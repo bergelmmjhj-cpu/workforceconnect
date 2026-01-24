@@ -1,5 +1,18 @@
 export type UserRole = "admin" | "hr" | "client" | "worker";
 
+export type WorkerOnboardingStatus = 
+  | "NOT_APPLIED"
+  | "APPLICATION_SUBMITTED"
+  | "APPLICATION_APPROVED"
+  | "APPLICATION_REJECTED"
+  | "AGREEMENT_PENDING"
+  | "AGREEMENT_ACCEPTED"
+  | "ONBOARDED";
+
+export type WorkerApplicationStatus = "submitted" | "approved" | "rejected";
+
+export type AgreementSubmissionStatus = "submitted" | "reviewed";
+
 export interface User {
   id: string;
   email: string;
@@ -7,7 +20,195 @@ export interface User {
   role: UserRole;
   timezone: string;
   avatarUrl?: string;
+  onboardingStatus?: WorkerOnboardingStatus;
   createdAt: string;
+}
+
+export interface WorkerApplicationAddress {
+  street: string;
+  city: string;
+  provinceState: string;
+  postalZip: string;
+  country: string;
+}
+
+export interface Certification {
+  name: string;
+  expiryDate?: string;
+}
+
+export interface Reference {
+  name: string;
+  relationship: string;
+  contact: string;
+}
+
+export interface DocumentPlaceholder {
+  docType: string;
+  provided: boolean;
+  notesOrLink?: string;
+}
+
+export interface PPESizes {
+  gloves?: string;
+  shirt?: string;
+  shoeSize?: string;
+}
+
+export interface ComplianceChecklist {
+  id?: boolean;
+  workAuth?: boolean;
+  certs?: boolean;
+  references?: boolean;
+}
+
+export interface AgreementInitials {
+  s19_1: string;
+  s19_2: string;
+  s19_3: string;
+  s19_4: string;
+  s19_5: string;
+}
+
+export interface WorkerApplication {
+  id: string;
+  workerId: string;
+  submittedAtUtc: string;
+  source?: string;
+  recruiterReferrerCode?: string;
+  
+  legalFirstName: string;
+  legalLastName: string;
+  preferredName?: string;
+  pronouns?: string;
+  mobilePhone: string;
+  emailAddress: string;
+  currentAddress: WorkerApplicationAddress;
+  primaryLanguage: string;
+  otherLanguages?: string;
+  timeZone: string;
+  
+  legallyEligibleToWork: boolean;
+  workAuthorizationType?: string;
+  workAuthorizationExpiry?: string;
+  hasGovernmentPhotoId: boolean;
+  hasDriversLicense: boolean;
+  driversLicenseProvinceClass?: string;
+  backgroundCheckConsent: "consent" | "do_not_consent";
+  certifications?: Certification[];
+  
+  rolesInterestedIn: string[];
+  rolesInterestedOtherText?: string;
+  preferredWorkType: "full_time" | "part_time" | "casual_on_call";
+  weeklyAvailabilityDays: string[];
+  dailyTimeWindows?: string;
+  earliestStartDate: string;
+  distanceWillingToTravelKm?: number;
+  reliableTransportation: "yes" | "no" | "sometimes";
+  
+  yearsExperiencePrimaryRole: number;
+  relatedExperienceSummary: string;
+  relevantSkills?: string[];
+  equipmentOperationText?: string;
+  technologyComfort?: string[];
+  languagesCommunicationNotes?: string;
+  
+  shiftTypes: string[];
+  minHoursPerShift?: number;
+  maxHoursPerWeekPreference?: number;
+  hourlyPayExpectation?: number;
+  unionMembership?: string;
+  
+  emergencyContactName: string;
+  emergencyContactRelationship: string;
+  emergencyContactPhone: string;
+  emergencyContactAlt?: string;
+  
+  allergiesMedicalAlerts?: string;
+  ppeSizes?: PPESizes;
+  accommodationRequests?: string;
+  
+  references?: { ref1?: Reference; ref2?: Reference };
+  
+  preferredContactChannels: string[];
+  consentOperationalMessages: boolean;
+  
+  documents?: DocumentPlaceholder[];
+  
+  acknowledgeTitoAccuracyUtc: boolean;
+  acknowledgeSiteRulesSafety: boolean;
+  
+  preAcknowledgeAgreementRequired: boolean;
+  verificationMethodAtSigningPlaceholder: string;
+  verificationMethodOtherText?: string;
+  
+  consentDataProcessing: boolean;
+  optionalGpsAcknowledgement: boolean;
+  privacyContactEmail: string;
+  
+  declareTrueComplete: boolean;
+  declareFalseInfoConsequences: boolean;
+  electronicSignatureFullLegalName: string;
+  dateLocal: string;
+  submitIp?: string;
+  submitUserAgent?: string;
+  
+  initialReviewOutcome?: "proceed_interview" | "hold" | "decline";
+  interviewerRecruiter?: string;
+  officeUseDate?: string;
+  officeNotes?: string;
+  complianceChecklist?: ComplianceChecklist;
+  nextSteps?: string[];
+  
+  formVersion: string;
+  retentionNote?: string;
+  
+  status: WorkerApplicationStatus;
+  reviewedById?: string;
+  reviewedAt?: string;
+  
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubcontractorAgreementTemplate {
+  id: string;
+  version: string;
+  title: string;
+  bodyText: string;
+  lastUpdated: string;
+  effectiveDate: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubcontractorAgreementAcceptance {
+  id: string;
+  workerId: string;
+  templateId: string;
+  templateVersion: string;
+  templateBodySnapshot: string;
+  acceptedAtUtc: string;
+  acceptedFullName: string;
+  initials: AgreementInitials;
+  dateLocal: string;
+  timeZone: string;
+  acceptanceIp?: string;
+  acceptanceUserAgent?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgreementSubmission {
+  id: string;
+  acceptanceId: string;
+  submittedToAdminAt: string;
+  status: AgreementSubmissionStatus;
+  adminReviewedById?: string;
+  adminReviewedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type RequestStatus = 

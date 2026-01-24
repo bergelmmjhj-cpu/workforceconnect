@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { User, UserRole } from "@/types";
+import { User, UserRole, WorkerOnboardingStatus } from "@/types";
 
 interface AuthContextType {
   user: User | null;
@@ -10,6 +10,8 @@ interface AuthContextType {
   register: (email: string, password: string, fullName: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
+  updateOnboardingStatus: (status: WorkerOnboardingStatus) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,6 +33,7 @@ const demoUsers: Record<UserRole, User> = {
     fullName: "James Rodriguez",
     role: "worker",
     timezone: "America/Toronto",
+    onboardingStatus: "ONBOARDED",
     createdAt: new Date().toISOString(),
   },
   hr: {
@@ -47,6 +50,36 @@ const demoUsers: Record<UserRole, User> = {
     fullName: "Michael Thompson",
     role: "admin",
     timezone: "America/Toronto",
+    createdAt: new Date().toISOString(),
+  },
+};
+
+const additionalDemoUsers: Record<string, User> = {
+  "worker_pending@example.com": {
+    id: "worker-pending",
+    email: "worker_pending@example.com",
+    fullName: "Alex Johnson",
+    role: "worker",
+    timezone: "America/Toronto",
+    onboardingStatus: "AGREEMENT_PENDING",
+    createdAt: new Date().toISOString(),
+  },
+  "worker_submitted@example.com": {
+    id: "worker-submitted",
+    email: "worker_submitted@example.com",
+    fullName: "Maria Garcia",
+    role: "worker",
+    timezone: "America/Toronto",
+    onboardingStatus: "APPLICATION_SUBMITTED",
+    createdAt: new Date().toISOString(),
+  },
+  "worker_new@example.com": {
+    id: "worker-new",
+    email: "worker_new@example.com",
+    fullName: "New Worker",
+    role: "worker",
+    timezone: "America/Toronto",
+    onboardingStatus: "NOT_APPLIED",
     createdAt: new Date().toISOString(),
   },
 };
@@ -73,9 +106,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    // Demo login - find matching demo user by email or use client as default
+    const lowerEmail = email.toLowerCase();
+    
+    if (additionalDemoUsers[lowerEmail]) {
+      const loginUser = additionalDemoUsers[lowerEmail];
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loginUser));
+      setUser(loginUser);
+      return;
+    }
+    
     const role = Object.keys(demoUsers).find(
-      (r) => demoUsers[r as UserRole].email === email.toLowerCase()
+      (r) => demoUsers[r as UserRole].email === lowerEmail
     ) as UserRole | undefined;
 
     const loginUser = role ? demoUsers[role] : { ...demoUsers.client, email };
@@ -91,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fullName,
       role,
       timezone: "America/Toronto",
+      onboardingStatus: role === "worker" ? "NOT_APPLIED" : undefined,
       createdAt: new Date().toISOString(),
     };
 
@@ -111,6 +153,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateOnboardingStatus = async (status: WorkerOnboardingStatus) => {
+    if (user) {
+      const updatedUser = { ...user, onboardingStatus: status };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    }
+  };
+
+  const refreshUser = async () => {
+    await loadUser();
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -121,6 +175,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         switchRole,
+        updateOnboardingStatus,
+        refreshUser,
       }}
     >
       {children}

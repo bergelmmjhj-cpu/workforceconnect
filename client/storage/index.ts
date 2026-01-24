@@ -9,6 +9,11 @@ import {
   Notification,
   RequestStatus,
   ShiftStatus,
+  WorkerApplication,
+  SubcontractorAgreementTemplate,
+  SubcontractorAgreementAcceptance,
+  AgreementSubmission,
+  WorkerOnboardingStatus,
 } from "@/types";
 
 const KEYS = {
@@ -18,6 +23,10 @@ const KEYS = {
   CONVERSATIONS: "@wc_conversations",
   MESSAGES: "@wc_messages",
   NOTIFICATIONS: "@wc_notifications",
+  WORKER_APPLICATIONS: "@wc_worker_applications",
+  AGREEMENT_TEMPLATES: "@wc_agreement_templates",
+  AGREEMENT_ACCEPTANCES: "@wc_agreement_acceptances",
+  AGREEMENT_SUBMISSIONS: "@wc_agreement_submissions",
 };
 
 // Helper to generate IDs
@@ -550,4 +559,370 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
 // Clear all data
 export async function clearStorage(): Promise<void> {
   await AsyncStorage.multiRemove(Object.values(KEYS));
+}
+
+// ============ ONBOARDING STORAGE ============
+
+// Default agreement template
+const defaultAgreementTemplate: SubcontractorAgreementTemplate = {
+  id: "template-v1",
+  version: "v1.0",
+  title: "Subcontractor Agreement",
+  bodyText: `SUBCONTRACTOR AGREEMENT
+
+This Subcontractor Agreement ("Agreement") is entered into as of the date of electronic acceptance below.
+
+1. INDEPENDENT CONTRACTOR STATUS
+The Subcontractor acknowledges and agrees that they are engaged as an independent contractor and not as an employee. The Subcontractor shall be solely responsible for all taxes, including income tax, employment insurance premiums, and Canada Pension Plan contributions. The Subcontractor shall not be entitled to any employee benefits, including but not limited to vacation pay, sick leave, health insurance, or pension benefits.
+
+2. SERVICES
+The Subcontractor agrees to provide staffing and workforce services as directed by the Company, including but not limited to:
+- Completing assigned shifts at designated client locations
+- Accurately recording time in/time out using the Company's TITO system
+- Following all workplace safety protocols and client site rules
+- Maintaining professional conduct at all times
+
+3. COMPENSATION
+The Subcontractor shall be compensated at the agreed-upon hourly rate for each assignment. Payment shall be made according to the Company's standard payment schedule. The Subcontractor is responsible for tracking and verifying their hours worked.
+
+4. TITO ACCURACY & VERIFICATION
+The Subcontractor agrees to:
+- Accurately record all clock-in and clock-out times using the GPS-verified TITO system
+- Only clock in when physically present at the designated work location
+- Report any discrepancies or technical issues immediately
+- Acknowledge that falsification of time records may result in termination
+
+5. CONFIDENTIALITY & PRIVACY
+The Subcontractor agrees to maintain strict confidentiality regarding:
+- Client business information and trade secrets
+- Personal information of clients, their customers, and other workers
+- Company operational procedures and proprietary systems
+- Any information marked as confidential
+
+6. NON-SOLICITATION
+During the term of this Agreement and for a period of twelve (12) months following termination, the Subcontractor shall not:
+- Directly solicit or accept work from any client of the Company
+- Recruit or solicit other subcontractors to leave the Company
+- Interfere with the Company's business relationships
+
+7. COMPLIANCE WITH LAWS
+The Subcontractor agrees to comply with all applicable federal, provincial, and local laws, regulations, and ordinances, including but not limited to:
+- Occupational health and safety regulations
+- Privacy legislation (PIPEDA and provincial privacy laws)
+- Human rights legislation
+- Employment standards (where applicable)
+
+8. INSURANCE
+The Subcontractor acknowledges that they are responsible for obtaining any insurance coverage they deem necessary, including liability insurance. The Company provides Workers' Safety and Insurance Board (WSIB) coverage for workplace injuries as required by law.
+
+9. TERMINATION
+Either party may terminate this Agreement at any time with or without cause. The Company reserves the right to immediately terminate this Agreement for:
+- Falsification of time records or other documentation
+- Violation of client site rules or safety protocols
+- Breach of confidentiality obligations
+- Failure to meet performance standards
+- Any conduct that reflects negatively on the Company
+
+10. DISPUTE RESOLUTION
+Any disputes arising under this Agreement shall be resolved through:
+- Good faith negotiation between the parties
+- Mediation if negotiation is unsuccessful
+- Binding arbitration in accordance with applicable provincial legislation
+
+11. LIMITATION OF LIABILITY
+To the maximum extent permitted by law:
+- The Company's liability shall be limited to the amounts paid to the Subcontractor under this Agreement
+- Neither party shall be liable for indirect, incidental, or consequential damages
+- The Subcontractor assumes all risk associated with the performance of services
+
+12. DATA PROTECTION & CONSENT
+The Subcontractor consents to the collection, use, and disclosure of personal information as necessary to:
+- Verify identity and work eligibility
+- Process payroll and maintain employment records
+- Communicate regarding assignments and scheduling
+- Comply with legal and regulatory requirements
+
+13. AMENDMENTS
+This Agreement may only be amended in writing signed by both parties. The Company may update policies and procedures from time to time, and continued acceptance of assignments constitutes acceptance of such updates.
+
+14. ENTIRE AGREEMENT
+This Agreement constitutes the entire agreement between the parties and supersedes all prior agreements, representations, and understandings.
+
+15. SEVERABILITY
+If any provision of this Agreement is found to be invalid or unenforceable, the remaining provisions shall continue in full force and effect.
+
+16. GOVERNING LAW
+This Agreement shall be governed by and construed in accordance with the laws of the Province of Ontario and the federal laws of Canada applicable therein.
+
+17. ELECTRONIC ACCEPTANCE
+The Subcontractor agrees that electronic acceptance of this Agreement, including typed signature and initials, constitutes a valid and binding agreement equivalent to a handwritten signature.
+
+18. ACKNOWLEDGMENTS
+By accepting this Agreement, the Subcontractor acknowledges that they have:
+- Read and understood all terms and conditions
+- Had the opportunity to seek independent legal advice
+- Voluntarily agreed to be bound by this Agreement
+
+19. REQUIRED INITIALS
+Please provide your initials to confirm your understanding and acceptance of the following key sections:
+
+19.1 Independent Contractor Status (Section 1) - I understand that I am engaged as an independent contractor and not an employee.
+
+19.2 TITO Accuracy & Verification (Section 4) - I agree to accurately record all time entries and understand the consequences of falsification.
+
+19.3 Confidentiality & Privacy (Section 5) - I agree to maintain strict confidentiality of all client and company information.
+
+19.4 Non-Solicitation (Section 6) - I understand and agree to the non-solicitation obligations.
+
+19.5 Limitation of Liability (Section 11) - I understand and accept the limitation of liability provisions.
+
+Version: v1.0
+Last Updated: 2026-01-01
+Effective Date: 2026-01-01`,
+  lastUpdated: "2026-01-01T00:00:00.000Z",
+  effectiveDate: "2026-01-01T00:00:00.000Z",
+  isActive: true,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
+// Sample worker application for testing
+const sampleWorkerApplication: WorkerApplication = {
+  id: "app-pending-1",
+  workerId: "worker-pending",
+  submittedAtUtc: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  source: "website",
+  legalFirstName: "Alex",
+  legalLastName: "Johnson",
+  preferredName: "Alex",
+  mobilePhone: "416-555-0123",
+  emailAddress: "worker_pending@example.com",
+  currentAddress: {
+    street: "123 Main Street",
+    city: "Toronto",
+    provinceState: "Ontario",
+    postalZip: "M5V 1A1",
+    country: "Canada",
+  },
+  primaryLanguage: "English",
+  timeZone: "America/Toronto",
+  legallyEligibleToWork: true,
+  hasGovernmentPhotoId: true,
+  hasDriversLicense: true,
+  driversLicenseProvinceClass: "G",
+  backgroundCheckConsent: "consent",
+  rolesInterestedIn: ["Housekeeper", "GeneralLabor"],
+  preferredWorkType: "part_time",
+  weeklyAvailabilityDays: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  dailyTimeWindows: "8:00 AM - 6:00 PM",
+  earliestStartDate: new Date().toISOString().split("T")[0],
+  reliableTransportation: "yes",
+  yearsExperiencePrimaryRole: 3,
+  relatedExperienceSummary: "3 years experience in hospitality and general labor",
+  relevantSkills: ["deep_cleaning", "heavy_lifting", "customer_service"],
+  shiftTypes: ["day", "evening"],
+  emergencyContactName: "Jane Johnson",
+  emergencyContactRelationship: "Spouse",
+  emergencyContactPhone: "416-555-0124",
+  preferredContactChannels: ["email", "sms"],
+  consentOperationalMessages: true,
+  acknowledgeTitoAccuracyUtc: true,
+  acknowledgeSiteRulesSafety: true,
+  preAcknowledgeAgreementRequired: true,
+  verificationMethodAtSigningPlaceholder: "typed_name",
+  consentDataProcessing: true,
+  optionalGpsAcknowledgement: true,
+  privacyContactEmail: "privacy@company.com",
+  declareTrueComplete: true,
+  declareFalseInfoConsequences: true,
+  electronicSignatureFullLegalName: "Alex Johnson",
+  dateLocal: new Date().toISOString().split("T")[0],
+  formVersion: "v1.0",
+  status: "approved",
+  createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+};
+
+const sampleSubmittedApplication: WorkerApplication = {
+  ...sampleWorkerApplication,
+  id: "app-submitted-1",
+  workerId: "worker-submitted",
+  legalFirstName: "Maria",
+  legalLastName: "Garcia",
+  emailAddress: "worker_submitted@example.com",
+  electronicSignatureFullLegalName: "Maria Garcia",
+  status: "submitted",
+};
+
+// Initialize onboarding data
+export async function initializeOnboardingData() {
+  try {
+    const existingTemplates = await AsyncStorage.getItem(KEYS.AGREEMENT_TEMPLATES);
+    if (!existingTemplates) {
+      await AsyncStorage.setItem(KEYS.AGREEMENT_TEMPLATES, JSON.stringify([defaultAgreementTemplate]));
+    }
+    
+    const existingApps = await AsyncStorage.getItem(KEYS.WORKER_APPLICATIONS);
+    if (!existingApps) {
+      await AsyncStorage.setItem(KEYS.WORKER_APPLICATIONS, JSON.stringify([sampleWorkerApplication, sampleSubmittedApplication]));
+    }
+  } catch (error) {
+    console.error("Failed to initialize onboarding data:", error);
+  }
+}
+
+// Worker Applications
+export async function getWorkerApplications(): Promise<WorkerApplication[]> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.WORKER_APPLICATIONS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getWorkerApplicationById(id: string): Promise<WorkerApplication | null> {
+  const apps = await getWorkerApplications();
+  return apps.find(a => a.id === id) || null;
+}
+
+export async function getWorkerApplicationByWorkerId(workerId: string): Promise<WorkerApplication | null> {
+  const apps = await getWorkerApplications();
+  return apps.find(a => a.workerId === workerId) || null;
+}
+
+export async function createWorkerApplication(application: Omit<WorkerApplication, "id" | "createdAt" | "updatedAt" | "submittedAtUtc">): Promise<WorkerApplication> {
+  const apps = await getWorkerApplications();
+  const existing = apps.find(a => a.workerId === application.workerId);
+  
+  if (existing) {
+    return updateWorkerApplication(existing.id, application);
+  }
+  
+  const now = new Date().toISOString();
+  const newApp: WorkerApplication = {
+    ...application,
+    id: generateId(),
+    submittedAtUtc: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  apps.push(newApp);
+  await AsyncStorage.setItem(KEYS.WORKER_APPLICATIONS, JSON.stringify(apps));
+  return newApp;
+}
+
+export async function updateWorkerApplication(id: string, updates: Partial<WorkerApplication>): Promise<WorkerApplication> {
+  const apps = await getWorkerApplications();
+  const index = apps.findIndex(a => a.id === id);
+  
+  if (index === -1) {
+    throw new Error("Application not found");
+  }
+  
+  apps[index] = {
+    ...apps[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  
+  await AsyncStorage.setItem(KEYS.WORKER_APPLICATIONS, JSON.stringify(apps));
+  return apps[index];
+}
+
+// Agreement Templates
+export async function getActiveAgreementTemplate(): Promise<SubcontractorAgreementTemplate | null> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.AGREEMENT_TEMPLATES);
+    const templates: SubcontractorAgreementTemplate[] = data ? JSON.parse(data) : [];
+    return templates.find(t => t.isActive) || null;
+  } catch {
+    return null;
+  }
+}
+
+// Agreement Acceptances
+export async function getAgreementAcceptances(): Promise<SubcontractorAgreementAcceptance[]> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.AGREEMENT_ACCEPTANCES);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getAgreementAcceptanceByWorkerId(workerId: string): Promise<SubcontractorAgreementAcceptance | null> {
+  const acceptances = await getAgreementAcceptances();
+  return acceptances.find(a => a.workerId === workerId) || null;
+}
+
+export async function createAgreementAcceptance(acceptance: Omit<SubcontractorAgreementAcceptance, "id" | "createdAt" | "updatedAt">): Promise<SubcontractorAgreementAcceptance> {
+  const acceptances = await getAgreementAcceptances();
+  const now = new Date().toISOString();
+  
+  const newAcceptance: SubcontractorAgreementAcceptance = {
+    ...acceptance,
+    id: generateId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  acceptances.push(newAcceptance);
+  await AsyncStorage.setItem(KEYS.AGREEMENT_ACCEPTANCES, JSON.stringify(acceptances));
+  return newAcceptance;
+}
+
+// Agreement Submissions
+export async function getAgreementSubmissions(): Promise<AgreementSubmission[]> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.AGREEMENT_SUBMISSIONS);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getAgreementSubmissionByAcceptanceId(acceptanceId: string): Promise<AgreementSubmission | null> {
+  const submissions = await getAgreementSubmissions();
+  return submissions.find(s => s.acceptanceId === acceptanceId) || null;
+}
+
+export async function createAgreementSubmission(submission: Omit<AgreementSubmission, "id" | "createdAt" | "updatedAt">): Promise<AgreementSubmission> {
+  const submissions = await getAgreementSubmissions();
+  const now = new Date().toISOString();
+  
+  const newSubmission: AgreementSubmission = {
+    ...submission,
+    id: generateId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  submissions.push(newSubmission);
+  await AsyncStorage.setItem(KEYS.AGREEMENT_SUBMISSIONS, JSON.stringify(submissions));
+  return newSubmission;
+}
+
+export async function updateAgreementSubmission(id: string, updates: Partial<AgreementSubmission>): Promise<AgreementSubmission> {
+  const submissions = await getAgreementSubmissions();
+  const index = submissions.findIndex(s => s.id === id);
+  
+  if (index === -1) {
+    throw new Error("Submission not found");
+  }
+  
+  submissions[index] = {
+    ...submissions[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  
+  await AsyncStorage.setItem(KEYS.AGREEMENT_SUBMISSIONS, JSON.stringify(submissions));
+  return submissions[index];
+}
+
+// Helper to check if worker has completed onboarding
+export function isWorkerOnboardingComplete(status?: WorkerOnboardingStatus): boolean {
+  return status === "AGREEMENT_ACCEPTED" || status === "ONBOARDED";
 }

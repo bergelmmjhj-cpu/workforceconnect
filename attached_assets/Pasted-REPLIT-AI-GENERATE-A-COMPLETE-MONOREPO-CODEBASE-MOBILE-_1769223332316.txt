@@ -1,0 +1,576 @@
+REPLIT AI — GENERATE A COMPLETE MONOREPO CODEBASE (MOBILE + DESKTOP RESPONSIVE)
+
+You are Replit AI acting as a senior full-stack engineer. Generate a COMPLETE, RUNNABLE monorepo codebase named `workforce-connect/` that builds a workforce management platform similar to Workforce Connect. The app MUST be fully responsive and optimized for BOTH mobile and desktop (mobile-first responsive UI, desktop dashboard layout). Do not write partial snippets—create all files, folders, package.json scripts, and runnable code.
+
+========================================
+1) PROJECT GOAL
+========================================
+Build a workforce management platform that supports:
+- Staff deployment
+- Shift tracking (TITO: time-in/time-out)
+- Workflow coordination between Clients, Workers, HR, and Admin
+- Realtime messaging and status updates
+- In-app notifications and basic reporting
+- Multi-timezone support (store timestamps in UTC; display in user’s timezone)
+- GDPR + Canadian privacy expectations (data minimization, audit logs, role-based access, secure auth)
+
+The SAME web app must work well on:
+- Mobile: stacked navigation, compact tables, bottom actions, touch-friendly UI
+- Desktop: sidebar navigation, top bar, wider tables, dashboards
+
+========================================
+2) TECH STACK (REPLIT-FRIENDLY)
+========================================
+Backend:
+- Node.js + Express (TypeScript)
+- PostgreSQL
+- Prisma ORM
+- JWT Auth + Refresh Tokens (httpOnly cookies recommended for refresh token)
+- Socket.io for realtime messaging and notification badges
+
+Frontend:
+- React + Vite (TypeScript)
+- React Router
+- Responsive UI (mobile-first) with a shared layout that adapts:
+  - Desktop: left sidebar + top bar
+  - Mobile: collapsible drawer or bottom-nav style; keep sidebar as off-canvas
+
+Recommended libraries (allowed if needed):
+- Axios for HTTP
+- Zod for validation
+- react-hook-form for forms
+- date-fns + date-fns-tz for timezone formatting
+- clsx or classnames for conditional styling
+- minimal CSS framework (Tailwind optional). If Tailwind is too heavy, use plain CSS modules.
+
+========================================
+3) MONOREPO STRUCTURE (MUST CREATE)
+========================================
+workforce-connect/
+  README.md
+  server/
+    README.md
+    package.json
+    tsconfig.json
+    .env.example
+    prisma/
+      schema.prisma
+      seed.ts
+    src/
+      server.ts
+      app.ts
+      config/
+        env.ts
+      prisma/
+        client.ts
+      middleware/
+        auth.ts
+        rbac.ts
+        errorHandler.ts
+      utils/
+        jwt.ts
+        password.ts
+        utc.ts
+        pagination.ts
+      socket/
+        index.ts
+      routes/
+        auth.ts
+        users.ts
+        requests.ts
+        shifts.ts
+        tito.ts
+        conversations.ts
+        messages.ts
+        notifications.ts
+        reports.ts
+        exports.ts
+      controllers/
+        authController.ts
+        usersController.ts
+        requestsController.ts
+        shiftsController.ts
+        titoController.ts
+        conversationsController.ts
+        messagesController.ts
+        notificationsController.ts
+        reportsController.ts
+        exportsController.ts
+      services/
+        notificationService.ts
+        auditService.ts
+        slaService.ts
+        messageService.ts
+  client/
+    README.md
+    package.json
+    tsconfig.json
+    vite.config.ts
+    .env.example
+    src/
+      main.tsx
+      App.tsx
+      api/
+        http.ts
+        auth.ts
+        users.ts
+        requests.ts
+        shifts.ts
+        tito.ts
+        conversations.ts
+        messages.ts
+        notifications.ts
+        reports.ts
+      auth/
+        AuthProvider.tsx
+        RequireAuth.tsx
+        useAuth.ts
+      socket/
+        socket.ts
+      components/
+        layout/
+          AppLayout.tsx
+          Sidebar.tsx
+          Topbar.tsx
+          MobileNav.tsx
+        common/
+          Button.tsx
+          Input.tsx
+          Select.tsx
+          Table.tsx
+          StatusPill.tsx
+          Card.tsx
+          Toast.tsx
+          Loading.tsx
+        dashboard/
+          SmartTodoWidget.tsx
+          StatCards.tsx
+        messaging/
+          ConversationList.tsx
+          MessageThread.tsx
+      pages/
+        LoginPage.tsx
+        RegisterPage.tsx
+        DashboardPage.tsx
+        RequestsPage.tsx
+        RequestDetailPage.tsx
+        ShiftsPage.tsx
+        ShiftDetailPage.tsx
+        TitoPage.tsx
+        MessagesPage.tsx
+        AdminPage.tsx
+        ReportsPage.tsx
+      styles/
+        global.css
+        layout.css
+      utils/
+        tz.ts
+        format.ts
+        guards.ts
+
+========================================
+4) ROLES + RBAC (STRICT)
+========================================
+Roles:
+- admin
+- hr
+- client
+- worker
+
+Permissions (enforce on backend routes via middleware):
+- Admin: manage users, view audit logs (optional), global settings
+- HR: manage worker requests, create shifts, assign workers, view reports
+- Client: create and manage own worker requests, approve/dispute TITO, view own shifts, message HR
+- Worker: view assigned shifts, submit TITO, message HR, view own TITO history
+
+IMPORTANT:
+- Every protected endpoint must check auth + role permissions.
+- Never allow a user to fetch another user’s private resources unless role permits and relationship exists.
+
+========================================
+5) CORE MODULES (MVP BEHAVIOR)
+========================================
+A) Worker Requests (Client -> HR workflow)
+- Client creates WorkerRequest:
+  - roleNeeded (string or enum)
+  - shiftStartTime, shiftEndTime (UTC stored)
+  - locationMajorIntersection (string; do not store precise addresses)
+  - payStructure (string, with visibility rules)
+  - notes (text)
+  - status: draft, submitted, reviewing, assigned, in_progress, completed, cancelled
+  - hrAssignedId optional
+  - slaDeadline (UTC)
+- HR can:
+  - list submitted requests
+  - set hrAssignedId
+  - update status and create shifts from requests
+  - SLA tracking: show upcoming deadlines and breaches in dashboard “Smart To-Do”
+
+B) Shift Management
+- HR creates Shift linked to WorkerRequest
+- HR assigns workers (via ShiftAssignment)
+- Worker sees assigned shifts
+- Client sees shifts associated with their requests
+
+C) TITO
+- Worker submits:
+  - timeIn (server-validated; ignore client-provided time if it’s wildly off; store UTC)
+  - timeOut
+  - timeInLocation/timeOutLocation (optional coarse string)
+  - verificationMethod (enum: "gps", "selfie_placeholder", "manual", "other")
+- HR/Client can approve/dispute:
+  - approvedBy, approvedAt, disputedBy, disputedAt
+- Audit trail:
+  - store audit entries (JSON) OR separate AuditLog rows
+
+D) Messaging (Quo-like)
+- Conversations between:
+  - Client <-> HR
+  - HR <-> Worker
+  - Admin oversight optional (admin can access if required)
+- Realtime Socket.io:
+  - New message event broadcasts to conversation participants
+  - Notification badge updates in realtime
+- Consistency requirement (avoid “different users see different data”):
+  - Use consistent DB reads
+  - Do not rely on client caching only
+  - When message created: write DB first, then emit socket event, then return API response
+  - On client: refetch on socket events or update local state reliably
+
+E) Notifications
+- Store notifications in DB:
+  - title, message, type, isRead, actionUrl
+- Trigger on:
+  - request created/submitted
+  - worker assigned
+  - shift starting soon (basic SLA job; can be a simple server interval in MVP)
+  - TITO submitted
+  - approval needed
+  - message received
+- Email stubs: console.log(...) only
+
+F) Reporting + CSV Export
+- /reports GET returns:
+  - shifts per worker
+  - hours worked (based on approved TITO where possible)
+  - approvals pending
+  - SLA breaches
+- /exports/shifts-per-worker.csv returns CSV
+
+========================================
+6) DATA MODEL (PRISMA) — MUST IMPLEMENT
+========================================
+Create `server/prisma/schema.prisma` with:
+- Standard fields on all models: id (cuid or uuid), createdAt, updatedAt
+
+Required entities and relationships:
+
+User:
+- id
+- email (unique)
+- passwordHash
+- role (enum)
+- refreshTokenHash (store hashed refresh token)
+- profileId (unique) -> Profile
+- timezone (string, default "America/Toronto")
+
+Profile:
+- id
+- userId (unique)
+- type (enum: client, worker, hr, admin)
+- fullName
+- phoneNumber
+- address (optional, minimize sensitive fields)
+- clientProfile (optional 1:1)
+- workerProfile (optional 1:1)
+- hrProfile (optional 1:1)
+
+ClientProfile:
+- id
+- profileId (unique)
+- businessName
+- contactFullName
+- contactEmail optional
+
+WorkerProfile:
+- id
+- profileId (unique)
+- available (boolean default true)
+- status (enum: active, inactive, suspended)
+
+HRProfile:
+- id
+- profileId (unique)
+- department (string optional)
+
+WorkerRequest:
+- id
+- clientId -> User
+- roleNeeded
+- shiftStartTime (DateTime)
+- shiftEndTime (DateTime)
+- locationMajorIntersection
+- payStructure
+- notes
+- status (enum)
+- hrAssignedId -> User (nullable)
+- slaDeadline (DateTime)
+- shifts relation
+
+Shift:
+- id
+- workerRequestId -> WorkerRequest
+- hrManagerId -> User
+- startTime, endTime
+- locationMajorIntersection
+- status (enum: scheduled, in_progress, completed, cancelled)
+- payRate (Decimal)
+- assignments relation
+
+ShiftAssignment:
+- id
+- shiftId -> Shift
+- workerId -> User
+- clientApprovalStatus (enum: pending, approved, disputed)
+- titoApprovalStatus (enum: pending, approved, disputed)
+- titoLogs relation
+
+TITOLog:
+- id
+- shiftAssignmentId -> ShiftAssignment
+- workerId -> User
+- timeIn (DateTime nullable)
+- timeOut (DateTime nullable)
+- timeInLocation (string nullable)
+- timeOutLocation (string nullable)
+- verificationMethod (string/enum)
+- approvedBy -> User nullable
+- approvedAt nullable
+- disputedBy -> User nullable
+- disputedAt nullable
+- auditTrail (Json) OR model relation to AuditLog entries
+
+Conversation:
+- id
+- type (enum: client_hr, hr_worker, admin_other)
+- participants (many-to-many via join table ConversationParticipant)
+
+ConversationParticipant:
+- id
+- conversationId
+- userId
+- joinedAt
+
+Message:
+- id
+- conversationId
+- senderId -> User
+- content
+- attachmentMetadata (Json nullable)
+- readAt (DateTime nullable)
+- createdAt
+
+Notification:
+- id
+- userId -> User
+- title
+- message
+- type
+- isRead default false
+- actionUrl nullable
+- createdAt
+
+AuditLog:
+- id
+- userId -> User
+- action
+- entityType
+- entityId
+- changes (Json)
+- timestamp (DateTime default now)
+
+Include indexes where appropriate (userId, role, request status, slaDeadline, conversationId).
+
+========================================
+7) API REQUIREMENTS (EXPRESS + RBAC)
+========================================
+Implement REST endpoints, with role gating and resource ownership checks:
+
+Auth:
+- POST /auth/register
+- POST /auth/login
+- POST /auth/refresh
+- POST /auth/logout
+
+Users (admin only):
+- GET /users
+- POST /users
+- PUT /users/:id
+- DELETE /users/:id
+
+Requests:
+- POST /requests (client)
+- GET /requests (client sees own; hr/admin sees relevant; admin sees all)
+- GET /requests/:id
+- PUT /requests/:id (client can edit own in draft/submitted; hr can update status/assign; admin can override)
+
+Shifts:
+- POST /shifts (hr)
+- GET /shifts (hr sees managed; worker sees assigned; client sees related)
+- GET /shifts/:id
+- PUT /shifts/:id (hr)
+
+TITO:
+- POST /tito (worker submits for a shiftAssignment)
+- GET /tito (worker own logs; hr/client logs they can review)
+- PUT /tito/:id/approve (client/hr)
+- PUT /tito/:id/dispute (client/hr)
+
+Messaging:
+- GET /conversations
+- POST /conversations
+- GET /messages?conversationId=...
+- POST /messages
+
+Notifications:
+- GET /notifications
+- PUT /notifications/:id/read
+
+Reports:
+- GET /reports
+
+Exports:
+- GET /exports/shifts-per-worker.csv
+
+Implement validation (Zod) for all POST/PUT bodies and query params.
+
+========================================
+8) REALTIME (SOCKET.IO)
+========================================
+Implement:
+- Socket authentication using JWT
+- Join rooms per userId and per conversationId
+- Events:
+  - message:new
+  - notification:new
+  - badge:update
+  - request:updated
+  - shift:updated
+- On message creation:
+  - write to DB
+  - emit message:new to conversation participants
+  - create Notification rows for recipients (except sender)
+  - emit notification:new and badge:update to recipients
+
+========================================
+9) FRONTEND REQUIREMENTS (RESPONSIVE MOBILE + DESKTOP)
+========================================
+Create routes/pages:
+
+Public:
+- /login
+- /register
+
+Protected:
+- /dashboard (role-based widgets)
+- /requests (list + detail)
+- /shifts (list + detail)
+- /tito (submit + history)
+- /messages (conversation list + thread)
+- /admin (admin only: user management)
+- /reports (hr/admin)
+
+UI/UX REQUIREMENTS:
+- Desktop:
+  - Left Sidebar + Topbar (notification badge, user menu)
+- Mobile:
+  - Sidebar becomes off-canvas drawer OR bottom nav
+  - Tables convert to stacked cards at small widths
+  - Large tap targets
+- Components:
+  - StatusPill for statuses
+  - SmartTodoWidget on Dashboard:
+    - pending approvals (TITO approvals)
+    - SLA breaches (requests with slaDeadline < now and not completed/cancelled)
+    - upcoming shifts (next 24–48 hours)
+
+Timezone:
+- Store UTC timestamps
+- Display in user timezone (use user.timezone, default America/Toronto)
+- Provide a simple profile setting to update timezone (optional MVP)
+
+========================================
+10) SEED DATA (PRISMA SEED)
+========================================
+Create `server/prisma/seed.ts` that:
+- Creates demo users for each role:
+  - admin@example.com / Password123!
+  - hr@example.com / Password123!
+  - client@example.com / Password123!
+  - worker@example.com / Password123!
+- Creates:
+  - A WorkerRequest submitted by client with SLA deadline in the near future
+  - A Shift created by HR linked to request
+  - A ShiftAssignment to the worker
+  - A TITOLog sample (pending approval)
+  - A Conversation between client and HR + sample messages
+  - Notifications for key events
+
+========================================
+11) ENV VARS + README INSTRUCTIONS
+========================================
+Create .env.example for server and client.
+
+Server .env.example must include:
+DATABASE_URL="postgresql://user:password@localhost:5432/workforce_db?schema=public"
+JWT_SECRET="YOUR_SUPER_SECRET_KEY"
+REFRESH_TOKEN_SECRET="YOUR_SUPER_SECRET_REFRESH_KEY"
+PORT=3000
+CLIENT_ORIGIN="http://localhost:5173"
+
+Client .env.example must include:
+VITE_API_URL="http://localhost:3000"
+VITE_SOCKET_URL="http://localhost:3000"
+
+Root README.md must include:
+- Setup steps (install, env vars, prisma migrate, prisma db seed, start)
+- Running server and client concurrently
+- How to login with seeded users
+- Known limitations / next steps:
+  - Face recognition + advanced GPS verification
+  - SMS/Push integrations
+  - Advanced GDPR (data export, right to be forgotten)
+  - Enhanced reporting/analytics
+  - Multi-language support
+
+========================================
+12) PRINT IN FULL (MANDATORY)
+========================================
+After generating the repository, PRINT THE FULL CONTENT (not summaries) of these files:
+1) server/prisma/schema.prisma
+2) server/src/routes/auth.ts
+3) server/src/server.ts
+4) client/src/pages/LoginPage.tsx
+5) client/src/pages/DashboardPage.tsx
+6) client/src/components/layout/Sidebar.tsx
+
+========================================
+13) IMPORTANT IMPLEMENTATION NOTES
+========================================
+- Use secure password hashing (bcrypt).
+- Store refresh token as HASH in DB (never plaintext).
+- Use httpOnly cookie for refresh token if possible; otherwise document alternative.
+- Ensure CORS properly configured for client origin.
+- Add centralized error handler middleware.
+- Ensure all “GET list” endpoints support basic pagination.
+- Keep PII minimal; location stored as major intersection only.
+- Add AuditLog entries on key workflow actions:
+  - request status change
+  - shift assignment
+  - tito approve/dispute
+  - admin user changes
+
+========================================
+14) FINAL INSTRUCTION
+========================================
+Generate ALL files needed. The code must run without missing imports. Do not omit any critical wiring. Ensure mobile + desktop responsive behavior in layout components.

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, Switch, ScrollView } from "react-native";
+import { View, StyleSheet, Pressable, Switch, ScrollView, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
@@ -29,6 +29,32 @@ export default function ProfileScreen() {
   const { user, logout, switchRole } = useAuth();
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  const handleNotificationToggle = (value: boolean) => {
+    if (!value) {
+      Alert.alert(
+        "Disable Notifications?",
+        "You will not be notified when there is an upcoming shift. Are you sure you want to disable notifications?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Disable",
+            style: "destructive",
+            onPress: () => {
+              setNotificationsEnabled(false);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            },
+          },
+        ]
+      );
+    } else {
+      setNotificationsEnabled(true);
+      Haptics.selectionAsync();
+    }
+  };
 
   const handleLogout = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -120,10 +146,7 @@ export default function ProfileScreen() {
               </View>
               <Switch
                 value={notificationsEnabled}
-                onValueChange={(value) => {
-                  setNotificationsEnabled(value);
-                  Haptics.selectionAsync();
-                }}
+                onValueChange={handleNotificationToggle}
                 trackColor={{ false: theme.border, true: theme.primary }}
                 thumbColor="#fff"
               />

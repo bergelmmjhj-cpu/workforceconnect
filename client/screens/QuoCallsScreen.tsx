@@ -6,10 +6,12 @@ import {
   RefreshControl,
   Pressable,
   TextInput,
+  Linking,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
@@ -30,11 +32,9 @@ export default function QuoCallsScreen() {
   const { paddingTop } = useContentPadding();
   const { theme } = useTheme();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
 
   const [showNewCall, setShowNewCall] = useState(false);
   const [newPhone, setNewPhone] = useState("");
-  const [newName, setNewName] = useState("");
 
   const { data: callLogs, isLoading, refetch } = useQuery<QuoCallLog[]>({
     queryKey: ["/api/quo/calls"],
@@ -49,35 +49,29 @@ export default function QuoCallsScreen() {
     enabled: !!user && (user.role === "admin" || user.role === "hr"),
   });
 
-  const initiateCallMutation = useMutation({
-    mutationFn: async (data: { toNumber: string; participantName?: string }) => {
-      const res = await fetch(`${getApiUrl()}api/quo/calls`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-role": user?.role || "admin",
-        },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to initiate call");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/quo/calls"] });
-      setShowNewCall(false);
-      setNewPhone("");
-      setNewName("");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-  });
+  const handleInitiateCall = async (phoneNumber: string) => {
+    const cleanNumber = phoneNumber.replace(/[^\d+]/g, "");
+    const telUrl = `tel:${cleanNumber}`;
+    
+    try {
+      const canOpen = await Linking.canOpenURL(telUrl);
+      if (canOpen) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await Linking.openURL(telUrl);
+        setShowNewCall(false);
+        setNewPhone("");
+      } else {
+        Alert.alert("Cannot Make Call", "Your device doesn't support phone calls.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to open dialer.");
+    }
+  };
 
-  const handleInitiateCall = () => {
-    if (newPhone.trim()) {
-      initiateCallMutation.mutate({
-        toNumber: newPhone.trim(),
-        participantName: newName.trim() || undefined,
-      });
+  const handleCallFromLog = (item: QuoCallLog) => {
+    const phoneNumber = item.direction === "outbound" ? item.toNumber : item.fromNumber;
+    if (phoneNumber) {
+      handleInitiateCall(phoneNumber);
     }
   };
 
@@ -122,45 +116,48 @@ export default function QuoCallsScreen() {
   };
 
   const renderItem = ({ item }: { item: QuoCallLog }) => (
-    <Card style={styles.callCard}>
-      <View style={styles.callRow}>
-        <View style={[styles.iconCircle, { backgroundColor: getStatusColor(item.status) + "20" }]}>
-          <Feather
-            name={getStatusIcon(item.status)}
-            size={20}
-            color={getStatusColor(item.status)}
-          />
-        </View>
-        <View style={styles.callInfo}>
-          <ThemedText type="h4" numberOfLines={1}>
-            {item.participantName || (item.direction === "outbound" ? item.toNumber : item.fromNumber)}
-          </ThemedText>
-          <View style={styles.callMeta}>
+    <Pressable onPress={() => handleCallFromLog(item)}>
+      <Card style={styles.callCard}>
+        <View style={styles.callRow}>
+          <View style={[styles.iconCircle, { backgroundColor: getStatusColor(item.status) + "20" }]}>
             <Feather
-              name={item.direction === "outbound" ? "arrow-up-right" : "arrow-down-left"}
-              size={14}
-              color={theme.textSecondary}
+              name={getStatusIcon(item.status)}
+              size={20}
+              color={getStatusColor(item.status)}
             />
-            <ThemedText style={[styles.metaText, { color: theme.textSecondary }]}>
-              {item.direction === "outbound" ? "Outgoing" : "Incoming"}
-            </ThemedText>
-            {item.durationSeconds ? (
-              <ThemedText style={[styles.metaText, { color: theme.textSecondary }]}>
-                {" "}  {formatDuration(item.durationSeconds)}
-              </ThemedText>
-            ) : null}
           </View>
-          <ThemedText style={[styles.time, { color: theme.textSecondary }]}>
-            {formatRelativeTime(item.startedAt)}
-          </ThemedText>
+          <View style={styles.callInfo}>
+            <ThemedText type="h4" numberOfLines={1}>
+              {item.participantName || (item.direction === "outbound" ? item.toNumber : item.fromNumber)}
+            </ThemedText>
+            <View style={styles.callMeta}>
+              <Feather
+                name={item.direction === "outbound" ? "arrow-up-right" : "arrow-down-left"}
+                size={14}
+                color={theme.textSecondary}
+              />
+              <ThemedText style={[styles.metaText, { color: theme.textSecondary }]}>
+                {item.direction === "outbound" ? "Outgoing" : "Incoming"}
+              </ThemedText>
+              {item.durationSeconds ? (
+                <ThemedText style={[styles.metaText, { color: theme.textSecondary }]}>
+                  {" "}  {formatDuration(item.durationSeconds)}
+                </ThemedText>
+              ) : null}
+            </View>
+            <ThemedText style={[styles.time, { color: theme.textSecondary }]}>
+              {formatRelativeTime(item.startedAt)}
+            </ThemedText>
+          </View>
+          <Pressable 
+            onPress={() => handleCallFromLog(item)}
+            style={[styles.callBackButton, { backgroundColor: theme.success + "20" }]}
+          >
+            <Feather name="phone" size={18} color={theme.success} />
+          </Pressable>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + "20" }]}>
-          <ThemedText style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-            {item.status}
-          </ThemedText>
-        </View>
-      </View>
-    </Card>
+      </Card>
+    </Pressable>
   );
 
   const renderEmpty = () => (
@@ -212,20 +209,12 @@ export default function QuoCallsScreen() {
           <ThemedText type="h4" style={styles.newCallTitle}>New Call</ThemedText>
           <TextInput
             style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-            placeholder="Phone number"
+            placeholder="Enter phone number"
             placeholderTextColor={theme.textSecondary}
             value={newPhone}
             onChangeText={setNewPhone}
             keyboardType="phone-pad"
             testID="input-call-phone"
-          />
-          <TextInput
-            style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-            placeholder="Name (optional)"
-            placeholderTextColor={theme.textSecondary}
-            value={newName}
-            onChangeText={setNewName}
-            testID="input-call-name"
           />
           <View style={styles.newCallActions}>
             <Pressable
@@ -235,14 +224,12 @@ export default function QuoCallsScreen() {
               <ThemedText>Cancel</ThemedText>
             </Pressable>
             <Pressable
-              onPress={handleInitiateCall}
+              onPress={() => newPhone.trim() && handleInitiateCall(newPhone.trim())}
               style={[styles.actionButton, { backgroundColor: theme.success }]}
-              disabled={initiateCallMutation.isPending}
+              disabled={!newPhone.trim()}
             >
               <Feather name="phone" size={16} color="#fff" style={{ marginRight: 6 }} />
-              <ThemedText style={{ color: "#fff" }}>
-                {initiateCallMutation.isPending ? "Calling..." : "Call"}
-              </ThemedText>
+              <ThemedText style={{ color: "#fff" }}>Call</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -306,6 +293,13 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 12,
     marginTop: 2,
+  },
+  callBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   statusBadge: {
     paddingHorizontal: Spacing.sm,

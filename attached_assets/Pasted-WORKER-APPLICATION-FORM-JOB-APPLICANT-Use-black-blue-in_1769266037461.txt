@@ -1,0 +1,113 @@
+WORKER APPLICATION FORM (JOB APPLICANT) Use black/blue ink or complete online. Fields marked * are required. If not applicable, write N/A.
+
+A. APPLICATION META
+
+Application ID: [auto-generated]
+Date Submitted (UTC): [auto-stamped]
+Source (How did you hear about us?): [text]
+Recruiter/Referrer Code (if any): [text]
+B. PERSONAL DETAILS
+
+Legal First Name*: [text]
+Legal Last Name*: [text]
+Preferred Name: [text]
+Pronouns: [text]
+Mobile Phone*: [text]
+Email Address*: [text]
+Current Address*: [street, city, province/state, postal/zip, country]
+Primary Language*: [text]
+Other Languages (proficiency): [text]
+Time Zone*: [select]
+C. WORK ELIGIBILITY & COMPLIANCE
+
+Are you legally eligible to work in this country?* [ ] Yes [ ] No
+Work Authorization Type (e.g., Citizen, PR, Open Work Permit): [text]
+Work Authorization Expiry (if applicable): [YYYY-MM-DD]
+Valid Government Photo ID available?* [ ] Yes [ ] No
+Driver’s License (if required by role): [ ] Yes [ ] No Province/Class: [text]
+Background Check Consent (if required by role)*: [ ] I consent [ ] I do not consent
+Certifications/Licenses (e.g., WHMIS, Food Handler, First Aid, SmartServe): [list + expiry]
+D. ROLE INTERESTS & AVAILABILITY
+
+Roles interested in* (check all that apply): [ ] Housekeeper [ ] Houseperson [ ] Laundry Attendant [ ] Server [ ] Kitchen Helper [ ] Dishwasher [ ] Cook [ ] Lifeguard [ ] General Labor [ ] Other: [text]
+Preferred Work Type*: [ ] Full-time [ ] Part-time [ ] Casual/On-call
+Typical Weekly Availability* (check days): [ ] Mon [ ] Tue [ ] Wed [ ] Thu [ ] Fri [ ] Sat [ ] Sun
+Daily Time Windows (e.g., 07:00–15:00): [text]
+Earliest Start Date*: [YYYY-MM-DD]
+Distance Willing to Travel (km): [number]
+Access to Reliable Transportation*: [ ] Yes [ ] No [ ] Sometimes
+E. EXPERIENCE & SKILLS
+
+Years of Experience in primary role*: [number]
+Related Experience (brief summary)*: [multi-line text]
+Relevant Skills (check all that apply): [ ] Deep cleaning [ ] Front-of-house [ ] Back-of-house [ ] Cash handling [ ] Heavy lifting (20–50 lbs) [ ] Team lead [ ] Customer service [ ] PPE compliance [ ] Equipment operation (specify): [text]
+Technology Comfort: [ ] Mobile apps [ ] Timekeeping (TITO) [ ] Messaging apps [ ] GPS check-ins
+Languages/Communication Notes: [text]
+F. SHIFT PREFERENCES & PAY
+
+Shift Types*: [ ] Day [ ] Evening [ ] Overnight [ ] Weekends
+Minimum Hours per Shift: [number]
+Max Hours per Week (preference): [number]
+Hourly Pay Expectation (optional): [$ / hr]
+Union Membership (if relevant): [text]
+G. EMERGENCY CONTACT
+
+Contact Name*: [text]
+Relationship*: [text]
+Phone*: [text]
+Alternate Phone/Email: [text]
+H. HEALTH & SAFETY (VOLUNTARY)
+
+Allergies/Medical Alerts (optional): [text]
+PPE Sizes (if applicable): [Gloves: S/M/L/XL] [Shirt: S/M/L/XL] [Shoe: ##]
+Accommodation Requests (optional): [multi-line text]
+I. REFERENCES (PREFER 2)
+
+Reference 1: Name [text], Relationship [text], Phone/Email [text]
+Reference 2: Name [text], Relationship [text], Phone/Email [text]
+J. MESSAGING & NOTIFICATIONS
+
+Preferred Contact Channels*: [ ] Email [ ] SMS [ ] In-app
+Consent to receive scheduling/operational messages*: [ ] Yes [ ] No
+K. DOCUMENTS (UPLOAD PLACEHOLDERS – OPTIONAL AT APPLICATION; REQUIRED IF HIRED/PLACED)
+
+Government Photo ID: [file placeholder or link]
+Proof of Work Eligibility (e.g., permit): [file/link]
+Resume/CV: [file/link]
+Certifications/Licenses (with expiry): [files/links]
+Background Check Consent/Result (if required): [file/link]
+Optional Selfie for ID Match (placeholder only; not facial recognition): [file/link]
+L. BANKING DETAILS (POST-HIRE ONLY – DO NOT SUBMIT NOW)
+
+Note: Banking information will be collected securely after hiring for payment setup.
+M. TITO & SITE RULES ACKNOWLEDGEMENT
+
+I understand accurate Time-In/Time-Out (TITO) is required and may be server-validated (UTC).* [ ] Agree
+I agree to follow site rules and health/safety policies at client locations.* [ ] Agree
+N. WORKER AGREEMENT PRE-ACKNOWLEDGMENT (REQUIRED BEFORE FIRST SHIFT)
+
+I acknowledge I must review and accept the Worker/Subcontractor Agreement before starting work, and re-consent if updated.* [ ] Pre-acknowledge
+Verification Method to be used at signing (placeholder): [ ] Checkbox Acknowledgement [ ] Typed Name [ ] Other: [text]
+O. PRIVACY & CONSENTS (GDPR/PIPEDA SUMMARY)
+
+I consent to the processing of my personal data for recruitment, scheduling, timekeeping, safety, and communications, per the Privacy Notice.* [ ] Consent
+Optional GPS/device metadata may be collected for coarse location/timekeeping verification; I can withdraw consent prospectively. [ ] Acknowledge
+Contact for privacy requests: [privacy@company.com]
+P. DECLARATIONS & E-SIGN
+
+I certify the information provided is true and complete to the best of my knowledge.* [ ] Yes
+I understand providing false or misleading information may result in disqualification or termination.* [ ] Yes
+Electronic Signature (type full legal name)*: [text]
+Date (local time zone)*: [YYYY-MM-DD]
+The system will record IP/device metadata at submission (for audit).
+Q. FOR OFFICE USE ONLY
+
+Initial Review Outcome: [ ] Proceed to Interview [ ] Hold [ ] Decline
+Interviewer/Recruiter: [text] Date: [YYYY-MM-DD]
+Notes: [multi-line]
+Compliance Checklist: ID [ ] Work Auth [ ] Certs [ ] References [ ]
+Next Steps: [ ] Agreement to sign [ ] Background check [ ] Onboarding docs
+R. VERSION & RETENTION
+
+Form Version: v1.0
+Retention: Application records retained per legal/audit requirements and internal policy.

@@ -1,0 +1,226 @@
+REPLIT AI — UPDATE REQUIREMENTS: WORKER ONBOARDING WORKFLOW (APPLICATION → HR/ADMIN APPROVAL → SUBCONTRACTOR AGREEMENT ACCEPTANCE → ADMIN REVIEW) + BUILD COMPLETE MONOREPO
+
+You are Replit AI acting as a senior full-stack engineer. Generate a COMPLETE, RUNNABLE monorepo codebase named `workforce-connect/` (server + client) for a workforce management platform. The app MUST be fully responsive for BOTH mobile and desktop (mobile-first responsive UI + desktop dashboard layout). Generate ALL files, folders, dependencies, and runnable code.
+
+This prompt includes an UPDATED onboarding workflow that MUST be implemented exactly as described.
+
+========================================
+A) UPDATED WORKER ONBOARDING WORKFLOW (MUST IMPLEMENT)
+========================================
+Goal:
+Before a worker can access the main application features, they must:
+1) Submit a Worker Application Form
+2) Get Approved by HR or Admin
+3) Accept/Sign the Subcontractor Agreement
+4) The signed agreement is submitted to Admin for review/record
+Only after step 3 is completed (and optionally step 4 marked “received/reviewed”) can the worker access normal worker features.
+
+Define “Access”:
+- Worker cannot access: dashboard, shifts, TITO, messaging, etc. until onboarding passes.
+- Worker CAN access: the onboarding portal pages (application + agreement) and view onboarding status.
+
+Implementation:
+- Add an “onboardingStatus” state machine for worker users:
+  - NOT_APPLIED
+  - APPLICATION_SUBMITTED
+  - APPLICATION_APPROVED
+  - APPLICATION_REJECTED
+  - AGREEMENT_PENDING
+  - AGREEMENT_ACCEPTED
+  - ONBOARDED (optional final state; can be set after admin acknowledges receipt)
+Rules:
+- When a worker registers, their onboardingStatus = NOT_APPLIED.
+- Worker completes application form => onboardingStatus becomes APPLICATION_SUBMITTED.
+- HR/Admin approves application => onboardingStatus becomes APPLICATION_APPROVED and agreement becomes available; set onboardingStatus = AGREEMENT_PENDING.
+- Worker must accept agreement (e-sign checkbox + typed full name + timestamp) => onboardingStatus becomes AGREEMENT_ACCEPTED.
+- Once agreement is accepted, automatically create an “AgreementSubmission” record sent to Admin inbox; Admin can mark it “RECEIVED/REVIEWED”.
+- Worker is allowed into main app when onboardingStatus IN (AGREEMENT_ACCEPTED, ONBOARDED) depending on your design. Prefer: allow access after AGREEMENT_ACCEPTED, and keep ONBOARDED for admin tracking.
+
+Access Control:
+- Backend middleware must block all worker routes except:
+  - /onboarding/*
+  - /auth/*
+  - /profile/me (read-only)
+- Frontend route guard must redirect workers who are not onboarded to onboarding pages.
+
+========================================
+B) DATA MODEL UPDATES (PRISMA) — MUST INCLUDE
+========================================
+Add/extend models:
+
+User:
+- onboardingStatus (enum, default NOT_APPLIED) [only relevant for worker role; safe for all users]
+
+WorkerApplication:
+- id, workerId (User)
+- legalFullName
+- phoneNumber
+- email (redundant ok; also on User)
+- addressCity (avoid full address if possible)
+- experienceSummary (text)
+- availabilityNotes (text)
+- status (enum: submitted, approved, rejected)
+- reviewedById (User nullable)
+- reviewedAt
+- createdAt, updatedAt
+
+SubcontractorAgreementTemplate:
+- id
+- version (string, e.g. "v1.0")
+- title
+- bodyText (long text)
+- effectiveDate
+- isActive (boolean)
+- createdAt, updatedAt
+(Seed one active template in seed.ts)
+
+SubcontractorAgreementAcceptance:
+- id
+- workerId (User)
+- templateId (SubcontractorAgreementTemplate)
+- acceptedAt (DateTime)
+- acceptedFullName (string)
+- acceptanceIp (string nullable)
+- acceptanceUserAgent (string nullable)
+- status (enum: accepted)
+- createdAt, updatedAt
+
+AgreementSubmission:
+- id
+- acceptanceId (SubcontractorAgreementAcceptance)
+- submittedToAdminAt (DateTime)
+- adminReviewedById (User nullable)
+- adminReviewedAt (DateTime nullable)
+- status (enum: submitted, reviewed)
+- createdAt, updatedAt
+
+Notification:
+- Create notifications for:
+  - HR/Admin when application submitted
+  - Worker when application approved/rejected
+  - Admin when agreement accepted (agreement submission created)
+
+AuditLog:
+- Log:
+  - worker application submitted
+  - application approved/rejected
+  - agreement accepted
+  - agreement marked reviewed
+
+========================================
+C) API UPDATES (EXPRESS + RBAC) — MUST IMPLEMENT
+========================================
+Onboarding Endpoints:
+- POST /onboarding/worker-application
+  Worker submits application form (role=worker only).
+  Sets worker onboardingStatus => APPLICATION_SUBMITTED.
+  Creates WorkerApplication(status=submitted).
+  Notifies HR/Admin.
+
+- GET /onboarding/worker-application/me
+  Worker fetches their application + status.
+
+- PUT /onboarding/worker-applications/:id/approve
+  HR/Admin approves; sets WorkerApplication.status=approved; sets worker onboardingStatus => AGREEMENT_PENDING.
+  Notify worker.
+
+- PUT /onboarding/worker-applications/:id/reject
+  HR/Admin rejects; sets WorkerApplication.status=rejected; sets worker onboardingStatus => APPLICATION_REJECTED.
+  Notify worker.
+
+- GET /onboarding/agreement/template/active
+  Worker fetches active agreement template (only if onboardingStatus is AGREEMENT_PENDING or higher).
+
+- POST /onboarding/agreement/accept
+  Worker accepts agreement:
+  Body: { templateId, acceptedFullName }
+  Server sets acceptedAt=now UTC, stores metadata (ip/user-agent if available).
+  Sets worker onboardingStatus => AGREEMENT_ACCEPTED (or ONBOARDED if you choose).
+  Creates AgreementSubmission(status=submitted, submittedToAdminAt=now).
+  Notify Admin.
+
+- GET /onboarding/agreement/me
+  Worker sees acceptance record + submission status.
+
+Admin Review:
+- GET /admin/agreements/submissions
+  Admin lists submissions (status=submitted/reviewed).
+
+- PUT /admin/agreements/submissions/:id/review
+  Admin marks reviewed; sets status=reviewed, adminReviewedAt, adminReviewedById.
+  Optionally set worker onboardingStatus => ONBOARDED.
+
+Existing Endpoints:
+Keep all previous endpoints (/auth, /users, /requests, /shifts, /tito, messaging, notifications, reports, exports) but enforce onboarding gate for workers.
+
+Middleware:
+- auth middleware: verifies JWT
+- rbac middleware: role checks
+- onboarding middleware:
+  If user.role=worker and onboardingStatus not in allowed states, block access to non-onboarding endpoints with 403 and a clear error code:
+    { code: "WORKER_ONBOARDING_INCOMPLETE", onboardingStatus: "..." }
+
+========================================
+D) FRONTEND UPDATES (MOBILE + DESKTOP RESPONSIVE)
+========================================
+Add onboarding routes/pages:
+
+/onboarding
+  - shows stepper + status
+/onboarding/application
+  - WorkerApplicationForm (react-hook-form + validation)
+/onboarding/status
+  - Shows current status and next action
+/onboarding/agreement
+  - Shows agreement template (scroll box), acceptance checkbox, typed full name, submit
+
+Routing Rules:
+- If logged-in user is worker and onboarding incomplete:
+  - Redirect any protected route to /onboarding
+- After agreement accepted:
+  - Allow access to main app (dashboard, shifts, etc.)
+- Admin has an “Agreements” section under /admin to review submissions
+
+UI:
+- Mobile:
+  - Stepper at top, cards for each step, big CTA buttons
+- Desktop:
+  - Stepper + side panel details, better spacing
+
+========================================
+E) SEED DATA UPDATES
+========================================
+In prisma/seed.ts:
+- Create an active SubcontractorAgreementTemplate with realistic placeholder bodyText
+- Create a demo worker in APPLICATION_SUBMITTED state AND another in AGREEMENT_PENDING state (optional)
+- Create demo HR/admin accounts (as previously)
+- Ensure demo logins still work
+
+========================================
+F) PRINT IN FULL (MANDATORY)
+========================================
+After generating the repository, PRINT THE FULL CONTENT (not summaries) of these files:
+1) server/prisma/schema.prisma
+2) server/src/routes/auth.ts
+3) server/src/server.ts
+4) server/src/routes/onboarding.ts  (NEW)
+5) client/src/pages/LoginPage.tsx
+6) client/src/pages/DashboardPage.tsx
+7) client/src/pages/OnboardingPage.tsx (NEW or equivalent)
+8) client/src/components/layout/Sidebar.tsx
+
+========================================
+G) EVERYTHING ELSE REMAINS THE SAME
+========================================
+Keep all prior requirements:
+- Node/Express/TS + Prisma/Postgres
+- React/Vite/TS + React Router
+- JWT + refresh tokens
+- Socket.io realtime messaging + notifications
+- Worker Requests, Shifts, TITO, Messaging, Notifications, Reports, Exports
+- GDPR + Canadian privacy expectations, minimal PII, audit logging
+- Root + server + client README.md
+- .env.example files
+- Pagination + validation + error handling
+
+FINAL: Generate ALL files and code needed. Ensure imports are correct and the project runs.

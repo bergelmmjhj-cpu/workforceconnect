@@ -1,0 +1,334 @@
+REPLIT AI — IMPLEMENT DETAILED WORKER APPLICATION FORM + SUBCONTRACTOR AGREEMENT + ONBOARDING GATE (MOBILE + DESKTOP)
+
+You are Replit AI acting as a senior full-stack engineer. Generate a COMPLETE, RUNNABLE monorepo codebase named `workforce-connect/` (server + client). The app MUST be fully responsive for BOTH mobile and desktop (mobile-first UI + desktop dashboard layout). Generate ALL files, folders, dependencies, and runnable code.
+
+This prompt replaces the worker onboarding and data capture requirements with the detailed forms below. Implement them exactly, including fields, validation, storage, and access gating.
+
+====================================================
+1) WORKER ONBOARDING WORKFLOW (MUST MATCH)
+====================================================
+Worker access is gated by onboarding steps:
+
+Step 1 — Worker Application Form
+- Worker registers/login, then completes the detailed Worker Application Form (Sections A–R below).
+- On submission:
+  - Application ID auto-generated
+  - Date Submitted UTC auto-stamped
+  - Save IP/device metadata for audit
+  - onboardingStatus => APPLICATION_SUBMITTED
+  - Notify HR + Admin
+
+Step 2 — HR/Admin Approval
+- HR or Admin reviews the application (internal view) and marks:
+  - Proceed to Interview / Hold / Decline (office use)
+  - Overall decision: Approve or Reject
+- If rejected: onboardingStatus => APPLICATION_REJECTED, worker blocked from main app and sees rejection status.
+- If approved: onboardingStatus => AGREEMENT_PENDING, worker is prompted to sign Subcontractor Agreement.
+
+Step 3 — Worker Accepts Subcontractor Agreement (Versioned)
+- Worker can view active Agreement Template (v1.0) and accept via:
+  - Checkbox “I Agree”
+  - Typed Full Legal Name
+  - Initials fields required for listed sections (19.1–19.5)
+  - Local date input (YYYY-MM-DD) and record worker timezone
+  - System records acceptedAt UTC + IP + userAgent
+- On acceptance:
+  - onboardingStatus => AGREEMENT_ACCEPTED (allow main app access after this)
+  - Create AgreementSubmission to Admin inbox (submitted)
+  - Notify Admin
+
+Step 4 — Admin Review (Recordkeeping)
+- Admin can mark AgreementSubmission “reviewed/received”.
+- Optionally set onboardingStatus => ONBOARDED (for reporting), but access is already allowed once AGREEMENT_ACCEPTED.
+
+Access Control Rules (Critical)
+- If user.role = worker AND onboardingStatus NOT IN (AGREEMENT_ACCEPTED, ONBOARDED):
+  - Backend must block access to ALL core modules (/requests, /shifts, /tito, /messages, /reports, etc.)
+  - Allow only:
+    - /auth/*
+    - /onboarding/*
+    - /profile/me (read-only)
+    - /notifications (optional, to show onboarding notifications)
+- Frontend must redirect such workers to /onboarding and show stepper + next action.
+
+====================================================
+2) WORKER APPLICATION FORM (SECTIONS A–R) — MUST IMPLEMENT
+====================================================
+Implement the form exactly with these sections and fields (store in DB). Fields marked * required. If not applicable, allow “N/A” where reasonable.
+
+A. APPLICATION META
+- applicationId: auto-generated (use cuid/uuid)
+- dateSubmittedUtc: auto-stamped (UTC)
+- source: text
+- recruiterReferrerCode: text
+
+B. PERSONAL DETAILS
+- legalFirstName* (text)
+- legalLastName* (text)
+- preferredName (text)
+- pronouns (text)
+- mobilePhone* (text)
+- emailAddress* (text)
+- currentAddress* (structured):
+  - street
+  - city
+  - provinceState
+  - postalZip
+  - country
+- primaryLanguage* (text)
+- otherLanguages (text)
+- timeZone* (select; store IANA tz string; default America/Toronto)
+
+C. WORK ELIGIBILITY & COMPLIANCE
+- legallyEligibleToWork* (boolean)
+- workAuthorizationType (text)
+- workAuthorizationExpiry (date nullable)
+- hasGovernmentPhotoId* (boolean)
+- hasDriversLicense (boolean)
+- driversLicenseProvinceClass (text)
+- backgroundCheckConsent* (enum: consent / do_not_consent)
+- certifications (array of objects):
+  - name
+  - expiryDate nullable
+
+D. ROLE INTERESTS & AVAILABILITY
+- rolesInterestedIn* (multi-select enum + “otherText”)
+  - Housekeeper, Houseperson, LaundryAttendant, Server, KitchenHelper, Dishwasher, Cook, Lifeguard, GeneralLabor, Other
+- rolesInterestedOtherText (text)
+- preferredWorkType* (enum: full_time, part_time, casual_on_call)
+- weeklyAvailabilityDays* (multi-select: Mon..Sun)
+- dailyTimeWindows (text)
+- earliestStartDate* (date)
+- distanceWillingToTravelKm (number nullable)
+- reliableTransportation* (enum: yes, no, sometimes)
+
+E. EXPERIENCE & SKILLS
+- yearsExperiencePrimaryRole* (number)
+- relatedExperienceSummary* (text)
+- relevantSkills (multi-select + equipmentOperationText):
+  - deep_cleaning, front_of_house, back_of_house, cash_handling, heavy_lifting, team_lead, customer_service, ppe_compliance, equipment_operation
+- equipmentOperationText (text)
+- technologyComfort (multi-select):
+  - mobile_apps, tito_timekeeping, messaging_apps, gps_checkins
+- languagesCommunicationNotes (text)
+
+F. SHIFT PREFERENCES & PAY
+- shiftTypes* (multi-select: day, evening, overnight, weekends)
+- minHoursPerShift (number nullable)
+- maxHoursPerWeekPreference (number nullable)
+- hourlyPayExpectation (number nullable)
+- unionMembership (text)
+
+G. EMERGENCY CONTACT
+- emergencyContactName* (text)
+- emergencyContactRelationship* (text)
+- emergencyContactPhone* (text)
+- emergencyContactAlt (text)
+
+H. HEALTH & SAFETY (VOLUNTARY)
+- allergiesMedicalAlerts (text optional)
+- ppeSizes (object optional):
+  - gloves (S/M/L/XL)
+  - shirt (S/M/L/XL)
+  - shoeSize (text/number)
+- accommodationRequests (text optional)
+
+I. REFERENCES (PREFER 2)
+- reference1 (object): name, relationship, contact
+- reference2 (object): name, relationship, contact
+
+J. MESSAGING & NOTIFICATIONS
+- preferredContactChannels* (multi-select: email, sms, in_app)
+- consentOperationalMessages* (boolean)
+
+K. DOCUMENTS (UPLOAD PLACEHOLDERS)
+MVP NOTE: Implement as “metadata placeholders” only (no real file storage). Store for each:
+- docType
+- provided (boolean)
+- notesOrLink (text)
+Doc types:
+- governmentPhotoId
+- proofWorkEligibility
+- resumeCv
+- certificationsLicenses
+- backgroundCheckConsentResult
+- optionalSelfieIdMatch
+
+L. BANKING DETAILS (POST-HIRE ONLY)
+- Do NOT collect in application. Add a note only (no DB fields needed).
+
+M. TITO & SITE RULES ACKNOWLEDGEMENT
+- acknowledgeTitoAccuracyUtc* (boolean)
+- acknowledgeSiteRulesSafety* (boolean)
+
+N. WORKER AGREEMENT PRE-ACKNOWLEDGMENT
+- preAcknowledgeAgreementRequired* (boolean)
+- verificationMethodAtSigningPlaceholder (enum: checkbox_ack, typed_name, other)
+- verificationMethodOtherText (text)
+
+O. PRIVACY & CONSENTS
+- consentDataProcessing* (boolean)
+- optionalGpsAcknowledgement (boolean)
+- privacyContactEmail (store constant “privacy@company.com” or configurable)
+
+P. DECLARATIONS & E-SIGN
+- declareTrueComplete* (boolean)
+- declareFalseInfoConsequences* (boolean)
+- electronicSignatureFullLegalName* (text)
+- dateLocal* (date)
+- record ip/device metadata at submission (store ip + userAgent)
+
+Q. FOR OFFICE USE ONLY (editable by HR/Admin only)
+- initialReviewOutcome (enum: proceed_interview, hold, decline)
+- interviewerRecruiter (text)
+- officeUseDate (date)
+- officeNotes (text)
+- complianceChecklist (object booleans): id, workAuth, certs, references
+- nextSteps (multi-select): agreement_to_sign, background_check, onboarding_docs
+
+R. VERSION & RETENTION
+- formVersion (string default "v1.0")
+- retentionNote (text default: “retained per legal/audit requirements and internal policy”)
+
+VALIDATION RULES
+- Enforce required fields with clear error messages on both client and server.
+- Dates must be ISO YYYY-MM-DD on client; store as DateTime in DB at UTC midnight or use Date-only approach (document decision).
+- Phone/email basic validation.
+
+====================================================
+3) SUBCONTRACTOR AGREEMENT — VERSIONED TEMPLATE + ACCEPTANCE
+====================================================
+Implement the agreement exactly as a template record (bodyText). Store acceptances with:
+- agreementId auto-generated
+- template version (v1.0)
+- lastUpdated date field on template
+Acceptance requires:
+- checkbox I Agree
+- typed full legal name (must match worker application legal first+last reasonably; allow minor spacing/case differences)
+- initials for:
+  - 19.1 Independent Contractor Status
+  - 19.2 TITO Accuracy & Verification
+  - 19.3 Confidentiality & Privacy
+  - 19.4 Non-Solicitation
+  - 19.5 Limitation of Liability
+- dateLocal (YYYY-MM-DD) + timezone
+System records:
+- acceptedAtUtc
+- ip
+- userAgent
+- immutable snapshot of template text at time of signing (store templateBodySnapshot in acceptance)
+
+Re-consent behavior (future-proof)
+- If a new active template version is published, worker must re-accept before submitting TITO for NEW shifts. For MVP:
+  - Implement check: when worker tries /tito submit, ensure latest active template has been accepted (by worker). If not, return 403 with code AGREEMENT_RECONSENT_REQUIRED.
+
+====================================================
+4) PRISMA SCHEMA — MUST UPDATE
+====================================================
+Update `server/prisma/schema.prisma` to include:
+- WorkerApplication (all fields above, including JSON where appropriate for lists/objects)
+- SubcontractorAgreementTemplate
+- SubcontractorAgreementAcceptance
+- AgreementSubmission
+- Extend User with onboardingStatus + timezone
+- Keep all other platform models (Requests, Shifts, TITO, Messaging, Notifications, AuditLog) from prior requirements.
+
+Implementation guidance:
+- Use enums for statuses.
+- Use Json fields for:
+  - certifications list
+  - references
+  - documents placeholders
+  - skills multi-select if you prefer; OR use separate tables (either ok, but must be consistent and queryable).
+- Add indexes for workerId, status, submittedAt, onboardingStatus.
+
+====================================================
+5) API ENDPOINTS — MUST ADD/UPDATE
+====================================================
+Onboarding endpoints:
+- POST /onboarding/worker-application
+- GET /onboarding/worker-application/me
+- GET /onboarding/worker-applications (HR/Admin list with filters: status, date range)  <-- add this
+- PUT /onboarding/worker-applications/:id/approve (HR/Admin)
+- PUT /onboarding/worker-applications/:id/reject (HR/Admin)
+
+Agreement endpoints:
+- GET /onboarding/agreement/template/active
+- POST /onboarding/agreement/accept
+- GET /onboarding/agreement/me
+
+Admin agreement review:
+- GET /admin/agreements/submissions
+- PUT /admin/agreements/submissions/:id/review
+
+Update middleware:
+- onboarding gate described above
+- For /tito submit: enforce agreement re-consent check against active template version
+
+====================================================
+6) FRONTEND PAGES — MUST ADD
+====================================================
+Add these pages (mobile + desktop responsive):
+- /onboarding (OnboardingHomePage with stepper)
+- /onboarding/application (WorkerApplicationFormPage)
+- /onboarding/agreement (AgreementSigningPage)
+- /onboarding/status (OnboardingStatusPage)
+Add Admin pages:
+- /admin/applications (HR/Admin review list)
+- /admin/applications/:id (detail view + approve/reject)
+- /admin/agreements (admin agreement submissions list)
+
+UI Requirements:
+- Mobile-first layout:
+  - Stepper at top
+  - Form sections collapsible accordions
+  - Save draft locally (optional) but submit to server required
+- Desktop:
+  - Two-column form layout for some sections
+  - Sidebar + topbar
+- Provide clear “Required” markers and inline validation.
+
+====================================================
+7) SEED DATA — MUST MATCH NEW MODELS
+====================================================
+In `server/prisma/seed.ts`:
+- Create active agreement template v1.0 and store the provided agreement bodyText.
+- Create:
+  - worker1 in APPLICATION_SUBMITTED with a full application record
+  - worker2 in AGREEMENT_PENDING (approved application)
+  - admin/hr/client demo users
+- Create notifications reflecting submission/approval.
+
+====================================================
+8) IMPORTANT: AGREEMENT + FORM TEXT
+====================================================
+Use the agreement body text exactly as provided (you may store it as a single long string).
+For the Worker Application Form, store fields as per schema; you do NOT need to store the literal “instructions” lines, but must store the values and preserve the “formVersion v1.0”.
+
+====================================================
+9) PRINT IN FULL (MANDATORY)
+====================================================
+After generating the repository, PRINT THE FULL CONTENT (not summaries) of:
+1) server/prisma/schema.prisma
+2) server/src/routes/auth.ts
+3) server/src/routes/onboarding.ts
+4) server/src/routes/adminAgreements.ts (or equivalent file)
+5) server/src/server.ts
+6) client/src/pages/OnboardingHomePage.tsx
+7) client/src/pages/WorkerApplicationFormPage.tsx
+8) client/src/pages/AgreementSigningPage.tsx
+9) client/src/components/layout/Sidebar.tsx
+
+====================================================
+10) EVERYTHING ELSE REMAINS REQUIRED
+====================================================
+Keep all original workforce platform requirements:
+- Requests, Shifts, TITO, Messaging, Notifications, Reports, CSV export
+- Socket.io realtime updates
+- JWT + refresh tokens
+- Role-based dashboards with Smart To-Do
+- Audit logging for key actions
+- Root/server/client README + .env.example files
+- Multi-timezone (UTC storage, local display)
+
+FINAL: Generate ALL files and code needed. Ensure correct imports, working scripts, and a runnable project in Replit.

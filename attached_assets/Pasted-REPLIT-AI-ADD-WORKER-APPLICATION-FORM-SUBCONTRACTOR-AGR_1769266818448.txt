@@ -1,0 +1,348 @@
+REPLIT AI — ADD WORKER APPLICATION FORM + SUBCONTRACTOR AGREEMENT (ONLY) WITH ONBOARDING GATE
+
+You are Replit AI. Modify the existing repo (do NOT create a new project). Implement ONLY:
+1) Worker Application Form (Sections A–R) + storage + endpoints + worker-facing pages
+2) Subcontractor Agreement (versioned template + acceptance) + storage + endpoints + worker-facing pages
+3) Worker access control (onboarding gate) that blocks workers from the rest of the app until agreement is accepted
+
+Do NOT implement requests/shifts/tito/messaging/reports changes beyond the access gate. Keep changes minimal and consistent with existing code patterns.
+
+========================================================
+1) DATABASE (PRISMA) — ADD MODELS + USER FIELDS
+========================================================
+Update `server/prisma/schema.prisma`:
+
+A) Enums
+- Role: keep existing
+- WorkerOnboardingStatus:
+  - NOT_APPLIED
+  - APPLICATION_SUBMITTED
+  - APPLICATION_APPROVED
+  - APPLICATION_REJECTED
+  - AGREEMENT_PENDING
+  - AGREEMENT_ACCEPTED
+  - ONBOARDED
+- WorkerApplicationStatus: submitted, approved, rejected
+- AgreementSubmissionStatus: submitted, reviewed
+
+B) Extend User
+- onboardingStatus WorkerOnboardingStatus @default(NOT_APPLIED)
+- timezone String @default("America/Toronto")
+
+C) New Models
+
+WorkerApplication (store Sections A–R)
+- id (cuid/uuid)
+- workerId (User) unique (one active application per worker for MVP)
+- submittedAtUtc DateTime @default(now())
+- source String?
+- recruiterReferrerCode String?
+
+Personal details:
+- legalFirstName String
+- legalLastName String
+- preferredName String?
+- pronouns String?
+- mobilePhone String
+- emailAddress String
+- currentAddress Json  // {street,city,provinceState,postalZip,country}
+- primaryLanguage String
+- otherLanguages String?
+- timeZone String
+
+Eligibility/compliance:
+- legallyEligibleToWork Boolean
+- workAuthorizationType String?
+- workAuthorizationExpiry DateTime?
+- hasGovernmentPhotoId Boolean
+- hasDriversLicense Boolean
+- driversLicenseProvinceClass String?
+- backgroundCheckConsent String  // "consent" | "do_not_consent"
+- certifications Json? // [{name, expiryDate?}]
+
+Role interests/availability:
+- rolesInterestedIn Json  // array of strings
+- rolesInterestedOtherText String?
+- preferredWorkType String
+- weeklyAvailabilityDays Json
+- dailyTimeWindows String?
+- earliestStartDate DateTime
+- distanceWillingToTravelKm Int?
+- reliableTransportation String // yes/no/sometimes
+
+Experience/skills:
+- yearsExperiencePrimaryRole Int
+- relatedExperienceSummary String
+- relevantSkills Json?
+- equipmentOperationText String?
+- technologyComfort Json?
+- languagesCommunicationNotes String?
+
+Shift preferences/pay:
+- shiftTypes Json
+- minHoursPerShift Int?
+- maxHoursPerWeekPreference Int?
+- hourlyPayExpectation Decimal?
+- unionMembership String?
+
+Emergency contact:
+- emergencyContactName String
+- emergencyContactRelationship String
+- emergencyContactPhone String
+- emergencyContactAlt String?
+
+Health/safety (voluntary):
+- allergiesMedicalAlerts String?
+- ppeSizes Json?
+- accommodationRequests String?
+
+References:
+- references Json? // {ref1:{...}, ref2:{...}}
+
+Messaging/notifications:
+- preferredContactChannels Json
+- consentOperationalMessages Boolean
+
+Documents placeholders:
+- documents Json? // [{docType, provided, notesOrLink}]
+
+Acknowledgements:
+- acknowledgeTitoAccuracyUtc Boolean
+- acknowledgeSiteRulesSafety Boolean
+
+Pre-ack:
+- preAcknowledgeAgreementRequired Boolean
+- verificationMethodAtSigningPlaceholder String
+- verificationMethodOtherText String?
+
+Privacy/consents:
+- consentDataProcessing Boolean
+- optionalGpsAcknowledgement Boolean
+- privacyContactEmail String @default("privacy@company.com")
+
+Declarations/e-sign:
+- declareTrueComplete Boolean
+- declareFalseInfoConsequences Boolean
+- electronicSignatureFullLegalName String
+- dateLocal String // YYYY-MM-DD
+- submitIp String?
+- submitUserAgent String?
+
+Office use only (HR/Admin):
+- initialReviewOutcome String?
+- interviewerRecruiter String?
+- officeUseDate String?
+- officeNotes String?
+- complianceChecklist Json?
+- nextSteps Json?
+
+Version:
+- formVersion String @default("v1.0")
+- retentionNote String? @default("retained per legal/audit requirements and internal policy")
+
+Workflow:
+- status WorkerApplicationStatus @default(submitted)
+- reviewedById String? (User)
+- reviewedAt DateTime?
+
+Standard:
+- createdAt DateTime @default(now())
+- updatedAt DateTime @updatedAt
+
+SubcontractorAgreementTemplate
+- id
+- version String (e.g. "v1.0")
+- title String
+- bodyText String (full text)
+- lastUpdated DateTime
+- effectiveDate DateTime
+- isActive Boolean @default(true)
+- createdAt/updatedAt
+
+SubcontractorAgreementAcceptance
+- id
+- workerId (User)
+- templateId
+- templateVersion String
+- templateBodySnapshot String
+- acceptedAtUtc DateTime
+- acceptedFullName String
+- initials Json // {s19_1,s19_2,s19_3,s19_4,s19_5}
+- dateLocal String // YYYY-MM-DD
+- timeZone String
+- acceptanceIp String?
+- acceptanceUserAgent String?
+- createdAt/updatedAt
+
+AgreementSubmission
+- id
+- acceptanceId
+- submittedToAdminAt DateTime
+- status AgreementSubmissionStatus @default(submitted)
+- adminReviewedById String?
+- adminReviewedAt DateTime?
+- createdAt/updatedAt
+
+Indexes:
+- Add indexes on workerId, status, submittedAtUtc, onboardingStatus, template isActive.
+
+Then:
+- Create a new Prisma migration.
+- Update seed script.
+
+========================================================
+2) BACKEND (EXPRESS) — ONLY ONBOARDING ROUTES + ACCESS GATE
+========================================================
+Add routes file: `server/src/routes/onboarding.ts` and mount at `/onboarding`.
+
+A) Worker Application
+- POST /onboarding/worker-application   (worker only)
+  - Validate required fields (A–R required items)
+  - Create WorkerApplication (or upsert if already exists and status=submitted)
+  - Set user.onboardingStatus = APPLICATION_SUBMITTED
+  - Store submitIp and submitUserAgent from request headers if available
+  - Return { applicationId, status, onboardingStatus }
+
+- GET /onboarding/worker-application/me (worker only)
+  - Return worker’s application + status + onboardingStatus
+
+B) HR/Admin Review (minimal admin endpoints ONLY for these forms)
+Create routes file: `server/src/routes/adminOnboarding.ts` and mount at `/admin/onboarding`.
+
+- GET /admin/onboarding/applications (hr/admin)
+  - List applications with filters: status, date range, search by name/email; paginate
+
+- GET /admin/onboarding/applications/:id (hr/admin)
+  - Application detail
+
+- PUT /admin/onboarding/applications/:id/approve (hr/admin)
+  - Set application.status=approved, reviewedById, reviewedAt
+  - Set user.onboardingStatus=AGREEMENT_PENDING
+  - Return updated records
+
+- PUT /admin/onboarding/applications/:id/reject (hr/admin)
+  - Set application.status=rejected, reviewedById, reviewedAt
+  - Set user.onboardingStatus=APPLICATION_REJECTED
+
+C) Agreement Template + Acceptance
+- GET /onboarding/agreement/template/active (worker only; only if onboardingStatus is AGREEMENT_PENDING or higher)
+  - Return active template (id, version, title, bodyText, lastUpdated, effectiveDate)
+
+- POST /onboarding/agreement/accept (worker only; only if onboardingStatus=AGREEMENT_PENDING)
+  Body:
+    - templateId
+    - acceptedFullName
+    - initials: {s19_1,s19_2,s19_3,s19_4,s19_5}
+    - dateLocal (YYYY-MM-DD)
+    - timeZone
+    - iAgree (boolean)
+  Behavior:
+    - Require iAgree true, acceptedFullName non-empty, all initials non-empty
+    - Create acceptance with templateBodySnapshot = template.bodyText and templateVersion
+    - Create AgreementSubmission (submittedToAdminAt=now)
+    - Set user.onboardingStatus = AGREEMENT_ACCEPTED
+    - Return onboardingStatus
+
+- GET /onboarding/agreement/me (worker only)
+  - Return latest acceptance + submission status (if any)
+
+D) Admin Agreement Review
+Add minimal routes in `server/src/routes/adminAgreements.ts` mounted at `/admin/agreements` (admin only):
+- GET /admin/agreements/submissions
+  - list submissions (submitted/reviewed) + paginate
+- GET /admin/agreements/submissions/:id
+  - detail includes acceptance + template snapshot
+- PUT /admin/agreements/submissions/:id/review
+  - mark reviewed; adminReviewedAt/by; status=reviewed
+  - optionally set worker onboardingStatus=ONBOARDED
+
+E) ACCESS GATE (critical)
+Create middleware `server/src/middleware/requireWorkerOnboardingComplete.ts`:
+- If req.user.role !== "worker" => next()
+- If req.path starts with "/onboarding" or "/auth" => next()
+- Allow read-only "/profile/me" if it exists
+- If user.onboardingStatus IN ("AGREEMENT_ACCEPTED","ONBOARDED") => next()
+- Else respond 403:
+  { code:"WORKER_ONBOARDING_INCOMPLETE", onboardingStatus:user.onboardingStatus }
+
+Mount this middleware for all authenticated routes (or globally after auth middleware) so workers cannot access the rest of the app until agreement accepted.
+
+========================================================
+3) FRONTEND (REACT) — ONLY FORM + AGREEMENT + STATUS PAGES
+========================================================
+Add routes:
+- /onboarding (OnboardingHomePage)
+- /onboarding/application (WorkerApplicationFormPage)
+- /onboarding/status (OnboardingStatusPage)
+- /onboarding/agreement (AgreementSigningPage)
+
+Behavior:
+- If logged-in user.role === "worker" AND onboardingStatus not in (AGREEMENT_ACCEPTED, ONBOARDED):
+  - Any attempt to access other protected pages must redirect to /onboarding
+- OnboardingHomePage:
+  - Stepper showing: Application → Approval → Agreement → Completed
+  - CTA goes to the next required step
+- WorkerApplicationFormPage:
+  - Implement Sections A–R fields (as per spec) with mobile-friendly accordions
+  - Client-side validation for required fields
+  - Submit to POST /onboarding/worker-application
+  - Navigate to /onboarding/status on success
+- OnboardingStatusPage:
+  - Shows current onboardingStatus and next instruction:
+    - NOT_APPLIED: complete application
+    - APPLICATION_SUBMITTED: “Awaiting HR/Admin review”
+    - APPLICATION_REJECTED: show “Not approved” + contact note
+    - AGREEMENT_PENDING: go to agreement signing
+    - AGREEMENT_ACCEPTED/ONBOARDED: show “Complete” and link to dashboard
+- AgreementSigningPage:
+  - Fetch active template
+  - Display in scrollable box; require “I have read” checkbox or scroll-to-end detection
+  - Require iAgree checkbox, typed full legal name, initials 19.1–19.5, dateLocal, timeZone
+  - Submit to POST /onboarding/agreement/accept
+  - On success: redirect to /dashboard (or app home)
+
+Also add minimal admin pages:
+- /admin/applications (HR/Admin list)
+- /admin/applications/:id (detail + approve/reject)
+- /admin/agreements (Admin list + mark reviewed)
+These pages can be simple, but must be functional.
+
+========================================================
+4) SEED DATA (SAMPLE DATA FOR TESTING)
+========================================================
+Update `server/prisma/seed.ts`:
+- Create users:
+  - admin@example.com / Password123!
+  - hr@example.com / Password123!
+  - worker_pending@example.com / Password123! (AGREEMENT_PENDING with approved WorkerApplication)
+  - worker_submitted@example.com / Password123! (APPLICATION_SUBMITTED with WorkerApplication)
+- Create one active SubcontractorAgreementTemplate:
+  - version: "v1.0"
+  - title: "Subcontractor Agreement"
+  - lastUpdated: set to today
+  - effectiveDate: set to today
+  - bodyText: use the full agreement text provided in the project notes (store as one long string)
+
+========================================================
+5) TEST WALKTHROUGH (BASIC)
+========================================================
+Update root README with a short manual test:
+1) Login as worker_submitted@example.com → verify redirected to /onboarding/status and cannot access dashboard.
+2) Login as hr@example.com → approve the worker application → worker becomes AGREEMENT_PENDING.
+3) Login as worker_submitted@example.com again → now can access /onboarding/agreement and sign.
+4) After signing, worker can access dashboard (agreement accepted).
+5) Login as admin@example.com → review agreement submission and mark reviewed.
+
+========================================================
+6) PRINT IN FULL (MANDATORY)
+========================================================
+After implementing, PRINT the full contents of:
+1) server/prisma/schema.prisma
+2) server/src/routes/onboarding.ts
+3) server/src/routes/adminOnboarding.ts
+4) server/src/middleware/requireWorkerOnboardingComplete.ts
+5) client/src/pages/WorkerApplicationFormPage.tsx
+6) client/src/pages/AgreementSigningPage.tsx
+7) client/src/pages/OnboardingStatusPage.tsx
+
+FINAL: Implement only the onboarding forms + agreement + access gate. Keep changes minimal and runnable.

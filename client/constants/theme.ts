@@ -22,6 +22,7 @@ export const Colors = {
     backgroundDefault: "#FFFFFF",
     backgroundSecondary: "#F1F5F9",
     backgroundTertiary: "#E2E8F0",
+    inputBackground: "#FFFFFF",
     
     // UI elements
     border: "#E2E8F0",
@@ -60,6 +61,7 @@ export const Colors = {
     backgroundDefault: "#1E293B",
     backgroundSecondary: "#334155",
     backgroundTertiary: "#475569",
+    inputBackground: "#1E293B",
     
     // UI elements
     border: "#334155",

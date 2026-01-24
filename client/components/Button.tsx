@@ -11,11 +11,13 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { BorderRadius, Spacing } from "@/constants/theme";
 
-interface ButtonProps {
+export interface ButtonProps {
   onPress?: () => void;
-  children: ReactNode;
+  children?: ReactNode;
+  title?: string;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
+  variant?: "primary" | "secondary" | "outline" | "ghost";
 }
 
 const springConfig: WithSpringConfig = {
@@ -31,8 +33,10 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 export function Button({
   onPress,
   children,
+  title,
   style,
   disabled = false,
+  variant = "primary",
 }: ButtonProps) {
   const { theme } = useTheme();
   const scale = useSharedValue(1);
@@ -53,6 +57,36 @@ export function Button({
     }
   };
 
+  const getBackgroundColor = () => {
+    switch (variant) {
+      case "secondary":
+        return theme.backgroundSecondary;
+      case "outline":
+      case "ghost":
+        return "transparent";
+      default:
+        return theme.link;
+    }
+  };
+
+  const getTextColor = () => {
+    switch (variant) {
+      case "secondary":
+      case "outline":
+      case "ghost":
+        return theme.text;
+      default:
+        return theme.buttonText;
+    }
+  };
+
+  const getBorderStyle = () => {
+    if (variant === "outline") {
+      return { borderWidth: 1, borderColor: theme.border };
+    }
+    return {};
+  };
+
   return (
     <AnimatedPressable
       onPress={disabled ? undefined : onPress}
@@ -62,18 +96,19 @@ export function Button({
       style={[
         styles.button,
         {
-          backgroundColor: theme.link,
+          backgroundColor: getBackgroundColor(),
           opacity: disabled ? 0.5 : 1,
         },
+        getBorderStyle(),
         style,
         animatedStyle,
       ]}
     >
       <ThemedText
         type="body"
-        style={[styles.buttonText, { color: theme.buttonText }]}
+        style={[styles.buttonText, { color: getTextColor() }]}
       >
-        {children}
+        {title || children}
       </ThemedText>
     </AnimatedPressable>
   );

@@ -54,7 +54,7 @@ Preferred communication style: Simple, everyday language.
 3. Server processes requests through Express routes
 4. Data stored in PostgreSQL via Drizzle ORM
 
-### Onboarding Flow
+### App Onboarding Flow
 
 First-time users are shown a 5-slide onboarding experience explaining:
 1. Welcome and app overview
@@ -64,6 +64,47 @@ First-time users are shown a 5-slide onboarding experience explaining:
 5. Messaging and communication
 
 Onboarding status is persisted in AsyncStorage (`@workforce_connect_onboarding`).
+
+### Worker Onboarding System
+
+Workers must complete an onboarding process before accessing the main app:
+
+**Onboarding States** (`WorkerOnboardingStatus`):
+- `NOT_APPLIED`: New worker, hasn't submitted application
+- `APPLICATION_SUBMITTED`: Application under review by HR/Admin
+- `APPLICATION_APPROVED`: Application approved, ready for agreement
+- `APPLICATION_REJECTED`: Application rejected
+- `AGREEMENT_PENDING`: Needs to sign subcontractor agreement
+- `AGREEMENT_ACCEPTED`: Agreement signed, onboarding complete
+- `ONBOARDED`: Fully onboarded worker
+
+**Onboarding Gate**: Workers with incomplete onboarding are redirected to `WorkerOnboardingScreen` instead of the main app. Only workers with `AGREEMENT_ACCEPTED` or `ONBOARDED` status can access shifts, TITO, and messaging.
+
+**Worker Application Form** (`WorkerApplicationFormScreen`):
+Multi-section collapsible form with 8 sections:
+- A. Personal Details (name, phone, email, address)
+- B. Work Eligibility (legal status, ID, background check consent)
+- C. Role Interests (job roles, work type preference)
+- D. Experience & Skills (years experience, summary)
+- E. Availability (days, shift types, travel distance)
+- F. Emergency Contact (required)
+- G. Preferences (contact channels, pay expectations)
+- H. Declarations (acknowledgments, electronic signature)
+
+**Subcontractor Agreement** (`AgreementSigningScreen`):
+- Displays versioned agreement template with full legal text
+- Requires scrolling through entire agreement
+- Signature section requires:
+  - "I Agree" checkbox
+  - Full legal name typed signature
+  - Initials for 5 key sections (19.1-19.5)
+  - Date
+
+**Demo Users for Testing**:
+- `worker_new@example.com` - NOT_APPLIED status
+- `worker_submitted@example.com` - APPLICATION_SUBMITTED status
+- `worker_pending@example.com` - AGREEMENT_PENDING status
+- `worker@example.com` - ONBOARDED status (full access)
 
 ### GPS Time Tracking (TITO)
 
@@ -87,12 +128,12 @@ Currently implemented as a demo/mock system using AsyncStorage for session persi
 ```
 client/           # React Native Expo frontend
   components/     # Reusable UI components
-  contexts/       # React contexts (Auth, Onboarding)
+  contexts/       # React contexts (Auth, Onboarding, WorkerOnboarding)
   hooks/          # Custom hooks (theme, screen options, content padding)
   navigation/     # React Navigation setup
-  screens/        # Screen components (including OnboardingScreen for first-time users)
-  storage/        # AsyncStorage helpers and mock data
-  types/          # TypeScript type definitions
+  screens/        # Screen components (including worker onboarding screens)
+  storage/        # AsyncStorage helpers, mock data, and onboarding data
+  types/          # TypeScript type definitions (includes worker application types)
   utils/          # Formatting utilities and location/GPS helpers
 server/           # Express backend
   routes.ts       # API route registration

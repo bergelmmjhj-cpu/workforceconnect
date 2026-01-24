@@ -13,7 +13,6 @@ import ProfileScreen from "@/screens/ProfileScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -31,7 +30,6 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 export default function MainTabNavigator() {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
-  const screenOptions = useScreenOptions();
 
   const role = user?.role || "client";
 
@@ -268,11 +266,19 @@ export default function MainTabNavigator() {
     }
   };
 
+  const isWeb = Platform.OS === "web";
+
   return (
     <Tab.Navigator
       initialRouteName="Dashboard"
       screenOptions={{
-        ...screenOptions,
+        headerTitleAlign: "center",
+        headerTransparent: !isWeb,
+        headerBlurEffect: isDark ? "dark" : "light",
+        headerTintColor: theme.text,
+        headerStyle: {
+          backgroundColor: isWeb ? theme.backgroundRoot : undefined,
+        },
         tabBarActiveTintColor: theme.tabIconSelected,
         tabBarInactiveTintColor: theme.tabIconDefault,
         tabBarStyle: {

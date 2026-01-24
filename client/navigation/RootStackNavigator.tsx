@@ -10,9 +10,13 @@ import CreateRequestScreen from "@/screens/CreateRequestScreen";
 import RequestDetailScreen from "@/screens/RequestDetailScreen";
 import ShiftDetailScreen from "@/screens/ShiftDetailScreen";
 import ClockInOutScreen from "@/screens/ClockInOutScreen";
+import WorkerOnboardingScreen from "@/screens/WorkerOnboardingScreen";
+import WorkerApplicationFormScreen from "@/screens/WorkerApplicationFormScreen";
+import AgreementSigningScreen from "@/screens/AgreementSigningScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
+import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
 import { useTheme } from "@/hooks/useTheme";
 
 export type RootStackParamList = {
@@ -24,17 +28,21 @@ export type RootStackParamList = {
   RequestDetail: { requestId: string };
   ShiftDetail: { shiftId: string };
   ClockInOut: { shiftId: string };
+  WorkerOnboarding: undefined;
+  WorkerApplication: undefined;
+  AgreementSigning: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
+  const { requiresOnboarding, isLoading: workerOnboardingLoading } = useWorkerOnboarding();
   const { theme } = useTheme();
 
-  if (authLoading || onboardingLoading) {
+  if (authLoading || onboardingLoading || (isAuthenticated && workerOnboardingLoading)) {
     return (
       <View
         style={{
@@ -57,7 +65,35 @@ export default function RootStackNavigator() {
           component={OnboardingScreen}
           options={{ headerShown: false }}
         />
-      ) : isAuthenticated ? (
+      ) : !isAuthenticated ? (
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{ headerShown: false }}
+        />
+      ) : requiresOnboarding ? (
+        <>
+          <Stack.Screen
+            name="WorkerOnboarding"
+            component={WorkerOnboardingScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="WorkerApplication"
+            component={WorkerApplicationFormScreen}
+            options={{
+              headerTitle: "Worker Application",
+            }}
+          />
+          <Stack.Screen
+            name="AgreementSigning"
+            component={AgreementSigningScreen}
+            options={{
+              headerTitle: "Sign Agreement",
+            }}
+          />
+        </>
+      ) : (
         <>
           <Stack.Screen
             name="Main"
@@ -101,12 +137,6 @@ export default function RootStackNavigator() {
             }}
           />
         </>
-      ) : (
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
       )}
     </Stack.Navigator>
   );

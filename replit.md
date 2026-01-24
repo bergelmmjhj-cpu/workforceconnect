@@ -91,6 +91,14 @@ Multi-section collapsible form with 8 sections:
 - G. Preferences (contact channels, pay expectations)
 - H. Declarations (acknowledgments, electronic signature)
 
+**Subcontractor Notice** (`SubcontractorNoticeScreen`):
+- Important disclosure screen shown before the full agreement
+- Covers work status (independent subcontractor, not employee)
+- Explains pay cycle & release timing (client-dependent payment)
+- Lists payment methods (Direct Deposit, E-Transfer, Cheque)
+- Payment information requirements
+- Two required acknowledgement checkboxes before proceeding
+
 **Subcontractor Agreement v2.0** (`AgreementSigningScreen`):
 - Displays versioned agreement template with 11 sections covering:
   - Subcontractor Status (Not Employment)

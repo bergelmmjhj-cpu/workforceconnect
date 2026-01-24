@@ -4,15 +4,18 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import MainTabNavigator from "@/navigation/MainTabNavigator";
 import LoginScreen from "@/screens/LoginScreen";
+import OnboardingScreen from "@/screens/OnboardingScreen";
 import ChatScreen from "@/screens/ChatScreen";
 import CreateRequestScreen from "@/screens/CreateRequestScreen";
 import RequestDetailScreen from "@/screens/RequestDetailScreen";
 import ShiftDetailScreen from "@/screens/ShiftDetailScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOnboarding } from "@/contexts/OnboardingContext";
 import { useTheme } from "@/hooks/useTheme";
 
 export type RootStackParamList = {
+  Onboarding: undefined;
   Login: undefined;
   Main: undefined;
   ChatScreen: { conversationId: string };
@@ -25,10 +28,11 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
   const { theme } = useTheme();
 
-  if (isLoading) {
+  if (authLoading || onboardingLoading) {
     return (
       <View
         style={{
@@ -45,7 +49,13 @@ export default function RootStackNavigator() {
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>
-      {isAuthenticated ? (
+      {!hasCompletedOnboarding ? (
+        <Stack.Screen
+          name="Onboarding"
+          component={OnboardingScreen}
+          options={{ headerShown: false }}
+        />
+      ) : isAuthenticated ? (
         <>
           <Stack.Screen
             name="Main"

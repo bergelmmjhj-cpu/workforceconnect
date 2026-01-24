@@ -58,6 +58,9 @@ export function Button({
   };
 
   const getBackgroundColor = () => {
+    if (disabled) {
+      return theme.border;
+    }
     switch (variant) {
       case "secondary":
         return theme.backgroundSecondary;
@@ -70,6 +73,9 @@ export function Button({
   };
 
   const getTextColor = () => {
+    if (disabled) {
+      return theme.textSecondary;
+    }
     switch (variant) {
       case "secondary":
       case "outline":

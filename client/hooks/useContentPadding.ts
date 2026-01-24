@@ -16,7 +16,8 @@ export function useContentPadding(): ContentPadding {
 
   const isWeb = Platform.OS === "web";
 
-  const paddingTop = isWeb ? Spacing.lg : headerHeight + Spacing.lg;
+  // Native devices need more top padding to account for transparent headers
+  const paddingTop = isWeb ? Spacing.lg : headerHeight + Spacing.xl;
   const paddingBottom = tabBarHeight + Spacing.xl;
 
   return { paddingTop, paddingBottom };
@@ -28,7 +29,8 @@ export function useStackContentPadding(): ContentPadding {
 
   const isWeb = Platform.OS === "web";
 
-  const paddingTop = isWeb ? Spacing.lg : headerHeight + Spacing.lg;
+  // Native devices need more top padding to account for transparent headers
+  const paddingTop = isWeb ? Spacing.lg : headerHeight + Spacing.xl;
   const paddingBottom = insets.bottom + Spacing.xl;
 
   return { paddingTop, paddingBottom };

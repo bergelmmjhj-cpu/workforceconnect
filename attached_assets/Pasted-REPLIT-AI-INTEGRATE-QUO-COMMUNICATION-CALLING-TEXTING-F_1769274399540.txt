@@ -1,0 +1,110 @@
+REPLIT AI — INTEGRATE “QUO” COMMUNICATION (CALLING + TEXTING) FOR HR + ADMIN ONLY
+
+You are Replit AI. Modify the existing workforce-connect monorepo (server: Node/Express/TS + Prisma, client: React/Vite/TS). Implement an integration layer that enables HR and Admin users to use the existing “Quo” communication system for calling and texting from inside Workforce Connect.
+
+Constraints
+- Scope: HR and Admin only. Clients and Workers must not see or use Quo features.
+- Do not break existing authentication or messaging features.
+- Build this as an isolated module so it won’t interfere with current voice/messaging code.
+- If Quo requires API keys, webhooks, or an SDK and we don’t have credentials yet, build the integration with:
+  1) a provider interface + mock provider (works locally)
+  2) clearly labeled environment variables and placeholder endpoints
+  3) a single place to switch from “MockQuoProvider” to “RealQuoProvider” once credentials are added
+
+Deliverables
+1) Server-side “Quo Integration” module
+- Create folder: server/src/integrations/quo/
+  - provider.ts (interface)
+  - mockProvider.ts (local dev, stores in DB)
+  - realProvider.ts (skeleton; throws “NOT_CONFIGURED” if missing env vars)
+  - index.ts (exports active provider)
+- Add required env vars to server/.env.example:
+  - QUO_API_BASE_URL=
+  - QUO_API_KEY=
+  - QUO_API_SECRET=
+  - QUO_WEBHOOK_SECRET=
+  - QUO_FROM_NUMBER=   (or Quo workspace number)
+- Add a DB model in Prisma for Quo objects (minimal viable):
+  - QuoConversation (id, externalId?, participantType, participantId, lastMessageAt, createdAt, updatedAt)
+  - QuoMessage (id, conversationId, externalId?, direction[inbound/outbound], toNumber, fromNumber, body, status, sentAt, deliveredAt?, createdAt)
+  - QuoCallLog (id, externalId?, direction, toNumber, fromNumber, status, startedAt, endedAt?, durationSeconds?, recordingUrl?, createdAt)
+  - QuoDeviceRegistration (id, userId, deviceId, lastSeenAt, createdAt)  // if needed for calling
+- Run prisma migration and update seed: create sample QuoConversation + QuoMessage + QuoCallLog for HR/Admin demo accounts.
+
+2) Server routes (RBAC enforced: HR + Admin only)
+Create: server/src/routes/quo.ts mounted at /quo
+Endpoints:
+- GET /quo/conversations
+  Returns list of conversations available to HR/Admin (from provider or DB).
+- GET /quo/conversations/:id/messages
+  Returns message thread.
+- POST /quo/messages
+  Body: { toNumber, body, conversationId? }
+  Sends SMS/text via provider; persists message; returns message.
+- POST /quo/calls
+  Body: { toNumber }
+  Initiates a call via provider (or mock); persists call log.
+- GET /quo/calls
+  List call logs.
+- POST /quo/webhooks/inbound
+  Webhook receiver for inbound messages/call status (validate QUO_WEBHOOK_SECRET).
+  On inbound message: store it + update conversation + emit realtime events to HR/Admin.
+- POST /quo/webhooks/call-status
+  Webhook receiver for call status updates.
+
+RBAC:
+- Add middleware: requireRole(["hr","admin"]) to ALL /quo routes (except webhooks).
+- Webhooks should validate shared secret and then process.
+
+Realtime:
+- Use Socket.io to broadcast events to HR/Admin only:
+  - quo:message:new
+  - quo:conversation:updated
+  - quo:call:updated
+Ensure only HR/Admin sockets join a room like “role:hr_admin” or per-user rooms; never broadcast to workers/clients.
+
+3) Frontend UI (HR + Admin only)
+Add navigation item: “Quo” under HR/Admin sidebar.
+Create pages:
+- client/src/pages/QuoPage.tsx
+  Layout: left panel conversation list, right panel message thread, compose box at bottom.
+- client/src/pages/QuoCallsPage.tsx
+  Shows call logs + “New Call” modal with toNumber.
+Components:
+- ConversationList, MessageThread, ComposeBox, CallLogTable, NewCallModal
+API:
+- client/src/api/quo.ts with functions for endpoints.
+Realtime:
+- client/src/socket/quo.ts to subscribe to quo:* events and update UI.
+Access control:
+- Hide Quo nav and routes unless role is hr/admin.
+- If non-hr/admin visits /quo route, redirect to /dashboard with “Access denied”.
+
+4) “Mock Quo Provider” behavior (must work without credentials)
+- Sending a message creates QuoMessage in DB with status “sent”
+- Inbound webhook can be simulated with a dev endpoint:
+  - POST /quo/dev/simulate-inbound { fromNumber, body }
+  This should create inbound QuoMessage and push realtime updates.
+- Calling creates QuoCallLog with status transitions (initiated -> ringing -> completed) in mock mode.
+
+5) Documentation
+Update root README with:
+- What Quo module does
+- Required env vars
+- How to run in mock mode
+- How to simulate inbound messages
+- Where to place real Quo credentials later
+
+6) Print in full after implementation
+- server/prisma/schema.prisma
+- server/src/routes/quo.ts
+- server/src/integrations/quo/provider.ts
+- server/src/integrations/quo/mockProvider.ts
+- client/src/pages/QuoPage.tsx
+- client/src/api/quo.ts
+- client/src/components/layout/Sidebar.tsx
+
+Important notes
+- Do not confuse this with the existing virtual phone/calling pages: create a separate “Quo” section and routes.
+- Avoid “different users see different data” issues: always write to DB first, then emit socket events, and ensure client updates are consistent (refetch on event if needed).
+- Keep the integration modular and easy to swap from mock to real provider.

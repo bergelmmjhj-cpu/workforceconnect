@@ -53,6 +53,17 @@ Preferred communication style: Simple, everyday language.
 3. Server processes requests through Express routes
 4. Data stored in PostgreSQL via Drizzle ORM
 
+### Onboarding Flow
+
+First-time users are shown a 5-slide onboarding experience explaining:
+1. Welcome and app overview
+2. Role-based experience explanation
+3. Shift management features
+4. Time In/Time Out (TITO) tracking
+5. Messaging and communication
+
+Onboarding status is persisted in AsyncStorage (`@workforce_connect_onboarding`).
+
 ### Authentication Pattern
 
 Currently implemented as a demo/mock system using AsyncStorage for session persistence. The architecture supports:
@@ -65,10 +76,10 @@ Currently implemented as a demo/mock system using AsyncStorage for session persi
 ```
 client/           # React Native Expo frontend
   components/     # Reusable UI components
-  contexts/       # React contexts (Auth)
+  contexts/       # React contexts (Auth, Onboarding)
   hooks/          # Custom hooks (theme, screen options, content padding)
   navigation/     # React Navigation setup
-  screens/        # Screen components
+  screens/        # Screen components (including OnboardingScreen for first-time users)
   storage/        # AsyncStorage helpers and mock data
   types/          # TypeScript type definitions
   utils/          # Formatting utilities

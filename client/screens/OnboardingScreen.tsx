@@ -100,7 +100,7 @@ export default function OnboardingScreen() {
       <View
         style={[
           styles.iconContainer,
-          { backgroundColor: theme.primarySubtle },
+          { backgroundColor: theme.backgroundSecondary },
         ]}
       >
         <Feather name={item.icon} size={64} color={theme.primary} />
@@ -174,11 +174,11 @@ export default function OnboardingScreen() {
         </View>
 
         <Button
-          title={isLastSlide ? "Get Started" : "Next"}
           onPress={handleNext}
           style={styles.nextButton}
-          testID="button-onboarding-next"
-        />
+        >
+          {isLastSlide ? "Get Started" : "Next"}
+        </Button>
       </View>
     </View>
   );

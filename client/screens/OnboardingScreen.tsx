@@ -177,6 +177,7 @@ export default function OnboardingScreen() {
           title={isLastSlide ? "Get Started" : "Next"}
           onPress={handleNext}
           style={styles.nextButton}
+          testID="button-onboarding-next"
         />
       </View>
     </View>

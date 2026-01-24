@@ -565,125 +565,143 @@ export async function clearStorage(): Promise<void> {
 
 // Default agreement template
 const defaultAgreementTemplate: SubcontractorAgreementTemplate = {
-  id: "template-v1",
-  version: "v1.0",
+  id: "template-v2",
+  version: "v2.0",
   title: "Subcontractor Agreement",
   bodyText: `SUBCONTRACTOR AGREEMENT
 
-This Subcontractor Agreement ("Agreement") is entered into as of the date of electronic acceptance below.
+1. SUBCONTRACTOR STATUS (NOT EMPLOYMENT)
 
-1. INDEPENDENT CONTRACTOR STATUS
-The Subcontractor acknowledges and agrees that they are engaged as an independent contractor and not as an employee. The Subcontractor shall be solely responsible for all taxes, including income tax, employment insurance premiums, and Canada Pension Plan contributions. The Subcontractor shall not be entitled to any employee benefits, including but not limited to vacation pay, sick leave, health insurance, or pension benefits.
+1.1 The Subcontractor acknowledges and agrees that all individuals providing services through Workforce Connect do so strictly as INDEPENDENT SUBCONTRACTORS.
 
-2. SERVICES
-The Subcontractor agrees to provide staffing and workforce services as directed by the Company, including but not limited to:
-- Completing assigned shifts at designated client locations
-- Accurately recording time in/time out using the Company's TITO system
-- Following all workplace safety protocols and client site rules
-- Maintaining professional conduct at all times
+1.2 This Agreement does NOT create an employer-employee relationship. The Subcontractor understands and agrees that:
+- You are NOT an employee
+- You are NOT on payroll
+- You do NOT receive employee benefits
+- There are NO deductions from your pay (NO CPP, NO EI, NO income tax)
 
-3. COMPENSATION
-The Subcontractor shall be compensated at the agreed-upon hourly rate for each assignment. Payment shall be made according to the Company's standard payment schedule. The Subcontractor is responsible for tracking and verifying their hours worked.
+1.3 The Subcontractor is fully and solely responsible for:
+- Reporting all income to the Canada Revenue Agency (CRA)
+- Paying all applicable taxes, CPP, EI (if applicable), HST/GST/QST
+- Maintaining any required tax registrations or filings
 
-4. TITO ACCURACY & VERIFICATION
-The Subcontractor agrees to:
-- Accurately record all clock-in and clock-out times using the GPS-verified TITO system
-- Only clock in when physically present at the designated work location
-- Report any discrepancies or technical issues immediately
-- Acknowledge that falsification of time records may result in termination
+2. SCOPE OF SERVICES
 
-5. CONFIDENTIALITY & PRIVACY
-The Subcontractor agrees to maintain strict confidentiality regarding:
-- Client business information and trade secrets
-- Personal information of clients, their customers, and other workers
-- Company operational procedures and proprietary systems
-- Any information marked as confidential
+2.1 The Subcontractor provides housekeeping, janitorial, hospitality, or related services on a shift-based or project-based basis for Workforce Connect and/or its hotel and janitorial clients ("Clients").
 
-6. NON-SOLICITATION
-During the term of this Agreement and for a period of twelve (12) months following termination, the Subcontractor shall not:
-- Directly solicit or accept work from any client of the Company
-- Recruit or solicit other subcontractors to leave the Company
-- Interfere with the Company's business relationships
+2.2 The Subcontractor agrees to:
+- Perform services professionally and safely
+- Follow all Client site rules, hotel policies, and safety procedures
+- Comply with all applicable laws and regulations
 
-7. COMPLIANCE WITH LAWS
-The Subcontractor agrees to comply with all applicable federal, provincial, and local laws, regulations, and ordinances, including but not limited to:
-- Occupational health and safety regulations
-- Privacy legislation (PIPEDA and provincial privacy laws)
-- Human rights legislation
-- Employment standards (where applicable)
+2.3 The Subcontractor controls the manner and means of performing the services, subject only to Client site standards and agreed outcomes.
 
-8. INSURANCE
-The Subcontractor acknowledges that they are responsible for obtaining any insurance coverage they deem necessary, including liability insurance. The Company provides Workers' Safety and Insurance Board (WSIB) coverage for workplace injuries as required by law.
+3. PAY STRUCTURE & PAYMENT RELEASE
+
+3.1 Bi-Weekly Reporting Period (Hotel Workers Only)
+Work performed for hotel-based assignments follows a bi-weekly reporting cutoff period.
+
+3.2 Client-Dependent Payment Release
+Payment to the Subcontractor is released ONLY AFTER Workforce Connect receives payment from the hotel or janitorial Client.
+
+3.3 Once Client funds are received and cleared:
+- The Subcontractor's corresponding payment will be processed and released immediately
+
+3.4 Payment timing may vary due to:
+- Client accounting and approval schedules
+- Banking settlement timelines
+- Holidays
+- System maintenance or operational delays
+
+3.5 For transparency, proof of Client payment may be provided upon request via email.
+
+4. NO GUARANTEED PAYMENT DATE
+
+4.1 The Subcontractor understands and agrees that:
+- There is NO guaranteed pay date
+- Payment release depends entirely on Client remittance
+- Workforce Connect is not responsible for delays caused by Clients or banking institutions
+
+5. PAYMENT METHODS
+
+5.1 Workforce Connect supports ONLY the following payment methods:
+
+A. Direct Deposit (EFT)
+- Requires valid banking details or a void cheque
+
+B. Interac E-Transfer
+- Subject to bank-imposed sending limits
+
+C. Company Cheque
+- Available to GTA-based subcontractors only
+
+6. PAYMENT INFORMATION REQUIREMENT
+
+6.1 The Subcontractor understands that payment cannot be processed until valid payment details are submitted and approved.
+
+6.2 The Subcontractor must complete the official Payment Information Form provided by Workforce Connect.
+
+6.3 Incorrect, incomplete, or missing payment information will result in payment delays, for which Workforce Connect is not liable.
+
+7. TIMEKEEPING & VERIFICATION (TITO)
+
+7.1 The Subcontractor must accurately submit Time-In / Time-Out (TITO) records through the Workforce Connect platform.
+
+7.2 Server-recorded UTC timestamps are authoritative. Corrections require valid justification.
+
+7.3 Coarse location data or simple verification methods (checkbox or typed name) may be required for audit and client verification purposes.
+
+8. CONFIDENTIALITY & CONDUCT
+
+8.1 The Subcontractor agrees to maintain confidentiality of all non-public Company or Client information.
+
+8.2 Misconduct, falsification of records, safety violations, or breach of policies may result in immediate termination of access to the platform.
 
 9. TERMINATION
-Either party may terminate this Agreement at any time with or without cause. The Company reserves the right to immediately terminate this Agreement for:
-- Falsification of time records or other documentation
-- Violation of client site rules or safety protocols
-- Breach of confidentiality obligations
-- Failure to meet performance standards
-- Any conduct that reflects negatively on the Company
 
-10. DISPUTE RESOLUTION
-Any disputes arising under this Agreement shall be resolved through:
-- Good faith negotiation between the parties
-- Mediation if negotiation is unsuccessful
-- Binding arbitration in accordance with applicable provincial legislation
+9.1 Either Party may terminate this Agreement with written notice.
 
-11. LIMITATION OF LIABILITY
-To the maximum extent permitted by law:
-- The Company's liability shall be limited to the amounts paid to the Subcontractor under this Agreement
-- Neither party shall be liable for indirect, incidental, or consequential damages
-- The Subcontractor assumes all risk associated with the performance of services
+9.2 Workforce Connect may immediately terminate access for:
+- Fraud or misrepresentation
+- Safety or policy violations
+- Breach of this Agreement
 
-12. DATA PROTECTION & CONSENT
-The Subcontractor consents to the collection, use, and disclosure of personal information as necessary to:
-- Verify identity and work eligibility
-- Process payroll and maintain employment records
-- Communicate regarding assignments and scheduling
-- Comply with legal and regulatory requirements
+9.3 Upon termination, the Subcontractor is entitled only to payment for approved and completed work up to the termination date, subject to Client payment.
 
-13. AMENDMENTS
-This Agreement may only be amended in writing signed by both parties. The Company may update policies and procedures from time to time, and continued acceptance of assignments constitutes acceptance of such updates.
+10. GOVERNING LAW
 
-14. ENTIRE AGREEMENT
-This Agreement constitutes the entire agreement between the parties and supersedes all prior agreements, representations, and understandings.
+10.1 This Agreement is governed by the laws of the Province of Ontario and the federal laws of Canada applicable therein.
 
-15. SEVERABILITY
-If any provision of this Agreement is found to be invalid or unenforceable, the remaining provisions shall continue in full force and effect.
+11. ELECTRONIC ACCEPTANCE
 
-16. GOVERNING LAW
-This Agreement shall be governed by and construed in accordance with the laws of the Province of Ontario and the federal laws of Canada applicable therein.
+11.1 The Subcontractor agrees that:
+- Clicking "I Agree"
+- Typing their full legal name
+- Submitting this Agreement electronically
+constitutes a legally binding electronic signature.
 
-17. ELECTRONIC ACCEPTANCE
-The Subcontractor agrees that electronic acceptance of this Agreement, including typed signature and initials, constitutes a valid and binding agreement equivalent to a handwritten signature.
+REQUIRED INITIALS
 
-18. ACKNOWLEDGMENTS
-By accepting this Agreement, the Subcontractor acknowledges that they have:
-- Read and understood all terms and conditions
-- Had the opportunity to seek independent legal advice
-- Voluntarily agreed to be bound by this Agreement
-
-19. REQUIRED INITIALS
 Please provide your initials to confirm your understanding and acceptance of the following key sections:
 
-19.1 Independent Contractor Status (Section 1) - I understand that I am engaged as an independent contractor and not an employee.
+A. Subcontractor Status (Section 1) - I understand that I am an independent subcontractor, NOT an employee, and I am responsible for my own taxes.
 
-19.2 TITO Accuracy & Verification (Section 4) - I agree to accurately record all time entries and understand the consequences of falsification.
+B. Pay Structure (Section 3 & 4) - I understand that payment is released only after Workforce Connect receives payment from the Client, and there is no guaranteed pay date.
 
-19.3 Confidentiality & Privacy (Section 5) - I agree to maintain strict confidentiality of all client and company information.
+C. TITO Accuracy (Section 7) - I agree to accurately submit all Time-In / Time-Out records and understand that falsification may result in termination.
 
-19.4 Non-Solicitation (Section 6) - I understand and agree to the non-solicitation obligations.
+D. Confidentiality & Conduct (Section 8) - I agree to maintain confidentiality and understand that misconduct may result in immediate termination.
 
-19.5 Limitation of Liability (Section 11) - I understand and accept the limitation of liability provisions.
+E. Termination (Section 9) - I understand the termination terms and that payment upon termination is subject to Client payment.
 
-Version: v1.0
-Last Updated: 2026-01-01
-Effective Date: 2026-01-01`,
-  lastUpdated: "2026-01-01T00:00:00.000Z",
-  effectiveDate: "2026-01-01T00:00:00.000Z",
+Version: v2.0
+Last Updated: 2026-01-24
+Effective Date: 2026-01-24`,
+  lastUpdated: "2026-01-24T00:00:00.000Z",
+  effectiveDate: "2026-01-24T00:00:00.000Z",
   isActive: true,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
+  createdAt: "2026-01-24T00:00:00.000Z",
+  updatedAt: "2026-01-24T00:00:00.000Z",
 };
 
 // Sample worker application for testing

@@ -35,11 +35,11 @@ interface InitialsForm {
 }
 
 const INITIAL_SECTIONS = [
-  { key: "s19_1" as const, title: "19.1 Independent Contractor Status" },
-  { key: "s19_2" as const, title: "19.2 TITO Accuracy & Verification" },
-  { key: "s19_3" as const, title: "19.3 Confidentiality & Privacy" },
-  { key: "s19_4" as const, title: "19.4 Non-Solicitation" },
-  { key: "s19_5" as const, title: "19.5 Limitation of Liability" },
+  { key: "s19_1" as const, title: "A. Subcontractor Status (Not Employee)" },
+  { key: "s19_2" as const, title: "B. Pay Structure & No Guaranteed Pay Date" },
+  { key: "s19_3" as const, title: "C. TITO Accuracy & Verification" },
+  { key: "s19_4" as const, title: "D. Confidentiality & Conduct" },
+  { key: "s19_5" as const, title: "E. Termination Terms" },
 ];
 
 export default function AgreementSigningScreen() {

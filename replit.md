@@ -91,13 +91,23 @@ Multi-section collapsible form with 8 sections:
 - G. Preferences (contact channels, pay expectations)
 - H. Declarations (acknowledgments, electronic signature)
 
-**Subcontractor Agreement** (`AgreementSigningScreen`):
-- Displays versioned agreement template with full legal text
-- Requires scrolling through entire agreement
+**Subcontractor Agreement v2.0** (`AgreementSigningScreen`):
+- Displays versioned agreement template with 11 sections covering:
+  - Subcontractor Status (Not Employment)
+  - Scope of Services
+  - Pay Structure & Payment Release (client-dependent)
+  - No Guaranteed Payment Date
+  - Payment Methods (EFT, E-Transfer, Cheque)
+  - Payment Information Requirement
+  - Timekeeping & Verification (TITO)
+  - Confidentiality & Conduct
+  - Termination
+  - Governing Law (Ontario)
+  - Electronic Acceptance
 - Signature section requires:
   - "I Agree" checkbox
   - Full legal name typed signature
-  - Initials for 5 key sections (19.1-19.5)
+  - Initials for 5 key sections (A-E: Subcontractor Status, Pay Structure, TITO, Confidentiality, Termination)
   - Date
 
 **Demo Users for Testing**:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef, useLayoutEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -6,11 +6,13 @@ import {
   TextInput,
   Pressable,
   KeyboardAvoidingView,
-  Platform,
+  Linking,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useRoute } from "@react-navigation/native";
+import { HeaderButton } from "@react-navigation/elements";
+import { useRoute, useNavigation } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -29,6 +31,7 @@ export default function QuoChatScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const route = useRoute();
+  const navigation = useNavigation();
   const { conversationId } = route.params as RouteParams;
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -43,6 +46,60 @@ export default function QuoChatScreen() {
   });
 
   const conversation = conversations?.find((c) => c.id === conversationId);
+
+  const handleCall = async () => {
+    if (!conversation) return;
+    const cleanNumber = conversation.participantPhone.replace(/[^\d+]/g, "");
+    const telUrl = `tel:${cleanNumber}`;
+    
+    try {
+      const canOpen = await Linking.canOpenURL(telUrl);
+      if (canOpen) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await Linking.openURL(telUrl);
+      } else {
+        Alert.alert("Cannot Make Call", "Your device doesn't support phone calls.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to open dialer.");
+    }
+  };
+
+  const handleSms = async () => {
+    if (!conversation) return;
+    const cleanNumber = conversation.participantPhone.replace(/[^\d+]/g, "");
+    const smsUrl = `sms:${cleanNumber}`;
+    
+    try {
+      const canOpen = await Linking.canOpenURL(smsUrl);
+      if (canOpen) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await Linking.openURL(smsUrl);
+      } else {
+        Alert.alert("Cannot Send SMS", "Your device doesn't support SMS messaging.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to open messaging app.");
+    }
+  };
+
+  useLayoutEffect(() => {
+    if (conversation) {
+      navigation.setOptions({
+        headerTitle: conversation.participantName || conversation.participantPhone,
+        headerRight: () => (
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <HeaderButton onPress={handleSms}>
+              <Feather name="message-square" size={22} color={theme.primary} />
+            </HeaderButton>
+            <HeaderButton onPress={handleCall}>
+              <Feather name="phone" size={22} color={theme.success} />
+            </HeaderButton>
+          </View>
+        ),
+      });
+    }
+  }, [conversation, navigation, theme]);
 
   const { data: messages, isLoading, refetch } = useQuery<QuoMessage[]>({
     queryKey: ["/api/quo/conversations", conversationId, "messages"],

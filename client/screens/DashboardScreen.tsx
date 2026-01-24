@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { View, StyleSheet, RefreshControl, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -13,6 +12,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { StatCardSkeleton } from "@/components/LoadingSkeleton";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing } from "@/constants/theme";
 import { getGreeting } from "@/utils/format";
 import { TodoItem, DashboardStats } from "@/types";
@@ -25,8 +25,8 @@ import {
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const { paddingTop, paddingBottom } = useContentPadding();
   const navigation = useNavigation();
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -222,8 +222,8 @@ export default function DashboardScreen() {
       contentContainerStyle={[
         styles.content,
         {
-          paddingTop: headerHeight + Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingTop,
+          paddingBottom,
         },
       ]}
       scrollIndicatorInsets={{ bottom: insets.bottom }}

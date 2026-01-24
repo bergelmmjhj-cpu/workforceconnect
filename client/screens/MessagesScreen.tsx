@@ -4,13 +4,10 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
-  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
 import { ConversationItem } from "@/components/ConversationItem";
@@ -18,14 +15,15 @@ import { EmptyState } from "@/components/EmptyState";
 import { ConversationSkeleton } from "@/components/LoadingSkeleton";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing } from "@/constants/theme";
 import { Conversation } from "@/types";
 import { getConversations } from "@/storage";
 
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const { paddingTop, paddingBottom } = useContentPadding();
   const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -77,7 +75,7 @@ export default function MessagesScreen() {
           styles.container,
           {
             backgroundColor: theme.backgroundRoot,
-            paddingTop: headerHeight + Spacing.lg,
+            paddingTop: paddingTop,
           },
         ]}
       >
@@ -96,7 +94,7 @@ export default function MessagesScreen() {
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingTop: headerHeight + Spacing.lg,
+            paddingTop: paddingTop,
             paddingBottom: tabBarHeight + Spacing.xl,
           },
           conversations.length === 0 && styles.emptyContent,

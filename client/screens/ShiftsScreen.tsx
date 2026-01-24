@@ -7,7 +7,6 @@ import {
   Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -19,6 +18,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ListSkeleton } from "@/components/LoadingSkeleton";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { Shift, ShiftStatus } from "@/types";
 import { getShifts } from "@/storage";
@@ -32,8 +32,8 @@ const filterOptions: { label: string; value: ShiftStatus | "all" }[] = [
 
 export default function ShiftsScreen() {
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const { paddingTop, paddingBottom } = useContentPadding();
   const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -134,7 +134,7 @@ export default function ShiftsScreen() {
           styles.container,
           {
             backgroundColor: theme.backgroundRoot,
-            paddingTop: headerHeight + Spacing.lg,
+            paddingTop: paddingTop,
             paddingHorizontal: Spacing.lg,
           },
         ]}
@@ -153,7 +153,7 @@ export default function ShiftsScreen() {
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingTop: headerHeight + Spacing["4xl"] + Spacing.lg,
+            paddingTop: paddingTop + Spacing["3xl"],
             paddingBottom: tabBarHeight + Spacing.xl,
           },
           filteredShifts.length === 0 && styles.emptyContent,

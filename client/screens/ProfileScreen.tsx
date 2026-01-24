@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { View, StyleSheet, Pressable, Switch, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -11,6 +10,7 @@ import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { UserRole } from "@/types";
 
@@ -23,8 +23,8 @@ const roleLabels: Record<UserRole, string> = {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const { paddingTop, paddingBottom } = useContentPadding();
   const { theme } = useTheme();
   const { user, logout, switchRole } = useAuth();
 
@@ -48,7 +48,7 @@ export default function ProfileScreen() {
       contentContainerStyle={[
         styles.content,
         {
-          paddingTop: headerHeight + Spacing.xl,
+          paddingTop: paddingTop,
           paddingBottom: tabBarHeight + Spacing.xl,
         },
       ]}

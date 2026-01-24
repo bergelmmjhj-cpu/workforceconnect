@@ -174,16 +174,6 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Shifts"
-              component={ShiftsScreen}
-              options={{
-                headerTitle: "Shifts",
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="calendar" size={size} color={color} />
-                ),
-              }}
-            />
-            <Tab.Screen
               name="Tito"
               component={TitoScreen}
               options={{
@@ -201,6 +191,16 @@ export default function MainTabNavigator() {
                 headerTitle: "Messages",
                 tabBarIcon: ({ color, size }) => (
                   <Feather name="message-circle" size={size} color={color} />
+                ),
+              }}
+            />
+            <Tab.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{
+                headerTitle: "Account",
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="user" size={size} color={color} />
                 ),
               }}
             />

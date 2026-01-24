@@ -6,7 +6,8 @@ Workforce Connect is an enterprise workforce management platform built as a cros
 
 Key capabilities include:
 - Staff deployment and shift tracking
-- Time-in/time-out logging with approval workflows
+- Geolocation-based time tracking (TITO) with 100-meter geofence verification
+- GPS-verified clock in/out requiring workers to be at work site
 - Real-time messaging between users
 - Role-based dashboards with SLA monitoring
 - Multi-timezone support (UTC storage, localized display)
@@ -64,6 +65,16 @@ First-time users are shown a 5-slide onboarding experience explaining:
 
 Onboarding status is persisted in AsyncStorage (`@workforce_connect_onboarding`).
 
+### GPS Time Tracking (TITO)
+
+Workers can clock in/out using GPS verification:
+- Shifts store work site coordinates (`locationCoordinates`) and geofence radius (default 100m)
+- ClockInOutScreen verifies worker is within geofence before allowing clock in/out
+- Uses Haversine formula for distance calculation (`client/utils/location.ts`)
+- TitoLog records actual coordinates and distance at clock in/out time
+- Location permission flow with fallback to Settings on native devices
+- Web shows notice directing users to Expo Go for full GPS features
+
 ### Authentication Pattern
 
 Currently implemented as a demo/mock system using AsyncStorage for session persistence. The architecture supports:
@@ -82,7 +93,7 @@ client/           # React Native Expo frontend
   screens/        # Screen components (including OnboardingScreen for first-time users)
   storage/        # AsyncStorage helpers and mock data
   types/          # TypeScript type definitions
-  utils/          # Formatting utilities
+  utils/          # Formatting utilities and location/GPS helpers
 server/           # Express backend
   routes.ts       # API route registration
   storage.ts      # Storage interface (memory/database)
@@ -97,10 +108,11 @@ shared/           # Shared code between client and server
 - **Drizzle ORM**: Type-safe database toolkit with migration support via `drizzle-kit`
 
 ### Frontend Libraries
-- **Expo SDK**: Managed workflow with native module support (expo-haptics, expo-image, expo-blur)
+- **Expo SDK**: Managed workflow with native module support (expo-haptics, expo-image, expo-blur, expo-location)
 - **React Navigation**: Navigation framework with native stack and bottom tabs
 - **TanStack Query**: Server state management and caching
 - **date-fns/date-fns-tz**: Date formatting with timezone support
+- **react-native-maps**: Map display for GPS-based time tracking
 
 ### Development Tools
 - **TypeScript**: Full type coverage across frontend and backend

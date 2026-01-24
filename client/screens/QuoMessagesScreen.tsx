@@ -6,11 +6,13 @@ import {
   RefreshControl,
   Pressable,
   TextInput,
+  Linking,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
@@ -36,7 +38,6 @@ export default function QuoMessagesScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
 
   const [showNewMessage, setShowNewMessage] = useState(false);
   const [newPhone, setNewPhone] = useState("");
@@ -55,37 +56,37 @@ export default function QuoMessagesScreen() {
     enabled: !!user && (user.role === "admin" || user.role === "hr"),
   });
 
-  const sendMessageMutation = useMutation({
-    mutationFn: async (data: { toNumber: string; body: string }) => {
-      const res = await fetch(`${getApiUrl()}api/quo/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-role": user?.role || "admin",
-        },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to send message");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/quo/conversations"] });
-      setShowNewMessage(false);
-      setNewPhone("");
-      setNewBody("");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-  });
-
   const handleConversationPress = (conv: QuoConversation) => {
     Haptics.selectionAsync();
     (navigation as any).navigate("QuoChat", { conversationId: conv.id });
   };
 
+  const handleOpenSms = async (phoneNumber: string, body?: string) => {
+    const cleanNumber = phoneNumber.replace(/[^\d+]/g, "");
+    let smsUrl = `sms:${cleanNumber}`;
+    if (body) {
+      smsUrl += `?body=${encodeURIComponent(body)}`;
+    }
+    
+    try {
+      const canOpen = await Linking.canOpenURL(smsUrl);
+      if (canOpen) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await Linking.openURL(smsUrl);
+        setShowNewMessage(false);
+        setNewPhone("");
+        setNewBody("");
+      } else {
+        Alert.alert("Cannot Send SMS", "Your device doesn't support SMS messaging.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to open messaging app.");
+    }
+  };
+
   const handleSendNew = () => {
-    if (newPhone.trim() && newBody.trim()) {
-      sendMessageMutation.mutate({ toNumber: newPhone.trim(), body: newBody.trim() });
+    if (newPhone.trim()) {
+      handleOpenSms(newPhone.trim(), newBody.trim() || undefined);
     }
   };
 
@@ -166,7 +167,7 @@ export default function QuoMessagesScreen() {
           <ThemedText type="h4" style={styles.newMessageTitle}>New Message</ThemedText>
           <TextInput
             style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-            placeholder="Phone number"
+            placeholder="Enter phone number"
             placeholderTextColor={theme.textSecondary}
             value={newPhone}
             onChangeText={setNewPhone}
@@ -175,7 +176,7 @@ export default function QuoMessagesScreen() {
           />
           <TextInput
             style={[styles.input, styles.bodyInput, { backgroundColor: theme.inputBackground, color: theme.text }]}
-            placeholder="Message"
+            placeholder="Message (optional)"
             placeholderTextColor={theme.textSecondary}
             value={newBody}
             onChangeText={setNewBody}
@@ -192,11 +193,10 @@ export default function QuoMessagesScreen() {
             <Pressable
               onPress={handleSendNew}
               style={[styles.actionButton, { backgroundColor: theme.primary }]}
-              disabled={sendMessageMutation.isPending}
+              disabled={!newPhone.trim()}
             >
-              <ThemedText style={{ color: "#fff" }}>
-                {sendMessageMutation.isPending ? "Sending..." : "Send"}
-              </ThemedText>
+              <Feather name="message-square" size={16} color="#fff" style={{ marginRight: 6 }} />
+              <ThemedText style={{ color: "#fff" }}>Open SMS</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -317,6 +317,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.md,

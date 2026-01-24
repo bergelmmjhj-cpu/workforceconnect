@@ -1,0 +1,296 @@
+import React, { useEffect, useState, useCallback } from "react";
+import { View, StyleSheet, RefreshControl, ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useNavigation } from "@react-navigation/native";
+import { Feather } from "@expo/vector-icons";
+
+import { ThemedText } from "@/components/ThemedText";
+import { TodoWidget } from "@/components/TodoWidget";
+import { StatCard } from "@/components/StatCard";
+import { EmptyState } from "@/components/EmptyState";
+import { StatCardSkeleton } from "@/components/LoadingSkeleton";
+import { useTheme } from "@/hooks/useTheme";
+import { useAuth } from "@/contexts/AuthContext";
+import { Spacing } from "@/constants/theme";
+import { getGreeting } from "@/utils/format";
+import { TodoItem, DashboardStats } from "@/types";
+import {
+  getRequests,
+  getShifts,
+  getTitoLogs,
+  initializeStorage,
+} from "@/storage";
+
+export default function DashboardScreen() {
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
+  const navigation = useNavigation();
+  const { theme } = useTheme();
+  const { user } = useAuth();
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({
+    activeRequests: 0,
+    pendingApprovals: 0,
+    hoursThisWeek: 0,
+    upcomingShifts: 0,
+  });
+
+  const loadData = useCallback(async () => {
+    try {
+      await initializeStorage();
+      
+      const [requests, shifts, titoLogs] = await Promise.all([
+        getRequests(user?.id, user?.role),
+        getShifts(user?.id, user?.role),
+        getTitoLogs(user?.id, user?.role),
+      ]);
+
+      const todoItems: TodoItem[] = [];
+
+      // Generate todos based on role
+      if (user?.role === "hr" || user?.role === "admin") {
+        // SLA breach todos
+        const now = new Date();
+        requests.forEach((req) => {
+          const slaDate = new Date(req.slaDeadline);
+          const hoursLeft = (slaDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+          
+          if (hoursLeft <= 0 && req.status !== "completed" && req.status !== "cancelled") {
+            todoItems.push({
+              id: `sla-${req.id}`,
+              title: "SLA Breach",
+              description: `${req.roleNeeded} request overdue`,
+              type: "sla_breach",
+              actionUrl: `/requests/${req.id}`,
+            });
+          } else if (hoursLeft <= 4 && hoursLeft > 0 && req.status !== "completed") {
+            todoItems.push({
+              id: `urgent-${req.id}`,
+              title: "Urgent Review",
+              description: `${req.roleNeeded} - ${Math.round(hoursLeft)}h left`,
+              type: "urgent",
+              actionUrl: `/requests/${req.id}`,
+            });
+          }
+        });
+
+        // Pending TITO approvals
+        const pendingTito = titoLogs.filter((t) => t.status === "pending");
+        pendingTito.forEach((tito) => {
+          todoItems.push({
+            id: `tito-${tito.id}`,
+            title: "TITO Pending",
+            description: `${tito.workerName} awaiting approval`,
+            type: "normal",
+            actionUrl: `/tito/${tito.id}`,
+          });
+        });
+      }
+
+      if (user?.role === "worker") {
+        // Upcoming shifts
+        const upcomingShifts = shifts.filter(
+          (s) => s.status === "scheduled" || s.status === "in_progress"
+        );
+        upcomingShifts.slice(0, 2).forEach((shift) => {
+          todoItems.push({
+            id: `shift-${shift.id}`,
+            title: "Upcoming Shift",
+            description: `${shift.roleNeeded} at ${shift.locationMajorIntersection}`,
+            type: "normal",
+            actionUrl: `/shifts/${shift.id}`,
+          });
+        });
+
+        // Pending TITO submission
+        const pendingSubmit = shifts.filter(
+          (s) =>
+            s.status === "in_progress" &&
+            !titoLogs.some((t) => t.shiftId === s.id && t.timeOut)
+        );
+        pendingSubmit.forEach((shift) => {
+          todoItems.push({
+            id: `submit-${shift.id}`,
+            title: "Submit Time Out",
+            description: `Clock out from ${shift.roleNeeded}`,
+            type: "urgent",
+            actionUrl: `/tito/submit/${shift.id}`,
+          });
+        });
+      }
+
+      if (user?.role === "client") {
+        // Pending approvals
+        const pendingApprovals = titoLogs.filter((t) => t.status === "pending");
+        pendingApprovals.forEach((tito) => {
+          todoItems.push({
+            id: `approve-${tito.id}`,
+            title: "Approve Time",
+            description: `${tito.workerName} submitted hours`,
+            type: "normal",
+            actionUrl: `/tito/${tito.id}`,
+          });
+        });
+
+        // Draft requests
+        const draftRequests = requests.filter((r) => r.status === "draft");
+        draftRequests.forEach((req) => {
+          todoItems.push({
+            id: `draft-${req.id}`,
+            title: "Complete Request",
+            description: `${req.roleNeeded} request in draft`,
+            type: "normal",
+            actionUrl: `/requests/${req.id}`,
+          });
+        });
+      }
+
+      setTodos(todoItems.slice(0, 5));
+
+      // Calculate stats
+      const activeReqs = requests.filter(
+        (r) => !["completed", "cancelled"].includes(r.status)
+      ).length;
+      const pendingApprovals = titoLogs.filter((t) => t.status === "pending").length;
+      const completedShifts = shifts.filter((s) => s.status === "completed");
+      const hoursWorked = completedShifts.length * 8; // Simplified
+      const upcoming = shifts.filter((s) => s.status === "scheduled").length;
+
+      setStats({
+        activeRequests: activeReqs,
+        pendingApprovals,
+        hoursThisWeek: hoursWorked,
+        upcomingShifts: upcoming,
+      });
+    } catch (error) {
+      console.error("Failed to load dashboard:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
+
+  const getStatsForRole = () => {
+    switch (user?.role) {
+      case "client":
+        return [
+          { title: "Active Requests", value: stats.activeRequests, icon: "file-text" as const, color: theme.primary },
+          { title: "Pending Approvals", value: stats.pendingApprovals, icon: "clock" as const, color: theme.warning },
+          { title: "Upcoming Shifts", value: stats.upcomingShifts, icon: "calendar" as const, color: theme.success },
+        ];
+      case "worker":
+        return [
+          { title: "Upcoming Shifts", value: stats.upcomingShifts, icon: "calendar" as const, color: theme.primary },
+          { title: "Hours This Week", value: stats.hoursThisWeek, icon: "clock" as const, color: theme.success },
+          { title: "Pending TITO", value: stats.pendingApprovals, icon: "check-circle" as const, color: theme.warning },
+        ];
+      case "hr":
+        return [
+          { title: "Open Requests", value: stats.activeRequests, icon: "inbox" as const, color: theme.primary },
+          { title: "Pending Reviews", value: stats.pendingApprovals, icon: "clock" as const, color: theme.warning },
+          { title: "Shifts Today", value: stats.upcomingShifts, icon: "calendar" as const, color: theme.success },
+        ];
+      case "admin":
+        return [
+          { title: "Total Requests", value: stats.activeRequests, icon: "file-text" as const, color: theme.primary },
+          { title: "System Users", value: 4, icon: "users" as const, color: theme.success },
+          { title: "Pending Actions", value: stats.pendingApprovals, icon: "alert-circle" as const, color: theme.warning },
+        ];
+      default:
+        return [];
+    }
+  };
+
+  return (
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      contentContainerStyle={[
+        styles.content,
+        {
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: tabBarHeight + Spacing.xl,
+        },
+      ]}
+      scrollIndicatorInsets={{ bottom: insets.bottom }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={theme.primary}
+        />
+      }
+    >
+      <View style={styles.greeting}>
+        <ThemedText type="h1">
+          {getGreeting()}, {user?.fullName?.split(" ")[0]}
+        </ThemedText>
+        <ThemedText style={[styles.roleLabel, { color: theme.textSecondary }]}>
+          {user?.role?.charAt(0).toUpperCase() + (user?.role?.slice(1) || "")}
+        </ThemedText>
+      </View>
+
+      <View style={styles.statsGrid}>
+        {isLoading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          getStatsForRole().map((stat, index) => (
+            <StatCard
+              key={index}
+              title={stat.title}
+              value={stat.value}
+              icon={stat.icon}
+              color={stat.color}
+            />
+          ))
+        )}
+      </View>
+
+      <View style={styles.todoSection}>
+        <TodoWidget items={todos} onItemPress={() => {}} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: Spacing.lg,
+  },
+  greeting: {
+    marginBottom: Spacing["2xl"],
+  },
+  roleLabel: {
+    fontSize: 14,
+    marginTop: Spacing.xs,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginBottom: Spacing["2xl"],
+  },
+  todoSection: {
+    marginBottom: Spacing.lg,
+  },
+});

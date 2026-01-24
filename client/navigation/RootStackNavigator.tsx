@@ -14,6 +14,7 @@ import WorkerOnboardingScreen from "@/screens/WorkerOnboardingScreen";
 import WorkerApplicationFormScreen from "@/screens/WorkerApplicationFormScreen";
 import AgreementSigningScreen from "@/screens/AgreementSigningScreen";
 import SubcontractorNoticeScreen from "@/screens/SubcontractorNoticeScreen";
+import QuoChatScreen from "@/screens/QuoChatScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -33,6 +34,7 @@ export type RootStackParamList = {
   WorkerApplication: undefined;
   SubcontractorNotice: undefined;
   AgreementSigning: undefined;
+  QuoChat: { conversationId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -143,6 +145,13 @@ export default function RootStackNavigator() {
             component={ClockInOutScreen}
             options={{
               headerTitle: "Clock In/Out",
+            }}
+          />
+          <Stack.Screen
+            name="QuoChat"
+            component={QuoChatScreen}
+            options={{
+              headerTitle: "Conversation",
             }}
           />
         </>

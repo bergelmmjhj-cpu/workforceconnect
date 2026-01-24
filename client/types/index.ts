@@ -343,3 +343,46 @@ export interface TodoItem {
   actionUrl: string;
   dueAt?: string;
 }
+
+export interface QuoConversation {
+  id: string;
+  externalId: string | null;
+  participantType: "worker" | "client" | "other";
+  participantId: string | null;
+  participantName: string | null;
+  participantPhone: string;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuoMessage {
+  id: string;
+  conversationId: string;
+  externalId: string | null;
+  direction: "inbound" | "outbound";
+  toNumber: string;
+  fromNumber: string;
+  body: string;
+  status: "pending" | "sent" | "delivered" | "failed";
+  sentAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+}
+
+export type QuoCallStatus = "initiated" | "ringing" | "in-progress" | "completed" | "failed" | "no-answer";
+
+export interface QuoCallLog {
+  id: string;
+  externalId: string | null;
+  direction: "inbound" | "outbound";
+  toNumber: string;
+  fromNumber: string;
+  status: QuoCallStatus;
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  recordingUrl: string | null;
+  participantName: string | null;
+  createdAt: string;
+}

@@ -9,6 +9,7 @@ import ChatScreen from "@/screens/ChatScreen";
 import CreateRequestScreen from "@/screens/CreateRequestScreen";
 import RequestDetailScreen from "@/screens/RequestDetailScreen";
 import ShiftDetailScreen from "@/screens/ShiftDetailScreen";
+import ClockInOutScreen from "@/screens/ClockInOutScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -22,6 +23,7 @@ export type RootStackParamList = {
   CreateRequest: undefined;
   RequestDetail: { requestId: string };
   ShiftDetail: { shiftId: string };
+  ClockInOut: { shiftId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -89,6 +91,13 @@ export default function RootStackNavigator() {
             component={ShiftDetailScreen}
             options={{
               headerTitle: "Shift Details",
+            }}
+          />
+          <Stack.Screen
+            name="ClockInOut"
+            component={ClockInOutScreen}
+            options={{
+              headerTitle: "Clock In/Out",
             }}
           />
         </>

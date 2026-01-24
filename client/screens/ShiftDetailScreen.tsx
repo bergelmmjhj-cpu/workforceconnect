@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useRoute } from "@react-navigation/native";
+import { useRoute, useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
@@ -27,6 +27,7 @@ export default function ShiftDetailScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const route = useRoute<any>();
+  const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -270,7 +271,27 @@ export default function ShiftDetailScreen() {
             Time Tracking
           </ThemedText>
 
-          {!hasClockedIn ? (
+          {shift.locationCoordinates ? (
+            <View style={styles.gpsInfo}>
+              <View style={styles.gpsInfoRow}>
+                <Feather name="navigation" size={16} color={theme.primary} />
+                <ThemedText style={[styles.gpsInfoText, { color: theme.textSecondary }]}>
+                  GPS verification enabled ({shift.geofenceRadius}m radius)
+                </ThemedText>
+              </View>
+              <Button
+                onPress={() => navigation.navigate("ClockInOut", { shiftId: shift.id })}
+                style={[styles.titoButton, { backgroundColor: theme.primary }]}
+              >
+                <View style={styles.titoButtonContent}>
+                  <Feather name="map-pin" size={20} color="#fff" />
+                  <ThemedText style={styles.titoButtonText}>
+                    {!hasClockedIn ? "Clock In with GPS" : !hasClockedOut ? "Clock Out with GPS" : "View Time Entry"}
+                  </ThemedText>
+                </View>
+              </Button>
+            </View>
+          ) : !hasClockedIn ? (
             <Button
               onPress={handleClockIn}
               disabled={isUpdating}
@@ -279,12 +300,12 @@ export default function ShiftDetailScreen() {
               {isUpdating ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <>
+                <View style={styles.titoButtonContent}>
                   <Feather name="log-in" size={20} color="#fff" />
                   <ThemedText style={styles.titoButtonText}>
                     Clock In
                   </ThemedText>
-                </>
+                </View>
               )}
             </Button>
           ) : !hasClockedOut ? (
@@ -296,12 +317,12 @@ export default function ShiftDetailScreen() {
               {isUpdating ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <>
+                <View style={styles.titoButtonContent}>
                   <Feather name="log-out" size={20} color="#fff" />
                   <ThemedText style={styles.titoButtonText}>
                     Clock Out
                   </ThemedText>
-                </>
+                </View>
               )}
             </Button>
           ) : (
@@ -384,8 +405,25 @@ const styles = StyleSheet.create({
   titoSection: {
     marginTop: Spacing.lg,
   },
+  gpsInfo: {
+    gap: Spacing.md,
+  },
+  gpsInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  gpsInfoText: {
+    fontSize: 14,
+  },
   titoButton: {
     flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  titoButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.sm,
   },
   titoButtonText: {

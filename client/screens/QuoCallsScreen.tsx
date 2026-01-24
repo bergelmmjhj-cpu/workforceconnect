@@ -208,7 +208,7 @@ export default function QuoCallsScreen() {
       />
 
       {showNewCall ? (
-        <View style={[styles.newCallCard, { bottom: tabBarHeight + Spacing.lg, backgroundColor: theme.surface }]}>
+        <View style={[styles.newCallCard, { bottom: tabBarHeight + Spacing.lg, backgroundColor: theme.surface, borderRadius: BorderRadius.lg }]}>
           <ThemedText type="h4" style={styles.newCallTitle}>New Call</ThemedText>
           <TextInput
             style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
@@ -248,16 +248,18 @@ export default function QuoCallsScreen() {
         </View>
       ) : null}
 
-      <Pressable
-        style={[styles.fab, { backgroundColor: theme.success, bottom: tabBarHeight + Spacing.lg }]}
-        onPress={() => {
-          Haptics.selectionAsync();
-          setShowNewCall(true);
-        }}
-        testID="button-new-call"
-      >
-        <Feather name="phone" size={24} color="#fff" />
-      </Pressable>
+      {!showNewCall ? (
+        <Pressable
+          style={[styles.fab, { backgroundColor: theme.success, bottom: tabBarHeight + Spacing.lg }]}
+          onPress={() => {
+            Haptics.selectionAsync();
+            setShowNewCall(true);
+          }}
+          testID="button-new-call"
+        >
+          <Feather name="phone" size={24} color="#fff" />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -345,7 +347,8 @@ const styles = StyleSheet.create({
     left: Spacing.lg,
     right: Spacing.lg,
     padding: Spacing.lg,
-    elevation: 8,
+    elevation: 10,
+    zIndex: 100,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,

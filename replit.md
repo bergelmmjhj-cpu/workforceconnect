@@ -141,6 +141,34 @@ Currently implemented as a demo/mock system using AsyncStorage for session persi
 - Role-based access control (admin, hr, client, worker)
 - Role switching for demo purposes
 
+### Quo Communication Integration
+
+HR and Admin users have access to Quo messaging and calling features for communicating with workers:
+
+**Quo Tab**: Visible only to HR and Admin roles in the bottom tab bar (phone icon)
+
+**Screens**:
+- `QuoMessagesScreen`: Conversation list with ability to compose new messages
+- `QuoCallsScreen`: Call history with ability to initiate calls
+- `QuoChatScreen`: Individual message thread view (pushed to stack navigation)
+
+**API Endpoints** (require `x-user-role: hr` or `x-user-role: admin` header):
+- `GET /api/quo/conversations` - List all conversations
+- `GET /api/quo/conversations/:id` - Get single conversation with messages
+- `POST /api/quo/messages` - Send a new message
+- `GET /api/quo/calls` - List call history
+- `POST /api/quo/calls` - Initiate a new call
+- `POST /api/quo/dev/inbound` - Dev endpoint to simulate inbound messages
+
+**Provider Architecture**:
+- `server/integrations/quo/index.ts` - Main provider interface
+- `server/integrations/quo/mockProvider.ts` - Mock provider with in-memory storage for development
+- Real provider stubs ready for API credentials integration
+
+**Data Storage**: Uses in-memory storage (matching current backend pattern) with seeded demo data:
+- 2 demo conversations with 4 messages
+- 2 demo call logs
+
 ### Project Structure
 
 ```

@@ -132,7 +132,7 @@ export default function WorkerOnboardingScreen() {
         return (
           <Button
             title="Sign Agreement"
-            onPress={() => navigation.navigate("AgreementSigning" as any)}
+            onPress={() => navigation.navigate("SubcontractorNotice" as any)}
             style={styles.actionButton}
           />
         );

@@ -13,6 +13,7 @@ import ClockInOutScreen from "@/screens/ClockInOutScreen";
 import WorkerOnboardingScreen from "@/screens/WorkerOnboardingScreen";
 import WorkerApplicationFormScreen from "@/screens/WorkerApplicationFormScreen";
 import AgreementSigningScreen from "@/screens/AgreementSigningScreen";
+import SubcontractorNoticeScreen from "@/screens/SubcontractorNoticeScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -30,6 +31,7 @@ export type RootStackParamList = {
   ClockInOut: { shiftId: string };
   WorkerOnboarding: undefined;
   WorkerApplication: undefined;
+  SubcontractorNotice: undefined;
   AgreementSigning: undefined;
 };
 
@@ -83,6 +85,13 @@ export default function RootStackNavigator() {
             component={WorkerApplicationFormScreen}
             options={{
               headerTitle: "Worker Application",
+            }}
+          />
+          <Stack.Screen
+            name="SubcontractorNotice"
+            component={SubcontractorNoticeScreen}
+            options={{
+              headerTitle: "Important Notice",
             }}
           />
           <Stack.Screen

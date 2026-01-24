@@ -39,6 +39,11 @@ export interface WorkerRequest {
 
 export type ShiftStatus = "scheduled" | "in_progress" | "completed" | "cancelled";
 
+export interface LocationCoordinates {
+  latitude: number;
+  longitude: number;
+}
+
 export interface Shift {
   id: string;
   workerRequestId: string;
@@ -47,6 +52,8 @@ export interface Shift {
   startTime: string;
   endTime: string;
   locationMajorIntersection: string;
+  locationCoordinates?: LocationCoordinates;
+  geofenceRadius: number;
   status: ShiftStatus;
   payRate: number;
   workerIds: string[];
@@ -67,6 +74,10 @@ export interface TitoLog {
   timeOut?: string;
   timeInLocation?: string;
   timeOutLocation?: string;
+  timeInCoordinates?: LocationCoordinates;
+  timeOutCoordinates?: LocationCoordinates;
+  timeInDistance?: number;
+  timeOutDistance?: number;
   verificationMethod: "gps" | "manual" | "selfie_placeholder" | "other";
   approvedBy?: string;
   approvedAt?: string;

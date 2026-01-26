@@ -185,6 +185,28 @@ function configureExpoAndLanding(app: express.Application) {
     res.sendFile(robotsPath);
   });
 
+  // Serve logo and favicon
+  const logoPath = path.resolve(process.cwd(), "server", "templates", "logo.png");
+  const faviconPath = path.resolve(process.cwd(), "server", "templates", "favicon.png");
+
+  app.get("/logo.png", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(logoPath);
+  });
+
+  app.get("/favicon.png", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(faviconPath);
+  });
+
+  app.get("/favicon.ico", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(faviconPath);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.get("/", (req: Request, res: Response) => {

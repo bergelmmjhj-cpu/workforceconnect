@@ -12,6 +12,7 @@ Key capabilities include:
 - Role-based dashboards with SLA monitoring
 - Multi-timezone support (UTC storage, localized display)
 - GDPR and Canadian privacy compliance considerations
+- Business website with contact form and SEO optimization
 
 ## User Preferences
 
@@ -46,6 +47,13 @@ Preferred communication style: Simple, everyday language.
 **Database**: PostgreSQL with Drizzle ORM for type-safe database operations. Schema defined in `shared/schema.ts` using Drizzle's pgTable definitions with Zod integration for validation.
 
 **Current State**: The backend has minimal implementation - routes are registered but most data is currently mocked in client-side storage (`client/storage/index.ts`). The architecture is ready for full API implementation.
+
+**Business Website**: Express serves a comprehensive marketing landing page at the root URL (port 5000) with:
+- Navigation, hero section with stats, features, how it works, user roles, industries
+- Contact form with validation (name 2+ chars, valid email, message 10+ chars)
+- Rate limiting (5 requests per 60 seconds per IP)
+- Contact leads stored in PostgreSQL via `contact_leads` table
+- SEO optimization: meta tags, OG tags, sitemap.xml, robots.txt
 
 ### Data Flow
 
@@ -201,10 +209,15 @@ client/           # React Native Expo frontend
   types/          # TypeScript type definitions (includes worker application types)
   utils/          # Formatting utilities and location/GPS helpers
 server/           # Express backend
-  routes.ts       # API route registration
+  db.ts           # Database connection (Drizzle + PostgreSQL)
+  routes.ts       # API route registration (includes /public/contact endpoint)
   storage.ts      # Storage interface (memory/database)
+  templates/      # HTML templates and SEO files
+    landing-page.html  # Business website
+    sitemap.xml        # SEO sitemap
+    robots.txt         # SEO robots file
 shared/           # Shared code between client and server
-  schema.ts       # Drizzle database schema
+  schema.ts       # Drizzle database schema (includes contactLeads table)
 ```
 
 ## External Dependencies

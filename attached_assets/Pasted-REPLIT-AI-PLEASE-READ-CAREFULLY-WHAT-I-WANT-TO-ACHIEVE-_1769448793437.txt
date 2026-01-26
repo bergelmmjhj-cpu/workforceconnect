@@ -1,0 +1,58 @@
+REPLIT AI — PLEASE READ CAREFULLY: WHAT I WANT TO ACHIEVE WITH wfconnect.org
+
+Goal:
+I want wfconnect.org to be a BUSINESS LANDING PAGE for “Workforce Connect Management” (the company), NOT an app advertisement page.
+
+Right now the site reads like it’s promoting an app. I need the homepage to present us as a real operating business that provides hotel/property services and staffing, similar to a commercial cleaning / housekeeping service company website.
+
+What the homepage must communicate:
+1) Workforce Connect Management is a business that provides:
+   - Commercial cleaning / janitorial services
+   - Hotel housekeeping support
+   - Property operations support
+   - Hotel staffing (housekeepers, houseperson, laundry attendants, kitchen helpers, dishwashers, breakfast attendants, cooks, front desk, night auditors, maintenance, banquet servers, bartenders, supervisors, etc.)
+   - 24/7 operational coverage (replacement when someone calls in sick)
+   - Capacity to deploy 10–50 workers per site when needed
+   - Coverage across multiple provinces in Canada
+
+2) The App is secondary:
+   - The app should ONLY be mentioned as a tool we use to coordinate staff.
+   - There should be a “Download the App” section near the bottom with two QR codes:
+     - Apple App Store QR
+     - Google Play Store QR
+   - The app should not be the main message of the homepage.
+
+Homepage sections I want (business-first):
+- Hero headline: “Your Business Is Ours” (or similar)
+- Short paragraph explaining we are a professional workforce/property services company
+- “What We Offer” services list:
+  - Office Cleaning
+  - Hotel Cleaning
+  - Medical Facilities Cleaning
+  - Schools Cleaning
+  - Customized Cleaning
+  - Post Construction Cleaning
+  - plus hotel staffing services
+- “Hotel Staffing” section listing roles we supply (housekeepers etc.)
+- “24/7 Coverage” section (we cover missed shifts)
+- “Coverage Area” (Canada-wide; list provinces, optionally some key Ontario cities)
+- “Our Clients” section:
+  - Use placeholders or “client references available upon request” (do NOT publish brand names unless we explicitly add them later)
+- “Request a Quote / Contact” form:
+  - Name, Email, Company/Property, Phone, City/Province, Service Needed, Message
+  - Store submissions in the production database (ContactLead)
+- “Download the App” section (bottom):
+  - Show Apple + Android QR codes
+  - Short line: “Use the app to coordinate scheduling, communication, and TITO.”
+
+Technical requirement:
+- Keep internal app accessible at /app (or current internal path)
+- Serve the business landing page at root (/)
+- Must be mobile-friendly (iPhone safe-area) and fast
+
+Deliverable:
+Update the current website so that when someone visits wfconnect.org, they immediately understand:
+“Workforce Connect Management is a real business providing cleaning + hotel staffing + property support,”
+and the app is only an optional tool mentioned later.
+
+Proceed to implement the business-first landing page, contact form storage, and keep /app intact.

@@ -80,3 +80,32 @@ export type QuoMessage = typeof quoMessages.$inferSelect;
 export type InsertQuoMessage = z.infer<typeof insertQuoMessageSchema>;
 export type QuoCallLog = typeof quoCallLogs.$inferSelect;
 export type InsertQuoCallLog = z.infer<typeof insertQuoCallLogSchema>;
+
+// Contact Lead Schema (for business website contact form)
+
+export const contactLeads = pgTable("contact_leads", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  company: text("company"),
+  phone: text("phone"),
+  message: text("message").notNull(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertContactLeadSchema = createInsertSchema(contactLeads).pick({
+  name: true,
+  email: true,
+  company: true,
+  phone: true,
+  message: true,
+  ip: true,
+  userAgent: true,
+});
+
+export type ContactLead = typeof contactLeads.$inferSelect;
+export type InsertContactLead = z.infer<typeof insertContactLeadSchema>;

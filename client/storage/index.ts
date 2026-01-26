@@ -47,7 +47,7 @@ const generateSampleData = () => {
       id: "req-1",
       clientId: "client-1",
       clientName: "Sarah Mitchell",
-      roleNeeded: "Security Guard",
+      roleNeeded: "General Labor",
       shiftStartTime: getDate(1, 8),
       shiftEndTime: getDate(1, 16),
       locationMajorIntersection: "King & Bay, Toronto",
@@ -62,7 +62,7 @@ const generateSampleData = () => {
       id: "req-2",
       clientId: "client-1",
       clientName: "Sarah Mitchell",
-      roleNeeded: "Event Staff",
+      roleNeeded: "Server",
       shiftStartTime: getDate(3, 18),
       shiftEndTime: getDate(3, 23),
       locationMajorIntersection: "Front & Spadina, Toronto",
@@ -79,7 +79,7 @@ const generateSampleData = () => {
       id: "req-3",
       clientId: "client-2",
       clientName: "Tech Solutions Inc",
-      roleNeeded: "Warehouse Associate",
+      roleNeeded: "Houseperson",
       shiftStartTime: getDate(0, 6),
       shiftEndTime: getDate(0, 14),
       locationMajorIntersection: "Airport & Derry, Mississauga",
@@ -96,7 +96,7 @@ const generateSampleData = () => {
       id: "req-4",
       clientId: "client-1",
       clientName: "Sarah Mitchell",
-      roleNeeded: "Receptionist",
+      roleNeeded: "Housekeeper",
       shiftStartTime: getDate(-2, 9),
       shiftEndTime: getDate(-2, 17),
       locationMajorIntersection: "Yonge & Bloor, Toronto",
@@ -127,7 +127,7 @@ const generateSampleData = () => {
       workerIds: ["worker-1"],
       workerNames: ["James Rodriguez"],
       clientName: "Sarah Mitchell",
-      roleNeeded: "Event Staff",
+      roleNeeded: "Server",
       createdAt: getDate(-1),
     },
     {
@@ -145,7 +145,7 @@ const generateSampleData = () => {
       workerIds: ["worker-1", "worker-2"],
       workerNames: ["James Rodriguez", "Alex Johnson"],
       clientName: "Tech Solutions Inc",
-      roleNeeded: "Warehouse Associate",
+      roleNeeded: "Houseperson",
       createdAt: getDate(-2),
     },
     {
@@ -163,7 +163,7 @@ const generateSampleData = () => {
       workerIds: ["worker-1"],
       workerNames: ["James Rodriguez"],
       clientName: "Sarah Mitchell",
-      roleNeeded: "Receptionist",
+      roleNeeded: "Housekeeper",
       createdAt: getDate(-4),
     },
   ];
@@ -374,7 +374,7 @@ export async function updateRequest(id: string, updates: Partial<WorkerRequest>)
 }
 
 // Shifts
-export async function getShifts(userId?: string, role?: string): Promise<Shift[]> {
+export async function getShifts(userId?: string, role?: string, workerRoles?: string[]): Promise<Shift[]> {
   try {
     const data = await AsyncStorage.getItem(KEYS.SHIFTS);
     let shifts: Shift[] = data ? JSON.parse(data) : [];
@@ -385,6 +385,26 @@ export async function getShifts(userId?: string, role?: string): Promise<Shift[]
     
     return shifts.sort((a, b) => 
       new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+    );
+  } catch {
+    return [];
+  }
+}
+
+// Get available shifts for workers based on their roles
+export async function getAvailableShiftsForWorker(workerRoles: string[]): Promise<Shift[]> {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.SHIFTS);
+    let shifts: Shift[] = data ? JSON.parse(data) : [];
+    
+    // Filter to only show scheduled shifts that match the worker's roles
+    shifts = shifts.filter(s => 
+      s.status === "scheduled" && 
+      workerRoles.includes(s.roleNeeded)
+    );
+    
+    return shifts.sort((a, b) => 
+      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
     );
   } catch {
     return [];

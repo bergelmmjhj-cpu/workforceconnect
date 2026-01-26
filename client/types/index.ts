@@ -258,7 +258,7 @@ export interface WorkerRequest {
   id: string;
   clientId: string;
   clientName: string;
-  roleNeeded: string;
+  roleNeeded: WorkerRole;
   shiftStartTime: string;
   shiftEndTime: string;
   locationMajorIntersection: string;
@@ -294,7 +294,7 @@ export interface Shift {
   workerIds: string[];
   workerNames: string[];
   clientName: string;
-  roleNeeded: string;
+  roleNeeded: WorkerRole;
   createdAt: string;
 }
 

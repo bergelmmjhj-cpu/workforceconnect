@@ -35,6 +35,7 @@ const demoUsers: Record<UserRole, User> = {
     role: "worker",
     timezone: "America/Toronto",
     onboardingStatus: "ONBOARDED",
+    workerRoles: ["Housekeeper", "Houseperson", "Server"],
     createdAt: new Date().toISOString(),
   },
   hr: {

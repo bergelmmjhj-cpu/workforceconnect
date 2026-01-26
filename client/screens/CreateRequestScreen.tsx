@@ -20,15 +20,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { createRequest } from "@/storage";
-
-const roleOptions = [
-  "Security Guard",
-  "Event Staff",
-  "Warehouse Associate",
-  "Receptionist",
-  "General Labour",
-  "Other",
-];
+import { WORKER_ROLES, WorkerRole } from "@/types";
 
 export default function CreateRequestScreen() {
   const insets = useSafeAreaInsets();
@@ -38,14 +30,12 @@ export default function CreateRequestScreen() {
   const { user } = useAuth();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [roleNeeded, setRoleNeeded] = useState("");
-  const [customRole, setCustomRole] = useState("");
+  const [roleNeeded, setRoleNeeded] = useState<WorkerRole | "">("");
   const [location, setLocation] = useState("");
   const [payStructure, setPayStructure] = useState("");
   const [notes, setNotes] = useState("");
 
-  const selectedRole = roleNeeded === "Other" ? customRole : roleNeeded;
-  const isValid = selectedRole.trim() && location.trim();
+  const isValid = roleNeeded && location.trim();
 
   const handleSubmit = async () => {
     if (!isValid || !user) return;
@@ -62,7 +52,7 @@ export default function CreateRequestScreen() {
       await createRequest({
         clientId: user.id,
         clientName: user.fullName,
-        roleNeeded: selectedRole,
+        roleNeeded: roleNeeded as WorkerRole,
         shiftStartTime: startTime.toISOString(),
         shiftEndTime: endTime.toISOString(),
         locationMajorIntersection: location,
@@ -99,7 +89,7 @@ export default function CreateRequestScreen() {
           Role Needed
         </ThemedText>
         <View style={styles.roleGrid}>
-          {roleOptions.map((role) => (
+          {WORKER_ROLES.map((role) => (
             <Pressable
               key={role}
               onPress={() => {
@@ -131,16 +121,6 @@ export default function CreateRequestScreen() {
             </Pressable>
           ))}
         </View>
-
-        {roleNeeded === "Other" ? (
-          <Input
-            label="Specify Role"
-            value={customRole}
-            onChangeText={setCustomRole}
-            placeholder="Enter role title"
-            containerStyle={styles.customRoleInput}
-          />
-        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -224,7 +204,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
-  customRoleInput: {
+  _customRoleInput: {
     marginTop: Spacing.md,
   },
   notesInput: {

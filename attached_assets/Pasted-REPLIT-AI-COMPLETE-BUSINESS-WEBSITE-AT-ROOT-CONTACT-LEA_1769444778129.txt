@@ -1,0 +1,186 @@
+REPLIT AI — COMPLETE BUSINESS WEBSITE AT ROOT + CONTACT LEADS + SEO, WHILE KEEPING INTERNAL APP ACCESSIBLE
+
+You are Replit AI. Modify the EXISTING deployed project (do not create a new repo). Finish the business website work that was started (landing page exists but needs enhancements). Implement everything below end-to-end and keep the internal app accessible.
+
+GOAL
+- Root domain `/` shows a professional public business website for “Workforce Connect Management”.
+- Internal app remains accessible at `/app` (or keep existing path if already set—make sure it is NOT replaced by the landing page).
+- Contact form submissions are stored in the Production database.
+- Add basic SEO + sharing files (meta, OG tags, sitemap, robots, favicon placeholder).
+
+====================================================
+1) ROUTING / APP SEPARATION (CRITICAL)
+====================================================
+Implement routing so:
+- Public website: GET `/` and public assets (CSS/JS/images)
+- Internal app: `/app/*` (do not break existing React/Expo web routes)
+- API: keep existing API routes unchanged (e.g., `/api/*`)
+
+If currently the landing page is served on a different port (e.g., 5000), consolidate so it is served by the same production Express server that handles the domain, at the root path.
+
+Ensure:
+- `/` never redirects to login.
+- `/app` remains the entry point for the authenticated application.
+- Static assets for the landing page are served correctly with cache headers.
+
+====================================================
+2) COMPLETE LANDING PAGE CONTENT (PUBLIC WEBSITE)
+====================================================
+Update/create the public site files so the website includes:
+
+A) Top Navigation
+- Brand: “Workforce Connect Management”
+- Links: Features, How It Works, Solutions, Contact
+- Buttons:
+  - “Request a Demo” (scroll to contact)
+  - “Log In” (link to `/app/login` or current login route)
+
+B) Hero Section
+- Headline + subheadline describing workforce deployment, shift tracking (TITO), HR coordination
+- Primary CTA: Request a Demo
+- Secondary: Log In
+
+C) Social Proof / Trust Row
+- “Built for hospitality, hotels, and property operations.”
+- Optional logo placeholders (no real brands)
+
+D) Features Section (cards)
+- Workforce deployment & scheduling
+- TITO timekeeping (server-validated UTC timestamps)
+- HR/Admin approvals & audit trails
+- Communication tools (Quo calling/texting for HR/Admin if available; otherwise “Integrated communications”)
+- Reporting & exports (if available)
+
+E) How It Works (steps)
+- Request workers
+- Assign and coordinate
+- Work completed + TITO
+- Approvals and reporting
+
+F) Solutions by Role (3 columns/cards)
+- For Clients
+- For HR/Admin
+- For Workers
+
+G) CTA Strip
+- “See Workforce Connect Management in action.”
+- Button → Contact form
+
+H) Contact Form (Required)
+Fields:
+- Full Name (required)
+- Email (required)
+- Company (optional)
+- Phone (optional)
+- Message (required)
+Submit:
+- POST to `/public/contact`
+- Show success/failure UI states
+- Prevent duplicate submissions with loading state
+
+I) Footer
+- Company name
+- Contact email placeholder
+- Copyright
+- Privacy/Terms placeholders
+
+Mobile responsiveness required (must look good on iPhone).
+
+====================================================
+3) CONTACT FORM BACKEND + DB STORAGE (PRODUCTION DB)
+====================================================
+A) Prisma Schema
+Add model `ContactLead` to `server/prisma/schema.prisma`:
+
+ContactLead:
+- id (cuid/uuid)
+- name String
+- email String
+- company String?
+- phone String?
+- message String
+- ip String?
+- userAgent String?
+- createdAt DateTime @default(now())
+
+Run a new Prisma migration.
+
+B) Endpoint
+Create route: `server/src/routes/public.ts` mounted at `/public`
+
+POST `/public/contact`
+- Validate inputs:
+  - name required (min 2 chars)
+  - email required (basic pattern)
+  - message required (min 10 chars)
+- Capture IP (respect x-forwarded-for if present) and user-agent header
+- Store in ContactLead
+- Return JSON { ok: true }
+
+Optional: Basic rate limit (in-memory per IP) to reduce spam.
+
+====================================================
+4) SEO + SHARING FILES
+====================================================
+Add to public website:
+- Proper <title> and meta description
+- Open Graph tags:
+  - og:title, og:description, og:type, og:url
+  - og:image (use a placeholder image in assets)
+- Twitter card tags (optional)
+- `/robots.txt`
+- `/sitemap.xml` (include `/` and `/contact` anchor if needed)
+- `/favicon.ico` placeholder or favicon.png
+
+====================================================
+5) WEBSITE FILE STRUCTURE
+====================================================
+Create or finalize a dedicated folder for the public site, e.g.:
+- `server/public-site/`
+  - `index.html`
+  - `styles.css`
+  - `assets/` (logo placeholder, og-image placeholder)
+  - `robots.txt`
+  - `sitemap.xml`
+
+Wire Express to serve:
+- GET `/` -> `public-site/index.html`
+- Static: `/public-site/*` or serve assets directly at root (your choice, but ensure correct references)
+
+====================================================
+6) PLANNED TASKS — IMPLEMENT ALL
+====================================================
+Implement the following tasks completely:
+- Store contact form submissions in data (DB ContactLead)
+- Create contact form receiving endpoint (/public/contact)
+- Complete landing page with all sections listed above
+- Add website visibility and sharing files (SEO meta, OG tags, robots.txt, sitemap.xml, favicon)
+- Check contact form and website sections (manual verification + brief checklist in README)
+
+====================================================
+7) UPDATE README
+====================================================
+Update root README with:
+- Public website URL and purpose
+- Internal app path (/app)
+- How to test contact form locally
+- Where contact leads are stored in DB
+- Any environment variables required (if any)
+
+====================================================
+8) PRINT IN FULL AFTER IMPLEMENTATION (MANDATORY)
+====================================================
+Print the full contents of:
+1) `server/prisma/schema.prisma`
+2) `server/src/server.ts` (or main Express entry)
+3) `server/src/routes/public.ts`
+4) `server/public-site/index.html`
+5) `server/public-site/styles.css`
+6) `server/public-site/sitemap.xml`
+7) `server/public-site/robots.txt`
+
+FINAL REQUIREMENT
+After implementation:
+- Visiting the root domain shows the business website.
+- Submitting the contact form saves a ContactLead in the Production database.
+- Internal app remains accessible at /app without disruption.

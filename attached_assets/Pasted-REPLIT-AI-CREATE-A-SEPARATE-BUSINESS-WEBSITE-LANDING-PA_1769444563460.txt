@@ -1,0 +1,137 @@
+REPLIT AI — CREATE A SEPARATE BUSINESS WEBSITE (LANDING PAGE) FOR “WORKFORCE CONNECT MANAGEMENT” (NOT THE WEB APP)
+
+You are Replit AI. In the existing workforce-connect monorepo, create a PUBLIC business website (marketing/landing site) that is separate from the internal web app UI. This site is for people to discover that “Workforce Connect Management” exists online.
+
+Key requirement:
+- This is NOT the authenticated app dashboard.
+- It must be a public, SEO-friendly landing page with clean design, fast load, and mobile responsive layout.
+
+====================================================
+1) ROUTING / DEPLOYMENT APPROACH
+====================================================
+Implement the business website as a static site served from the existing Express server:
+
+- Serve website at:
+  - `/`  (root)
+- Keep the internal app under:
+  - `/app/*` (or `/dashboard/*`, whichever is easiest and already used)
+- Ensure `/` never redirects to the app login.
+- Add correct cache headers for static assets.
+
+If the current React web app already uses `/`, move it to `/app` without breaking routes:
+- Update client router base path if needed.
+- Update server static serving accordingly.
+
+====================================================
+2) WEBSITE CONTENT (WORKFORCE CONNECT MANAGEMENT)
+====================================================
+Create a professional landing page with these sections:
+
+A) Top Nav
+- Logo/Name: “Workforce Connect Management”
+- Links: Features, How It Works, Solutions, Pricing (optional placeholder), Contact
+- CTA button: “Request a Demo” (scrolls to contact form)
+
+B) Hero Section
+- Headline: Workforce Connect Management
+- Subheadline: Workforce deployment, shift tracking (TITO), and HR coordination — streamlined.
+- Primary CTA: Request a Demo
+- Secondary CTA: Log In (links to /app/login)
+
+C) Social Proof / Trust Row
+- Simple line: “Built for hospitality, hotels, and property operations.”
+- Optional placeholders for client logos (no real logos unless provided)
+
+D) Features
+- Shift & Deployment Management
+- TITO Timekeeping (server-validated timestamps, optional location verification)
+- HR/Admin Workflow & Approvals
+- Communication (Quo calling/texting for HR/Admin)
+- Audit Trails & Compliance-friendly logging
+
+E) How It Works (3–4 steps)
+- Clients request workers
+- HR assigns and coordinates
+- Workers log time (TITO)
+- Approvals + reporting
+
+F) Solutions by Role (Cards)
+- For Clients
+- For HR/Admin
+- For Workers
+
+G) Call-to-Action Strip
+- “See Workforce Connect Management in action.”
+- Button: Request a Demo
+
+H) Contact / Lead Form
+- Fields: Name, Email, Company, Phone (optional), Message
+- Submit should POST to a backend endpoint:
+  - POST /public/contact
+- Store submissions in DB (Prisma model ContactLead) OR in a JSON file if DB is not available.
+- Show success message on submit.
+
+I) Footer
+- Company name
+- Email placeholder (info@workforceconnectmanagement.com) and/or “Contact us” text
+- Copyright
+- Links: Privacy, Terms (placeholders)
+
+====================================================
+3) TECHNICAL REQUIREMENTS
+====================================================
+- Mobile-first responsive design (looks good on phones)
+- Lightweight styling (plain CSS or Tailwind—choose whichever fits the repo best)
+- Add basic SEO:
+  - <title>, meta description, Open Graph tags
+  - favicon placeholder
+  - sitemap.xml (basic) and robots.txt
+- Add analytics placeholder:
+  - Include a commented section in HTML for future Google Analytics/Tag Manager snippet.
+
+====================================================
+4) BACKEND: CONTACT LEAD ENDPOINT
+====================================================
+Add:
+- POST /public/contact
+  - Validate input (name, email, message required)
+  - Rate limit lightly (basic in-memory throttle per IP is fine for MVP)
+  - Persist to DB model ContactLead:
+    - id, name, email, company, phone, message, createdAt, ip, userAgent
+  - Return 200 with { ok: true }
+
+====================================================
+5) FILE STRUCTURE
+====================================================
+Create website files under:
+- server/public-site/  (or server/public/)
+  - index.html
+  - styles.css
+  - assets/ (logo placeholder)
+  - sitemap.xml
+  - robots.txt
+
+Wire Express:
+- app.get("/") serves the public site index
+- app.use("/public-site", express.static(...)) if needed
+- app.use("/app", serve the internal app
+
+====================================================
+6) DO NOT BREAK EXISTING APP
+====================================================
+- Ensure existing API routes still work.
+- Ensure the internal app remains reachable at /app.
+- Ensure auth remains unchanged.
+
+====================================================
+7) PRINT IN FULL AFTER IMPLEMENTING
+====================================================
+Print the full content of:
+- server/src/server.ts (or main server entry)
+- server/public-site/index.html (or equivalent)
+- server/public-site/styles.css (or equivalent)
+- server/src/routes/public.ts (or wherever /public/contact is implemented)
+- server/prisma/schema.prisma (if you add ContactLead)
+
+Goal:
+When someone visits the root domain, they see a clean business website proving Workforce Connect Management exists online, with a demo request form, and a link to log in to the real app.

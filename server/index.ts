@@ -170,6 +170,21 @@ function configureExpoAndLanding(app: express.Application) {
   const landingPageTemplate = fs.readFileSync(templatePath, "utf-8");
   const appName = getAppName();
 
+  const sitemapPath = path.resolve(process.cwd(), "server", "templates", "sitemap.xml");
+  const robotsPath = path.resolve(process.cwd(), "server", "templates", "robots.txt");
+
+  app.get("/sitemap.xml", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(sitemapPath);
+  });
+
+  app.get("/robots.txt", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(robotsPath);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.use((req: Request, res: Response, next: NextFunction) => {

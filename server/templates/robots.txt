@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://workforce-connect.replit.app/sitemap.xml
+
+# Disallow API endpoints
+Disallow: /api/
+Disallow: /public/
+
+# Disallow Expo specific paths
+Disallow: /manifest
+Disallow: /static-build/

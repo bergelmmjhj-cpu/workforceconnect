@@ -25,6 +25,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { createWorkerApplication } from "@/storage";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import type { WorkerApplicationAddress } from "@/types";
+import { WORKER_ROLES } from "@/types";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -45,18 +46,7 @@ const SECTIONS: FormSection[] = [
   { id: "declarations", title: "H. Declarations", icon: "check-square" },
 ];
 
-const ROLE_OPTIONS = [
-  "Housekeeper",
-  "Houseperson",
-  "LaundryAttendant",
-  "Server",
-  "KitchenHelper",
-  "Dishwasher",
-  "Cook",
-  "Lifeguard",
-  "GeneralLabor",
-  "Other",
-];
+const ROLE_OPTIONS = [...WORKER_ROLES];
 
 const DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 

@@ -1,5 +1,32 @@
 export type UserRole = "admin" | "hr" | "client" | "worker";
 
+// Worker job roles
+export const WORKER_ROLES = [
+  "Housekeeper",
+  "Houseperson",
+  "Laundry Attendant",
+  "Server",
+  "Kitchen Helper",
+  "Dishwasher",
+  "Cook",
+  "Lifeguard",
+  "General Labor",
+  "Other",
+] as const;
+
+export type WorkerRole = typeof WORKER_ROLES[number];
+
+// Client business types
+export const CLIENT_TYPES = [
+  "Hotel",
+  "Banquet Hall",
+  "Janitorial",
+  "Facilities",
+  "Apartment Buildings",
+] as const;
+
+export type ClientType = typeof CLIENT_TYPES[number];
+
 export type WorkerOnboardingStatus = 
   | "NOT_APPLIED"
   | "APPLICATION_SUBMITTED"
@@ -21,6 +48,13 @@ export interface User {
   timezone: string;
   avatarUrl?: string;
   onboardingStatus?: WorkerOnboardingStatus;
+  // Client-specific fields
+  clientType?: ClientType;
+  businessName?: string;
+  businessAddress?: string;
+  businessPhone?: string;
+  // Worker-specific fields
+  workerRoles?: WorkerRole[];
   createdAt: string;
 }
 

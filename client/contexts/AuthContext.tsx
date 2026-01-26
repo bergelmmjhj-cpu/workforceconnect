@@ -11,6 +11,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
   updateOnboardingStatus: (status: WorkerOnboardingStatus) => Promise<void>;
+  updateUser: (updates: Partial<User>) => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -161,6 +162,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUser = async (updates: Partial<User>) => {
+    if (user) {
+      const updatedUser = { ...user, ...updates };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    }
+  };
+
   const refreshUser = async () => {
     await loadUser();
   };
@@ -176,6 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         switchRole,
         updateOnboardingStatus,
+        updateUser,
         refreshUser,
       }}
     >

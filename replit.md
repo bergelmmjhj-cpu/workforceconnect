@@ -122,7 +122,26 @@ Multi-section collapsible form with 8 sections:
 - `worker_new@example.com` - NOT_APPLIED status
 - `worker_submitted@example.com` - APPLICATION_SUBMITTED status
 - `worker_pending@example.com` - AGREEMENT_PENDING status
-- `worker@example.com` - ONBOARDED status (full access)
+- `worker@example.com` - ONBOARDED status (full access, roles: Housekeeper, Houseperson, Server)
+
+### Worker Roles & Client Types
+
+**Worker Roles** (defined in `client/types/index.ts` as `WORKER_ROLES`):
+- Housekeeper, Houseperson, Laundry Attendant, Server, Kitchen Helper, Dishwasher, Cook, Lifeguard, General Labor, Other
+
+**Client Types** (defined in `client/types/index.ts` as `CLIENT_TYPES`):
+- Hotel, Banquet Hall, Janitorial, Facilities, Apartment Buildings
+
+**Role-Based Shift Matching**:
+- When clients create worker requests, they select a required worker role from `WORKER_ROLES`
+- Shifts inherit the `roleNeeded` field from their parent request
+- Workers can have multiple roles assigned (`user.workerRoles` array)
+- `getAvailableShiftsForWorker()` filters available shifts to only show those matching worker's roles
+
+**Client Profile Section**:
+- Clients can set their business type in Profile screen
+- Business details include: businessName, businessAddress, businessPhone
+- `updateUser()` function in AuthContext handles partial user updates
 
 ### GPS Time Tracking (TITO)
 

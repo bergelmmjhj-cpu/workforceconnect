@@ -1,37 +1,39 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <title>Workforce Connect - Enterprise Workforce Management Platform</title>
+    <title>Workforce Connect Management - Professional Cleaning & Hotel Staffing Services</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Workforce Connect is an enterprise workforce management platform. Connect clients, workers, and HR teams for seamless shift deployment, GPS-verified time tracking (TITO), and real-time communication." />
-    <meta name="keywords" content="workforce management, shift scheduling, time tracking, GPS verification, employee management, HR software, hospitality staffing, facilities management" />
-    <meta name="author" content="Workforce Connect" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Workforce Connect Management provides professional commercial cleaning, hotel housekeeping, and staffing services across Canada. 24/7 coverage, 10-50 workers per site." />
+    <meta name="keywords" content="commercial cleaning, hotel housekeeping, janitorial services, hotel staffing, property services, facilities management, Ontario, Canada" />
+    <meta name="author" content="Workforce Connect Management" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://workforce-connect.replit.app/" />
+    <link rel="canonical" href="https://wfconnect.org/" />
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://workforce-connect.replit.app/" />
-    <meta property="og:title" content="Workforce Connect - Enterprise Workforce Management Platform" />
-    <meta property="og:description" content="Connect clients, workers, and HR teams for seamless shift deployment, GPS-verified time tracking, and real-time communication." />
-    <meta property="og:image" content="https://workforce-connect.replit.app/og-image.png" />
-    <meta property="og:site_name" content="Workforce Connect" />
+    <meta property="og:url" content="https://wfconnect.org/" />
+    <meta property="og:title" content="Workforce Connect Management - Professional Cleaning & Hotel Staffing" />
+    <meta property="og:description" content="Professional commercial cleaning, hotel housekeeping, and staffing services across Canada. 24/7 coverage with capacity to deploy 10-50 workers per site." />
+    <meta property="og:image" content="https://wfconnect.org/og-image.png" />
+    <meta property="og:site_name" content="Workforce Connect Management" />
     
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:url" content="https://workforce-connect.replit.app/" />
-    <meta name="twitter:title" content="Workforce Connect - Enterprise Workforce Management Platform" />
-    <meta name="twitter:description" content="Connect clients, workers, and HR teams for seamless shift deployment, GPS-verified time tracking, and real-time communication." />
-    <meta name="twitter:image" content="https://workforce-connect.replit.app/og-image.png" />
+    <meta name="twitter:url" content="https://wfconnect.org/" />
+    <meta name="twitter:title" content="Workforce Connect Management - Professional Cleaning & Hotel Staffing" />
+    <meta name="twitter:description" content="Professional commercial cleaning, hotel housekeeping, and staffing services across Canada. 24/7 coverage." />
+    <meta name="twitter:image" content="https://wfconnect.org/og-image.png" />
     
     <!-- Additional SEO -->
     <meta name="theme-color" content="#1E40AF" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
       * {
         box-sizing: border-box;
@@ -58,6 +60,8 @@
         background: var(--background);
         color: var(--text-primary);
         line-height: 1.6;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
       }
       
       /* Navigation */
@@ -66,11 +70,12 @@
         top: 0;
         left: 0;
         right: 0;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(255, 255, 255, 0.97);
         backdrop-filter: blur(10px);
         border-bottom: 1px solid var(--border);
         z-index: 100;
         padding: 16px 24px;
+        padding-top: max(16px, env(safe-area-inset-top));
       }
       
       .nav-container {
@@ -84,24 +89,24 @@
       .nav-logo {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
         font-weight: 700;
-        font-size: 20px;
+        font-size: 18px;
         color: var(--primary);
         text-decoration: none;
       }
       
       .nav-logo-icon {
-        width: 36px;
-        height: 36px;
+        width: 40px;
+        height: 40px;
         background: linear-gradient(135deg, var(--primary), var(--primary-light));
-        border-radius: 8px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
-        font-weight: 700;
-        font-size: 18px;
+        font-weight: 800;
+        font-size: 16px;
       }
       
       .nav-links {
@@ -168,13 +173,13 @@
       
       /* Hero Section */
       .hero {
-        padding: 140px 24px 80px;
+        padding: 160px 24px 80px;
         text-align: center;
         background: linear-gradient(180deg, var(--surface) 0%, var(--background) 100%);
       }
       
       .hero-container {
-        max-width: 800px;
+        max-width: 900px;
         margin: 0 auto;
       }
       
@@ -192,11 +197,11 @@
       }
       
       .hero h1 {
-        font-size: 40px;
-        font-weight: 700;
-        line-height: 1.2;
+        font-size: 42px;
+        font-weight: 800;
+        line-height: 1.1;
         letter-spacing: -0.02em;
-        margin-bottom: 20px;
+        margin-bottom: 24px;
         color: var(--text-primary);
       }
       
@@ -204,9 +209,10 @@
         font-size: 18px;
         color: var(--text-secondary);
         margin-bottom: 40px;
-        max-width: 600px;
+        max-width: 700px;
         margin-left: auto;
         margin-right: auto;
+        line-height: 1.7;
       }
       
       .hero-cta {
@@ -218,7 +224,7 @@
       
       .hero-stats {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
         gap: 24px;
         margin-top: 60px;
         padding-top: 40px;
@@ -230,8 +236,8 @@
       }
       
       .stat-number {
-        font-size: 32px;
-        font-weight: 700;
+        font-size: 36px;
+        font-weight: 800;
         color: var(--primary);
       }
       
@@ -241,8 +247,8 @@
         margin-top: 4px;
       }
       
-      /* Features Section */
-      .features {
+      /* Services Section */
+      .services {
         padding: 80px 24px;
         background: var(--surface);
       }
@@ -262,7 +268,7 @@
         font-weight: 600;
         color: var(--primary);
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.1em;
         margin-bottom: 12px;
       }
       
@@ -280,392 +286,213 @@
         margin: 0 auto;
       }
       
-      .features-grid {
+      .services-grid {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 24px;
+        gap: 20px;
       }
       
-      .feature-card {
+      .service-card {
         background: var(--background);
         border: 1px solid var(--border);
         border-radius: 12px;
-        padding: 32px;
+        padding: 28px;
         transition: all 0.2s;
       }
       
-      .feature-card:hover {
+      .service-card:hover {
         border-color: var(--primary-light);
         box-shadow: 0 4px 12px rgba(30, 64, 175, 0.08);
       }
       
-      .feature-icon {
-        width: 48px;
-        height: 48px;
+      .service-icon {
+        width: 52px;
+        height: 52px;
         background: linear-gradient(135deg, var(--primary), var(--primary-light));
-        border-radius: 10px;
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
         margin-bottom: 20px;
       }
       
-      .feature-icon svg {
-        width: 24px;
-        height: 24px;
+      .service-icon svg {
+        width: 26px;
+        height: 26px;
         color: white;
       }
       
-      .feature-title {
+      .service-title {
         font-size: 18px;
         font-weight: 600;
         color: var(--text-primary);
-        margin-bottom: 12px;
+        margin-bottom: 10px;
       }
       
-      .feature-description {
+      .service-description {
         font-size: 14px;
         color: var(--text-secondary);
         line-height: 1.6;
       }
       
-      /* How It Works */
-      .how-it-works {
+      /* Hotel Staffing Section */
+      .staffing {
         padding: 80px 24px;
         background: var(--background);
       }
       
-      .steps {
+      .staffing-content {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 32px;
-      }
-      
-      .step {
-        display: flex;
-        gap: 20px;
-        align-items: flex-start;
-      }
-      
-      .step-number {
-        width: 40px;
-        height: 40px;
-        background: var(--primary);
-        color: white;
-        border-radius: 50%;
-        display: flex;
+        gap: 40px;
         align-items: center;
-        justify-content: center;
+      }
+      
+      .staffing-text h3 {
+        font-size: 28px;
         font-weight: 700;
-        font-size: 16px;
-        flex-shrink: 0;
-      }
-      
-      .step-content {
-        flex: 1;
-      }
-      
-      .step-title {
-        font-size: 18px;
-        font-weight: 600;
         color: var(--text-primary);
-        margin-bottom: 8px;
+        margin-bottom: 16px;
       }
       
-      .step-description {
-        font-size: 14px;
+      .staffing-text p {
+        font-size: 16px;
         color: var(--text-secondary);
-      }
-      
-      /* User Roles */
-      .roles {
-        padding: 80px 24px;
-        background: var(--surface);
+        margin-bottom: 24px;
+        line-height: 1.7;
       }
       
       .roles-grid {
         display: grid;
-        grid-template-columns: 1fr;
-        gap: 24px;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
       }
       
-      .role-card {
-        background: var(--background);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 32px;
-        text-align: center;
-      }
-      
-      .role-icon {
-        width: 64px;
-        height: 64px;
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 0 auto 20px;
-        font-size: 28px;
-      }
-      
-      .role-icon.client {
-        background: rgba(30, 64, 175, 0.1);
-        color: var(--primary);
-      }
-      
-      .role-icon.worker {
-        background: rgba(16, 185, 129, 0.1);
-        color: var(--success);
-      }
-      
-      .role-icon.hr {
-        background: rgba(245, 158, 11, 0.1);
-        color: var(--accent);
-      }
-      
-      .role-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 12px;
-      }
-      
-      .role-description {
-        font-size: 14px;
-        color: var(--text-secondary);
-        margin-bottom: 20px;
-      }
-      
-      .role-features {
-        list-style: none;
-        text-align: left;
-      }
-      
-      .role-features li {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 14px;
-        color: var(--text-secondary);
-        padding: 8px 0;
-        border-bottom: 1px solid var(--border);
-      }
-      
-      .role-features li:last-child {
-        border-bottom: none;
-      }
-      
-      .role-features .check {
-        width: 18px;
-        height: 18px;
-        background: var(--success);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-      }
-      
-      .role-features .check svg {
-        width: 12px;
-        height: 12px;
-        color: white;
-      }
-      
-      /* Industries */
-      .industries {
-        padding: 80px 24px;
-        background: var(--background);
-      }
-      
-      .industries-list {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 16px;
-        margin-top: 40px;
-      }
-      
-      .industry-tag {
+      .role-tag {
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 8px;
-        padding: 16px 24px;
+        padding: 12px 16px;
         font-size: 14px;
         font-weight: 500;
         color: var(--text-secondary);
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
       }
       
-      .industry-tag svg {
-        width: 20px;
-        height: 20px;
-        color: var(--primary);
+      .role-tag svg {
+        width: 16px;
+        height: 16px;
+        color: var(--success);
       }
       
-      /* CTA Section */
-      .cta {
+      /* 24/7 Coverage Section */
+      .coverage-section {
         padding: 80px 24px;
         background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
         text-align: center;
       }
       
-      .cta h2 {
+      .coverage-section h2 {
         font-size: 32px;
         font-weight: 700;
         color: white;
         margin-bottom: 16px;
       }
       
-      .cta p {
+      .coverage-section p {
         font-size: 18px;
-        color: rgba(255, 255, 255, 0.8);
+        color: rgba(255, 255, 255, 0.85);
         margin-bottom: 32px;
-        max-width: 500px;
+        max-width: 600px;
         margin-left: auto;
         margin-right: auto;
+        line-height: 1.7;
       }
       
-      .cta .btn-primary {
-        background: white;
-        color: var(--primary);
-      }
-      
-      .cta .btn-primary:hover {
-        background: var(--background);
-      }
-      
-      /* Footer */
-      .footer {
-        padding: 48px 24px;
-        background: var(--text-primary);
-        color: rgba(255, 255, 255, 0.7);
-      }
-      
-      .footer-container {
-        max-width: 1200px;
-        margin: 0 auto;
-        display: flex;
-        flex-direction: column;
-        gap: 32px;
-        text-align: center;
-      }
-      
-      .footer-logo {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        font-weight: 700;
-        font-size: 18px;
-        color: white;
-      }
-      
-      .footer-logo-icon {
-        width: 32px;
-        height: 32px;
-        background: var(--primary-light);
-        border-radius: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 700;
-        font-size: 16px;
-      }
-      
-      .footer-links {
+      .coverage-features {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        gap: 24px;
+        gap: 16px;
+        margin-top: 32px;
       }
       
-      .footer-links a {
-        color: rgba(255, 255, 255, 0.7);
-        text-decoration: none;
+      .coverage-feature {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 14px 20px;
         font-size: 14px;
-        transition: color 0.2s;
-      }
-      
-      .footer-links a:hover {
+        font-weight: 500;
         color: white;
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
       
-      .footer-copyright {
+      .coverage-feature svg {
+        width: 18px;
+        height: 18px;
+      }
+      
+      /* Service Area Section */
+      .service-area {
+        padding: 80px 24px;
+        background: var(--surface);
+      }
+      
+      .provinces-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        margin-top: 40px;
+      }
+      
+      .province-card {
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+      }
+      
+      .province-name {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      
+      .province-cities {
         font-size: 13px;
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--text-secondary);
+        margin-top: 6px;
       }
       
-      /* Desktop Styles */
-      @media (min-width: 768px) {
-        .nav-links {
-          display: flex;
-        }
-        
-        .hero {
-          padding: 160px 24px 100px;
-        }
-        
-        .hero h1 {
-          font-size: 56px;
-        }
-        
-        .hero-subtitle {
-          font-size: 20px;
-        }
-        
-        .hero-cta {
-          flex-direction: row;
-          justify-content: center;
-        }
-        
-        .features-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-        
-        .steps {
-          grid-template-columns: repeat(2, 1fr);
-        }
-        
-        .roles-grid {
-          grid-template-columns: repeat(3, 1fr);
-        }
-        
-        .footer-container {
-          flex-direction: row;
-          justify-content: space-between;
-          align-items: center;
-          text-align: left;
-        }
-        
-        .footer-links {
-          order: 2;
-        }
-        
-        .footer-copyright {
-          order: 3;
-        }
+      /* Clients Section */
+      .clients {
+        padding: 80px 24px;
+        background: var(--background);
       }
       
-      @media (min-width: 1024px) {
-        .hero h1 {
-          font-size: 64px;
-        }
-        
-        .features-grid {
-          grid-template-columns: repeat(3, 1fr);
-        }
-        
-        .steps {
-          grid-template-columns: repeat(4, 1fr);
-        }
-        
-        .section-title {
-          font-size: 40px;
-        }
+      .clients-note {
+        text-align: center;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 40px;
+        margin-top: 40px;
+      }
+      
+      .clients-note p {
+        font-size: 16px;
+        color: var(--text-secondary);
+        margin-bottom: 20px;
+      }
+      
+      .clients-note .btn {
+        margin-top: 12px;
       }
       
       /* Contact Section */
@@ -708,10 +535,10 @@
       }
       
       .contact-item-icon {
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
         background: rgba(30, 64, 175, 0.1);
-        border-radius: 8px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -771,7 +598,8 @@
       }
       
       .form-group input,
-      .form-group textarea {
+      .form-group textarea,
+      .form-group select {
         padding: 12px 16px;
         font-size: 15px;
         border: 1px solid var(--border);
@@ -782,8 +610,18 @@
         transition: border-color 0.2s, box-shadow 0.2s;
       }
       
+      .form-group select {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 40px;
+      }
+      
       .form-group input:focus,
-      .form-group textarea:focus {
+      .form-group textarea:focus,
+      .form-group select:focus {
         outline: none;
         border-color: var(--primary);
         box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
@@ -791,7 +629,7 @@
       
       .form-group textarea {
         resize: vertical;
-        min-height: 120px;
+        min-height: 100px;
       }
       
       .form-submit {
@@ -838,13 +676,215 @@
         border: 1px solid #EF4444;
       }
       
+      /* Download App Section */
+      .download-app {
+        padding: 80px 24px;
+        background: var(--background);
+        text-align: center;
+      }
+      
+      .download-app h2 {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+      }
+      
+      .download-app > p {
+        font-size: 16px;
+        color: var(--text-secondary);
+        margin-bottom: 40px;
+        max-width: 500px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      
+      .qr-codes {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 32px;
+      }
+      
+      .qr-item {
+        text-align: center;
+      }
+      
+      .qr-placeholder {
+        width: 150px;
+        height: 150px;
+        background: var(--surface);
+        border: 2px dashed var(--border);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 12px;
+      }
+      
+      .qr-placeholder svg {
+        width: 60px;
+        height: 60px;
+        color: var(--text-muted);
+      }
+      
+      .qr-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      
+      .app-note {
+        margin-top: 32px;
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+      
+      /* Footer */
+      .footer {
+        padding: 48px 24px;
+        padding-bottom: max(48px, env(safe-area-inset-bottom));
+        background: var(--text-primary);
+        color: rgba(255, 255, 255, 0.7);
+      }
+      
+      .footer-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+        text-align: center;
+      }
+      
+      .footer-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 18px;
+        color: white;
+      }
+      
+      .footer-logo-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--primary-light);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 14px;
+      }
+      
+      .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 24px;
+      }
+      
+      .footer-links a {
+        color: rgba(255, 255, 255, 0.7);
+        text-decoration: none;
+        font-size: 14px;
+        transition: color 0.2s;
+      }
+      
+      .footer-links a:hover {
+        color: white;
+      }
+      
+      .footer-copyright {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+      
+      /* Desktop Styles */
       @media (min-width: 768px) {
+        .nav-links {
+          display: flex;
+        }
+        
+        .hero {
+          padding: 180px 24px 100px;
+        }
+        
+        .hero h1 {
+          font-size: 56px;
+        }
+        
+        .hero-subtitle {
+          font-size: 20px;
+        }
+        
+        .hero-cta {
+          flex-direction: row;
+          justify-content: center;
+        }
+        
+        .hero-stats {
+          grid-template-columns: repeat(4, 1fr);
+        }
+        
+        .services-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .staffing-content {
+          grid-template-columns: 1fr 1fr;
+        }
+        
+        .roles-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .provinces-grid {
+          grid-template-columns: repeat(4, 1fr);
+        }
+        
         .contact-grid {
           grid-template-columns: 1fr 1fr;
         }
         
         .form-row {
           grid-template-columns: 1fr 1fr;
+        }
+        
+        .footer-container {
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: center;
+          text-align: left;
+        }
+        
+        .footer-links {
+          order: 2;
+        }
+        
+        .footer-copyright {
+          order: 3;
+        }
+      }
+      
+      @media (min-width: 1024px) {
+        .hero h1 {
+          font-size: 64px;
+        }
+        
+        .services-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        
+        .roles-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        
+        .section-title {
+          font-size: 40px;
         }
       }
       
@@ -863,12 +903,8 @@
           background: rgba(15, 23, 42, 0.95);
         }
         
-        .hero {
-          background: linear-gradient(180deg, var(--surface) 0%, var(--background) 100%);
-        }
-        
-        .feature-card:hover {
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        .form-group select {
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         }
       }
     </style>
@@ -878,18 +914,17 @@
     <nav class="nav">
       <div class="nav-container">
         <a href="#" class="nav-logo">
-          <div class="nav-logo-icon">W</div>
-          Workforce Connect
+          <div class="nav-logo-icon">WC</div>
+          <span>Workforce Connect</span>
         </a>
         <ul class="nav-links">
-          <li><a href="#features">Features</a></li>
-          <li><a href="#how-it-works">How It Works</a></li>
-          <li><a href="#roles">For Teams</a></li>
-          <li><a href="#industries">Industries</a></li>
+          <li><a href="#services">Services</a></li>
+          <li><a href="#staffing">Staffing</a></li>
+          <li><a href="#coverage">Coverage</a></li>
           <li><a href="#contact">Contact</a></li>
         </ul>
         <div class="nav-cta">
-          <a href="#get-started" class="btn btn-primary">Get Started</a>
+          <a href="#contact" class="btn btn-primary">Request Quote</a>
         </div>
       </div>
     </nav>
@@ -898,423 +933,465 @@
     <section class="hero">
       <div class="hero-container">
         <div class="hero-badge">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
             <polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
-          Trusted by 500+ businesses
+          Trusted by Hotels & Properties Across Canada
         </div>
-        <h1>Smarter Workforce Management</h1>
+        <h1>Your Business Is Our Business</h1>
         <p class="hero-subtitle">
-          Connect clients, workers, and HR teams for seamless shift deployment, GPS-verified time tracking, and real-time communication.
+          Workforce Connect Management is a professional property services company providing commercial cleaning, hotel housekeeping, and staffing solutions. We deploy skilled workers to keep your operations running smoothly, 24/7.
         </p>
         <div class="hero-cta">
-          <a href="#get-started" class="btn btn-primary btn-large">Start Free Trial</a>
-          <a href="#how-it-works" class="btn btn-secondary btn-large">See How It Works</a>
+          <a href="#contact" class="btn btn-primary btn-large">Get a Free Quote</a>
+          <a href="#services" class="btn btn-secondary btn-large">Our Services</a>
         </div>
         <div class="hero-stats">
           <div class="stat">
-            <div class="stat-number">98%</div>
-            <div class="stat-label">Time Accuracy</div>
-          </div>
-          <div class="stat">
-            <div class="stat-number">50%</div>
-            <div class="stat-label">Faster Scheduling</div>
-          </div>
-          <div class="stat">
             <div class="stat-number">24/7</div>
-            <div class="stat-label">Real-time Support</div>
+            <div class="stat-label">Coverage Available</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">10-50</div>
+            <div class="stat-label">Workers Per Site</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">6+</div>
+            <div class="stat-label">Provinces Served</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">100%</div>
+            <div class="stat-label">Shift Coverage</div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="features" id="features">
+    <!-- Services Section -->
+    <section id="services" class="services">
       <div class="section-container">
         <div class="section-header">
-          <div class="section-label">Features</div>
-          <h2 class="section-title">Everything You Need to Manage Your Workforce</h2>
+          <div class="section-label">What We Offer</div>
+          <h2 class="section-title">Professional Cleaning & Property Services</h2>
           <p class="section-description">
-            From shift scheduling to GPS-verified time tracking, we provide the tools to streamline your operations.
+            Comprehensive cleaning and maintenance solutions tailored to your industry's unique requirements.
           </p>
         </div>
-        <div class="features-grid">
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-            </div>
-            <h3 class="feature-title">Smart Shift Scheduling</h3>
-            <p class="feature-description">
-              Create, assign, and manage shifts with intelligent matching based on worker skills, availability, and location.
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="10" r="3"/>
-                <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 6.9 8 11.7z"/>
-              </svg>
-            </div>
-            <h3 class="feature-title">GPS Time Tracking</h3>
-            <p class="feature-description">
-              Verify worker attendance with 100-meter geofence accuracy. No more time disputes or manual verification.
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </div>
-            <h3 class="feature-title">Real-time Messaging</h3>
-            <p class="feature-description">
-              Keep everyone connected with instant messaging between clients, workers, and HR teams.
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-              </svg>
-            </div>
-            <h3 class="feature-title">Role-Based Access</h3>
-            <p class="feature-description">
-              Tailored dashboards for Clients, Workers, HR, and Admins with the exact tools each role needs.
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-            </div>
-            <h3 class="feature-title">Worker Onboarding</h3>
-            <p class="feature-description">
-              Streamlined digital onboarding with application forms, background checks, and e-signature agreements.
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="20" x2="18" y2="10"/>
-                <line x1="12" y1="20" x2="12" y2="4"/>
-                <line x1="6" y1="20" x2="6" y2="14"/>
-              </svg>
-            </div>
-            <h3 class="feature-title">Analytics & Reports</h3>
-            <p class="feature-description">
-              Track hours, monitor SLA compliance, and export detailed reports for payroll and compliance.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- How It Works -->
-    <section class="how-it-works" id="how-it-works">
-      <div class="section-container">
-        <div class="section-header">
-          <div class="section-label">Process</div>
-          <h2 class="section-title">How It Works</h2>
-          <p class="section-description">
-            Get started in minutes with our simple four-step process.
-          </p>
-        </div>
-        <div class="steps">
-          <div class="step">
-            <div class="step-number">1</div>
-            <div class="step-content">
-              <h3 class="step-title">Create a Request</h3>
-              <p class="step-description">
-                Clients submit worker requests specifying role, location, date, time, and requirements.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-number">2</div>
-            <div class="step-content">
-              <h3 class="step-title">Match & Assign</h3>
-              <p class="step-description">
-                HR reviews requests and matches qualified workers based on skills and availability.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-number">3</div>
-            <div class="step-content">
-              <h3 class="step-title">Track Time</h3>
-              <p class="step-description">
-                Workers clock in/out with GPS verification. Automatic time tracking with geofence validation.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <div class="step-number">4</div>
-            <div class="step-content">
-              <h3 class="step-title">Review & Pay</h3>
-              <p class="step-description">
-                HR approves time logs, generates reports, and processes payroll with verified hours.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- User Roles Section -->
-    <section class="roles" id="roles">
-      <div class="section-container">
-        <div class="section-header">
-          <div class="section-label">For Teams</div>
-          <h2 class="section-title">Built for Every Role</h2>
-          <p class="section-description">
-            Whether you're a client, worker, or HR manager, we have the tools you need.
-          </p>
-        </div>
-        <div class="roles-grid">
-          <div class="role-card">
-            <div class="role-icon client">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="services-grid">
+          <div class="service-card">
+            <div class="service-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                 <polyline points="9 22 9 12 15 12 15 22"/>
               </svg>
             </div>
-            <h3 class="role-title">Clients</h3>
-            <p class="role-description">Request workers, track shifts, and manage your workforce needs.</p>
-            <ul class="role-features">
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Create worker requests
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Track active shifts
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Review time logs
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Message HR directly
-              </li>
-            </ul>
+            <h3 class="service-title">Office Cleaning</h3>
+            <p class="service-description">Daily, weekly, or custom cleaning schedules for corporate offices, co-working spaces, and business centers.</p>
           </div>
-          <div class="role-card">
-            <div class="role-icon worker">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
+          <div class="service-card">
+            <div class="service-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16"/>
+                <path d="M3 21h18"/>
+                <path d="M9 7h1"/>
+                <path d="M9 11h1"/>
+                <path d="M9 15h1"/>
+                <path d="M14 7h1"/>
+                <path d="M14 11h1"/>
+                <path d="M14 15h1"/>
               </svg>
             </div>
-            <h3 class="role-title">Workers</h3>
-            <p class="role-description">View shifts, clock in/out with GPS, and track your hours.</p>
-            <ul class="role-features">
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                View assigned shifts
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                GPS clock in/out
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Track time history
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Digital onboarding
-              </li>
-            </ul>
+            <h3 class="service-title">Hotel Cleaning</h3>
+            <p class="service-description">Full-service housekeeping for hotels, motels, and resorts. Room turnover, public areas, and deep cleaning.</p>
           </div>
-          <div class="role-card">
-            <div class="role-icon hr">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          <div class="service-card">
+            <div class="service-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
               </svg>
             </div>
-            <h3 class="role-title">HR Teams</h3>
-            <p class="role-description">Manage requests, assign workers, and approve time logs.</p>
-            <ul class="role-features">
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Review requests
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Match & assign workers
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Approve time logs
-              </li>
-              <li>
-                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                Generate reports
-              </li>
-            </ul>
+            <h3 class="service-title">Medical Facilities</h3>
+            <p class="service-description">Specialized sanitation for clinics, dental offices, and healthcare facilities following strict protocols.</p>
+          </div>
+          <div class="service-card">
+            <div class="service-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+              </svg>
+            </div>
+            <h3 class="service-title">Schools & Universities</h3>
+            <p class="service-description">Cleaning and maintenance for educational institutions, including classrooms, gymnasiums, and common areas.</p>
+          </div>
+          <div class="service-card">
+            <div class="service-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <h3 class="service-title">Customized Cleaning</h3>
+            <p class="service-description">Tailored cleaning programs designed around your schedule, requirements, and budget.</p>
+          </div>
+          <div class="service-card">
+            <div class="service-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="6" width="20" height="12" rx="2"/>
+                <path d="M12 12h.01"/>
+                <path d="M17 12h.01"/>
+                <path d="M7 12h.01"/>
+              </svg>
+            </div>
+            <h3 class="service-title">Post-Construction</h3>
+            <p class="service-description">Complete cleanup after renovations or construction projects. Debris removal, dusting, and final polish.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Industries -->
-    <section class="industries" id="industries">
+    <!-- Hotel Staffing Section -->
+    <section id="staffing" class="staffing">
       <div class="section-container">
         <div class="section-header">
-          <div class="section-label">Industries</div>
-          <h2 class="section-title">Serving Hospitality & Facilities</h2>
+          <div class="section-label">Hotel Staffing</div>
+          <h2 class="section-title">Skilled Hospitality Workers On Demand</h2>
           <p class="section-description">
-            Purpose-built for industries that rely on flexible, skilled workforces.
+            We provide trained, reliable staff for all hotel and hospitality positions. Whether you need one worker or fifty, we've got you covered.
           </p>
         </div>
-        <div class="industries-list">
-          <div class="industry-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            </svg>
-            Hotels
+        <div class="staffing-content">
+          <div class="staffing-text">
+            <h3>Staff When You Need Them</h3>
+            <p>
+              Running a hotel means unpredictable staffing needs. Someone calls in sick? A conference just doubled your bookings? We deploy qualified workers within hours, not days. Our team understands hospitality standards and arrives ready to work.
+            </p>
           </div>
-          <div class="industry-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
-              <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
-              <line x1="6" y1="1" x2="6" y2="4"/>
-              <line x1="10" y1="1" x2="10" y2="4"/>
-              <line x1="14" y1="1" x2="14" y2="4"/>
-            </svg>
-            Banquet Halls
-          </div>
-          <div class="industry-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-            </svg>
-            Janitorial Services
-          </div>
-          <div class="industry-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="1" y="3" width="15" height="13"/>
-              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
-              <circle cx="5.5" cy="18.5" r="2.5"/>
-              <circle cx="18.5" cy="18.5" r="2.5"/>
-            </svg>
-            Facilities Management
-          </div>
-          <div class="industry-tag">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="4" y="2" width="16" height="20" rx="2" ry="2"/>
-              <line x1="12" y1="18" x2="12" y2="18"/>
-            </svg>
-            Apartment Buildings
+          <div class="roles-grid">
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Housekeepers
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Housepersons
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Laundry Attendants
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Kitchen Helpers
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Dishwashers
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Breakfast Attendants
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Cooks
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Front Desk
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Night Auditors
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Maintenance
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Banquet Servers
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Bartenders
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Supervisors
+            </div>
+            <div class="role-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              General Labor
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="cta" id="get-started">
+    <!-- 24/7 Coverage Section -->
+    <section id="coverage" class="coverage-section">
       <div class="section-container">
-        <h2>Ready to Transform Your Workforce?</h2>
-        <p>Join hundreds of businesses already using Workforce Connect to streamline their operations.</p>
-        <a href="#contact" class="btn btn-primary btn-large">Get In Touch</a>
+        <h2>24/7 Operational Coverage</h2>
+        <p>
+          Someone called in sick? An unexpected event? We're your backup. Our rapid response team can deploy replacement workers to your site, ensuring your operations never skip a beat.
+        </p>
+        <div class="coverage-features">
+          <div class="coverage-feature">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Same-Day Deployment
+          </div>
+          <div class="coverage-feature">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            10-50 Workers Per Site
+          </div>
+          <div class="coverage-feature">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+            Emergency Call Support
+          </div>
+          <div class="coverage-feature">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Vetted & Trained Staff
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Service Area Section -->
+    <section class="service-area">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-label">Coverage Area</div>
+          <h2 class="section-title">Serving Clients Across Canada</h2>
+          <p class="section-description">
+            We provide services in major cities and regions across multiple provinces.
+          </p>
+        </div>
+        <div class="provinces-grid">
+          <div class="province-card">
+            <div class="province-name">Ontario</div>
+            <div class="province-cities">Toronto, Ottawa, Mississauga, Hamilton, London</div>
+          </div>
+          <div class="province-card">
+            <div class="province-name">British Columbia</div>
+            <div class="province-cities">Vancouver, Victoria, Burnaby</div>
+          </div>
+          <div class="province-card">
+            <div class="province-name">Alberta</div>
+            <div class="province-cities">Calgary, Edmonton</div>
+          </div>
+          <div class="province-card">
+            <div class="province-name">Quebec</div>
+            <div class="province-cities">Montreal, Quebec City</div>
+          </div>
+          <div class="province-card">
+            <div class="province-name">Manitoba</div>
+            <div class="province-cities">Winnipeg</div>
+          </div>
+          <div class="province-card">
+            <div class="province-name">Saskatchewan</div>
+            <div class="province-cities">Saskatoon, Regina</div>
+          </div>
+          <div class="province-card">
+            <div class="province-name">Nova Scotia</div>
+            <div class="province-cities">Halifax</div>
+          </div>
+          <div class="province-card">
+            <div class="province-name">New Brunswick</div>
+            <div class="province-cities">Moncton, Saint John</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Clients Section -->
+    <section class="clients">
+      <div class="section-container">
+        <div class="section-header">
+          <div class="section-label">Our Clients</div>
+          <h2 class="section-title">Trusted by Hotels & Properties</h2>
+          <p class="section-description">
+            We work with hotels, resorts, property management companies, and commercial facilities across Canada.
+          </p>
+        </div>
+        <div class="clients-note">
+          <p>Client references available upon request. We respect our partners' privacy and will gladly provide testimonials during the quote process.</p>
+          <a href="#contact" class="btn btn-primary">Request References</a>
+        </div>
       </div>
     </section>
 
     <!-- Contact Section -->
-    <section class="contact" id="contact">
+    <section id="contact" class="contact">
       <div class="section-container">
         <div class="section-header">
-          <div class="section-label">Contact Us</div>
-          <h2 class="section-title">Let's Start a Conversation</h2>
+          <div class="section-label">Get In Touch</div>
+          <h2 class="section-title">Request a Quote</h2>
           <p class="section-description">
-            Have questions about how Workforce Connect can help your business? We'd love to hear from you.
+            Tell us about your property and staffing needs. We'll get back to you within 24 hours.
           </p>
         </div>
         <div class="contact-grid">
           <div class="contact-info">
-            <h3>Get in Touch</h3>
-            <p>Our team is ready to help you streamline your workforce management. Reach out to us and we'll respond within 24 hours.</p>
+            <h3>Contact Information</h3>
+            <p>Ready to discuss your cleaning or staffing needs? Reach out and let's find the right solution for your business.</p>
             <div class="contact-item">
               <div class="contact-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
                   <polyline points="22,6 12,13 2,6"/>
                 </svg>
               </div>
               <div class="contact-item-content">
                 <div class="contact-item-label">Email</div>
-                <div class="contact-item-value">info@workforceconnect.com</div>
+                <div class="contact-item-value">info@wfconnect.org</div>
               </div>
             </div>
             <div class="contact-item">
               <div class="contact-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                 </svg>
               </div>
               <div class="contact-item-content">
                 <div class="contact-item-label">Phone</div>
-                <div class="contact-item-value">1-800-WORKFORCE</div>
+                <div class="contact-item-value">1-800-WFC-WORK</div>
               </div>
             </div>
             <div class="contact-item">
               <div class="contact-item-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"/>
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
               </div>
               <div class="contact-item-content">
-                <div class="contact-item-label">Business Hours</div>
-                <div class="contact-item-value">Mon - Fri: 9AM - 6PM EST</div>
+                <div class="contact-item-label">Hours</div>
+                <div class="contact-item-value">24/7 Operations Support</div>
               </div>
             </div>
           </div>
-          <div class="contact-form">
-            <form id="contactForm">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="name">Full Name <span>*</span></label>
-                  <input type="text" id="name" name="name" required placeholder="John Smith" />
-                </div>
-                <div class="form-group">
-                  <label for="email">Email Address <span>*</span></label>
-                  <input type="email" id="email" name="email" required placeholder="john@company.com" />
-                </div>
+          <form class="contact-form" id="contactForm">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="name">Full Name <span>*</span></label>
+                <input type="text" id="name" name="name" required placeholder="Your name" />
               </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="company">Company Name</label>
-                  <input type="text" id="company" name="company" placeholder="Your Company Inc." />
-                </div>
-                <div class="form-group">
-                  <label for="phone">Phone Number</label>
-                  <input type="tel" id="phone" name="phone" placeholder="(555) 123-4567" />
-                </div>
+              <div class="form-group">
+                <label for="email">Email <span>*</span></label>
+                <input type="email" id="email" name="email" required placeholder="you@company.com" />
               </div>
-              <div class="form-group" style="margin-bottom: 24px;">
-                <label for="message">Message <span>*</span></label>
-                <textarea id="message" name="message" required placeholder="Tell us about your workforce management needs..."></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="company">Company / Property</label>
+                <input type="text" id="company" name="company" placeholder="Hotel or property name" />
               </div>
-              <button type="submit" class="form-submit" id="submitBtn">Send Message</button>
-              <div class="form-message" id="formMessage"></div>
-            </form>
+              <div class="form-group">
+                <label for="phone">Phone</label>
+                <input type="tel" id="phone" name="phone" placeholder="(555) 123-4567" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="cityProvince">City / Province</label>
+                <input type="text" id="cityProvince" name="cityProvince" placeholder="Toronto, ON" />
+              </div>
+              <div class="form-group">
+                <label for="serviceNeeded">Service Needed</label>
+                <select id="serviceNeeded" name="serviceNeeded">
+                  <option value="">Select a service...</option>
+                  <option value="office-cleaning">Office Cleaning</option>
+                  <option value="hotel-cleaning">Hotel Cleaning</option>
+                  <option value="medical-cleaning">Medical Facilities Cleaning</option>
+                  <option value="school-cleaning">Schools & Universities</option>
+                  <option value="custom-cleaning">Customized Cleaning</option>
+                  <option value="post-construction">Post-Construction Cleanup</option>
+                  <option value="hotel-staffing">Hotel Staffing</option>
+                  <option value="multiple">Multiple Services</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label for="message">Message <span>*</span></label>
+              <textarea id="message" name="message" required placeholder="Tell us about your property and staffing needs..."></textarea>
+            </div>
+            <button type="submit" class="form-submit" id="submitBtn">Send Request</button>
+            <div class="form-message" id="formMessage"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download App Section -->
+    <section class="download-app">
+      <div class="section-container">
+        <h2>Workforce Connect App</h2>
+        <p>Our staff uses the Workforce Connect app to coordinate scheduling, communication, and time tracking (TITO).</p>
+        <div class="qr-codes">
+          <div class="qr-item">
+            <div class="qr-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 18.5A1.5 1.5 0 1 1 12 21.5 1.5 1.5 0 0 1 12 18.5Z"/>
+                <path d="M12 2C6.477 2 2 6.477 2 12H4.5C4.5 7.858 7.858 4.5 12 4.5S19.5 7.858 19.5 12H22C22 6.477 17.523 2 12 2Z"/>
+                <path d="M12 7C9.239 7 7 9.239 7 12H9.5C9.5 10.619 10.619 9.5 12 9.5S14.5 10.619 14.5 12H17C17 9.239 14.761 7 12 7Z"/>
+              </svg>
+            </div>
+            <div class="qr-label">Apple App Store</div>
+          </div>
+          <div class="qr-item">
+            <div class="qr-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 18.5A1.5 1.5 0 1 1 12 21.5 1.5 1.5 0 0 1 12 18.5Z"/>
+                <path d="M12 2C6.477 2 2 6.477 2 12H4.5C4.5 7.858 7.858 4.5 12 4.5S19.5 7.858 19.5 12H22C22 6.477 17.523 2 12 2Z"/>
+                <path d="M12 7C9.239 7 7 9.239 7 12H9.5C9.5 10.619 10.619 9.5 12 9.5S14.5 10.619 14.5 12H17C17 9.239 14.761 7 12 7Z"/>
+              </svg>
+            </div>
+            <div class="qr-label">Google Play Store</div>
           </div>
         </div>
+        <p class="app-note">QR codes coming soon. Contact us to learn more about our app.</p>
       </div>
     </section>
 
@@ -1322,20 +1399,17 @@
     <footer class="footer">
       <div class="footer-container">
         <div class="footer-logo">
-          <div class="footer-logo-icon">W</div>
-          Workforce Connect
+          <div class="footer-logo-icon">WC</div>
+          <span>Workforce Connect Management</span>
         </div>
         <div class="footer-links">
-          <a href="#features">Features</a>
-          <a href="#how-it-works">How It Works</a>
-          <a href="#roles">For Teams</a>
-          <a href="#industries">Industries</a>
+          <a href="#services">Services</a>
+          <a href="#staffing">Staffing</a>
+          <a href="#coverage">Coverage</a>
           <a href="#contact">Contact</a>
-          <a href="#">Privacy Policy</a>
-          <a href="#">Terms of Service</a>
         </div>
         <div class="footer-copyright">
-          &copy; 2026 Workforce Connect. All rights reserved.
+          &copy; 2025 Workforce Connect Management. All rights reserved.
         </div>
       </div>
     </footer>
@@ -1346,20 +1420,43 @@
         
         const submitBtn = document.getElementById('submitBtn');
         const formMessage = document.getElementById('formMessage');
-        const form = this;
         
+        // Get form data
+        const formData = {
+          name: document.getElementById('name').value.trim(),
+          email: document.getElementById('email').value.trim(),
+          company: document.getElementById('company').value.trim(),
+          phone: document.getElementById('phone').value.trim(),
+          cityProvince: document.getElementById('cityProvince').value.trim(),
+          serviceNeeded: document.getElementById('serviceNeeded').value,
+          message: document.getElementById('message').value.trim()
+        };
+        
+        // Client-side validation
+        if (formData.name.length < 2) {
+          formMessage.textContent = 'Please enter your full name (at least 2 characters).';
+          formMessage.className = 'form-message error';
+          return;
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+          formMessage.textContent = 'Please enter a valid email address.';
+          formMessage.className = 'form-message error';
+          return;
+        }
+        
+        if (formData.message.length < 10) {
+          formMessage.textContent = 'Please provide more details about your needs (at least 10 characters).';
+          formMessage.className = 'form-message error';
+          return;
+        }
+        
+        // Disable submit button
         submitBtn.disabled = true;
         submitBtn.textContent = 'Sending...';
         formMessage.className = 'form-message';
-        formMessage.style.display = 'none';
-        
-        const formData = {
-          name: form.name.value.trim(),
-          email: form.email.value.trim(),
-          company: form.company.value.trim() || null,
-          phone: form.phone.value.trim() || null,
-          message: form.message.value.trim()
-        };
+        formMessage.textContent = '';
         
         try {
           const response = await fetch('/public/contact', {
@@ -1372,21 +1469,22 @@
           
           const data = await response.json();
           
-          if (data.ok) {
+          if (response.ok) {
+            formMessage.textContent = 'Thank you! We\'ll get back to you within 24 hours.';
             formMessage.className = 'form-message success';
-            formMessage.textContent = 'Thank you for your message! We will get back to you within 24 hours.';
-            form.reset();
+            document.getElementById('contactForm').reset();
           } else {
-            formMessage.className = 'form-message error';
             formMessage.textContent = data.error || 'Something went wrong. Please try again.';
+            formMessage.className = 'form-message error';
           }
         } catch (error) {
-          formMessage.className = 'form-message error';
           formMessage.textContent = 'Network error. Please check your connection and try again.';
-        } finally {
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Send Message';
+          formMessage.className = 'form-message error';
         }
+        
+        // Re-enable submit button
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send Request';
       });
     </script>
   </body>

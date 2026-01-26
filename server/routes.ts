@@ -156,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { name, email, company, phone, message } = req.body;
+      const { name, email, company, phone, cityProvince, serviceNeeded, message } = req.body;
       
       if (!name || typeof name !== "string" || name.trim().length < 2) {
         res.status(400).json({ ok: false, error: "Name is required (minimum 2 characters)" });
@@ -181,6 +181,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: email.trim().toLowerCase(),
         company: company?.trim() || null,
         phone: phone?.trim() || null,
+        cityProvince: cityProvince?.trim() || null,
+        serviceNeeded: serviceNeeded?.trim() || null,
         message: message.trim(),
         ip,
         userAgent,

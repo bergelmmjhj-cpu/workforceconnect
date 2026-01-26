@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -34,6 +35,7 @@ const filterOptions: { label: string; value: RequestStatus | "all" }[] = [
 export default function RequestsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const headerHeight = useHeaderHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
   const navigation = useNavigation<any>();
   const { theme } = useTheme();
@@ -81,7 +83,7 @@ export default function RequestsScreen() {
   };
 
   const renderFilter = () => (
-    <View style={styles.filterContainer}>
+    <View style={[styles.filterContainer, { top: headerHeight }]}>
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -211,7 +213,6 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     position: "absolute",
-    top: 0,
     left: 0,
     right: 0,
     zIndex: 10,

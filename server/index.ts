@@ -187,34 +187,30 @@ function configureExpoAndLanding(app: express.Application) {
 
   log("Serving static Expo files with dynamic manifest routing");
 
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith("/api")) {
-      return next();
-    }
-
-    if (req.path !== "/" && req.path !== "/manifest") {
-      return next();
-    }
-
+  app.get("/", (req: Request, res: Response) => {
     const platform = req.header("expo-platform");
     if (platform && (platform === "ios" || platform === "android")) {
       return serveExpoManifest(platform, res);
     }
 
-    if (req.path === "/") {
-      return serveLandingPage({
-        req,
-        res,
-        landingPageTemplate,
-        appName,
-      });
-    }
+    return serveLandingPage({
+      req,
+      res,
+      landingPageTemplate,
+      appName,
+    });
+  });
 
+  app.get("/manifest", (req: Request, res: Response, next: NextFunction) => {
+    const platform = req.header("expo-platform");
+    if (platform && (platform === "ios" || platform === "android")) {
+      return serveExpoManifest(platform, res);
+    }
     next();
   });
 
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
-  app.use(express.static(path.resolve(process.cwd(), "static-build")));
+  app.use(express.static(path.resolve(process.cwd(), "static-build"), { index: false }));
 
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }

@@ -207,6 +207,24 @@ function configureExpoAndLanding(app: express.Application) {
     res.sendFile(faviconPath);
   });
 
+  // Serve Contractor Payment & Processing Guide
+  const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
+  const contractorGuideTemplate = fs.readFileSync(contractorGuidePath, "utf-8");
+
+  // Serve guide at /guide path
+  app.get("/guide", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(contractorGuideTemplate);
+  });
+
+  // Also serve at /contractor-guide for backwards compatibility
+  app.get("/contractor-guide", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(contractorGuideTemplate);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.get("/", (req: Request, res: Response) => {

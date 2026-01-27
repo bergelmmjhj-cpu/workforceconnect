@@ -30,6 +30,10 @@ export interface ContractorGuideContent {
     phone: string;
     website: string;
   };
+  departments?: {
+    name: string;
+    phone: string;
+  }[];
 }
 
 export const contractorGuideContent: ContractorGuideContent = {
@@ -203,10 +207,6 @@ export const contractorGuideContent: ContractorGuideContent = {
           text: "Subcontractor responsible for all tax reporting to CRA",
           bold: false,
         },
-        {
-          text: "T4A tax slips issued annually for payments over $500",
-          bold: false,
-        },
         { text: "Keep records of all work completed and payments received", bold: false },
       ],
     },
@@ -217,6 +217,12 @@ export const contractorGuideContent: ContractorGuideContent = {
     phone: "(416) 555-0100",
     website: "https://wfconnect.org",
   },
+
+  departments: [
+    { name: "Sales Department", phone: "(289) 670-5697" },
+    { name: "Accounting Department", phone: "(437) 476-2418" },
+    { name: "HR Department", phone: "(437) 476-9566" },
+  ],
 };
 
 /**

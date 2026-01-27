@@ -13,6 +13,7 @@ Key capabilities include:
 - Multi-timezone support (UTC storage, localized display)
 - GDPR and Canadian privacy compliance considerations
 - Business website with contact form and SEO optimization
+- Public contractor payment guide page at /guide for subcontractors
 
 ## User Preferences
 

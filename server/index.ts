@@ -233,6 +233,14 @@ function configureExpoAndLanding(app: express.Application) {
       return serveExpoManifest(platform, res);
     }
 
+    // Check if request is from guide subdomain
+    const host = req.hostname || req.headers.host || "";
+    if (host.startsWith("guide.") || host.includes("guide.wfconnect")) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.status(200).send(contractorGuideTemplate);
+    }
+
     return serveLandingPage({
       req,
       res,

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, UserRole, WorkerOnboardingStatus } from "@/types";
+import { apiRequest } from "@/lib/query-client";
 
 interface AuthContextType {
   user: User | null;
@@ -110,6 +111,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const lowerEmail = email.toLowerCase();
     
+    // Try API login first
+    try {
+      const response = await apiRequest("POST", "/api/auth/login", { email: lowerEmail, password });
+      const data = await response.json();
+      if (data.user) {
+        const loginUser: User = {
+          id: data.user.id,
+          email: data.user.email,
+          fullName: data.user.fullName,
+          role: data.user.role as UserRole,
+          timezone: data.user.timezone || "America/Toronto",
+          onboardingStatus: data.user.onboardingStatus as WorkerOnboardingStatus | undefined,
+          workerRoles: data.user.workerRoles ? JSON.parse(data.user.workerRoles) : undefined,
+          businessName: data.user.businessName,
+          businessAddress: data.user.businessAddress,
+          businessPhone: data.user.businessPhone,
+          createdAt: data.user.createdAt,
+        };
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loginUser));
+        setUser(loginUser);
+        return;
+      }
+    } catch (error) {
+      // If API fails, fall back to demo users for testing
+      console.log("API login failed, falling back to demo users");
+    }
+    
+    // Fallback to demo users
     if (additionalDemoUsers[lowerEmail]) {
       const loginUser = additionalDemoUsers[lowerEmail];
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loginUser));
@@ -128,18 +157,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (email: string, password: string, fullName: string, role: UserRole) => {
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      email,
-      fullName,
-      role,
-      timezone: "America/Toronto",
-      onboardingStatus: role === "worker" ? "NOT_APPLIED" : undefined,
-      createdAt: new Date().toISOString(),
-    };
-
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
-    setUser(newUser);
+    try {
+      const response = await apiRequest("POST", "/api/auth/register", { email, password, fullName, role });
+      const data = await response.json();
+      if (data.user) {
+        const newUser: User = {
+          id: data.user.id,
+          email: data.user.email,
+          fullName: data.user.fullName,
+          role: data.user.role as UserRole,
+          timezone: data.user.timezone || "America/Toronto",
+          onboardingStatus: data.user.onboardingStatus as WorkerOnboardingStatus | undefined,
+          createdAt: data.user.createdAt,
+        };
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
+        setUser(newUser);
+        return;
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Failed to create account");
+    }
   };
 
   const logout = async () => {

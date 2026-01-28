@@ -68,7 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     checkRoles("admin", "hr"),
     async (req: Request, res: Response) => {
       try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const messages = await quoProvider.getMessages(id);
         res.json(messages);
       } catch (error) {
@@ -252,7 +252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/users/:id", checkRoles("admin"), async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { role, isActive, onboardingStatus, workerRoles } = req.body;
 
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
@@ -281,7 +281,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/users/:id", checkRoles("admin"), async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
 
       const [deletedUser] = await db.delete(users)
         .where(eq(users.id, id))

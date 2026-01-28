@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import MainTabNavigator from "@/navigation/MainTabNavigator";
 import LoginScreen from "@/screens/LoginScreen";
+import SignUpScreen from "@/screens/SignUpScreen";
 import OnboardingScreen from "@/screens/OnboardingScreen";
 import ChatScreen from "@/screens/ChatScreen";
 import CreateRequestScreen from "@/screens/CreateRequestScreen";
@@ -24,6 +25,7 @@ import { useTheme } from "@/hooks/useTheme";
 export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
+  SignUp: undefined;
   Main: undefined;
   ChatScreen: { conversationId: string };
   CreateRequest: undefined;
@@ -70,11 +72,18 @@ export default function RootStackNavigator() {
           options={{ headerShown: false }}
         />
       ) : !isAuthenticated ? (
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
+        <>
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="SignUp"
+            component={SignUpScreen}
+            options={{ headerShown: false }}
+          />
+        </>
       ) : requiresOnboarding ? (
         <>
           <Stack.Screen

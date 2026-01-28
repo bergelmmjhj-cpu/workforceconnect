@@ -5,6 +5,7 @@ import {
   Image,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -24,46 +25,67 @@ import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-export default function LoginScreen() {
+export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { login } = useAuth();
+  const { register } = useAuth();
   const navigation = useNavigation<NavigationProp>();
-  const [error, setError] = useState("");
 
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>("client");
-
-  const demoEmails: Record<UserRole, string> = {
-    client: "client@example.com",
-    worker: "worker@example.com",
-    hr: "hr@example.com",
-    admin: "admin@example.com",
-  };
+  const [selectedRole, setSelectedRole] = useState<UserRole>("worker");
+  const [error, setError] = useState("");
 
   const roles: { role: UserRole; label: string; icon: keyof typeof Feather.glyphMap }[] = [
-    { role: "client", label: "Client", icon: "briefcase" },
     { role: "worker", label: "Worker", icon: "user" },
+    { role: "client", label: "Client", icon: "briefcase" },
     { role: "hr", label: "HR", icon: "users" },
     { role: "admin", label: "Admin", icon: "settings" },
   ];
 
-  const handleLogin = async () => {
+  const handleSignUp = async () => {
     setError("");
+
+    if (!fullName.trim()) {
+      setError("Please enter your full name");
+      return;
+    }
+    if (fullName.trim().length < 2) {
+      setError("Name must be at least 2 characters");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Please enter your email");
+      return;
+    }
+    if (!password) {
+      setError("Please enter a password");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
     setIsLoading(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await login(email || demoEmails[selectedRole], password);
+      await register(email.trim(), password, fullName.trim(), selectedRole);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: unknown) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("Failed to sign in");
+        setError("Failed to create account");
       }
     } finally {
       setIsLoading(false);
@@ -72,7 +94,6 @@ export default function LoginScreen() {
 
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
-    setEmail(demoEmails[role]);
     Haptics.selectionAsync();
   };
 
@@ -82,7 +103,7 @@ export default function LoginScreen() {
       contentContainerStyle={[
         styles.content,
         {
-          paddingTop: insets.top + Spacing["4xl"],
+          paddingTop: insets.top + Spacing["2xl"],
           paddingBottom: insets.bottom + Spacing["2xl"],
         },
       ]}
@@ -94,16 +115,16 @@ export default function LoginScreen() {
           resizeMode="contain"
         />
         <ThemedText type="h1" style={styles.title}>
-          Workforce Connect
+          Create Account
         </ThemedText>
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Staff deployment and shift management
+          Join Workforce Connect
         </ThemedText>
       </View>
 
       <View style={styles.roleSelector}>
         <ThemedText style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-          Demo Login As
+          I am a
         </ThemedText>
         <View style={styles.roleGrid}>
           {roles.map(({ role, label, icon }) => (
@@ -166,6 +187,14 @@ export default function LoginScreen() {
 
       <View style={styles.form}>
         <Input
+          label="Full Name"
+          value={fullName}
+          onChangeText={setFullName}
+          placeholder="Enter your full name"
+          autoCapitalize="words"
+        />
+
+        <Input
           label="Email"
           value={email}
           onChangeText={setEmail}
@@ -180,7 +209,7 @@ export default function LoginScreen() {
             label="Password"
             value={password}
             onChangeText={setPassword}
-            placeholder="Enter your password"
+            placeholder="Create a password"
             secureTextEntry={!showPassword}
             containerStyle={styles.passwordInput}
           />
@@ -196,29 +225,32 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
-        <Button onPress={handleLogin} disabled={isLoading} style={styles.loginButton}>
+        <Input
+          label="Confirm Password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Confirm your password"
+          secureTextEntry={!showPassword}
+        />
+
+        <Button onPress={handleSignUp} disabled={isLoading} style={styles.signUpButton}>
           {isLoading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            "Sign In"
+            "Create Account"
           )}
         </Button>
       </View>
 
       <View style={styles.footer}>
         <ThemedText style={[styles.footerText, { color: theme.textMuted }]}>
-          Demo mode - any password works
+          Already have an account?{" "}
         </ThemedText>
-        <View style={styles.signupRow}>
-          <ThemedText style={[styles.footerText, { color: theme.textMuted }]}>
-            Don't have an account?{" "}
+        <Pressable onPress={() => navigation.navigate("Login")}>
+          <ThemedText style={[styles.linkText, { color: theme.primary }]}>
+            Sign In
           </ThemedText>
-          <Pressable onPress={() => navigation.navigate("SignUp")}>
-            <ThemedText style={[styles.linkText, { color: theme.primary }]}>
-              Sign Up
-            </ThemedText>
-          </Pressable>
-        </View>
+        </Pressable>
       </View>
     </KeyboardAwareScrollViewCompat>
   );
@@ -234,12 +266,12 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginBottom: Spacing["3xl"],
+    marginBottom: Spacing["2xl"],
   },
   logo: {
-    width: 80,
-    height: 80,
-    marginBottom: Spacing.lg,
+    width: 60,
+    height: 60,
+    marginBottom: Spacing.md,
   },
   title: {
     textAlign: "center",
@@ -250,7 +282,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   roleSelector: {
-    marginBottom: Spacing["2xl"],
+    marginBottom: Spacing.xl,
   },
   sectionLabel: {
     fontSize: 13,
@@ -262,51 +294,26 @@ const styles = StyleSheet.create({
   roleGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   roleCard: {
     flex: 1,
-    minWidth: "45%",
+    minWidth: "22%",
     alignItems: "center",
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
     borderWidth: 1.5,
   },
   roleIcon: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: BorderRadius.md,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   roleLabel: {
-    fontSize: 14,
-  },
-  form: {
-    marginBottom: Spacing["2xl"],
-  },
-  passwordContainer: {
-    position: "relative",
-  },
-  passwordInput: {
-    marginBottom: Spacing.lg,
-  },
-  eyeButton: {
-    position: "absolute",
-    right: Spacing.lg,
-    top: 32,
-    padding: Spacing.sm,
-  },
-  loginButton: {
-    marginTop: Spacing.sm,
-  },
-  footer: {
-    alignItems: "center",
-    marginTop: "auto",
-  },
-  footerText: {
-    fontSize: 13,
+    fontSize: 12,
   },
   errorContainer: {
     flexDirection: "row",
@@ -320,12 +327,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
-  signupRow: {
-    flexDirection: "row",
+  form: {
+    marginBottom: Spacing.xl,
+  },
+  passwordContainer: {
+    position: "relative",
+  },
+  passwordInput: {
+    marginBottom: Spacing.lg,
+  },
+  eyeButton: {
+    position: "absolute",
+    right: Spacing.lg,
+    top: 32,
+    padding: Spacing.sm,
+  },
+  signUpButton: {
     marginTop: Spacing.md,
   },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: 14,
+  },
   linkText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
   },
 });

@@ -12,6 +12,7 @@ import MessagesScreen from "@/screens/MessagesScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import QuoMessagesScreen from "@/screens/QuoMessagesScreen";
 import QuoCallsScreen from "@/screens/QuoCallsScreen";
+import UserManagementScreen from "@/screens/UserManagementScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -224,23 +225,22 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
+              name="Users"
+              component={UserManagementScreen}
+              options={{
+                headerTitle: "User Management",
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="users" size={size} color={color} />
+                ),
+              }}
+            />
+            <Tab.Screen
               name="Requests"
               component={RequestsScreen}
               options={{
                 headerTitle: "All Requests",
                 tabBarIcon: ({ color, size }) => (
                   <Feather name="file-text" size={size} color={color} />
-                ),
-              }}
-            />
-            <Tab.Screen
-              name="QuoMessages"
-              component={QuoMessagesScreen}
-              options={{
-                title: "Quo",
-                headerTitle: "Quo Messages",
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="phone" size={size} color={color} />
                 ),
               }}
             />

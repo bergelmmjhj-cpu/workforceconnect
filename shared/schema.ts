@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -7,17 +7,51 @@ export const users = pgTable("users", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password").notNull(),
+  fullName: text("full_name").notNull(),
+  role: text("role").notNull().default("worker"), // admin, hr, client, worker
+  timezone: text("timezone").default("America/Toronto"),
+  onboardingStatus: text("onboarding_status"), // For workers: NOT_APPLIED, APPLICATION_SUBMITTED, etc.
+  workerRoles: text("worker_roles"), // JSON array of worker roles
+  businessName: text("business_name"), // For clients
+  businessAddress: text("business_address"),
+  businessPhone: text("business_phone"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
+  email: true,
   password: true,
+  fullName: true,
+  role: true,
+  timezone: true,
+  onboardingStatus: true,
+  workerRoles: true,
+  businessName: true,
+  businessAddress: true,
+  businessPhone: true,
+  isActive: true,
+});
+
+export const registerUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  fullName: z.string().min(2),
+  role: z.enum(["admin", "hr", "client", "worker"]),
+});
+
+export const loginUserSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type RegisterUser = z.infer<typeof registerUserSchema>;
+export type LoginUser = z.infer<typeof loginUserSchema>;
 
 // Quo Communication Schema
 

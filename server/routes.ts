@@ -2,7 +2,9 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { quoProvider } from "./integrations/quo";
 import { db } from "./db";
-import { contactLeads } from "../shared/schema";
+import { contactLeads, users, registerUserSchema, loginUserSchema } from "../shared/schema";
+import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -146,6 +148,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
+
+  // Auth endpoints
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
+    try {
+      const result = registerUserSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({ error: result.error.errors[0].message });
+        return;
+      }
+
+      const { email, password, fullName, role } = result.data;
+
+      // Check if user already exists
+      const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+      if (existingUser.length > 0) {
+        res.status(400).json({ error: "Email already registered" });
+        return;
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const [newUser] = await db.insert(users).values({
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        fullName,
+        role,
+        onboardingStatus: role === "worker" ? "NOT_APPLIED" : null,
+      }).returning();
+
+      // Return user without password
+      const { password: _, ...userWithoutPassword } = newUser;
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      console.error("Error registering user:", error);
+      res.status(500).json({ error: "Failed to register user" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const result = loginUserSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({ error: result.error.errors[0].message });
+        return;
+      }
+
+      const { email, password } = result.data;
+
+      // Find user
+      const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+      if (!user) {
+        res.status(401).json({ error: "Invalid email or password" });
+        return;
+      }
+
+      // Check password
+      const validPassword = await bcrypt.compare(password, user.password);
+      if (!validPassword) {
+        res.status(401).json({ error: "Invalid email or password" });
+        return;
+      }
+
+      // Check if user is active
+      if (!user.isActive) {
+        res.status(401).json({ error: "Account is deactivated" });
+        return;
+      }
+
+      // Return user without password
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      console.error("Error logging in:", error);
+      res.status(500).json({ error: "Failed to login" });
+    }
+  });
+
+  // User management endpoints (admin only)
+  app.get("/api/users", checkRoles("admin"), async (_req: Request, res: Response) => {
+    try {
+      const allUsers = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        timezone: users.timezone,
+        onboardingStatus: users.onboardingStatus,
+        workerRoles: users.workerRoles,
+        businessName: users.businessName,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      }).from(users);
+      res.json(allUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.patch("/api/users/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { role, isActive, onboardingStatus, workerRoles } = req.body;
+
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (role !== undefined) updateData.role = role;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      if (onboardingStatus !== undefined) updateData.onboardingStatus = onboardingStatus;
+      if (workerRoles !== undefined) updateData.workerRoles = workerRoles;
+
+      const [updatedUser] = await db.update(users)
+        .set(updateData)
+        .where(eq(users.id, id))
+        .returning();
+
+      if (!updatedUser) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const { password: _, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  app.delete("/api/users/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const [deletedUser] = await db.delete(users)
+        .where(eq(users.id, id))
+        .returning();
+
+      if (!deletedUser) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
 
   app.post("/public/contact", async (req: Request, res: Response) => {
     try {

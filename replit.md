@@ -164,10 +164,14 @@ Workers can clock in/out using GPS verification:
 
 ### Authentication Pattern
 
-Currently implemented as a demo/mock system using AsyncStorage for session persistence. The architecture supports:
-- JWT-based authentication (ready for implementation)
-- Role-based access control (admin, hr, client, worker)
-- Role switching for demo purposes
+Full authentication system using PostgreSQL database with bcrypt password hashing:
+- **Registration**: API endpoint at `/api/auth/register` creates users with hashed passwords
+- **Login**: API endpoint at `/api/auth/login` verifies credentials, falls back to demo users for testing
+- **User Management**: Admin-only access at `/api/users` to list, update, and delete users
+- **Role-based access**: Roles are admin, hr, client, worker (worker requires additional onboarding)
+- **SignUpScreen**: New users can select their role (Worker, Client, HR, Admin) during registration
+- **UserManagementScreen**: Admin users can view all users, edit roles, and toggle active status
+- **API Authentication**: AuthContext tries API first, falls back to demo users if API unavailable
 
 ### Quo Communication Integration
 

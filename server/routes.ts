@@ -8,7 +8,9 @@ import {
   loginUserSchema, 
   conversations as conversationsTable, 
   messages as messagesTable, 
-  messageLogs as messageLogsTable 
+  messageLogs as messageLogsTable,
+  workerApplications,
+  insertWorkerApplicationSchema
 } from "../shared/schema";
 import bcrypt from "bcryptjs";
 import { eq, and, or, desc, isNull, sql } from "drizzle-orm";
@@ -591,6 +593,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error saving contact lead:", error);
       res.status(500).json({ ok: false, error: "Failed to submit form. Please try again." });
+    }
+  });
+
+  // Worker Application Form Submission
+  app.post("/api/public/apply", async (req: Request, res: Response) => {
+    try {
+      const ip = getClientIp(req);
+      
+      if (!checkRateLimit(ip)) {
+        res.status(429).json({ error: "Too many requests. Please try again later." });
+        return;
+      }
+
+      const userAgent = req.headers["user-agent"] || null;
+
+      const applicationData = {
+        ...req.body,
+        ip,
+        userAgent,
+      };
+
+      const [newApplication] = await db.insert(workerApplications).values(applicationData).returning();
+
+      console.log(`Worker application submitted from: ${req.body.email}`);
+      res.json({ ok: true, id: newApplication.id });
+    } catch (error) {
+      console.error("Error saving worker application:", error);
+      res.status(500).json({ error: "Failed to submit application. Please try again." });
+    }
+  });
+
+  // Get all worker applications (admin only with basic auth)
+  app.get("/api/admin/applications", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const applications = await db.select().from(workerApplications).orderBy(desc(workerApplications.createdAt));
+      res.json(applications);
+    } catch (error) {
+      console.error("Error fetching applications:", error);
+      res.status(500).json({ error: "Failed to fetch applications" });
+    }
+  });
+
+  // Get single worker application
+  app.get("/api/admin/applications/:id", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id));
+      
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      res.json(application);
+    } catch (error) {
+      console.error("Error fetching application:", error);
+      res.status(500).json({ error: "Failed to fetch application" });
+    }
+  });
+
+  // Update application status
+  app.patch("/api/admin/applications/:id", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const { status, notes } = req.body;
+
+      const [updatedApplication] = await db.update(workerApplications)
+        .set({
+          status,
+          notes,
+          reviewedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(workerApplications.id, req.params.id))
+        .returning();
+
+      if (!updatedApplication) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      res.json(updatedApplication);
+    } catch (error) {
+      console.error("Error updating application:", error);
+      res.status(500).json({ error: "Failed to update application" });
     }
   });
 

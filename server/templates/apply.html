@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Apply to Join - Workforce Connect Management</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Apply to become a subcontractor with Workforce Connect Management. Join our team of professional cleaners and hospitality staff." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://wfconnect.org/apply" />
+    <meta name="theme-color" content="#1E40AF" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      
+      :root {
+        --primary: #1E40AF;
+        --primary-light: #3B82F6;
+        --primary-dark: #1E3A8A;
+        --accent: #F59E0B;
+        --success: #10B981;
+        --warning: #F59E0B;
+        --error: #EF4444;
+        --info: #3B82F6;
+        --background: #F8FAFC;
+        --surface: #FFFFFF;
+        --border: #E2E8F0;
+        --text-primary: #0F172A;
+        --text-secondary: #64748B;
+        --text-muted: #94A3B8;
+      }
+      
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--background);
+        color: var(--text-primary);
+        line-height: 1.6;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      .header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      
+      .header-container {
+        max-width: 800px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .header-logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: var(--primary);
+        font-weight: 700;
+        font-size: 16px;
+      }
+      
+      .header-logo img {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        object-fit: contain;
+      }
+      
+      .header-back {
+        color: var(--primary);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      
+      .header-back:hover {
+        text-decoration: underline;
+      }
+      
+      .main {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 32px 24px;
+      }
+      
+      .page-header {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      
+      .page-title {
+        font-size: 32px;
+        font-weight: 800;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+        line-height: 1.2;
+      }
+      
+      .page-subtitle {
+        font-size: 16px;
+        color: var(--text-secondary);
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      
+      .form-section {
+        background: var(--surface);
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+      
+      .section-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .section-title::before {
+        content: '';
+        width: 4px;
+        height: 24px;
+        background: var(--primary);
+        border-radius: 2px;
+      }
+      
+      .form-row {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      
+      .form-row.two-col {
+        grid-template-columns: 1fr 1fr;
+      }
+      
+      .form-row.three-col {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+      
+      @media (max-width: 600px) {
+        .form-row.two-col,
+        .form-row.three-col {
+          grid-template-columns: 1fr;
+        }
+      }
+      
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      
+      .form-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      
+      .form-label .required {
+        color: var(--error);
+        margin-left: 2px;
+      }
+      
+      .form-input,
+      .form-select,
+      .form-textarea {
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 15px;
+        font-family: inherit;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: var(--surface);
+      }
+      
+      .form-input:focus,
+      .form-select:focus,
+      .form-textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+      }
+      
+      .form-textarea {
+        resize: vertical;
+        min-height: 100px;
+      }
+      
+      .form-select {
+        cursor: pointer;
+      }
+      
+      .checkbox-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      
+      .checkbox-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        cursor: pointer;
+      }
+      
+      .checkbox-item input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        margin-top: 2px;
+        cursor: pointer;
+        accent-color: var(--primary);
+      }
+      
+      .checkbox-label {
+        font-size: 14px;
+        color: var(--text-primary);
+        line-height: 1.5;
+      }
+      
+      .checkbox-label.bold {
+        font-weight: 600;
+      }
+      
+      .multi-select {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      
+      .multi-select-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      
+      .multi-select-item:hover {
+        border-color: var(--primary-light);
+        background: rgba(59, 130, 246, 0.05);
+      }
+      
+      .multi-select-item input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+      }
+      
+      .multi-select-item label {
+        font-size: 14px;
+        cursor: pointer;
+      }
+      
+      .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .radio-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      
+      .radio-item:hover {
+        border-color: var(--primary-light);
+      }
+      
+      .radio-item input[type="radio"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+      }
+      
+      .radio-item label {
+        font-size: 14px;
+        cursor: pointer;
+      }
+      
+      .highlight-box {
+        padding: 16px;
+        border-radius: 8px;
+        margin: 16px 0;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      
+      .highlight-box.info {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+      }
+      
+      .highlight-box.warning {
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+      }
+      
+      .highlight-icon {
+        flex-shrink: 0;
+        width: 24px;
+        height: 24px;
+      }
+      
+      .highlight-box.info .highlight-icon {
+        color: var(--info);
+      }
+      
+      .highlight-box.warning .highlight-icon {
+        color: var(--warning);
+      }
+      
+      .highlight-text {
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      
+      .highlight-box.info .highlight-text {
+        color: #1E40AF;
+      }
+      
+      .highlight-box.warning .highlight-text {
+        color: #92400E;
+      }
+      
+      .signature-section {
+        background: #F8FAFC;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 16px;
+      }
+      
+      .signature-section .form-input {
+        background: white;
+        font-size: 18px;
+        font-style: italic;
+        text-align: center;
+      }
+      
+      .submit-section {
+        text-align: center;
+        padding: 32px 0;
+      }
+      
+      .submit-btn {
+        display: inline-block;
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: white;
+        font-weight: 700;
+        font-size: 18px;
+        padding: 16px 48px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      
+      .submit-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(30, 64, 175, 0.3);
+      }
+      
+      .submit-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      
+      .submit-note {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-top: 16px;
+      }
+      
+      .footer {
+        background: var(--primary-dark);
+        color: white;
+        padding: 32px 24px;
+        text-align: center;
+        margin-top: 48px;
+      }
+      
+      .footer-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 16px;
+        font-weight: 700;
+        font-size: 16px;
+      }
+      
+      .footer-logo img {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+      }
+      
+      .footer-copyright {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+      
+      .error-message {
+        color: var(--error);
+        font-size: 13px;
+        margin-top: 4px;
+        display: none;
+      }
+      
+      .form-group.error .form-input,
+      .form-group.error .form-select,
+      .form-group.error .form-textarea {
+        border-color: var(--error);
+      }
+      
+      .form-group.error .error-message {
+        display: block;
+      }
+      
+      .success-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      
+      .success-modal.show {
+        display: flex;
+      }
+      
+      .success-content {
+        background: white;
+        border-radius: 16px;
+        padding: 40px;
+        text-align: center;
+        max-width: 400px;
+        width: 100%;
+      }
+      
+      .success-icon {
+        width: 64px;
+        height: 64px;
+        background: var(--success);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+      }
+      
+      .success-icon svg {
+        width: 32px;
+        height: 32px;
+        color: white;
+      }
+      
+      .success-title {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      
+      .success-message {
+        font-size: 15px;
+        color: var(--text-secondary);
+        margin-bottom: 24px;
+      }
+      
+      .success-btn {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        font-weight: 600;
+        font-size: 15px;
+        padding: 12px 32px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      
+      @media (max-width: 480px) {
+        .main {
+          padding: 24px 16px;
+        }
+        
+        .form-section {
+          padding: 20px 16px;
+        }
+        
+        .page-title {
+          font-size: 26px;
+        }
+        
+        .multi-select {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-container">
+        <a href="https://wfconnect.org" class="header-logo">
+          <img src="/logo.png" alt="Workforce Connect Logo" />
+          <span>Workforce Connect</span>
+        </a>
+        <a href="/guide" class="header-back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Back to Guide
+        </a>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="page-header">
+        <h1 class="page-title">Worker Application Form</h1>
+        <p class="page-subtitle">
+          Complete this form to apply as an independent subcontractor with Workforce Connect Management. All fields marked with <span style="color: var(--error);">*</span> are required.
+        </p>
+      </div>
+
+      <form id="applicationForm" novalidate>
+        <!-- Section A: Personal Details -->
+        <section class="form-section">
+          <h2 class="section-title">A. Personal Details</h2>
+          
+          <div class="form-row two-col">
+            <div class="form-group">
+              <label class="form-label">Full Legal Name <span class="required">*</span></label>
+              <input type="text" name="fullName" class="form-input" placeholder="Enter your full name" required>
+              <span class="error-message">Please enter your full name</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date of Birth</label>
+              <input type="date" name="dateOfBirth" class="form-input">
+            </div>
+          </div>
+          
+          <div class="form-row two-col">
+            <div class="form-group">
+              <label class="form-label">Phone Number <span class="required">*</span></label>
+              <input type="tel" name="phone" class="form-input" placeholder="(416) 555-1234" required>
+              <span class="error-message">Please enter a valid phone number</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address <span class="required">*</span></label>
+              <input type="email" name="email" class="form-input" placeholder="your.email@example.com" required>
+              <span class="error-message">Please enter a valid email address</span>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Street Address <span class="required">*</span></label>
+            <input type="text" name="address" class="form-input" placeholder="123 Main Street, Unit 4" required>
+            <span class="error-message">Please enter your address</span>
+          </div>
+          
+          <div class="form-row three-col">
+            <div class="form-group">
+              <label class="form-label">City <span class="required">*</span></label>
+              <input type="text" name="city" class="form-input" placeholder="Toronto" required>
+              <span class="error-message">Please enter your city</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Province <span class="required">*</span></label>
+              <select name="province" class="form-select" required>
+                <option value="">Select province</option>
+                <option value="ON">Ontario</option>
+                <option value="BC">British Columbia</option>
+                <option value="AB">Alberta</option>
+                <option value="QC">Quebec</option>
+                <option value="MB">Manitoba</option>
+                <option value="SK">Saskatchewan</option>
+                <option value="NS">Nova Scotia</option>
+                <option value="NB">New Brunswick</option>
+                <option value="NL">Newfoundland and Labrador</option>
+                <option value="PE">Prince Edward Island</option>
+                <option value="NT">Northwest Territories</option>
+                <option value="YT">Yukon</option>
+                <option value="NU">Nunavut</option>
+              </select>
+              <span class="error-message">Please select your province</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Postal Code <span class="required">*</span></label>
+              <input type="text" name="postalCode" class="form-input" placeholder="M5V 1A1" required>
+              <span class="error-message">Please enter your postal code</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section B: Work Eligibility -->
+        <section class="form-section">
+          <h2 class="section-title">B. Work Eligibility</h2>
+          
+          <div class="form-group">
+            <label class="form-label">Right to Work Status <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" name="workStatus" value="citizen" required>
+                <span>Canadian Citizen</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="workStatus" value="permanent_resident">
+                <span>Permanent Resident</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="workStatus" value="work_permit">
+                <span>Valid Work Permit Holder</span>
+              </label>
+            </div>
+            <span class="error-message">Please select your work status</span>
+          </div>
+          
+          <div class="highlight-box info">
+            <div class="highlight-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+            </div>
+            <p class="highlight-text">Your SIN/Tax ID will be collected after your application is approved. This is only required for payment processing purposes.</p>
+          </div>
+          
+          <div class="checkbox-group">
+            <label class="checkbox-item">
+              <input type="checkbox" name="backgroundCheckConsent" required>
+              <span class="checkbox-label">I consent to Workforce Connect conducting necessary background checks as part of the application process. <span style="color: var(--error);">*</span></span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Section C: Role Interests -->
+        <section class="form-section">
+          <h2 class="section-title">C. Role Interests</h2>
+          
+          <div class="form-group">
+            <label class="form-label">Preferred Job Roles <span class="required">*</span> (Select all that apply)</label>
+            <div class="multi-select">
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Housekeeper">
+                <span>Housekeeper</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Houseperson">
+                <span>Houseperson</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Laundry Attendant">
+                <span>Laundry Attendant</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Server">
+                <span>Server</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Kitchen Helper">
+                <span>Kitchen Helper</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Dishwasher">
+                <span>Dishwasher</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Cook">
+                <span>Cook</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Lifeguard">
+                <span>Lifeguard</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="General Labor">
+                <span>General Labor</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredRoles" value="Other">
+                <span>Other</span>
+              </label>
+            </div>
+            <span class="error-message">Please select at least one role</span>
+          </div>
+          
+          <div class="form-group" id="otherRoleGroup" style="display: none; margin-top: 16px;">
+            <label class="form-label">Please specify other role(s)</label>
+            <input type="text" name="otherRole" class="form-input" placeholder="Enter other role(s)">
+          </div>
+        </section>
+
+        <!-- Section D: Availability -->
+        <section class="form-section">
+          <h2 class="section-title">D. Availability</h2>
+          
+          <div class="form-group">
+            <label class="form-label">Days Available <span class="required">*</span> (Select all that apply)</label>
+            <div class="multi-select">
+              <label class="multi-select-item">
+                <input type="checkbox" name="availableDays" value="Monday">
+                <span>Monday</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="availableDays" value="Tuesday">
+                <span>Tuesday</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="availableDays" value="Wednesday">
+                <span>Wednesday</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="availableDays" value="Thursday">
+                <span>Thursday</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="availableDays" value="Friday">
+                <span>Friday</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="availableDays" value="Saturday">
+                <span>Saturday</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="availableDays" value="Sunday">
+                <span>Sunday</span>
+              </label>
+            </div>
+            <span class="error-message">Please select at least one day</span>
+          </div>
+          
+          <div class="form-group" style="margin-top: 20px;">
+            <label class="form-label">Preferred Shift Times <span class="required">*</span> (Select all that apply)</label>
+            <div class="multi-select">
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredShifts" value="morning">
+                <span>Morning (6am - 12pm)</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredShifts" value="afternoon">
+                <span>Afternoon (12pm - 6pm)</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredShifts" value="evening">
+                <span>Evening (6pm - 12am)</span>
+              </label>
+              <label class="multi-select-item">
+                <input type="checkbox" name="preferredShifts" value="overnight">
+                <span>Overnight (12am - 6am)</span>
+              </label>
+            </div>
+            <span class="error-message">Please select at least one shift time</span>
+          </div>
+          
+          <div class="form-group" style="margin-top: 20px;">
+            <label class="form-label">Any periods you are NOT available? (Optional)</label>
+            <textarea name="unavailablePeriods" class="form-textarea" placeholder="E.g., Vacation from Dec 20-30, unavailable on religious holidays, etc."></textarea>
+          </div>
+        </section>
+
+        <!-- Section E: Experience -->
+        <section class="form-section">
+          <h2 class="section-title">E. Experience & Skills</h2>
+          
+          <div class="form-row two-col">
+            <div class="form-group">
+              <label class="form-label">Years of Relevant Experience</label>
+              <select name="yearsExperience" class="form-select">
+                <option value="">Select experience</option>
+                <option value="0">No experience</option>
+                <option value="1">Less than 1 year</option>
+                <option value="1-2">1-2 years</option>
+                <option value="3-5">3-5 years</option>
+                <option value="5+">5+ years</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="form-group" style="margin-top: 16px;">
+            <label class="form-label">Experience Summary</label>
+            <textarea name="experienceSummary" class="form-textarea" placeholder="Briefly describe your relevant work experience, previous roles, and responsibilities..."></textarea>
+          </div>
+          
+          <div class="form-group" style="margin-top: 16px;">
+            <label class="form-label">Skills & Certifications (Optional)</label>
+            <textarea name="skills" class="form-textarea" placeholder="E.g., WHMIS certified, First Aid/CPR, Food Handler's Certificate, specific equipment training, languages spoken, etc."></textarea>
+          </div>
+        </section>
+
+        <!-- Section F: Shift Preferences -->
+        <section class="form-section">
+          <h2 class="section-title">F. Shift Preferences</h2>
+          
+          <div class="form-row two-col">
+            <div class="form-group">
+              <label class="form-label">Preferred Shift Length</label>
+              <select name="desiredShiftLength" class="form-select">
+                <option value="">Select preference</option>
+                <option value="4">4 hours</option>
+                <option value="6">6 hours</option>
+                <option value="8">8 hours</option>
+                <option value="flexible">Flexible</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Maximum Travel Distance</label>
+              <select name="maxTravelDistance" class="form-select">
+                <option value="">Select distance</option>
+                <option value="5km">Up to 5 km</option>
+                <option value="10km">Up to 10 km</option>
+                <option value="25km">Up to 25 km</option>
+                <option value="50km">Up to 50 km</option>
+                <option value="any">Any distance</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section G: Emergency Contact -->
+        <section class="form-section">
+          <h2 class="section-title">G. Emergency Contact</h2>
+          
+          <div class="form-row three-col">
+            <div class="form-group">
+              <label class="form-label">Contact Name <span class="required">*</span></label>
+              <input type="text" name="emergencyContactName" class="form-input" placeholder="Full name" required>
+              <span class="error-message">Please enter contact name</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Relationship <span class="required">*</span></label>
+              <select name="emergencyContactRelationship" class="form-select" required>
+                <option value="">Select relationship</option>
+                <option value="spouse">Spouse</option>
+                <option value="parent">Parent</option>
+                <option value="sibling">Sibling</option>
+                <option value="child">Child</option>
+                <option value="friend">Friend</option>
+                <option value="other">Other</option>
+              </select>
+              <span class="error-message">Please select relationship</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone Number <span class="required">*</span></label>
+              <input type="tel" name="emergencyContactPhone" class="form-input" placeholder="(416) 555-5678" required>
+              <span class="error-message">Please enter phone number</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section H: Acknowledgments -->
+        <section class="form-section">
+          <h2 class="section-title">H. Acknowledgments & Consents</h2>
+          
+          <div class="highlight-box warning">
+            <div class="highlight-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <p class="highlight-text">Please read and acknowledge each item carefully. Your banking information for payment will only be collected after your application is approved.</p>
+          </div>
+          
+          <div class="checkbox-group">
+            <label class="checkbox-item">
+              <input type="checkbox" name="titoAcknowledgment" required>
+              <span class="checkbox-label bold">TITO System Acknowledgment <span style="color: var(--error);">*</span></span>
+            </label>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I understand that I must accurately submit Time-In/Time-Out (TITO) records through the Workforce Connect platform. GPS verification may be required. Falsification of time records may result in immediate termination.</p>
+            
+            <label class="checkbox-item" style="margin-top: 16px;">
+              <input type="checkbox" name="siteRulesAcknowledgment" required>
+              <span class="checkbox-label bold">Site Rules Agreement <span style="color: var(--error);">*</span></span>
+            </label>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I agree to adhere to client site-specific rules and regulations at all work locations.</p>
+            
+            <label class="checkbox-item" style="margin-top: 16px;">
+              <input type="checkbox" name="workerAgreementConsent" required>
+              <span class="checkbox-label bold">Worker Agreement <span style="color: var(--error);">*</span></span>
+            </label>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I have read and agree to the <a href="/guide" style="color: var(--primary);">Contractor Payment & Processing Guide</a> and understand that I will be working as an independent subcontractor, NOT as an employee.</p>
+            
+            <label class="checkbox-item" style="margin-top: 16px;">
+              <input type="checkbox" name="privacyConsent" required>
+              <span class="checkbox-label bold">Privacy Policy <span style="color: var(--error);">*</span></span>
+            </label>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I consent to the collection, use, and protection of my personal data as outlined in Workforce Connect's <a href="/privacy" style="color: var(--primary);">Privacy Policy</a>, in compliance with GDPR and PIPEDA regulations.</p>
+            
+            <label class="checkbox-item" style="margin-top: 16px;">
+              <input type="checkbox" name="marketingConsent">
+              <span class="checkbox-label">I agree to receive promotional communications and updates from Workforce Connect (optional)</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Section I: Electronic Signature -->
+        <section class="form-section">
+          <h2 class="section-title">I. Electronic Signature</h2>
+          
+          <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;">
+            By typing your full legal name below, you confirm that all information provided in this application is true and accurate to the best of your knowledge. This serves as your electronic signature.
+          </p>
+          
+          <div class="signature-section">
+            <div class="form-group">
+              <label class="form-label">Type Your Full Legal Name <span class="required">*</span></label>
+              <input type="text" name="signature" class="form-input" placeholder="Your Full Legal Name" required>
+              <span class="error-message">Please type your full legal name as your signature</span>
+            </div>
+            <p style="text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 12px;">
+              Date: <span id="signatureDate"></span>
+            </p>
+          </div>
+        </section>
+
+        <!-- Submit Section -->
+        <div class="submit-section">
+          <button type="submit" class="submit-btn" id="submitBtn">
+            Submit Application
+          </button>
+          <p class="submit-note">Your application will be reviewed by our HR team. We will contact you within 2-3 business days.</p>
+        </div>
+      </form>
+    </main>
+
+    <!-- Success Modal -->
+    <div class="success-modal" id="successModal">
+      <div class="success-content">
+        <div class="success-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h2 class="success-title">Application Submitted!</h2>
+        <p class="success-message">Thank you for applying to Workforce Connect. Our HR team will review your application and contact you within 2-3 business days.</p>
+        <a href="https://wfconnect.org" class="success-btn">Return to Website</a>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <div class="footer-logo">
+        <img src="/logo.png" alt="Workforce Connect Logo" />
+        <span>Workforce Connect Management</span>
+      </div>
+      <p class="footer-copyright">
+        &copy; 2025 Workforce Connect Management. All rights reserved.
+      </p>
+    </footer>
+
+    <script>
+      // Set current date for signature
+      document.getElementById('signatureDate').textContent = new Date().toLocaleDateString('en-CA', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      // Show/hide "Other" role input
+      document.querySelectorAll('input[name="preferredRoles"]').forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+          var otherChecked = document.querySelector('input[name="preferredRoles"][value="Other"]').checked;
+          document.getElementById('otherRoleGroup').style.display = otherChecked ? 'block' : 'none';
+        });
+      });
+
+      // Form validation and submission
+      document.getElementById('applicationForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        var form = e.target;
+        var isValid = true;
+        
+        // Clear previous errors
+        form.querySelectorAll('.form-group.error').forEach(function(group) {
+          group.classList.remove('error');
+        });
+        
+        // Validate required text inputs
+        form.querySelectorAll('input[required], select[required]').forEach(function(input) {
+          if (!input.value.trim()) {
+            input.closest('.form-group').classList.add('error');
+            isValid = false;
+          }
+        });
+        
+        // Validate email format
+        var emailInput = form.querySelector('input[name="email"]');
+        if (emailInput.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value)) {
+          emailInput.closest('.form-group').classList.add('error');
+          isValid = false;
+        }
+        
+        // Validate required checkboxes
+        var requiredCheckboxes = ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'privacyConsent'];
+        requiredCheckboxes.forEach(function(name) {
+          var checkbox = form.querySelector('input[name="' + name + '"]');
+          if (checkbox && !checkbox.checked) {
+            isValid = false;
+          }
+        });
+        
+        // Validate at least one role is selected
+        var roleChecked = form.querySelectorAll('input[name="preferredRoles"]:checked').length > 0;
+        if (!roleChecked) {
+          isValid = false;
+        }
+        
+        // Validate at least one day is selected
+        var dayChecked = form.querySelectorAll('input[name="availableDays"]:checked').length > 0;
+        if (!dayChecked) {
+          isValid = false;
+        }
+        
+        // Validate at least one shift is selected
+        var shiftChecked = form.querySelectorAll('input[name="preferredShifts"]:checked').length > 0;
+        if (!shiftChecked) {
+          isValid = false;
+        }
+        
+        // Validate work status is selected
+        var workStatusSelected = form.querySelector('input[name="workStatus"]:checked');
+        if (!workStatusSelected) {
+          isValid = false;
+        }
+        
+        if (!isValid) {
+          alert('Please fill in all required fields before submitting.');
+          return;
+        }
+        
+        // Collect form data
+        var formData = {
+          fullName: form.fullName.value,
+          dateOfBirth: form.dateOfBirth.value || null,
+          phone: form.phone.value,
+          email: form.email.value,
+          address: form.address.value,
+          city: form.city.value,
+          province: form.province.value,
+          postalCode: form.postalCode.value,
+          workStatus: form.querySelector('input[name="workStatus"]:checked').value,
+          backgroundCheckConsent: form.backgroundCheckConsent.checked,
+          preferredRoles: JSON.stringify(Array.from(form.querySelectorAll('input[name="preferredRoles"]:checked')).map(function(cb) { return cb.value; })),
+          otherRole: form.otherRole ? form.otherRole.value : null,
+          availableDays: JSON.stringify(Array.from(form.querySelectorAll('input[name="availableDays"]:checked')).map(function(cb) { return cb.value; })),
+          preferredShifts: JSON.stringify(Array.from(form.querySelectorAll('input[name="preferredShifts"]:checked')).map(function(cb) { return cb.value; })),
+          unavailablePeriods: form.unavailablePeriods.value || null,
+          yearsExperience: form.yearsExperience.value || null,
+          experienceSummary: form.experienceSummary.value || null,
+          skills: form.skills.value || null,
+          desiredShiftLength: form.desiredShiftLength.value || null,
+          maxTravelDistance: form.maxTravelDistance.value || null,
+          emergencyContactName: form.emergencyContactName.value,
+          emergencyContactRelationship: form.emergencyContactRelationship.value,
+          emergencyContactPhone: form.emergencyContactPhone.value,
+          titoAcknowledgment: form.titoAcknowledgment.checked,
+          siteRulesAcknowledgment: form.siteRulesAcknowledgment.checked,
+          workerAgreementConsent: form.workerAgreementConsent.checked,
+          privacyConsent: form.privacyConsent.checked,
+          marketingConsent: form.marketingConsent.checked,
+          signature: form.signature.value,
+          signatureDate: new Date().toISOString().split('T')[0]
+        };
+        
+        // Disable submit button
+        var submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+        
+        try {
+          var response = await fetch('/api/public/apply', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+          });
+          
+          if (response.ok) {
+            document.getElementById('successModal').classList.add('show');
+          } else {
+            var errorData = await response.json();
+            alert('Error: ' + (errorData.message || 'Failed to submit application. Please try again.'));
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Application';
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          alert('Failed to submit application. Please check your internet connection and try again.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Application';
+        }
+      });
+    </script>
+  </body>
+</html>

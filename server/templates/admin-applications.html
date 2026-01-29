@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Applicant Dashboard - Workforce Connect Admin</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#1E40AF" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      
+      :root {
+        --primary: #1E40AF;
+        --primary-light: #3B82F6;
+        --primary-dark: #1E3A8A;
+        --success: #10B981;
+        --warning: #F59E0B;
+        --error: #EF4444;
+        --background: #F8FAFC;
+        --surface: #FFFFFF;
+        --border: #E2E8F0;
+        --text-primary: #0F172A;
+        --text-secondary: #64748B;
+        --text-muted: #94A3B8;
+      }
+      
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--background);
+        color: var(--text-primary);
+        line-height: 1.6;
+      }
+      
+      .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      
+      .login-card {
+        background: var(--surface);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        padding: 40px;
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+      }
+      
+      .login-logo {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 20px;
+        border-radius: 12px;
+      }
+      
+      .login-title {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      
+      .login-subtitle {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-bottom: 32px;
+      }
+      
+      .form-group {
+        margin-bottom: 16px;
+        text-align: left;
+      }
+      
+      .form-label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      
+      .form-input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 15px;
+        font-family: inherit;
+      }
+      
+      .form-input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+      }
+      
+      .login-btn {
+        width: 100%;
+        background: var(--primary);
+        color: white;
+        font-weight: 600;
+        font-size: 15px;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        margin-top: 8px;
+      }
+      
+      .login-btn:hover {
+        background: var(--primary-dark);
+      }
+      
+      .login-error {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--error);
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 14px;
+        display: none;
+      }
+      
+      .dashboard-container {
+        display: none;
+        min-height: 100vh;
+      }
+      
+      .dashboard-container.show {
+        display: block;
+      }
+      
+      .login-container.hide {
+        display: none;
+      }
+      
+      .header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      
+      .header-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      
+      .header-logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: var(--primary);
+        font-weight: 700;
+        font-size: 16px;
+      }
+      
+      .header-logo img {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+      }
+      
+      .header-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      
+      .logout-btn {
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 500;
+        border: 1px solid var(--border);
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      
+      .logout-btn:hover {
+        background: var(--background);
+        color: var(--text-primary);
+      }
+      
+      .main {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 32px 24px;
+      }
+      
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+      }
+      
+      .stat-card {
+        background: var(--surface);
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        padding: 20px;
+      }
+      
+      .stat-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+      
+      .stat-value {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+      
+      .stat-card.pending .stat-value { color: var(--warning); }
+      .stat-card.approved .stat-value { color: var(--success); }
+      .stat-card.rejected .stat-value { color: var(--error); }
+      
+      .table-card {
+        background: var(--surface);
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        overflow: hidden;
+      }
+      
+      .table-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .table-title {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      
+      .search-input {
+        padding: 8px 14px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 14px;
+        width: 250px;
+      }
+      
+      .table-wrapper {
+        overflow-x: auto;
+      }
+      
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      
+      th, td {
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+      
+      th {
+        background: var(--background);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+      }
+      
+      td {
+        font-size: 14px;
+      }
+      
+      tr:hover {
+        background: var(--background);
+      }
+      
+      .status-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      
+      .status-badge.pending {
+        background: rgba(245, 158, 11, 0.15);
+        color: #B45309;
+      }
+      
+      .status-badge.reviewed {
+        background: rgba(59, 130, 246, 0.15);
+        color: #1D4ED8;
+      }
+      
+      .status-badge.approved {
+        background: rgba(16, 185, 129, 0.15);
+        color: #047857;
+      }
+      
+      .status-badge.rejected {
+        background: rgba(239, 68, 68, 0.15);
+        color: #B91C1C;
+      }
+      
+      .view-btn {
+        background: var(--primary);
+        color: white;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      
+      .view-btn:hover {
+        background: var(--primary-dark);
+      }
+      
+      .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-secondary);
+      }
+      
+      .empty-state-icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 16px;
+        color: var(--text-muted);
+      }
+      
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        overflow-y: auto;
+      }
+      
+      .modal.show {
+        display: flex;
+      }
+      
+      .modal-content {
+        background: white;
+        border-radius: 16px;
+        max-width: 700px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+      
+      .modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 10;
+      }
+      
+      .modal-title {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      
+      .modal-close {
+        background: transparent;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--text-secondary);
+        padding: 4px;
+      }
+      
+      .modal-body {
+        padding: 24px;
+      }
+      
+      .detail-section {
+        margin-bottom: 24px;
+      }
+      
+      .detail-section-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--primary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid var(--primary);
+      }
+      
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+      
+      .detail-item {
+        padding: 10px;
+        background: var(--background);
+        border-radius: 6px;
+      }
+      
+      .detail-item.full {
+        grid-column: span 2;
+      }
+      
+      .detail-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+        margin-bottom: 2px;
+      }
+      
+      .detail-value {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      
+      .modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+      
+      .action-btn {
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+      }
+      
+      .action-btn.approve {
+        background: var(--success);
+        color: white;
+      }
+      
+      .action-btn.reject {
+        background: var(--error);
+        color: white;
+      }
+      
+      .action-btn.review {
+        background: var(--primary);
+        color: white;
+      }
+      
+      .notes-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 14px;
+        margin-top: 12px;
+        resize: vertical;
+        min-height: 80px;
+      }
+      
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-secondary);
+      }
+      
+      @media (max-width: 640px) {
+        .detail-grid {
+          grid-template-columns: 1fr;
+        }
+        
+        .detail-item.full {
+          grid-column: span 1;
+        }
+        
+        .stats-row {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .header-title {
+          display: none;
+        }
+        
+        .search-input {
+          width: 150px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Login Form -->
+    <div class="login-container" id="loginContainer">
+      <div class="login-card">
+        <img src="/logo.png" alt="Workforce Connect" class="login-logo">
+        <h1 class="login-title">Admin Login</h1>
+        <p class="login-subtitle">Sign in to view worker applications</p>
+        
+        <div class="login-error" id="loginError">Invalid credentials. Please try again.</div>
+        
+        <form id="loginForm">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" name="username" class="form-input" placeholder="Enter username" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-input" placeholder="Enter password" required>
+          </div>
+          <button type="submit" class="login-btn">Sign In</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard-container" id="dashboardContainer">
+      <header class="header">
+        <div class="header-container">
+          <div class="header-left">
+            <a href="https://wfconnect.org" class="header-logo">
+              <img src="/logo.png" alt="Workforce Connect">
+              <span>Workforce Connect</span>
+            </a>
+            <span class="header-title">Applicant Dashboard</span>
+          </div>
+          <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="stats-row" id="statsRow">
+          <div class="stat-card">
+            <div class="stat-label">Total Applications</div>
+            <div class="stat-value" id="totalCount">-</div>
+          </div>
+          <div class="stat-card pending">
+            <div class="stat-label">Pending</div>
+            <div class="stat-value" id="pendingCount">-</div>
+          </div>
+          <div class="stat-card approved">
+            <div class="stat-label">Approved</div>
+            <div class="stat-value" id="approvedCount">-</div>
+          </div>
+          <div class="stat-card rejected">
+            <div class="stat-label">Rejected</div>
+            <div class="stat-value" id="rejectedCount">-</div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <h2 class="table-title">Applications</h2>
+            <input type="text" class="search-input" id="searchInput" placeholder="Search by name or email...">
+          </div>
+          
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Location</th>
+                  <th>Roles</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="applicationsTable">
+                <tr>
+                  <td colspan="8" class="loading">Loading applications...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Application Detail Modal -->
+    <div class="modal" id="detailModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="modal-title">Application Details</h2>
+          <button class="modal-close" id="closeModal">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody">
+          <!-- Content loaded dynamically -->
+        </div>
+        <div class="modal-footer">
+          <textarea class="notes-input" id="notesInput" placeholder="Add notes about this application..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="action-btn review" id="reviewBtn">Mark as Reviewed</button>
+          <button class="action-btn approve" id="approveBtn">Approve</button>
+          <button class="action-btn reject" id="rejectBtn">Reject</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let authCredentials = null;
+      let applications = [];
+      let currentApplicationId = null;
+
+      // Check for saved session
+      const savedAuth = sessionStorage.getItem('wfconnect_admin_auth');
+      if (savedAuth) {
+        authCredentials = savedAuth;
+        showDashboard();
+      }
+
+      // Login form handler
+      document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const username = this.username.value;
+        const password = this.password.value;
+        
+        authCredentials = btoa(username + ':' + password);
+        
+        try {
+          const response = await fetch('/api/admin/applications', {
+            headers: {
+              'Authorization': 'Basic ' + authCredentials
+            }
+          });
+          
+          if (response.ok) {
+            sessionStorage.setItem('wfconnect_admin_auth', authCredentials);
+            document.getElementById('loginError').style.display = 'none';
+            showDashboard();
+          } else {
+            document.getElementById('loginError').style.display = 'block';
+            authCredentials = null;
+          }
+        } catch (error) {
+          document.getElementById('loginError').textContent = 'Connection error. Please try again.';
+          document.getElementById('loginError').style.display = 'block';
+        }
+      });
+
+      // Logout handler
+      document.getElementById('logoutBtn').addEventListener('click', function() {
+        sessionStorage.removeItem('wfconnect_admin_auth');
+        authCredentials = null;
+        document.getElementById('loginContainer').classList.remove('hide');
+        document.getElementById('dashboardContainer').classList.remove('show');
+      });
+
+      function showDashboard() {
+        document.getElementById('loginContainer').classList.add('hide');
+        document.getElementById('dashboardContainer').classList.add('show');
+        loadApplications();
+      }
+
+      async function loadApplications() {
+        try {
+          const response = await fetch('/api/admin/applications', {
+            headers: {
+              'Authorization': 'Basic ' + authCredentials
+            }
+          });
+          
+          if (response.ok) {
+            applications = await response.json();
+            updateStats();
+            renderTable(applications);
+          } else if (response.status === 401) {
+            sessionStorage.removeItem('wfconnect_admin_auth');
+            location.reload();
+          }
+        } catch (error) {
+          console.error('Error loading applications:', error);
+        }
+      }
+
+      function updateStats() {
+        document.getElementById('totalCount').textContent = applications.length;
+        document.getElementById('pendingCount').textContent = applications.filter(a => a.status === 'pending').length;
+        document.getElementById('approvedCount').textContent = applications.filter(a => a.status === 'approved').length;
+        document.getElementById('rejectedCount').textContent = applications.filter(a => a.status === 'rejected').length;
+      }
+
+      function renderTable(data) {
+        const tbody = document.getElementById('applicationsTable');
+        
+        if (data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div><p>No applications found</p></td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = data.map(function(app) {
+          var roles = [];
+          try {
+            roles = JSON.parse(app.preferredRoles || '[]');
+          } catch(e) {}
+          
+          return '<tr>' +
+            '<td><strong>' + escapeHtml(app.fullName) + '</strong></td>' +
+            '<td>' + escapeHtml(app.email) + '</td>' +
+            '<td>' + escapeHtml(app.phone) + '</td>' +
+            '<td>' + escapeHtml(app.city) + ', ' + escapeHtml(app.province) + '</td>' +
+            '<td>' + roles.slice(0, 2).join(', ') + (roles.length > 2 ? '...' : '') + '</td>' +
+            '<td><span class="status-badge ' + app.status + '">' + app.status + '</span></td>' +
+            '<td>' + new Date(app.createdAt).toLocaleDateString() + '</td>' +
+            '<td><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button></td>' +
+          '</tr>';
+        }).join('');
+      }
+
+      function escapeHtml(text) {
+        if (!text) return '';
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Search functionality
+      document.getElementById('searchInput').addEventListener('input', function(e) {
+        var query = e.target.value.toLowerCase();
+        var filtered = applications.filter(function(app) {
+          return app.fullName.toLowerCase().includes(query) ||
+                 app.email.toLowerCase().includes(query) ||
+                 (app.phone && app.phone.includes(query));
+        });
+        renderTable(filtered);
+      });
+
+      // View application details
+      function viewApplication(id) {
+        currentApplicationId = id;
+        var app = applications.find(function(a) { return a.id === id; });
+        if (!app) return;
+        
+        var roles = [];
+        var days = [];
+        var shifts = [];
+        try {
+          roles = JSON.parse(app.preferredRoles || '[]');
+          days = JSON.parse(app.availableDays || '[]');
+          shifts = JSON.parse(app.preferredShifts || '[]');
+        } catch(e) {}
+        
+        var html = '';
+        
+        // Personal Details
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Personal Details</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.fullName) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">' + (app.dateOfBirth || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone) + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Address</div><div class="detail-value">' + escapeHtml(app.address) + ', ' + escapeHtml(app.city) + ', ' + escapeHtml(app.province) + ' ' + escapeHtml(app.postalCode) + '</div></div>';
+        html += '</div></div>';
+        
+        // Work Eligibility
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Work Eligibility</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Work Status</div><div class="detail-value">' + formatWorkStatus(app.workStatus) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Background Check Consent</div><div class="detail-value">' + (app.backgroundCheckConsent ? 'Yes' : 'No') + '</div></div>';
+        html += '</div></div>';
+        
+        // Roles & Availability
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Roles & Availability</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + roles.join(', ') + (app.otherRole ? ' (' + app.otherRole + ')' : '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Available Days</div><div class="detail-value">' + days.join(', ') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Preferred Shifts</div><div class="detail-value">' + shifts.join(', ') + '</div></div>';
+        if (app.unavailablePeriods) {
+          html += '<div class="detail-item full"><div class="detail-label">Unavailable Periods</div><div class="detail-value">' + escapeHtml(app.unavailablePeriods) + '</div></div>';
+        }
+        html += '</div></div>';
+        
+        // Experience
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Experience</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Years of Experience</div><div class="detail-value">' + (app.yearsExperience || 'Not specified') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Shift Length Preference</div><div class="detail-value">' + (app.desiredShiftLength ? app.desiredShiftLength + ' hours' : 'Not specified') + '</div></div>';
+        if (app.experienceSummary) {
+          html += '<div class="detail-item full"><div class="detail-label">Experience Summary</div><div class="detail-value">' + escapeHtml(app.experienceSummary) + '</div></div>';
+        }
+        if (app.skills) {
+          html += '<div class="detail-item full"><div class="detail-label">Skills & Certifications</div><div class="detail-value">' + escapeHtml(app.skills) + '</div></div>';
+        }
+        html += '</div></div>';
+        
+        // Emergency Contact
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Emergency Contact</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">' + escapeHtml(app.emergencyContactName) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Relationship</div><div class="detail-value">' + escapeHtml(app.emergencyContactRelationship) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.emergencyContactPhone) + '</div></div>';
+        html += '</div></div>';
+        
+        // Acknowledgments
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Acknowledgments</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">TITO Acknowledgment</div><div class="detail-value">' + (app.titoAcknowledgment ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Site Rules</div><div class="detail-value">' + (app.siteRulesAcknowledgment ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Worker Agreement</div><div class="detail-value">' + (app.workerAgreementConsent ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Privacy Policy</div><div class="detail-value">' + (app.privacyConsent ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Marketing Consent</div><div class="detail-value">' + (app.marketingConsent ? 'Yes' : 'No') + '</div></div>';
+        html += '</div></div>';
+        
+        // Signature
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Electronic Signature</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Signature</div><div class="detail-value" style="font-style: italic;">' + escapeHtml(app.signature) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Signed Date</div><div class="detail-value">' + escapeHtml(app.signatureDate) + '</div></div>';
+        html += '</div></div>';
+        
+        // Metadata
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Application Info</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="status-badge ' + app.status + '">' + app.status + '</span></div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Submitted</div><div class="detail-value">' + new Date(app.createdAt).toLocaleString() + '</div></div>';
+        if (app.notes) {
+          html += '<div class="detail-item full"><div class="detail-label">Notes</div><div class="detail-value">' + escapeHtml(app.notes) + '</div></div>';
+        }
+        html += '</div></div>';
+        
+        document.getElementById('modalBody').innerHTML = html;
+        document.getElementById('notesInput').value = app.notes || '';
+        document.getElementById('detailModal').classList.add('show');
+      }
+
+      function formatWorkStatus(status) {
+        var map = {
+          'citizen': 'Canadian Citizen',
+          'permanent_resident': 'Permanent Resident',
+          'work_permit': 'Work Permit Holder'
+        };
+        return map[status] || status;
+      }
+
+      // Close modal
+      document.getElementById('closeModal').addEventListener('click', function() {
+        document.getElementById('detailModal').classList.remove('show');
+        currentApplicationId = null;
+      });
+
+      document.getElementById('detailModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+          this.classList.remove('show');
+          currentApplicationId = null;
+        }
+      });
+
+      // Status update handlers
+      async function updateStatus(status) {
+        if (!currentApplicationId) return;
+        
+        var notes = document.getElementById('notesInput').value;
+        
+        try {
+          var response = await fetch('/api/admin/applications/' + currentApplicationId, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': 'Basic ' + authCredentials,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: status, notes: notes })
+          });
+          
+          if (response.ok) {
+            document.getElementById('detailModal').classList.remove('show');
+            loadApplications();
+          } else {
+            alert('Failed to update status');
+          }
+        } catch (error) {
+          alert('Error updating status');
+        }
+      }
+
+      document.getElementById('reviewBtn').addEventListener('click', function() {
+        updateStatus('reviewed');
+      });
+
+      document.getElementById('approveBtn').addEventListener('click', function() {
+        if (confirm('Are you sure you want to approve this application?')) {
+          updateStatus('approved');
+        }
+      });
+
+      document.getElementById('rejectBtn').addEventListener('click', function() {
+        if (confirm('Are you sure you want to reject this application?')) {
+          updateStatus('rejected');
+        }
+      });
+    </script>
+  </body>
+</html>

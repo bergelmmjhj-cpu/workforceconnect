@@ -306,6 +306,26 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(privacyTemplate);
   });
 
+  // Serve Worker Application Form
+  const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
+  const applyTemplate = fs.readFileSync(applyPath, "utf-8");
+
+  app.get("/apply", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(applyTemplate);
+  });
+
+  // Serve Admin Applications Dashboard
+  const adminAppsPath = path.resolve(process.cwd(), "server", "templates", "admin-applications.html");
+  const adminAppsTemplate = fs.readFileSync(adminAppsPath, "utf-8");
+
+  app.get("/admin/applications", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.status(200).send(adminAppsTemplate);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.get("/", (req: Request, res: Response) => {

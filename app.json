@@ -13,7 +13,8 @@
       "bundleIdentifier": "org.workforceconnect.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {

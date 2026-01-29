@@ -149,63 +149,65 @@ export default function WorkerCommunicationsScreen() {
   });
 
   const renderConversation = ({ item }: { item: Conversation }) => (
-    <Pressable onPress={() => handleConversationPress(item)} testID={`conversation-${item.id}`}>
-      <Card style={styles.conversationCard}>
-        <View style={styles.conversationRow}>
-          <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-            <ThemedText style={styles.avatarText}>
-              {item.workerName?.charAt(0).toUpperCase() || "?"}
+    <Card
+      style={styles.conversationCard}
+      onPress={() => handleConversationPress(item)}
+    >
+      <View style={styles.conversationRow}>
+        <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+          <ThemedText style={styles.avatarText}>
+            {item.workerName?.charAt(0).toUpperCase() || "?"}
+          </ThemedText>
+        </View>
+        <View style={styles.conversationContent}>
+          <View style={styles.conversationHeader}>
+            <ThemedText style={styles.workerName} numberOfLines={1}>
+              {item.workerName || "Unknown Worker"}
             </ThemedText>
+            {item.lastMessageAt ? (
+              <ThemedText style={[styles.time, { color: theme.textSecondary }]}>
+                {formatRelativeTime(item.lastMessageAt)}
+              </ThemedText>
+            ) : null}
           </View>
-          <View style={styles.conversationContent}>
-            <View style={styles.conversationHeader}>
-              <ThemedText style={styles.workerName} numberOfLines={1}>
-                {item.workerName || "Unknown Worker"}
-              </ThemedText>
-              {item.lastMessageAt ? (
-                <ThemedText style={[styles.time, { color: theme.textSecondary }]}>
-                  {formatRelativeTime(item.lastMessageAt)}
-                </ThemedText>
-              ) : null}
-            </View>
-            <View style={styles.previewRow}>
-              <ThemedText
-                style={[styles.preview, { color: theme.textSecondary }]}
-                numberOfLines={1}
-              >
-                {item.lastMessagePreview || "No messages yet"}
-              </ThemedText>
-              {item.unreadCount > 0 ? (
-                <View style={[styles.badge, { backgroundColor: theme.primary }]}>
-                  <ThemedText style={styles.badgeText}>{item.unreadCount}</ThemedText>
-                </View>
-              ) : null}
-            </View>
+          <View style={styles.previewRow}>
+            <ThemedText
+              style={[styles.preview, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {item.lastMessagePreview || "No messages yet"}
+            </ThemedText>
+            {item.unreadCount > 0 ? (
+              <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+                <ThemedText style={styles.badgeText}>{item.unreadCount}</ThemedText>
+              </View>
+            ) : null}
           </View>
         </View>
-      </Card>
-    </Pressable>
+      </View>
+    </Card>
   );
 
   const renderWorker = ({ item }: { item: Worker }) => (
-    <Pressable onPress={() => handleStartNewConversation(item)} testID={`worker-${item.id}`}>
-      <Card style={styles.conversationCard}>
-        <View style={styles.conversationRow}>
-          <View style={[styles.avatar, { backgroundColor: theme.primaryLight }]}>
-            <ThemedText style={styles.avatarText}>
-              {item.fullName.charAt(0).toUpperCase()}
-            </ThemedText>
-          </View>
-          <View style={styles.conversationContent}>
-            <ThemedText style={styles.workerName}>{item.fullName}</ThemedText>
-            <ThemedText style={[styles.preview, { color: theme.textSecondary }]}>
-              {item.email}
-            </ThemedText>
-          </View>
-          <Feather name="message-circle" size={20} color={theme.primary} />
+    <Card
+      style={styles.conversationCard}
+      onPress={() => handleStartNewConversation(item)}
+    >
+      <View style={styles.conversationRow}>
+        <View style={[styles.avatar, { backgroundColor: theme.primaryLight }]}>
+          <ThemedText style={styles.avatarText}>
+            {item.fullName.charAt(0).toUpperCase()}
+          </ThemedText>
         </View>
-      </Card>
-    </Pressable>
+        <View style={styles.conversationContent}>
+          <ThemedText style={styles.workerName}>{item.fullName}</ThemedText>
+          <ThemedText style={[styles.preview, { color: theme.textSecondary }]}>
+            {item.email}
+          </ThemedText>
+        </View>
+        <Feather name="message-circle" size={20} color={theme.primary} />
+      </View>
+    </Card>
   );
 
   const EmptyConversations = () => (

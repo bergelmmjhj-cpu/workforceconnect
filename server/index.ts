@@ -3,9 +3,70 @@ import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import * as fs from "fs";
 import * as path from "path";
+import bcrypt from "bcryptjs";
+import { db } from "./db";
+import { users } from "../shared/schema";
+import { eq } from "drizzle-orm";
 
 const app = express();
 const log = console.log;
+
+const DEMO_USERS = [
+  {
+    id: "client-1",
+    email: "client@example.com",
+    fullName: "Sarah Mitchell",
+    role: "client" as const,
+    password: "password123",
+  },
+  {
+    id: "worker-1",
+    email: "worker@example.com",
+    fullName: "James Rodriguez",
+    role: "worker" as const,
+    password: "password123",
+    onboardingStatus: "ONBOARDED",
+    workerRoles: ["Housekeeper", "Houseperson", "Server"],
+  },
+  {
+    id: "hr-1",
+    email: "hr@example.com",
+    fullName: "Emily Chen",
+    role: "hr" as const,
+    password: "password123",
+  },
+  {
+    id: "admin-1",
+    email: "admin@example.com",
+    fullName: "Michael Thompson",
+    role: "admin" as const,
+    password: "password123",
+  },
+];
+
+async function seedDemoUsers() {
+  try {
+    for (const demoUser of DEMO_USERS) {
+      const existing = await db.select().from(users).where(eq(users.id, demoUser.id)).limit(1);
+      if (existing.length === 0) {
+        const hashedPassword = await bcrypt.hash(demoUser.password, 10);
+        await db.insert(users).values({
+          id: demoUser.id,
+          email: demoUser.email,
+          fullName: demoUser.fullName,
+          password: hashedPassword,
+          role: demoUser.role,
+          isActive: true,
+          onboardingStatus: demoUser.onboardingStatus,
+          workerRoles: demoUser.workerRoles ? JSON.stringify(demoUser.workerRoles) : null,
+        });
+        log(`Seeded demo user: ${demoUser.email}`);
+      }
+    }
+  } catch (error) {
+    log("Error seeding demo users:", error);
+  }
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -40,7 +101,7 @@ function setupCors(app: express.Application) {
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, DELETE, OPTIONS",
       );
-      res.header("Access-Control-Allow-Headers", "Content-Type, x-user-role");
+      res.header("Access-Control-Allow-Headers", "Content-Type, x-user-role, x-user-id");
       res.header("Access-Control-Allow-Credentials", "true");
     }
 
@@ -305,6 +366,8 @@ function setupErrorHandler(app: express.Application) {
 }
 
 (async () => {
+  await seedDemoUsers();
+
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);

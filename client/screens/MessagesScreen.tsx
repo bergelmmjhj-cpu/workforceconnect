@@ -4,26 +4,40 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import { Feather } from "@expo/vector-icons";
 
-import { ConversationItem } from "@/components/ConversationItem";
+import { ThemedText } from "@/components/ThemedText";
 import { EmptyState } from "@/components/EmptyState";
 import { ConversationSkeleton } from "@/components/LoadingSkeleton";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
-import { Spacing } from "@/constants/theme";
-import { Conversation } from "@/types";
-import { getConversations } from "@/storage";
+import { Spacing, BorderRadius } from "@/constants/theme";
+import { getApiUrl } from "@/lib/query-client";
+import { formatDistanceToNow } from "date-fns";
+
+interface Conversation {
+  id: string;
+  hrUserId: string;
+  workerUserId: string;
+  hrName: string;
+  workerName: string;
+  lastMessageText: string | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  createdAt: string;
+}
 
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-  const { paddingTop, paddingBottom } = useContentPadding();
+  const { paddingTop } = useContentPadding();
   const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -34,8 +48,21 @@ export default function MessagesScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      if (user?.id) {
-        const data = await getConversations(user.id);
+      if (!user?.id) return;
+
+      const response = await fetch(
+        new URL("/api/communications/conversations", getApiUrl()).toString(),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": user.id,
+            "x-user-role": user.role || "worker",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
         setConversations(data);
       }
     } catch (error) {
@@ -49,6 +76,14 @@ export default function MessagesScreen() {
     loadData();
   }, [loadData]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      const interval = setInterval(loadData, 5000);
+      return () => clearInterval(interval);
+    }, [loadData])
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData();
@@ -57,14 +92,88 @@ export default function MessagesScreen() {
 
   const handleConversationPress = (conversation: Conversation) => {
     Haptics.selectionAsync();
-    navigation.navigate("ChatScreen", { conversationId: conversation.id });
+    navigation.navigate("CommunicationsChat", {
+      conversationId: conversation.id,
+    });
+  };
+
+  const getOtherPartyName = (conversation: Conversation) => {
+    if (user?.role === "worker") {
+      return conversation.hrName || "HR Representative";
+    }
+    return conversation.workerName || "Worker";
+  };
+
+  const renderConversation = ({ item }: { item: Conversation }) => {
+    const otherPartyName = getOtherPartyName(item);
+    const initials = otherPartyName
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+    const hasUnread = item.unreadCount > 0;
+
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.conversationItem,
+          { backgroundColor: pressed ? theme.surface : "transparent" },
+        ]}
+        onPress={() => handleConversationPress(item)}
+      >
+        <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+          <ThemedText style={styles.avatarText}>{initials}</ThemedText>
+        </View>
+        <View style={styles.conversationContent}>
+          <View style={styles.conversationHeader}>
+            <ThemedText
+              style={[styles.name, hasUnread && { fontWeight: "700" }]}
+            >
+              {otherPartyName}
+            </ThemedText>
+            {item.lastMessageAt ? (
+              <ThemedText style={styles.time}>
+                {formatDistanceToNow(new Date(item.lastMessageAt), {
+                  addSuffix: true,
+                })}
+              </ThemedText>
+            ) : null}
+          </View>
+          <View style={styles.messagePreview}>
+            <ThemedText
+              numberOfLines={1}
+              style={[
+                styles.lastMessage,
+                { color: hasUnread ? theme.text : theme.textSecondary },
+                hasUnread && { fontWeight: "600" },
+              ]}
+            >
+              {item.lastMessageText || "No messages yet"}
+            </ThemedText>
+            {hasUnread ? (
+              <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+                <ThemedText style={styles.badgeText}>
+                  {item.unreadCount}
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
+        </View>
+        <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+      </Pressable>
+    );
   };
 
   const renderEmpty = () => (
     <EmptyState
       image={require("../../assets/images/empty-messages.png")}
-      title="No conversations"
-      description="Your messages with HR and team members will appear here"
+      title="No messages yet"
+      description={
+        user?.role === "worker"
+          ? "HR will reach out to you here when needed"
+          : "Start a conversation with a worker"
+      }
     />
   );
 
@@ -107,12 +216,7 @@ export default function MessagesScreen() {
             tintColor={theme.primary}
           />
         }
-        renderItem={({ item }) => (
-          <ConversationItem
-            conversation={item}
-            onPress={() => handleConversationPress(item)}
-          />
-        )}
+        renderItem={renderConversation}
         ItemSeparatorComponent={() => (
           <View
             style={[
@@ -131,9 +235,72 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  listContent: {},
+  listContent: {
+    paddingHorizontal: Spacing.md,
+  },
   emptyContent: {
     flexGrow: 1,
+    justifyContent: "center",
+  },
+  conversationItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+  },
+  avatarText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  conversationContent: {
+    flex: 1,
+    marginRight: Spacing.sm,
+  },
+  conversationHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  time: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  messagePreview: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  lastMessage: {
+    fontSize: 14,
+    flex: 1,
+  },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: Spacing.sm,
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   separator: {
     height: 1,

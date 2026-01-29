@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support | Workforce Connect</title>
+    <meta name="description" content="Get help and support from Workforce Connect. Contact our team for assistance with staffing, scheduling, and workforce management.">
+    <meta name="keywords" content="workforce connect support, help, contact, customer service, staffing support">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="canonical" href="https://wfconnect.org/support">
+    <meta property="og:title" content="Support | Workforce Connect">
+    <meta property="og:description" content="Get help and support from Workforce Connect.">
+    <meta property="og:url" content="https://wfconnect.org/support">
+    <meta property="og:type" content="website">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: #1a1a2e;
+        }
+
+        .logo img {
+            height: 40px;
+            width: auto;
+        }
+
+        .logo-text {
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #667eea;
+        }
+
+        .page-hero {
+            padding: 80px 0 60px;
+            text-align: center;
+            color: white;
+        }
+
+        .page-hero h1 {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .page-hero p {
+            font-size: 1.2rem;
+            opacity: 0.95;
+        }
+
+        .content-section {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .content-section h2 {
+            font-size: 1.8rem;
+            color: #1a1a2e;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .contact-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+
+        .contact-card {
+            background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .contact-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+        }
+
+        .contact-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+        }
+
+        .contact-icon svg {
+            width: 28px;
+            height: 28px;
+            fill: white;
+        }
+
+        .contact-card h3 {
+            font-size: 1.1rem;
+            color: #1a1a2e;
+            margin-bottom: 10px;
+        }
+
+        .contact-card a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .contact-card a:hover {
+            text-decoration: underline;
+        }
+
+        .contact-card p {
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin-top: 8px;
+        }
+
+        .faq-section {
+            margin-top: 40px;
+        }
+
+        .faq-item {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 25px 0;
+        }
+
+        .faq-item:last-child {
+            border-bottom: none;
+        }
+
+        .faq-question {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #1a1a2e;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .faq-question::before {
+            content: "Q";
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        .faq-answer {
+            color: #4a5568;
+            padding-left: 40px;
+            line-height: 1.7;
+        }
+
+        .hours-section {
+            background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+            padding: 30px;
+            border-radius: 15px;
+            margin-top: 30px;
+        }
+
+        .hours-section h3 {
+            color: #1a1a2e;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .hours-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px 20px;
+        }
+
+        .hours-grid dt {
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+
+        .hours-grid dd {
+            color: #4a5568;
+        }
+
+        .app-support {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .app-support h3 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+
+        .app-support p {
+            opacity: 0.95;
+            margin-bottom: 20px;
+        }
+
+        .app-support-steps {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-top: 25px;
+        }
+
+        .app-step {
+            text-align: center;
+        }
+
+        .app-step .step-num {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin: 0 auto 10px;
+        }
+
+        footer {
+            background: rgba(26, 26, 46, 0.95);
+            color: white;
+            padding: 40px 0;
+            margin-top: 60px;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 25px;
+        }
+
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .page-hero h1 {
+                font-size: 2rem;
+            }
+
+            .content-section {
+                padding: 30px 20px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .contact-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">
+                    <img src="/logo.png" alt="Workforce Connect Logo">
+                    <span class="logo-text">Workforce Connect</span>
+                </a>
+                <nav>
+                    <ul class="nav-links">
+                        <li><a href="/">Home</a></li>
+                        <li><a href="/guide">Payment Guide</a></li>
+                        <li><a href="/support">Support</a></li>
+                        <li><a href="/privacy">Privacy</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <section class="page-hero">
+        <div class="container">
+            <h1>How Can We Help?</h1>
+            <p>Our team is here to support you every step of the way</p>
+        </div>
+    </section>
+
+    <main class="container">
+        <section class="content-section">
+            <h2>Contact Our Team</h2>
+            <div class="contact-grid">
+                <div class="contact-card">
+                    <div class="contact-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+                    </div>
+                    <h3>General Inquiries</h3>
+                    <a href="mailto:info@wfconnect.org">info@wfconnect.org</a>
+                    <p>For general questions and information</p>
+                </div>
+
+                <div class="contact-card">
+                    <div class="contact-icon">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    </div>
+                    <h3>Payroll Support</h3>
+                    <a href="mailto:payroll@wfconnect.org">payroll@wfconnect.org</a>
+                    <p>Payment and payroll questions</p>
+                </div>
+
+                <div class="contact-card">
+                    <div class="contact-icon">
+                        <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    </div>
+                    <h3>Sales</h3>
+                    <a href="tel:+12896705697">(289) 670-5697</a>
+                    <p>New client inquiries</p>
+                </div>
+
+                <div class="contact-card">
+                    <div class="contact-icon">
+                        <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    </div>
+                    <h3>Accounting</h3>
+                    <a href="tel:+14374762418">(437) 476-2418</a>
+                    <p>Billing and invoicing</p>
+                </div>
+
+                <div class="contact-card">
+                    <div class="contact-icon">
+                        <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    </div>
+                    <h3>HR & Worker Support</h3>
+                    <a href="tel:+14374769566">(437) 476-9566</a>
+                    <p>Worker onboarding and HR inquiries</p>
+                </div>
+            </div>
+
+            <div class="hours-section">
+                <h3>Business Hours</h3>
+                <dl class="hours-grid">
+                    <dt>Monday - Friday</dt>
+                    <dd>8:00 AM - 6:00 PM EST</dd>
+                    <dt>Saturday</dt>
+                    <dd>9:00 AM - 2:00 PM EST</dd>
+                    <dt>Sunday</dt>
+                    <dd>Closed</dd>
+                    <dt>Holidays</dt>
+                    <dd>Reduced hours or closed</dd>
+                </dl>
+            </div>
+        </section>
+
+        <section class="content-section">
+            <h2>Frequently Asked Questions</h2>
+            <div class="faq-section">
+                <div class="faq-item">
+                    <div class="faq-question">How do I download the Workforce Connect app?</div>
+                    <div class="faq-answer">The Workforce Connect app is available for iOS and Android devices. Search for "Workforce Connect" in the App Store or Google Play Store, or contact our team for a direct download link.</div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">How do I reset my password?</div>
+                    <div class="faq-answer">On the login screen, tap "Forgot Password" and enter your registered email address. You'll receive a password reset link within a few minutes. If you don't receive it, check your spam folder or contact our support team.</div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">Why can't I clock in/out?</div>
+                    <div class="faq-answer">The Time In/Time Out (TITO) feature requires you to be within 100 meters of the work site. Make sure your device's location services are enabled and you're at the correct location. If issues persist, contact your supervisor or our support team.</div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">When do I get paid?</div>
+                    <div class="faq-answer">As an independent subcontractor, payment timing depends on when our clients pay for services rendered. We process payments as soon as we receive them. For detailed payment information, visit our <a href="/guide" style="color: #667eea;">Contractor Payment Guide</a>.</div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">How do I update my payment information?</div>
+                    <div class="faq-answer">Contact our payroll team at <a href="mailto:payroll@wfconnect.org" style="color: #667eea;">payroll@wfconnect.org</a> to update your direct deposit, e-transfer, or cheque mailing details. Include your full name and worker ID for faster processing.</div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">How do I apply for more shifts?</div>
+                    <div class="faq-answer">Log into the app and navigate to the Shifts tab. Available shifts matching your skills and availability will be displayed. Tap on a shift to view details and apply. You'll be notified when you're assigned.</div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">I'm a client - how do I request workers?</div>
+                    <div class="faq-answer">Log into your client account and go to the Requests tab. Fill out the worker request form with your staffing needs, preferred dates, and required skills. Our team will match qualified workers to your request.</div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">How do I report an issue with the app?</div>
+                    <div class="faq-answer">Email our technical support at <a href="mailto:info@wfconnect.org" style="color: #667eea;">info@wfconnect.org</a> with a description of the issue, screenshots if possible, and your device type (iPhone/Android). We typically respond within 24 hours.</div>
+                </div>
+            </div>
+
+            <div class="app-support">
+                <h3>Need Help With the App?</h3>
+                <p>Follow these steps to troubleshoot common issues:</p>
+                <div class="app-support-steps">
+                    <div class="app-step">
+                        <div class="step-num">1</div>
+                        <div>Check internet connection</div>
+                    </div>
+                    <div class="app-step">
+                        <div class="step-num">2</div>
+                        <div>Update to latest version</div>
+                    </div>
+                    <div class="app-step">
+                        <div class="step-num">3</div>
+                        <div>Restart the app</div>
+                    </div>
+                    <div class="app-step">
+                        <div class="step-num">4</div>
+                        <div>Contact support</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <p>&copy; 2025 Workforce Connect Management Inc. All rights reserved.</p>
+                <div class="footer-links">
+                    <a href="/">Home</a>
+                    <a href="/guide">Payment Guide</a>
+                    <a href="/support">Support</a>
+                    <a href="/privacy">Privacy Policy</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

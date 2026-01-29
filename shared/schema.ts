@@ -152,3 +152,89 @@ export const insertContactLeadSchema = createInsertSchema(contactLeads).pick({
 
 export type ContactLead = typeof contactLeads.$inferSelect;
 export type InsertContactLead = z.infer<typeof insertContactLeadSchema>;
+
+// Worker Application Schema (from public website form)
+
+export const workerApplications = pgTable("worker_applications", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  
+  // Personal Details
+  fullName: text("full_name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email").notNull(),
+  address: text("address").notNull(),
+  city: text("city").notNull(),
+  province: text("province").notNull(),
+  postalCode: text("postal_code").notNull(),
+  dateOfBirth: text("date_of_birth"),
+  
+  // Work Eligibility
+  workStatus: text("work_status").notNull(), // citizen, permanent_resident, work_permit
+  backgroundCheckConsent: boolean("background_check_consent").default(false),
+  
+  // Role Interests
+  preferredRoles: text("preferred_roles").notNull(), // JSON array
+  otherRole: text("other_role"),
+  
+  // Availability
+  availableDays: text("available_days").notNull(), // JSON array
+  preferredShifts: text("preferred_shifts").notNull(), // JSON array (morning, afternoon, evening)
+  unavailablePeriods: text("unavailable_periods"),
+  
+  // Experience
+  yearsExperience: text("years_experience"),
+  workHistory: text("work_history"), // JSON array of job objects
+  experienceSummary: text("experience_summary"),
+  
+  // Skills
+  skills: text("skills"), // JSON array
+  certifications: text("certifications"), // JSON array
+  
+  // Shift Preferences
+  shiftTypePreference: text("shift_type_preference"), // day, night, flexible
+  desiredShiftLength: text("desired_shift_length"), // 4, 8, flexible
+  maxTravelDistance: text("max_travel_distance"),
+  
+  // Emergency Contact
+  emergencyContactName: text("emergency_contact_name").notNull(),
+  emergencyContactRelationship: text("emergency_contact_relationship").notNull(),
+  emergencyContactPhone: text("emergency_contact_phone").notNull(),
+  
+  // Acknowledgments
+  titoAcknowledgment: boolean("tito_acknowledgment").default(false),
+  siteRulesAcknowledgment: boolean("site_rules_acknowledgment").default(false),
+  workerAgreementConsent: boolean("worker_agreement_consent").default(false),
+  privacyConsent: boolean("privacy_consent").default(false),
+  marketingConsent: boolean("marketing_consent").default(false),
+  
+  // Electronic Signature
+  signature: text("signature").notNull(), // Typed full name as signature
+  signatureDate: text("signature_date").notNull(),
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, reviewed, approved, rejected
+  reviewedBy: varchar("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  notes: text("notes"),
+  
+  // Metadata
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertWorkerApplicationSchema = createInsertSchema(workerApplications).omit({
+  id: true,
+  status: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type WorkerApplication = typeof workerApplications.$inferSelect;
+export type InsertWorkerApplication = z.infer<typeof insertWorkerApplicationSchema>;

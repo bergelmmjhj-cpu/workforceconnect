@@ -173,33 +173,37 @@ Full authentication system using PostgreSQL database with bcrypt password hashin
 - **UserManagementScreen**: Admin users can view all users, edit roles, and toggle active status
 - **API Authentication**: AuthContext tries API first, falls back to demo users if API unavailable
 
-### Quo Communication Integration
+### Internal Communications System
 
-HR and Admin users have access to Quo messaging and calling features for communicating with workers:
+HR and Admin users can communicate with workers through an internal messaging system:
 
-**Quo Tab**: Visible only to HR and Admin roles in the bottom tab bar (phone icon)
+**Navigation**:
+- HR/Admin see a "Comms" tab in the bottom navigation bar (message-circle icon)
+- Workers see a "Messages" tab to view HR conversations
 
 **Screens**:
-- `QuoMessagesScreen`: Conversation list with ability to compose new messages
-- `QuoCallsScreen`: Call history with ability to initiate calls
-- `QuoChatScreen`: Individual message thread view (pushed to stack navigation)
+- `WorkerCommunicationsScreen`: HR view showing worker list with search, + button to start new conversations
+- `CommunicationsChatScreen`: Individual chat thread with real-time message polling (3-second intervals)
+- `MessagesScreen`: Worker view showing conversations with HR
 
-**API Endpoints** (require `x-user-role: hr` or `x-user-role: admin` header):
-- `GET /api/quo/conversations` - List all conversations
-- `GET /api/quo/conversations/:id` - Get single conversation with messages
-- `POST /api/quo/messages` - Send a new message
-- `GET /api/quo/calls` - List call history
-- `POST /api/quo/calls` - Initiate a new call
-- `POST /api/quo/dev/inbound` - Dev endpoint to simulate inbound messages
+**API Endpoints** (require `x-user-role` and `x-user-id` headers):
+- `GET /api/communications/workers` - List workers for HR to message
+- `GET /api/communications/conversations` - List conversations (filtered by role)
+- `POST /api/communications/conversations` - Create a new conversation
+- `GET /api/communications/conversations/:id/messages` - Get messages in a conversation
+- `POST /api/communications/conversations/:id/messages` - Send a new message
+- `PUT /api/communications/conversations/:id/read` - Mark conversation as read
 
-**Provider Architecture**:
-- `server/integrations/quo/index.ts` - Main provider interface
-- `server/integrations/quo/mockProvider.ts` - Mock provider with in-memory storage for development
-- Real provider stubs ready for API credentials integration
+**Database Schema** (in `shared/schema.ts`):
+- `conversations`: Links HR and Worker users (type always "hr_worker")
+- `messages`: Individual messages with senderId, content, readAt timestamps
+- `messageLogs`: Audit log for message events
 
-**Data Storage**: Uses in-memory storage (matching current backend pattern) with seeded demo data:
-- 2 demo conversations with 4 messages
-- 2 demo call logs
+**Demo Users** (seeded on server startup):
+- `hr@example.com` / password123 - HR user
+- `worker@example.com` / password123 - Onboarded worker
+- `client@example.com` / password123 - Client user
+- `admin@example.com` / password123 - Admin user
 
 ### Project Structure
 

@@ -225,6 +225,26 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(contractorGuideTemplate);
   });
 
+  // Serve Support page
+  const supportPath = path.resolve(process.cwd(), "server", "templates", "support.html");
+  const supportTemplate = fs.readFileSync(supportPath, "utf-8");
+
+  app.get("/support", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(supportTemplate);
+  });
+
+  // Serve Privacy Policy page
+  const privacyPath = path.resolve(process.cwd(), "server", "templates", "privacy.html");
+  const privacyTemplate = fs.readFileSync(privacyPath, "utf-8");
+
+  app.get("/privacy", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(privacyTemplate);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.get("/", (req: Request, res: Response) => {

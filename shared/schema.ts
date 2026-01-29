@@ -53,67 +53,72 @@ export type User = typeof users.$inferSelect;
 export type RegisterUser = z.infer<typeof registerUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 
-// Quo Communication Schema
+// Internal Communications Schema (HR ↔ Worker messaging)
 
-export const quoConversations = pgTable("quo_conversations", {
+export const conversations = pgTable("conversations", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  externalId: text("external_id"),
-  participantType: text("participant_type").notNull(), // 'worker', 'client', 'other'
-  participantId: text("participant_id"), // Reference to worker/client if applicable
-  participantName: text("participant_name"),
-  participantPhone: text("participant_phone").notNull(),
+  type: text("type").notNull().default("hr_worker"), // Only "hr_worker" type
+  workerUserId: varchar("worker_user_id")
+    .notNull()
+    .references(() => users.id),
+  hrUserId: varchar("hr_user_id")
+    .references(() => users.id), // Optional - can be null if multiple HR
   lastMessageAt: timestamp("last_message_at"),
+  lastMessagePreview: text("last_message_preview"),
+  isArchived: boolean("is_archived").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const quoMessages = pgTable("quo_messages", {
+export const messages = pgTable("messages", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   conversationId: varchar("conversation_id")
     .notNull()
-    .references(() => quoConversations.id),
-  externalId: text("external_id"),
-  direction: text("direction").notNull(), // 'inbound' or 'outbound'
-  toNumber: text("to_number").notNull(),
-  fromNumber: text("from_number").notNull(),
+    .references(() => conversations.id),
+  senderUserId: varchar("sender_user_id")
+    .notNull()
+    .references(() => users.id),
+  recipientUserId: varchar("recipient_user_id")
+    .notNull()
+    .references(() => users.id),
   body: text("body").notNull(),
-  status: text("status").notNull(), // 'pending', 'sent', 'delivered', 'failed'
-  sentAt: timestamp("sent_at"),
-  deliveredAt: timestamp("delivered_at"),
+  messageType: text("message_type").notNull().default("text"), // "text" | "image" | "file"
+  mediaUrl: text("media_url"),
+  readAt: timestamp("read_at"),
+  status: text("status").notNull().default("delivered"), // "sent" | "delivered" | "read"
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const quoCallLogs = pgTable("quo_call_logs", {
+export const messageLogs = pgTable("message_logs", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  externalId: text("external_id"),
-  direction: text("direction").notNull(), // 'inbound' or 'outbound'
-  toNumber: text("to_number").notNull(),
-  fromNumber: text("from_number").notNull(),
-  status: text("status").notNull(), // 'initiated', 'ringing', 'in-progress', 'completed', 'failed', 'no-answer'
-  startedAt: timestamp("started_at").notNull(),
-  endedAt: timestamp("ended_at"),
-  durationSeconds: integer("duration_seconds"),
-  recordingUrl: text("recording_url"),
-  participantName: text("participant_name"),
+  messageId: varchar("message_id")
+    .notNull()
+    .references(() => messages.id),
+  event: text("event").notNull(), // "created" | "delivered" | "read" | "edited" | "deleted"
+  actorUserId: varchar("actor_user_id")
+    .notNull()
+    .references(() => users.id),
+  metadata: text("metadata"), // JSON string for additional data
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertQuoConversationSchema = createInsertSchema(quoConversations);
-export const insertQuoMessageSchema = createInsertSchema(quoMessages);
-export const insertQuoCallLogSchema = createInsertSchema(quoCallLogs);
+export const insertConversationSchema = createInsertSchema(conversations);
+export const insertMessageSchema = createInsertSchema(messages);
+export const insertMessageLogSchema = createInsertSchema(messageLogs);
 
-export type QuoConversation = typeof quoConversations.$inferSelect;
-export type InsertQuoConversation = z.infer<typeof insertQuoConversationSchema>;
-export type QuoMessage = typeof quoMessages.$inferSelect;
-export type InsertQuoMessage = z.infer<typeof insertQuoMessageSchema>;
-export type QuoCallLog = typeof quoCallLogs.$inferSelect;
-export type InsertQuoCallLog = z.infer<typeof insertQuoCallLogSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type MessageLog = typeof messageLogs.$inferSelect;
+export type InsertMessageLog = z.infer<typeof insertMessageLogSchema>;
 
 // Contact Lead Schema (for business website contact form)
 

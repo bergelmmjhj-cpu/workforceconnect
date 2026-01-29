@@ -1,10 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
-import { quoProvider } from "./integrations/quo";
 import { db } from "./db";
-import { contactLeads, users, registerUserSchema, loginUserSchema } from "../shared/schema";
+import { contactLeads, users, registerUserSchema, loginUserSchema, conversations, messages, messageLogs } from "../shared/schema";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, and, or, desc, isNull, sql } from "drizzle-orm";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -49,13 +48,132 @@ function checkRoles(...allowedRoles: UserRole[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // ========================================
+  // Internal Communications API (HR ↔ Worker)
+  // ========================================
+
+  // Get all workers for HR to start conversations with
   app.get(
-    "/api/quo/conversations",
+    "/api/communications/workers",
     checkRoles("admin", "hr"),
     async (_req: Request, res: Response) => {
       try {
-        const conversations = await quoProvider.getConversations();
-        res.json(conversations);
+        const workers = await db.select({
+          id: users.id,
+          email: users.email,
+          fullName: users.fullName,
+          onboardingStatus: users.onboardingStatus,
+          workerRoles: users.workerRoles,
+          isActive: users.isActive,
+        }).from(users).where(eq(users.role, "worker"));
+        res.json(workers);
+      } catch (error) {
+        console.error("Error fetching workers:", error);
+        res.status(500).json({ error: "Failed to fetch workers" });
+      }
+    }
+  );
+
+  // Get or create a conversation with a worker
+  app.post(
+    "/api/communications/conversations",
+    checkRoles("admin", "hr"),
+    async (req: Request, res: Response) => {
+      try {
+        const { workerUserId } = req.body;
+        const hrUserId = req.headers["x-user-id"] as string;
+        
+        if (!workerUserId) {
+          res.status(400).json({ error: "workerUserId is required" });
+          return;
+        }
+
+        // Check if conversation already exists
+        const existing = await db.select()
+          .from(conversations)
+          .where(eq(conversations.workerUserId, workerUserId))
+          .limit(1);
+
+        if (existing.length > 0) {
+          res.json(existing[0]);
+          return;
+        }
+
+        // Create new conversation
+        const [newConversation] = await db.insert(conversations).values({
+          type: "hr_worker",
+          workerUserId,
+          hrUserId: hrUserId || null,
+        }).returning();
+
+        res.json(newConversation);
+      } catch (error) {
+        console.error("Error creating conversation:", error);
+        res.status(500).json({ error: "Failed to create conversation" });
+      }
+    }
+  );
+
+  // List all conversations (HR/Admin sees all, Worker sees only their own)
+  app.get(
+    "/api/communications/conversations",
+    async (req: Request, res: Response) => {
+      try {
+        const role = req.headers["x-user-role"] as UserRole;
+        const userId = req.headers["x-user-id"] as string;
+
+        if (!role || !userId) {
+          res.status(401).json({ error: "Authentication required" });
+          return;
+        }
+
+        let convos;
+        if (role === "admin" || role === "hr") {
+          // HR/Admin see all conversations with worker details
+          convos = await db.select({
+            id: conversations.id,
+            type: conversations.type,
+            workerUserId: conversations.workerUserId,
+            hrUserId: conversations.hrUserId,
+            lastMessageAt: conversations.lastMessageAt,
+            lastMessagePreview: conversations.lastMessagePreview,
+            isArchived: conversations.isArchived,
+            createdAt: conversations.createdAt,
+            updatedAt: conversations.updatedAt,
+            workerName: users.fullName,
+            workerEmail: users.email,
+          })
+          .from(conversations)
+          .leftJoin(users, eq(conversations.workerUserId, users.id))
+          .where(eq(conversations.isArchived, false))
+          .orderBy(desc(conversations.lastMessageAt));
+        } else if (role === "worker") {
+          // Workers see only their conversations
+          convos = await db.select()
+            .from(conversations)
+            .where(and(
+              eq(conversations.workerUserId, userId),
+              eq(conversations.isArchived, false)
+            ))
+            .orderBy(desc(conversations.lastMessageAt));
+        } else {
+          res.status(403).json({ error: "Access denied" });
+          return;
+        }
+
+        // Get unread counts for each conversation
+        const convosWithUnread = await Promise.all(convos.map(async (c) => {
+          const unreadResult = await db.select({ count: sql<number>`count(*)` })
+            .from(messages)
+            .where(and(
+              eq(messages.conversationId, c.id),
+              eq(messages.recipientUserId, userId),
+              isNull(messages.readAt)
+            ));
+          return { ...c, unreadCount: Number(unreadResult[0]?.count || 0) };
+        }));
+
+        res.json(convosWithUnread);
       } catch (error) {
         console.error("Error fetching conversations:", error);
         res.status(500).json({ error: "Failed to fetch conversations" });
@@ -63,14 +181,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Get messages for a conversation
   app.get(
-    "/api/quo/conversations/:id/messages",
-    checkRoles("admin", "hr"),
+    "/api/communications/conversations/:id/messages",
     async (req: Request, res: Response) => {
       try {
-        const id = req.params.id as string;
-        const messages = await quoProvider.getMessages(id);
-        res.json(messages);
+        const role = req.headers["x-user-role"] as UserRole;
+        const userId = req.headers["x-user-id"] as string;
+        const conversationId = req.params.id;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const offset = parseInt(req.query.offset as string) || 0;
+
+        if (!role || !userId) {
+          res.status(401).json({ error: "Authentication required" });
+          return;
+        }
+
+        // Verify access to conversation
+        const [convo] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+        if (!convo) {
+          res.status(404).json({ error: "Conversation not found" });
+          return;
+        }
+
+        // Workers can only access their own conversations
+        if (role === "worker" && convo.workerUserId !== userId) {
+          res.status(403).json({ error: "Access denied" });
+          return;
+        }
+
+        const msgs = await db.select({
+          id: messages.id,
+          conversationId: messages.conversationId,
+          senderUserId: messages.senderUserId,
+          recipientUserId: messages.recipientUserId,
+          body: messages.body,
+          messageType: messages.messageType,
+          mediaUrl: messages.mediaUrl,
+          readAt: messages.readAt,
+          status: messages.status,
+          createdAt: messages.createdAt,
+          senderName: users.fullName,
+        })
+        .from(messages)
+        .leftJoin(users, eq(messages.senderUserId, users.id))
+        .where(and(
+          eq(messages.conversationId, conversationId),
+          isNull(messages.deletedAt)
+        ))
+        .orderBy(desc(messages.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+        res.json(msgs.reverse()); // Return oldest first for display
       } catch (error) {
         console.error("Error fetching messages:", error);
         res.status(500).json({ error: "Failed to fetch messages" });
@@ -78,18 +241,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Send a message
   app.post(
-    "/api/quo/messages",
-    checkRoles("admin", "hr"),
+    "/api/communications/conversations/:id/messages",
     async (req: Request, res: Response) => {
       try {
-        const { toNumber, body, conversationId } = req.body;
-        if (!toNumber || !body) {
-          res.status(400).json({ error: "toNumber and body are required" });
+        const role = req.headers["x-user-role"] as UserRole;
+        const userId = req.headers["x-user-id"] as string;
+        const conversationId = req.params.id;
+        const { body, messageType = "text", mediaUrl } = req.body;
+
+        if (!role || !userId) {
+          res.status(401).json({ error: "Authentication required" });
           return;
         }
-        const message = await quoProvider.sendMessage({ toNumber, body, conversationId });
-        res.json(message);
+
+        if (!body || body.trim().length === 0) {
+          res.status(400).json({ error: "Message body is required" });
+          return;
+        }
+
+        // Verify access to conversation
+        const [convo] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+        if (!convo) {
+          res.status(404).json({ error: "Conversation not found" });
+          return;
+        }
+
+        // Workers can only send in their own conversations
+        if (role === "worker" && convo.workerUserId !== userId) {
+          res.status(403).json({ error: "Access denied" });
+          return;
+        }
+
+        // Determine recipient
+        let recipientUserId: string;
+        if (role === "worker") {
+          // Worker sending to HR - get any HR user or the assigned one
+          if (convo.hrUserId) {
+            recipientUserId = convo.hrUserId;
+          } else {
+            // Get first HR user as recipient
+            const [hrUser] = await db.select({ id: users.id })
+              .from(users)
+              .where(or(eq(users.role, "hr"), eq(users.role, "admin")))
+              .limit(1);
+            if (!hrUser) {
+              res.status(400).json({ error: "No HR available to receive message" });
+              return;
+            }
+            recipientUserId = hrUser.id;
+          }
+        } else {
+          // HR/Admin sending to worker
+          recipientUserId = convo.workerUserId;
+        }
+
+        // Create message
+        const [newMessage] = await db.insert(messages).values({
+          conversationId,
+          senderUserId: userId,
+          recipientUserId,
+          body: body.trim(),
+          messageType,
+          mediaUrl,
+          status: "delivered",
+        }).returning();
+
+        // Create message log
+        await db.insert(messageLogs).values({
+          messageId: newMessage.id,
+          event: "created",
+          actorUserId: userId,
+        });
+
+        // Update conversation with last message info
+        await db.update(conversations)
+          .set({
+            lastMessageAt: new Date(),
+            lastMessagePreview: body.trim().substring(0, 100),
+            updatedAt: new Date(),
+          })
+          .where(eq(conversations.id, conversationId));
+
+        // Get sender name for response
+        const [sender] = await db.select({ fullName: users.fullName })
+          .from(users)
+          .where(eq(users.id, userId));
+
+        res.json({ ...newMessage, senderName: sender?.fullName || "Unknown" });
       } catch (error) {
         console.error("Error sending message:", error);
         res.status(500).json({ error: "Failed to send message" });
@@ -97,54 +337,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  app.get(
-    "/api/quo/calls",
-    checkRoles("admin", "hr"),
-    async (_req: Request, res: Response) => {
-      try {
-        const calls = await quoProvider.getCallLogs();
-        res.json(calls);
-      } catch (error) {
-        console.error("Error fetching call logs:", error);
-        res.status(500).json({ error: "Failed to fetch call logs" });
-      }
-    }
-  );
-
+  // Mark messages as read
   app.post(
-    "/api/quo/calls",
-    checkRoles("admin", "hr"),
+    "/api/communications/conversations/:id/read",
     async (req: Request, res: Response) => {
       try {
-        const { toNumber, participantName } = req.body;
-        if (!toNumber) {
-          res.status(400).json({ error: "toNumber is required" });
-          return;
-        }
-        const call = await quoProvider.initiateCall({ toNumber, participantName });
-        res.json(call);
-      } catch (error) {
-        console.error("Error initiating call:", error);
-        res.status(500).json({ error: "Failed to initiate call" });
-      }
-    }
-  );
+        const userId = req.headers["x-user-id"] as string;
+        const conversationId = req.params.id;
 
-  app.post(
-    "/api/quo/dev/simulate-inbound",
-    checkRoles("admin", "hr"),
-    async (req: Request, res: Response) => {
-      try {
-        const { fromNumber, body } = req.body;
-        if (!fromNumber || !body) {
-          res.status(400).json({ error: "fromNumber and body are required" });
+        if (!userId) {
+          res.status(401).json({ error: "Authentication required" });
           return;
         }
-        const message = await quoProvider.handleInboundMessage(fromNumber, body);
-        res.json(message);
+
+        // Get unread messages addressed to current user
+        const unreadMessages = await db.select({ id: messages.id })
+          .from(messages)
+          .where(and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.recipientUserId, userId),
+            isNull(messages.readAt)
+          ));
+
+        const now = new Date();
+        
+        // Mark as read
+        await db.update(messages)
+          .set({ readAt: now, status: "read" })
+          .where(and(
+            eq(messages.conversationId, conversationId),
+            eq(messages.recipientUserId, userId),
+            isNull(messages.readAt)
+          ));
+
+        // Log read events
+        for (const msg of unreadMessages) {
+          await db.insert(messageLogs).values({
+            messageId: msg.id,
+            event: "read",
+            actorUserId: userId,
+          });
+        }
+
+        res.json({ marked: unreadMessages.length });
       } catch (error) {
-        console.error("Error simulating inbound message:", error);
-        res.status(500).json({ error: "Failed to simulate inbound message" });
+        console.error("Error marking messages as read:", error);
+        res.status(500).json({ error: "Failed to mark messages as read" });
       }
     }
   );

@@ -1,7 +1,15 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 import { db } from "./db";
-import { contactLeads, users, registerUserSchema, loginUserSchema, conversations, messages, messageLogs } from "../shared/schema";
+import { 
+  contactLeads, 
+  users, 
+  registerUserSchema, 
+  loginUserSchema, 
+  conversations as conversationsTable, 
+  messages as messagesTable, 
+  messageLogs as messageLogsTable 
+} from "../shared/schema";
 import bcrypt from "bcryptjs";
 import { eq, and, or, desc, isNull, sql } from "drizzle-orm";
 
@@ -90,8 +98,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Check if conversation already exists
         const existing = await db.select()
-          .from(conversations)
-          .where(eq(conversations.workerUserId, workerUserId))
+          .from(conversationsTable)
+          .where(eq(conversationsTable.workerUserId, workerUserId))
           .limit(1);
 
         if (existing.length > 0) {
@@ -100,7 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Create new conversation
-        const [newConversation] = await db.insert(conversations).values({
+        const [newConversation] = await db.insert(conversationsTable).values({
           type: "hr_worker",
           workerUserId,
           hrUserId: hrUserId || null,
@@ -131,31 +139,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (role === "admin" || role === "hr") {
           // HR/Admin see all conversations with worker details
           convos = await db.select({
-            id: conversations.id,
-            type: conversations.type,
-            workerUserId: conversations.workerUserId,
-            hrUserId: conversations.hrUserId,
-            lastMessageAt: conversations.lastMessageAt,
-            lastMessagePreview: conversations.lastMessagePreview,
-            isArchived: conversations.isArchived,
-            createdAt: conversations.createdAt,
-            updatedAt: conversations.updatedAt,
+            id: conversationsTable.id,
+            type: conversationsTable.type,
+            workerUserId: conversationsTable.workerUserId,
+            hrUserId: conversationsTable.hrUserId,
+            lastMessageAt: conversationsTable.lastMessageAt,
+            lastMessagePreview: conversationsTable.lastMessagePreview,
+            isArchived: conversationsTable.isArchived,
+            createdAt: conversationsTable.createdAt,
+            updatedAt: conversationsTable.updatedAt,
             workerName: users.fullName,
             workerEmail: users.email,
           })
-          .from(conversations)
-          .leftJoin(users, eq(conversations.workerUserId, users.id))
-          .where(eq(conversations.isArchived, false))
-          .orderBy(desc(conversations.lastMessageAt));
+          .from(conversationsTable)
+          .leftJoin(users, eq(conversationsTable.workerUserId, users.id))
+          .where(eq(conversationsTable.isArchived, false))
+          .orderBy(desc(conversationsTable.lastMessageAt));
         } else if (role === "worker") {
           // Workers see only their conversations
           convos = await db.select()
-            .from(conversations)
+            .from(conversationsTable)
             .where(and(
-              eq(conversations.workerUserId, userId),
-              eq(conversations.isArchived, false)
+              eq(conversationsTable.workerUserId, userId),
+              eq(conversationsTable.isArchived, false)
             ))
-            .orderBy(desc(conversations.lastMessageAt));
+            .orderBy(desc(conversationsTable.lastMessageAt));
         } else {
           res.status(403).json({ error: "Access denied" });
           return;
@@ -164,11 +172,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get unread counts for each conversation
         const convosWithUnread = await Promise.all(convos.map(async (c) => {
           const unreadResult = await db.select({ count: sql<number>`count(*)` })
-            .from(messages)
+            .from(messagesTable)
             .where(and(
-              eq(messages.conversationId, c.id),
-              eq(messages.recipientUserId, userId),
-              isNull(messages.readAt)
+              eq(messagesTable.conversationId, c.id),
+              eq(messagesTable.recipientUserId, userId),
+              isNull(messagesTable.readAt)
             ));
           return { ...c, unreadCount: Number(unreadResult[0]?.count || 0) };
         }));
@@ -198,7 +206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Verify access to conversation
-        const [convo] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+        const [convo] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conversationId));
         if (!convo) {
           res.status(404).json({ error: "Conversation not found" });
           return;
@@ -211,25 +219,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const msgs = await db.select({
-          id: messages.id,
-          conversationId: messages.conversationId,
-          senderUserId: messages.senderUserId,
-          recipientUserId: messages.recipientUserId,
-          body: messages.body,
-          messageType: messages.messageType,
-          mediaUrl: messages.mediaUrl,
-          readAt: messages.readAt,
-          status: messages.status,
-          createdAt: messages.createdAt,
+          id: messagesTable.id,
+          conversationId: messagesTable.conversationId,
+          senderUserId: messagesTable.senderUserId,
+          recipientUserId: messagesTable.recipientUserId,
+          body: messagesTable.body,
+          messageType: messagesTable.messageType,
+          mediaUrl: messagesTable.mediaUrl,
+          readAt: messagesTable.readAt,
+          status: messagesTable.status,
+          createdAt: messagesTable.createdAt,
           senderName: users.fullName,
         })
-        .from(messages)
-        .leftJoin(users, eq(messages.senderUserId, users.id))
+        .from(messagesTable)
+        .leftJoin(users, eq(messagesTable.senderUserId, users.id))
         .where(and(
-          eq(messages.conversationId, conversationId),
-          isNull(messages.deletedAt)
+          eq(messagesTable.conversationId, conversationId),
+          isNull(messagesTable.deletedAt)
         ))
-        .orderBy(desc(messages.createdAt))
+        .orderBy(desc(messagesTable.createdAt))
         .limit(limit)
         .offset(offset);
 
@@ -262,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Verify access to conversation
-        const [convo] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+        const [convo] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conversationId));
         if (!convo) {
           res.status(404).json({ error: "Conversation not found" });
           return;
@@ -298,7 +306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Create message
-        const [newMessage] = await db.insert(messages).values({
+        const [newMessage] = await db.insert(messagesTable).values({
           conversationId,
           senderUserId: userId,
           recipientUserId,
@@ -309,20 +317,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }).returning();
 
         // Create message log
-        await db.insert(messageLogs).values({
+        await db.insert(messageLogsTable).values({
           messageId: newMessage.id,
           event: "created",
           actorUserId: userId,
         });
 
         // Update conversation with last message info
-        await db.update(conversations)
+        await db.update(conversationsTable)
           .set({
             lastMessageAt: new Date(),
             lastMessagePreview: body.trim().substring(0, 100),
             updatedAt: new Date(),
           })
-          .where(eq(conversations.id, conversationId));
+          .where(eq(conversationsTable.id, conversationId));
 
         // Get sender name for response
         const [sender] = await db.select({ fullName: users.fullName })
@@ -351,28 +359,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Get unread messages addressed to current user
-        const unreadMessages = await db.select({ id: messages.id })
-          .from(messages)
+        const unreadMessages = await db.select({ id: messagesTable.id })
+          .from(messagesTable)
           .where(and(
-            eq(messages.conversationId, conversationId),
-            eq(messages.recipientUserId, userId),
-            isNull(messages.readAt)
+            eq(messagesTable.conversationId, conversationId),
+            eq(messagesTable.recipientUserId, userId),
+            isNull(messagesTable.readAt)
           ));
 
         const now = new Date();
         
         // Mark as read
-        await db.update(messages)
+        await db.update(messagesTable)
           .set({ readAt: now, status: "read" })
           .where(and(
-            eq(messages.conversationId, conversationId),
-            eq(messages.recipientUserId, userId),
-            isNull(messages.readAt)
+            eq(messagesTable.conversationId, conversationId),
+            eq(messagesTable.recipientUserId, userId),
+            isNull(messagesTable.readAt)
           ));
 
         // Log read events
         for (const msg of unreadMessages) {
-          await db.insert(messageLogs).values({
+          await db.insert(messageLogsTable).values({
             messageId: msg.id,
             event: "read",
             actorUserId: userId,

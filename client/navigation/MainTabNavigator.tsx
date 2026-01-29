@@ -10,8 +10,7 @@ import ShiftsScreen from "@/screens/ShiftsScreen";
 import TitoScreen from "@/screens/TitoScreen";
 import MessagesScreen from "@/screens/MessagesScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
-import QuoMessagesScreen from "@/screens/QuoMessagesScreen";
-import QuoCallsScreen from "@/screens/QuoCallsScreen";
+import WorkerCommunicationsScreen from "@/screens/WorkerCommunicationsScreen";
 import UserManagementScreen from "@/screens/UserManagementScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
@@ -26,8 +25,7 @@ export type MainTabParamList = {
   Profile: undefined;
   Users: undefined;
   Reports: undefined;
-  QuoMessages: undefined;
-  QuoCalls: undefined;
+  Communications: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -177,13 +175,13 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="QuoMessages"
-              component={QuoMessagesScreen}
+              name="Communications"
+              component={WorkerCommunicationsScreen}
               options={{
-                title: "Quo",
-                headerTitle: "Quo Messages",
+                title: "Comms",
+                headerTitle: "Worker Communications",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="phone" size={size} color={color} />
+                  <Feather name="message-circle" size={size} color={color} />
                 ),
               }}
             />
@@ -235,22 +233,23 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
+              name="Communications"
+              component={WorkerCommunicationsScreen}
+              options={{
+                title: "Comms",
+                headerTitle: "Worker Communications",
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="message-circle" size={size} color={color} />
+                ),
+              }}
+            />
+            <Tab.Screen
               name="Requests"
               component={RequestsScreen}
               options={{
                 headerTitle: "All Requests",
                 tabBarIcon: ({ color, size }) => (
                   <Feather name="file-text" size={size} color={color} />
-                ),
-              }}
-            />
-            <Tab.Screen
-              name="Shifts"
-              component={ShiftsScreen}
-              options={{
-                headerTitle: "All Shifts",
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="calendar" size={size} color={color} />
                 ),
               }}
             />

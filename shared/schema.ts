@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, doublePrecision, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -238,3 +238,121 @@ export const insertWorkerApplicationSchema = createInsertSchema(workerApplicatio
 
 export type WorkerApplication = typeof workerApplications.$inferSelect;
 export type InsertWorkerApplication = z.infer<typeof insertWorkerApplicationSchema>;
+
+// Workplaces Schema (Deployment locations)
+
+export const workplaces = pgTable("workplaces", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  addressLine1: text("address_line1"),
+  city: text("city"),
+  province: text("province"),
+  postalCode: text("postal_code"),
+  country: text("country").default("Canada"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  geofenceRadiusMeters: integer("geofence_radius_meters").default(150),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertWorkplaceSchema = createInsertSchema(workplaces).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Workplace = typeof workplaces.$inferSelect;
+export type InsertWorkplace = z.infer<typeof insertWorkplaceSchema>;
+
+// Workplace Assignments Schema (Worker ↔ Workplace)
+
+export const workplaceAssignmentStatusEnum = z.enum(["invited", "active", "suspended", "removed"]);
+export type WorkplaceAssignmentStatus = z.infer<typeof workplaceAssignmentStatusEnum>;
+
+export const workplaceAssignments = pgTable("workplace_assignments", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  workplaceId: varchar("workplace_id")
+    .notNull()
+    .references(() => workplaces.id),
+  workerUserId: varchar("worker_user_id")
+    .notNull()
+    .references(() => users.id),
+  status: text("status").notNull().default("active"), // invited, active, suspended, removed
+  invitedByUserId: varchar("invited_by_user_id")
+    .references(() => users.id),
+  invitedAt: timestamp("invited_at").defaultNow().notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueWorkerWorkplace: uniqueIndex("unique_worker_workplace").on(table.workplaceId, table.workerUserId),
+}));
+
+export const insertWorkplaceAssignmentSchema = createInsertSchema(workplaceAssignments).omit({
+  id: true,
+  invitedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type WorkplaceAssignment = typeof workplaceAssignments.$inferSelect;
+export type InsertWorkplaceAssignment = z.infer<typeof insertWorkplaceAssignmentSchema>;
+
+// TITO Logs Schema (Time In/Time Out with GPS verification)
+
+export const titoLogs = pgTable("tito_logs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  workerId: varchar("worker_id")
+    .notNull()
+    .references(() => users.id),
+  workplaceId: varchar("workplace_id")
+    .references(() => workplaces.id),
+  shiftId: varchar("shift_id"),
+  
+  // Time tracking
+  timeIn: timestamp("time_in"),
+  timeOut: timestamp("time_out"),
+  
+  // GPS verification - Time In
+  timeInGpsLat: doublePrecision("time_in_gps_lat"),
+  timeInGpsLng: doublePrecision("time_in_gps_lng"),
+  timeInDistanceMeters: doublePrecision("time_in_distance_meters"),
+  timeInGpsVerified: boolean("time_in_gps_verified").default(false),
+  timeInGpsFailureReason: text("time_in_gps_failure_reason"),
+  
+  // GPS verification - Time Out
+  timeOutGpsLat: doublePrecision("time_out_gps_lat"),
+  timeOutGpsLng: doublePrecision("time_out_gps_lng"),
+  timeOutDistanceMeters: doublePrecision("time_out_distance_meters"),
+  timeOutGpsVerified: boolean("time_out_gps_verified").default(false),
+  timeOutGpsFailureReason: text("time_out_gps_failure_reason"),
+  
+  // Approval
+  status: text("status").notNull().default("pending"), // pending, approved, disputed
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  disputedBy: varchar("disputed_by"),
+  disputedAt: timestamp("disputed_at"),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertTitoLogSchema = createInsertSchema(titoLogs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TitoLogDB = typeof titoLogs.$inferSelect;
+export type InsertTitoLog = z.infer<typeof insertTitoLogSchema>;

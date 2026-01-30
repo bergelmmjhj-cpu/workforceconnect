@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, doublePrecision, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, doublePrecision, uniqueIndex, date, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -356,3 +356,150 @@ export const insertTitoLogSchema = createInsertSchema(titoLogs).omit({
 
 export type TitoLogDB = typeof titoLogs.$inferSelect;
 export type InsertTitoLog = z.infer<typeof insertTitoLogSchema>;
+
+// ============================================
+// Timesheets & Payroll Schema
+// ============================================
+
+// Timesheet status enum
+export const timesheetStatusEnum = z.enum(["draft", "submitted", "approved", "disputed", "processed"]);
+export type TimesheetStatus = z.infer<typeof timesheetStatusEnum>;
+
+// Timesheets table - aggregates work entries for a pay period
+export const timesheets = pgTable("timesheets", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  workerUserId: varchar("worker_user_id")
+    .notNull()
+    .references(() => users.id),
+  periodYear: integer("period_year").notNull(),
+  periodNumber: integer("period_number").notNull(),
+  status: text("status").notNull().default("draft"), // draft, submitted, approved, disputed, processed
+  submittedAt: timestamp("submitted_at"),
+  approvedByUserId: varchar("approved_by_user_id")
+    .references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  disputedByUserId: varchar("disputed_by_user_id")
+    .references(() => users.id),
+  disputedAt: timestamp("disputed_at"),
+  disputeReason: text("dispute_reason"),
+  totalHours: numeric("total_hours", { precision: 10, scale: 2 }).default("0"),
+  totalPay: numeric("total_pay", { precision: 12, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueWorkerPeriod: uniqueIndex("unique_worker_period").on(table.workerUserId, table.periodYear, table.periodNumber),
+}));
+
+export const insertTimesheetSchema = createInsertSchema(timesheets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Timesheet = typeof timesheets.$inferSelect;
+export type InsertTimesheet = z.infer<typeof insertTimesheetSchema>;
+
+// Timesheet Entries table - individual work entries within a timesheet
+export const timesheetEntries = pgTable("timesheet_entries", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  timesheetId: varchar("timesheet_id")
+    .notNull()
+    .references(() => timesheets.id, { onDelete: "cascade" }),
+  workplaceId: varchar("workplace_id")
+    .references(() => workplaces.id),
+  titoLogId: varchar("tito_log_id")
+    .references(() => titoLogs.id),
+  dateLocal: date("date_local").notNull(), // Work date (YYYY-MM-DD)
+  timeInUtc: timestamp("time_in_utc").notNull(),
+  timeOutUtc: timestamp("time_out_utc").notNull(),
+  breakMinutes: integer("break_minutes").default(0),
+  hours: numeric("hours", { precision: 5, scale: 2 }).notNull(),
+  payRate: numeric("pay_rate", { precision: 10, scale: 2 }).notNull(), // Snapshot rate at time of work
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(), // hours * payRate
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertTimesheetEntrySchema = createInsertSchema(timesheetEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TimesheetEntry = typeof timesheetEntries.$inferSelect;
+export type InsertTimesheetEntry = z.infer<typeof insertTimesheetEntrySchema>;
+
+// Payroll Batch status enum
+export const payrollBatchStatusEnum = z.enum(["open", "finalized", "exported"]);
+export type PayrollBatchStatus = z.infer<typeof payrollBatchStatusEnum>;
+
+// Payroll Batches table - groups approved timesheets for payment processing
+export const payrollBatches = pgTable("payroll_batches", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  periodYear: integer("period_year").notNull(),
+  periodNumber: integer("period_number").notNull(),
+  status: text("status").notNull().default("open"), // open, finalized, exported
+  createdByUserId: varchar("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  finalizedByUserId: varchar("finalized_by_user_id")
+    .references(() => users.id),
+  finalizedAt: timestamp("finalized_at"),
+  totalWorkers: integer("total_workers").default(0),
+  totalHours: numeric("total_hours", { precision: 10, scale: 2 }).default("0"),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  uniquePeriodBatch: uniqueIndex("unique_period_batch").on(table.periodYear, table.periodNumber),
+}));
+
+export const insertPayrollBatchSchema = createInsertSchema(payrollBatches).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type PayrollBatch = typeof payrollBatches.$inferSelect;
+export type InsertPayrollBatch = z.infer<typeof insertPayrollBatchSchema>;
+
+// Payroll Batch Items status enum
+export const payrollBatchItemStatusEnum = z.enum(["included", "excluded"]);
+export type PayrollBatchItemStatus = z.infer<typeof payrollBatchItemStatusEnum>;
+
+// Payroll Batch Items table - links timesheets to payroll batches
+export const payrollBatchItems = pgTable("payroll_batch_items", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  payrollBatchId: varchar("payroll_batch_id")
+    .notNull()
+    .references(() => payrollBatches.id, { onDelete: "cascade" }),
+  workerUserId: varchar("worker_user_id")
+    .notNull()
+    .references(() => users.id),
+  timesheetId: varchar("timesheet_id")
+    .notNull()
+    .references(() => timesheets.id),
+  status: text("status").notNull().default("included"), // included, excluded
+  hours: numeric("hours", { precision: 10, scale: 2 }).notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertPayrollBatchItemSchema = createInsertSchema(payrollBatchItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type PayrollBatchItem = typeof payrollBatchItems.$inferSelect;
+export type InsertPayrollBatchItem = z.infer<typeof insertPayrollBatchItemSchema>;

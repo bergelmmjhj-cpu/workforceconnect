@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
-import { users, workplaces, workplaceAssignments } from "../shared/schema";
+import { users, workplaces, workplaceAssignments, timesheets, timesheetEntries } from "../shared/schema";
 import { eq } from "drizzle-orm";
 
 const app = express();
@@ -112,6 +112,176 @@ async function seedWorkplaces() {
     }
   } catch (error) {
     log("Error seeding workplaces:", error);
+  }
+}
+
+async function seedTimesheets() {
+  try {
+    // Check if demo timesheets exist for Period 2 (Jan 10-23, 2026)
+    const existingTs = await db.select().from(timesheets).where(eq(timesheets.id, "timesheet-demo-1")).limit(1);
+    
+    if (existingTs.length === 0) {
+      // Create demo timesheet for worker-1 in Period 2
+      await db.insert(timesheets).values({
+        id: "timesheet-demo-1",
+        workerUserId: "worker-1",
+        periodYear: 2026,
+        periodNumber: 2,
+        status: "submitted",
+        submittedAt: new Date("2026-01-24T09:00:00Z"),
+        totalHours: "32.50",
+        totalPay: "650.00",
+      });
+      
+      // Add timesheet entries
+      const entries = [
+        {
+          id: "entry-1",
+          timesheetId: "timesheet-demo-1",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-01-12",
+          timeInUtc: new Date("2026-01-12T13:00:00Z"),
+          timeOutUtc: new Date("2026-01-12T21:00:00Z"),
+          breakMinutes: 30,
+          hours: "7.50",
+          payRate: "20.00",
+          amount: "150.00",
+          notes: "Regular shift",
+        },
+        {
+          id: "entry-2",
+          timesheetId: "timesheet-demo-1",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-01-13",
+          timeInUtc: new Date("2026-01-13T13:00:00Z"),
+          timeOutUtc: new Date("2026-01-13T21:00:00Z"),
+          breakMinutes: 30,
+          hours: "7.50",
+          payRate: "20.00",
+          amount: "150.00",
+        },
+        {
+          id: "entry-3",
+          timesheetId: "timesheet-demo-1",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-01-14",
+          timeInUtc: new Date("2026-01-14T14:00:00Z"),
+          timeOutUtc: new Date("2026-01-14T22:30:00Z"),
+          breakMinutes: 30,
+          hours: "8.00",
+          payRate: "20.00",
+          amount: "160.00",
+        },
+        {
+          id: "entry-4",
+          timesheetId: "timesheet-demo-1",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-01-19",
+          timeInUtc: new Date("2026-01-19T09:00:00Z"),
+          timeOutUtc: new Date("2026-01-19T17:30:00Z"),
+          breakMinutes: 30,
+          hours: "8.00",
+          payRate: "20.00",
+          amount: "160.00",
+        },
+      ];
+      
+      for (const entry of entries) {
+        await db.insert(timesheetEntries).values(entry);
+      }
+      
+      log("Seeded demo timesheet: worker-1 Period 2 (submitted, 32.5h, $650)");
+    }
+    
+    // Create a second demo timesheet for another period (approved)
+    const existingTs2 = await db.select().from(timesheets).where(eq(timesheets.id, "timesheet-demo-2")).limit(1);
+    
+    if (existingTs2.length === 0) {
+      await db.insert(timesheets).values({
+        id: "timesheet-demo-2",
+        workerUserId: "worker-1",
+        periodYear: 2026,
+        periodNumber: 3,
+        status: "approved",
+        submittedAt: new Date("2026-02-07T09:00:00Z"),
+        approvedByUserId: "admin-1",
+        approvedAt: new Date("2026-02-08T10:00:00Z"),
+        totalHours: "40.00",
+        totalPay: "800.00",
+      });
+      
+      // Add entries for approved timesheet
+      const entries2 = [
+        {
+          id: "entry-5",
+          timesheetId: "timesheet-demo-2",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-01-26",
+          timeInUtc: new Date("2026-01-26T09:00:00Z"),
+          timeOutUtc: new Date("2026-01-26T17:30:00Z"),
+          breakMinutes: 30,
+          hours: "8.00",
+          payRate: "20.00",
+          amount: "160.00",
+        },
+        {
+          id: "entry-6",
+          timesheetId: "timesheet-demo-2",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-01-27",
+          timeInUtc: new Date("2026-01-27T09:00:00Z"),
+          timeOutUtc: new Date("2026-01-27T17:30:00Z"),
+          breakMinutes: 30,
+          hours: "8.00",
+          payRate: "20.00",
+          amount: "160.00",
+        },
+        {
+          id: "entry-7",
+          timesheetId: "timesheet-demo-2",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-01-28",
+          timeInUtc: new Date("2026-01-28T09:00:00Z"),
+          timeOutUtc: new Date("2026-01-28T17:30:00Z"),
+          breakMinutes: 30,
+          hours: "8.00",
+          payRate: "20.00",
+          amount: "160.00",
+        },
+        {
+          id: "entry-8",
+          timesheetId: "timesheet-demo-2",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-02-02",
+          timeInUtc: new Date("2026-02-02T09:00:00Z"),
+          timeOutUtc: new Date("2026-02-02T17:30:00Z"),
+          breakMinutes: 30,
+          hours: "8.00",
+          payRate: "20.00",
+          amount: "160.00",
+        },
+        {
+          id: "entry-9",
+          timesheetId: "timesheet-demo-2",
+          workplaceId: "workplace-cae-1",
+          dateLocal: "2026-02-03",
+          timeInUtc: new Date("2026-02-03T09:00:00Z"),
+          timeOutUtc: new Date("2026-02-03T17:30:00Z"),
+          breakMinutes: 30,
+          hours: "8.00",
+          payRate: "20.00",
+          amount: "160.00",
+        },
+      ];
+      
+      for (const entry of entries2) {
+        await db.insert(timesheetEntries).values(entry);
+      }
+      
+      log("Seeded demo timesheet: worker-1 Period 3 (approved, 40h, $800)");
+    }
+  } catch (error) {
+    log("Error seeding timesheets:", error);
   }
 }
 
@@ -373,6 +543,16 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(adminAppsTemplate);
   });
 
+  // Serve Admin Timesheets & Payroll Dashboard
+  const adminTimesheetsPath = path.resolve(process.cwd(), "server", "templates", "admin-timesheets.html");
+  const adminTimesheetsTemplate = fs.readFileSync(adminTimesheetsPath, "utf-8");
+
+  app.get("/admin/timesheets", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.status(200).send(adminTimesheetsTemplate);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   app.get("/", (req: Request, res: Response) => {
@@ -435,6 +615,7 @@ function setupErrorHandler(app: express.Application) {
 (async () => {
   await seedDemoUsers();
   await seedWorkplaces();
+  await seedTimesheets();
 
   setupCors(app);
   setupBodyParsing(app);

@@ -13,8 +13,13 @@ import {
   insertWorkerApplicationSchema,
   workplaces,
   workplaceAssignments,
-  titoLogs
+  titoLogs,
+  timesheets,
+  timesheetEntries,
+  payrollBatches,
+  payrollBatchItems
 } from "../shared/schema";
+import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
 import { eq, and, or, desc, isNull, sql } from "drizzle-orm";
 
@@ -1310,6 +1315,445 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching workers:", error);
       res.status(500).json({ error: "Failed to fetch workers" });
+    }
+  });
+
+  // ========================================
+  // Timesheets & Payroll API
+  // ========================================
+
+  // Get pay periods for a year
+  app.get("/api/payroll/periods", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || 2026;
+      const periods = getPayPeriodsForYear(year);
+      res.json(periods);
+    } catch (error) {
+      console.error("Error fetching pay periods:", error);
+      res.status(500).json({ error: "Failed to fetch pay periods" });
+    }
+  });
+
+  // List timesheets with filters
+  app.get("/api/timesheets", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || 2026;
+      const period = req.query.period ? parseInt(req.query.period as string) : undefined;
+      const status = req.query.status as string | undefined;
+
+      let query = db.select({
+        id: timesheets.id,
+        workerUserId: timesheets.workerUserId,
+        periodYear: timesheets.periodYear,
+        periodNumber: timesheets.periodNumber,
+        status: timesheets.status,
+        submittedAt: timesheets.submittedAt,
+        approvedAt: timesheets.approvedAt,
+        disputedAt: timesheets.disputedAt,
+        disputeReason: timesheets.disputeReason,
+        totalHours: timesheets.totalHours,
+        totalPay: timesheets.totalPay,
+        createdAt: timesheets.createdAt,
+        workerName: users.fullName,
+        workerEmail: users.email,
+      })
+      .from(timesheets)
+      .leftJoin(users, eq(timesheets.workerUserId, users.id))
+      .where(eq(timesheets.periodYear, year))
+      .orderBy(desc(timesheets.submittedAt));
+
+      const results = await query;
+
+      // Apply filters in JS for simplicity
+      let filtered = results;
+      if (period) {
+        filtered = filtered.filter(t => t.periodNumber === period);
+      }
+      if (status) {
+        filtered = filtered.filter(t => t.status === status);
+      }
+
+      res.json(filtered);
+    } catch (error) {
+      console.error("Error fetching timesheets:", error);
+      res.status(500).json({ error: "Failed to fetch timesheets" });
+    }
+  });
+
+  // Get single timesheet with entries
+  app.get("/api/timesheets/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const [timesheet] = await db.select({
+        id: timesheets.id,
+        workerUserId: timesheets.workerUserId,
+        periodYear: timesheets.periodYear,
+        periodNumber: timesheets.periodNumber,
+        status: timesheets.status,
+        submittedAt: timesheets.submittedAt,
+        approvedAt: timesheets.approvedAt,
+        disputedAt: timesheets.disputedAt,
+        disputeReason: timesheets.disputeReason,
+        totalHours: timesheets.totalHours,
+        totalPay: timesheets.totalPay,
+        createdAt: timesheets.createdAt,
+        workerName: users.fullName,
+        workerEmail: users.email,
+      })
+      .from(timesheets)
+      .leftJoin(users, eq(timesheets.workerUserId, users.id))
+      .where(eq(timesheets.id, id));
+
+      if (!timesheet) {
+        res.status(404).json({ error: "Timesheet not found" });
+        return;
+      }
+
+      // Get entries
+      const entries = await db.select({
+        id: timesheetEntries.id,
+        timesheetId: timesheetEntries.timesheetId,
+        workplaceId: timesheetEntries.workplaceId,
+        titoLogId: timesheetEntries.titoLogId,
+        dateLocal: timesheetEntries.dateLocal,
+        timeInUtc: timesheetEntries.timeInUtc,
+        timeOutUtc: timesheetEntries.timeOutUtc,
+        breakMinutes: timesheetEntries.breakMinutes,
+        hours: timesheetEntries.hours,
+        payRate: timesheetEntries.payRate,
+        amount: timesheetEntries.amount,
+        notes: timesheetEntries.notes,
+        workplaceName: workplaces.name,
+      })
+      .from(timesheetEntries)
+      .leftJoin(workplaces, eq(timesheetEntries.workplaceId, workplaces.id))
+      .where(eq(timesheetEntries.timesheetId, id))
+      .orderBy(timesheetEntries.dateLocal);
+
+      res.json({ ...timesheet, entries });
+    } catch (error) {
+      console.error("Error fetching timesheet:", error);
+      res.status(500).json({ error: "Failed to fetch timesheet" });
+    }
+  });
+
+  // Approve timesheet
+  app.patch("/api/timesheets/:id/approve", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userId = req.headers["x-user-id"] as string;
+
+      const [timesheet] = await db.select().from(timesheets).where(eq(timesheets.id, id));
+      if (!timesheet) {
+        res.status(404).json({ error: "Timesheet not found" });
+        return;
+      }
+
+      if (timesheet.status !== "submitted") {
+        res.status(400).json({ error: "Only submitted timesheets can be approved" });
+        return;
+      }
+
+      const [updated] = await db.update(timesheets)
+        .set({
+          status: "approved",
+          approvedByUserId: userId,
+          approvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(timesheets.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error approving timesheet:", error);
+      res.status(500).json({ error: "Failed to approve timesheet" });
+    }
+  });
+
+  // Dispute timesheet
+  app.patch("/api/timesheets/:id/dispute", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const userId = req.headers["x-user-id"] as string;
+
+      if (!reason || reason.trim().length === 0) {
+        res.status(400).json({ error: "Dispute reason is required" });
+        return;
+      }
+
+      const [timesheet] = await db.select().from(timesheets).where(eq(timesheets.id, id));
+      if (!timesheet) {
+        res.status(404).json({ error: "Timesheet not found" });
+        return;
+      }
+
+      if (timesheet.status !== "submitted" && timesheet.status !== "approved") {
+        res.status(400).json({ error: "Only submitted or approved timesheets can be disputed" });
+        return;
+      }
+
+      const [updated] = await db.update(timesheets)
+        .set({
+          status: "disputed",
+          disputedByUserId: userId,
+          disputedAt: new Date(),
+          disputeReason: reason.trim(),
+          updatedAt: new Date(),
+        })
+        .where(eq(timesheets.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error disputing timesheet:", error);
+      res.status(500).json({ error: "Failed to dispute timesheet" });
+    }
+  });
+
+  // Create or get payroll batch for a period
+  app.post("/api/payroll/batches", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { year, periodNumber } = req.body;
+      const userId = req.headers["x-user-id"] as string;
+
+      if (!year || !periodNumber) {
+        res.status(400).json({ error: "Year and periodNumber are required" });
+        return;
+      }
+
+      // Check if batch already exists
+      const [existingBatch] = await db.select()
+        .from(payrollBatches)
+        .where(and(
+          eq(payrollBatches.periodYear, year),
+          eq(payrollBatches.periodNumber, periodNumber)
+        ));
+
+      if (existingBatch) {
+        // Return existing batch with items
+        const items = await db.select({
+          id: payrollBatchItems.id,
+          workerUserId: payrollBatchItems.workerUserId,
+          timesheetId: payrollBatchItems.timesheetId,
+          status: payrollBatchItems.status,
+          hours: payrollBatchItems.hours,
+          amount: payrollBatchItems.amount,
+          workerName: users.fullName,
+          workerEmail: users.email,
+        })
+        .from(payrollBatchItems)
+        .leftJoin(users, eq(payrollBatchItems.workerUserId, users.id))
+        .where(eq(payrollBatchItems.payrollBatchId, existingBatch.id));
+
+        res.json({ ...existingBatch, items });
+        return;
+      }
+
+      // Get all approved timesheets for this period
+      const approvedTimesheets = await db.select()
+        .from(timesheets)
+        .where(and(
+          eq(timesheets.periodYear, year),
+          eq(timesheets.periodNumber, periodNumber),
+          eq(timesheets.status, "approved")
+        ));
+
+      // Calculate totals
+      let totalWorkers = approvedTimesheets.length;
+      let totalHours = 0;
+      let totalAmount = 0;
+
+      for (const ts of approvedTimesheets) {
+        totalHours += parseFloat(ts.totalHours || "0");
+        totalAmount += parseFloat(ts.totalPay || "0");
+      }
+
+      // Create batch
+      const [batch] = await db.insert(payrollBatches)
+        .values({
+          periodYear: year,
+          periodNumber,
+          status: "open",
+          createdByUserId: userId,
+          totalWorkers,
+          totalHours: totalHours.toFixed(2),
+          totalAmount: totalAmount.toFixed(2),
+        })
+        .returning();
+
+      // Create batch items for each approved timesheet
+      const items = [];
+      for (const ts of approvedTimesheets) {
+        const [item] = await db.insert(payrollBatchItems)
+          .values({
+            payrollBatchId: batch.id,
+            workerUserId: ts.workerUserId,
+            timesheetId: ts.id,
+            status: "included",
+            hours: ts.totalHours || "0",
+            amount: ts.totalPay || "0",
+          })
+          .returning();
+        items.push(item);
+      }
+
+      res.json({ ...batch, items });
+    } catch (error) {
+      console.error("Error creating payroll batch:", error);
+      res.status(500).json({ error: "Failed to create payroll batch" });
+    }
+  });
+
+  // Get payroll batches
+  app.get("/api/payroll/batches", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || 2026;
+      const period = req.query.period ? parseInt(req.query.period as string) : undefined;
+
+      let results = await db.select()
+        .from(payrollBatches)
+        .where(eq(payrollBatches.periodYear, year))
+        .orderBy(desc(payrollBatches.createdAt));
+
+      if (period) {
+        results = results.filter(b => b.periodNumber === period);
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching payroll batches:", error);
+      res.status(500).json({ error: "Failed to fetch payroll batches" });
+    }
+  });
+
+  // Get single payroll batch with items
+  app.get("/api/payroll/batches/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const [batch] = await db.select().from(payrollBatches).where(eq(payrollBatches.id, id));
+      if (!batch) {
+        res.status(404).json({ error: "Payroll batch not found" });
+        return;
+      }
+
+      const items = await db.select({
+        id: payrollBatchItems.id,
+        workerUserId: payrollBatchItems.workerUserId,
+        timesheetId: payrollBatchItems.timesheetId,
+        status: payrollBatchItems.status,
+        hours: payrollBatchItems.hours,
+        amount: payrollBatchItems.amount,
+        workerName: users.fullName,
+        workerEmail: users.email,
+      })
+      .from(payrollBatchItems)
+      .leftJoin(users, eq(payrollBatchItems.workerUserId, users.id))
+      .where(eq(payrollBatchItems.payrollBatchId, id));
+
+      res.json({ ...batch, items });
+    } catch (error) {
+      console.error("Error fetching payroll batch:", error);
+      res.status(500).json({ error: "Failed to fetch payroll batch" });
+    }
+  });
+
+  // Finalize payroll batch (Admin only)
+  app.patch("/api/payroll/batches/:id/finalize", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userId = req.headers["x-user-id"] as string;
+
+      const [batch] = await db.select().from(payrollBatches).where(eq(payrollBatches.id, id));
+      if (!batch) {
+        res.status(404).json({ error: "Payroll batch not found" });
+        return;
+      }
+
+      if (batch.status !== "open") {
+        res.status(400).json({ error: "Only open batches can be finalized" });
+        return;
+      }
+
+      // Get all included items
+      const items = await db.select()
+        .from(payrollBatchItems)
+        .where(and(
+          eq(payrollBatchItems.payrollBatchId, id),
+          eq(payrollBatchItems.status, "included")
+        ));
+
+      // Mark all included timesheets as processed
+      for (const item of items) {
+        await db.update(timesheets)
+          .set({ status: "processed", updatedAt: new Date() })
+          .where(eq(timesheets.id, item.timesheetId));
+      }
+
+      // Update batch status
+      const [updated] = await db.update(payrollBatches)
+        .set({
+          status: "finalized",
+          finalizedByUserId: userId,
+          finalizedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(payrollBatches.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error finalizing payroll batch:", error);
+      res.status(500).json({ error: "Failed to finalize payroll batch" });
+    }
+  });
+
+  // Export payroll batch as CSV (Admin only)
+  app.get("/api/payroll/batches/:id/export.csv", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const [batch] = await db.select().from(payrollBatches).where(eq(payrollBatches.id, id));
+      if (!batch) {
+        res.status(404).json({ error: "Payroll batch not found" });
+        return;
+      }
+
+      const period = getPayPeriod(batch.periodYear, batch.periodNumber);
+      const dateRange = period ? `${period.startDate} to ${period.endDate}` : "Unknown";
+
+      // Get items with worker info
+      const items = await db.select({
+        workerName: users.fullName,
+        workerEmail: users.email,
+        hours: payrollBatchItems.hours,
+        amount: payrollBatchItems.amount,
+        status: payrollBatchItems.status,
+      })
+      .from(payrollBatchItems)
+      .leftJoin(users, eq(payrollBatchItems.workerUserId, users.id))
+      .where(and(
+        eq(payrollBatchItems.payrollBatchId, id),
+        eq(payrollBatchItems.status, "included")
+      ));
+
+      // Generate CSV
+      const csvLines = [
+        "Worker Name,Worker Email,Hours,Amount,Period,Date Range",
+        ...items.map(item => 
+          `"${item.workerName || ""}","${item.workerEmail || ""}",${item.hours},${item.amount},Period ${batch.periodNumber},"${dateRange}"`
+        )
+      ];
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="payroll-period-${batch.periodNumber}-${batch.periodYear}.csv"`);
+      res.send(csvLines.join("\n"));
+    } catch (error) {
+      console.error("Error exporting payroll batch:", error);
+      res.status(500).json({ error: "Failed to export payroll batch" });
     }
   });
 

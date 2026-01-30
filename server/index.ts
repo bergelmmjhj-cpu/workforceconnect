@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
-import { users } from "../shared/schema";
+import { users, workplaces, workplaceAssignments } from "../shared/schema";
 import { eq } from "drizzle-orm";
 
 const app = express();
@@ -65,6 +65,53 @@ async function seedDemoUsers() {
     }
   } catch (error) {
     log("Error seeding demo users:", error);
+  }
+}
+
+const CAE_WORKPLACE = {
+  id: "workplace-cae-1",
+  name: "CAE Aviation Training & Services Toronto",
+  addressLine1: "2025 Logistics Dr",
+  city: "Mississauga",
+  province: "ON",
+  postalCode: "L5S 1Z9",
+  country: "Canada",
+  latitude: 43.6894,
+  longitude: -79.6355,
+  geofenceRadiusMeters: 150,
+  isActive: true,
+};
+
+async function seedWorkplaces() {
+  try {
+    const existing = await db.select().from(workplaces).where(eq(workplaces.id, CAE_WORKPLACE.id)).limit(1);
+    if (existing.length === 0) {
+      await db.insert(workplaces).values(CAE_WORKPLACE);
+      log(`Seeded workplace: ${CAE_WORKPLACE.name}`);
+      
+      const adminExists = await db.select().from(users).where(eq(users.id, "admin-1")).limit(1);
+      const workerExists = await db.select().from(users).where(eq(users.id, "worker-1")).limit(1);
+      
+      if (adminExists.length > 0 && workerExists.length > 0) {
+        const assignmentExists = await db.select().from(workplaceAssignments)
+          .where(eq(workplaceAssignments.workplaceId, CAE_WORKPLACE.id))
+          .limit(1);
+        
+        if (assignmentExists.length === 0) {
+          await db.insert(workplaceAssignments).values({
+            id: "assignment-1",
+            workplaceId: CAE_WORKPLACE.id,
+            workerUserId: "worker-1",
+            status: "active",
+            invitedByUserId: "admin-1",
+            notes: "Demo assignment for testing",
+          });
+          log(`Seeded workplace assignment: worker-1 to CAE Aviation`);
+        }
+      }
+    }
+  } catch (error) {
+    log("Error seeding workplaces:", error);
   }
 }
 
@@ -387,6 +434,7 @@ function setupErrorHandler(app: express.Application) {
 
 (async () => {
   await seedDemoUsers();
+  await seedWorkplaces();
 
   setupCors(app);
   setupBodyParsing(app);

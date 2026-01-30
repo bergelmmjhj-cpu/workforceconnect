@@ -10,12 +10,27 @@ import {
   messages as messagesTable, 
   messageLogs as messageLogsTable,
   workerApplications,
-  insertWorkerApplicationSchema
+  insertWorkerApplicationSchema,
+  workplaces,
+  workplaceAssignments,
+  titoLogs
 } from "../shared/schema";
 import bcrypt from "bcryptjs";
 import { eq, and, or, desc, isNull, sql } from "drizzle-orm";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371e3;
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW = 60000;
@@ -724,6 +739,577 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating application:", error);
       res.status(500).json({ error: "Failed to update application" });
+    }
+  });
+
+  // ========================================
+  // Workplaces API (Admin only)
+  // ========================================
+
+  app.get("/api/workplaces", checkRoles("admin", "hr"), async (_req: Request, res: Response) => {
+    try {
+      const allWorkplaces = await db.select().from(workplaces).orderBy(desc(workplaces.createdAt));
+      res.json(allWorkplaces);
+    } catch (error) {
+      console.error("Error fetching workplaces:", error);
+      res.status(500).json({ error: "Failed to fetch workplaces" });
+    }
+  });
+
+  app.get("/api/workplaces/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
+      if (!workplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+      res.json(workplace);
+    } catch (error) {
+      console.error("Error fetching workplace:", error);
+      res.status(500).json({ error: "Failed to fetch workplace" });
+    }
+  });
+
+  app.post("/api/workplaces", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { name, addressLine1, city, province, postalCode, country, latitude, longitude, geofenceRadiusMeters, isActive } = req.body;
+      
+      if (!name || name.trim().length < 2) {
+        res.status(400).json({ error: "Name is required (minimum 2 characters)" });
+        return;
+      }
+
+      const [newWorkplace] = await db.insert(workplaces).values({
+        name: name.trim(),
+        addressLine1: addressLine1?.trim() || null,
+        city: city?.trim() || null,
+        province: province?.trim() || null,
+        postalCode: postalCode?.trim() || null,
+        country: country?.trim() || "Canada",
+        latitude: latitude || null,
+        longitude: longitude || null,
+        geofenceRadiusMeters: geofenceRadiusMeters || 150,
+        isActive: isActive !== false,
+      }).returning();
+
+      res.json(newWorkplace);
+    } catch (error) {
+      console.error("Error creating workplace:", error);
+      res.status(500).json({ error: "Failed to create workplace" });
+    }
+  });
+
+  app.put("/api/workplaces/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { name, addressLine1, city, province, postalCode, country, latitude, longitude, geofenceRadiusMeters, isActive } = req.body;
+      
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (name !== undefined) updateData.name = name.trim();
+      if (addressLine1 !== undefined) updateData.addressLine1 = addressLine1?.trim() || null;
+      if (city !== undefined) updateData.city = city?.trim() || null;
+      if (province !== undefined) updateData.province = province?.trim() || null;
+      if (postalCode !== undefined) updateData.postalCode = postalCode?.trim() || null;
+      if (country !== undefined) updateData.country = country?.trim() || "Canada";
+      if (latitude !== undefined) updateData.latitude = latitude;
+      if (longitude !== undefined) updateData.longitude = longitude;
+      if (geofenceRadiusMeters !== undefined) updateData.geofenceRadiusMeters = geofenceRadiusMeters;
+      if (isActive !== undefined) updateData.isActive = isActive;
+
+      const [updatedWorkplace] = await db.update(workplaces)
+        .set(updateData)
+        .where(eq(workplaces.id, req.params.id))
+        .returning();
+
+      if (!updatedWorkplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+
+      res.json(updatedWorkplace);
+    } catch (error) {
+      console.error("Error updating workplace:", error);
+      res.status(500).json({ error: "Failed to update workplace" });
+    }
+  });
+
+  app.patch("/api/workplaces/:id/toggle-active", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
+      if (!workplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+
+      const [updatedWorkplace] = await db.update(workplaces)
+        .set({ isActive: !workplace.isActive, updatedAt: new Date() })
+        .where(eq(workplaces.id, req.params.id))
+        .returning();
+
+      res.json(updatedWorkplace);
+    } catch (error) {
+      console.error("Error toggling workplace status:", error);
+      res.status(500).json({ error: "Failed to toggle workplace status" });
+    }
+  });
+
+  // ========================================
+  // Workplace Assignments API (Admin only)
+  // ========================================
+
+  app.get("/api/workplaces/:id/workers", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const assignments = await db.select({
+        id: workplaceAssignments.id,
+        workplaceId: workplaceAssignments.workplaceId,
+        workerUserId: workplaceAssignments.workerUserId,
+        status: workplaceAssignments.status,
+        invitedAt: workplaceAssignments.invitedAt,
+        acceptedAt: workplaceAssignments.acceptedAt,
+        notes: workplaceAssignments.notes,
+        createdAt: workplaceAssignments.createdAt,
+        workerName: users.fullName,
+        workerEmail: users.email,
+        workerRoles: users.workerRoles,
+      })
+      .from(workplaceAssignments)
+      .leftJoin(users, eq(workplaceAssignments.workerUserId, users.id))
+      .where(eq(workplaceAssignments.workplaceId, req.params.id))
+      .orderBy(desc(workplaceAssignments.createdAt));
+
+      res.json(assignments);
+    } catch (error) {
+      console.error("Error fetching workplace workers:", error);
+      res.status(500).json({ error: "Failed to fetch workplace workers" });
+    }
+  });
+
+  app.post("/api/workplaces/:id/invite-worker", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { workerUserId, status, notes } = req.body;
+      const invitedByUserId = req.headers["x-user-id"] as string;
+
+      if (!workerUserId) {
+        res.status(400).json({ error: "workerUserId is required" });
+        return;
+      }
+
+      const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
+      if (!worker) {
+        res.status(404).json({ error: "Worker not found" });
+        return;
+      }
+
+      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
+      if (!workplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+
+      const existing = await db.select().from(workplaceAssignments)
+        .where(and(
+          eq(workplaceAssignments.workplaceId, req.params.id),
+          eq(workplaceAssignments.workerUserId, workerUserId)
+        ))
+        .limit(1);
+
+      if (existing.length > 0) {
+        if (existing[0].status === "removed") {
+          const [updated] = await db.update(workplaceAssignments)
+            .set({ status: status || "active", notes, updatedAt: new Date() })
+            .where(eq(workplaceAssignments.id, existing[0].id))
+            .returning();
+          res.json(updated);
+          return;
+        }
+        res.status(400).json({ error: "Worker is already assigned to this workplace" });
+        return;
+      }
+
+      const [newAssignment] = await db.insert(workplaceAssignments).values({
+        workplaceId: req.params.id,
+        workerUserId,
+        status: status || "active",
+        invitedByUserId: invitedByUserId || null,
+        notes: notes || null,
+      }).returning();
+
+      res.json(newAssignment);
+    } catch (error) {
+      console.error("Error inviting worker:", error);
+      res.status(500).json({ error: "Failed to invite worker" });
+    }
+  });
+
+  app.patch("/api/workplace-assignments/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { status, notes } = req.body;
+
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (status !== undefined) updateData.status = status;
+      if (notes !== undefined) updateData.notes = notes;
+      if (status === "active" && !req.body.acceptedAt) {
+        updateData.acceptedAt = new Date();
+      }
+
+      const [updatedAssignment] = await db.update(workplaceAssignments)
+        .set(updateData)
+        .where(eq(workplaceAssignments.id, req.params.id))
+        .returning();
+
+      if (!updatedAssignment) {
+        res.status(404).json({ error: "Assignment not found" });
+        return;
+      }
+
+      res.json(updatedAssignment);
+    } catch (error) {
+      console.error("Error updating assignment:", error);
+      res.status(500).json({ error: "Failed to update assignment" });
+    }
+  });
+
+  app.delete("/api/workplace-assignments/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const [deleted] = await db.delete(workplaceAssignments)
+        .where(eq(workplaceAssignments.id, req.params.id))
+        .returning();
+
+      if (!deleted) {
+        res.status(404).json({ error: "Assignment not found" });
+        return;
+      }
+
+      res.json({ message: "Assignment deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting assignment:", error);
+      res.status(500).json({ error: "Failed to delete assignment" });
+    }
+  });
+
+  // ========================================
+  // Worker Self-Service API
+  // ========================================
+
+  app.get("/api/me/workplaces", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as UserRole;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      if (role !== "worker") {
+        res.status(403).json({ error: "Only workers can access this endpoint" });
+        return;
+      }
+
+      const myWorkplaces = await db.select({
+        assignmentId: workplaceAssignments.id,
+        status: workplaceAssignments.status,
+        invitedAt: workplaceAssignments.invitedAt,
+        acceptedAt: workplaceAssignments.acceptedAt,
+        workplaceId: workplaces.id,
+        workplaceName: workplaces.name,
+        addressLine1: workplaces.addressLine1,
+        city: workplaces.city,
+        province: workplaces.province,
+        postalCode: workplaces.postalCode,
+        latitude: workplaces.latitude,
+        longitude: workplaces.longitude,
+        geofenceRadiusMeters: workplaces.geofenceRadiusMeters,
+        isActive: workplaces.isActive,
+      })
+      .from(workplaceAssignments)
+      .leftJoin(workplaces, eq(workplaceAssignments.workplaceId, workplaces.id))
+      .where(and(
+        eq(workplaceAssignments.workerUserId, userId),
+        or(eq(workplaceAssignments.status, "active"), eq(workplaceAssignments.status, "invited"))
+      ))
+      .orderBy(desc(workplaceAssignments.invitedAt));
+
+      res.json(myWorkplaces);
+    } catch (error) {
+      console.error("Error fetching worker workplaces:", error);
+      res.status(500).json({ error: "Failed to fetch workplaces" });
+    }
+  });
+
+  // ========================================
+  // TITO API with GPS Validation
+  // ========================================
+
+  app.post("/api/tito/time-in", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as UserRole;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      if (role !== "worker") {
+        res.status(403).json({ error: "Only workers can clock in" });
+        return;
+      }
+
+      const { workplaceId, gpsLat, gpsLng, shiftId } = req.body;
+
+      if (!workplaceId) {
+        res.status(400).json({ error: "workplaceId is required" });
+        return;
+      }
+
+      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
+      if (!workplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+
+      if (!workplace.isActive) {
+        res.status(400).json({ error: "Workplace is not active" });
+        return;
+      }
+
+      const assignment = await db.select().from(workplaceAssignments)
+        .where(and(
+          eq(workplaceAssignments.workplaceId, workplaceId),
+          eq(workplaceAssignments.workerUserId, userId),
+          eq(workplaceAssignments.status, "active")
+        ))
+        .limit(1);
+
+      if (assignment.length === 0) {
+        res.status(403).json({ error: "You are not assigned to this workplace" });
+        return;
+      }
+
+      if (workplace.latitude === null || workplace.longitude === null) {
+        res.status(400).json({ error: "Workplace coordinates not configured. Contact admin." });
+        return;
+      }
+
+      if (gpsLat === undefined || gpsLng === undefined) {
+        res.status(400).json({ error: "Location permission required for TITO. Please enable GPS." });
+        return;
+      }
+
+      const distance = haversineDistance(gpsLat, gpsLng, workplace.latitude, workplace.longitude);
+      const radius = workplace.geofenceRadiusMeters || 150;
+      const isWithinRadius = distance <= radius;
+
+      if (!isWithinRadius) {
+        const [titoLog] = await db.insert(titoLogs).values({
+          workerId: userId,
+          workplaceId,
+          shiftId: shiftId || null,
+          timeIn: new Date(),
+          timeInGpsLat: gpsLat,
+          timeInGpsLng: gpsLng,
+          timeInDistanceMeters: distance,
+          timeInGpsVerified: false,
+          timeInGpsFailureReason: `Outside geofence: ${Math.round(distance)}m from workplace (max ${radius}m)`,
+          status: "pending",
+        }).returning();
+
+        res.status(400).json({ 
+          error: `You are not within the required GPS radius of the workplace. You are ${Math.round(distance)}m away, but must be within ${radius}m.`,
+          distance: Math.round(distance),
+          maxRadius: radius,
+          titoLogId: titoLog.id,
+          gpsVerified: false,
+        });
+        return;
+      }
+
+      const [titoLog] = await db.insert(titoLogs).values({
+        workerId: userId,
+        workplaceId,
+        shiftId: shiftId || null,
+        timeIn: new Date(),
+        timeInGpsLat: gpsLat,
+        timeInGpsLng: gpsLng,
+        timeInDistanceMeters: distance,
+        timeInGpsVerified: true,
+        status: "pending",
+      }).returning();
+
+      res.json({
+        success: true,
+        message: "Successfully clocked in",
+        titoLogId: titoLog.id,
+        timeIn: titoLog.timeIn,
+        distance: Math.round(distance),
+        gpsVerified: true,
+      });
+    } catch (error) {
+      console.error("Error clocking in:", error);
+      res.status(500).json({ error: "Failed to clock in" });
+    }
+  });
+
+  app.post("/api/tito/time-out", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as UserRole;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      if (role !== "worker") {
+        res.status(403).json({ error: "Only workers can clock out" });
+        return;
+      }
+
+      const { titoLogId, gpsLat, gpsLng } = req.body;
+
+      if (!titoLogId) {
+        res.status(400).json({ error: "titoLogId is required" });
+        return;
+      }
+
+      const [titoLog] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      if (!titoLog) {
+        res.status(404).json({ error: "TITO record not found" });
+        return;
+      }
+
+      if (titoLog.workerId !== userId) {
+        res.status(403).json({ error: "You can only clock out of your own shift" });
+        return;
+      }
+
+      if (titoLog.timeOut) {
+        res.status(400).json({ error: "Already clocked out" });
+        return;
+      }
+
+      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, titoLog.workplaceId!));
+      if (!workplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+
+      if (workplace.latitude === null || workplace.longitude === null) {
+        res.status(400).json({ error: "Workplace coordinates not configured. Contact admin." });
+        return;
+      }
+
+      if (gpsLat === undefined || gpsLng === undefined) {
+        res.status(400).json({ error: "Location permission required for TITO. Please enable GPS." });
+        return;
+      }
+
+      const distance = haversineDistance(gpsLat, gpsLng, workplace.latitude, workplace.longitude);
+      const radius = workplace.geofenceRadiusMeters || 150;
+      const isWithinRadius = distance <= radius;
+
+      if (!isWithinRadius) {
+        const [updated] = await db.update(titoLogs)
+          .set({
+            timeOut: new Date(),
+            timeOutGpsLat: gpsLat,
+            timeOutGpsLng: gpsLng,
+            timeOutDistanceMeters: distance,
+            timeOutGpsVerified: false,
+            timeOutGpsFailureReason: `Outside geofence: ${Math.round(distance)}m from workplace (max ${radius}m)`,
+            updatedAt: new Date(),
+          })
+          .where(eq(titoLogs.id, titoLogId))
+          .returning();
+
+        res.status(400).json({ 
+          error: `You are not within the required GPS radius of the workplace. You are ${Math.round(distance)}m away, but must be within ${radius}m.`,
+          distance: Math.round(distance),
+          maxRadius: radius,
+          gpsVerified: false,
+        });
+        return;
+      }
+
+      const [updated] = await db.update(titoLogs)
+        .set({
+          timeOut: new Date(),
+          timeOutGpsLat: gpsLat,
+          timeOutGpsLng: gpsLng,
+          timeOutDistanceMeters: distance,
+          timeOutGpsVerified: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(titoLogs.id, titoLogId))
+        .returning();
+
+      res.json({
+        success: true,
+        message: "Successfully clocked out",
+        titoLogId: updated.id,
+        timeIn: updated.timeIn,
+        timeOut: updated.timeOut,
+        distance: Math.round(distance),
+        gpsVerified: true,
+      });
+    } catch (error) {
+      console.error("Error clocking out:", error);
+      res.status(500).json({ error: "Failed to clock out" });
+    }
+  });
+
+  app.get("/api/tito/my-logs", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const logs = await db.select({
+        id: titoLogs.id,
+        workerId: titoLogs.workerId,
+        workplaceId: titoLogs.workplaceId,
+        shiftId: titoLogs.shiftId,
+        timeIn: titoLogs.timeIn,
+        timeOut: titoLogs.timeOut,
+        timeInGpsVerified: titoLogs.timeInGpsVerified,
+        timeOutGpsVerified: titoLogs.timeOutGpsVerified,
+        timeInDistanceMeters: titoLogs.timeInDistanceMeters,
+        timeOutDistanceMeters: titoLogs.timeOutDistanceMeters,
+        status: titoLogs.status,
+        createdAt: titoLogs.createdAt,
+        workplaceName: workplaces.name,
+      })
+      .from(titoLogs)
+      .leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id))
+      .where(eq(titoLogs.workerId, userId))
+      .orderBy(desc(titoLogs.createdAt))
+      .limit(50);
+
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching TITO logs:", error);
+      res.status(500).json({ error: "Failed to fetch TITO logs" });
+    }
+  });
+
+  app.get("/api/workers", checkRoles("admin", "hr"), async (_req: Request, res: Response) => {
+    try {
+      const workers = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        onboardingStatus: users.onboardingStatus,
+        workerRoles: users.workerRoles,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+      }).from(users).where(eq(users.role, "worker")).orderBy(desc(users.createdAt));
+      res.json(workers);
+    } catch (error) {
+      console.error("Error fetching workers:", error);
+      res.status(500).json({ error: "Failed to fetch workers" });
     }
   });
 

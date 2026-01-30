@@ -233,6 +233,16 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
+              name="Shifts"
+              component={ShiftsScreen}
+              options={{
+                headerTitle: "All Shifts",
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="calendar" size={size} color={color} />
+                ),
+              }}
+            />
+            <Tab.Screen
               name="Communications"
               component={WorkerCommunicationsScreen}
               options={{
@@ -240,16 +250,6 @@ export default function MainTabNavigator() {
                 headerTitle: "Worker Communications",
                 tabBarIcon: ({ color, size }) => (
                   <Feather name="message-circle" size={size} color={color} />
-                ),
-              }}
-            />
-            <Tab.Screen
-              name="Requests"
-              component={RequestsScreen}
-              options={{
-                headerTitle: "All Requests",
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="file-text" size={size} color={color} />
                 ),
               }}
             />

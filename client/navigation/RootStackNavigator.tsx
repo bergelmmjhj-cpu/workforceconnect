@@ -16,6 +16,13 @@ import WorkerApplicationFormScreen from "@/screens/WorkerApplicationFormScreen";
 import AgreementSigningScreen from "@/screens/AgreementSigningScreen";
 import SubcontractorNoticeScreen from "@/screens/SubcontractorNoticeScreen";
 import CommunicationsChatScreen from "@/screens/CommunicationsChatScreen";
+import AdminManageScreen from "@/screens/AdminManageScreen";
+import WorkplacesListScreen from "@/screens/WorkplacesListScreen";
+import WorkplaceDetailScreen from "@/screens/WorkplaceDetailScreen";
+import WorkplaceEditScreen from "@/screens/WorkplaceEditScreen";
+import WorkerDirectoryScreen from "@/screens/WorkerDirectoryScreen";
+import InviteWorkerScreen from "@/screens/InviteWorkerScreen";
+import AssignToWorkplaceScreen from "@/screens/AssignToWorkplaceScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -37,6 +44,15 @@ export type RootStackParamList = {
   SubcontractorNotice: undefined;
   AgreementSigning: undefined;
   CommunicationsChat: { conversationId: string };
+  AdminManage: undefined;
+  WorkplacesList: undefined;
+  WorkplaceDetail: { workplaceId: string };
+  WorkplaceEdit: { workplaceId?: string };
+  WorkerDirectory: undefined;
+  InviteWorker: { workplaceId: string };
+  AssignToWorkplace: { workerId: string; workerName: string };
+  TitoLogsAdmin: undefined;
+  ApplicationsAdmin: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -161,6 +177,55 @@ export default function RootStackNavigator() {
             component={CommunicationsChatScreen}
             options={{
               headerTitle: "Conversation",
+            }}
+          />
+          <Stack.Screen
+            name="AdminManage"
+            component={AdminManageScreen}
+            options={{
+              headerTitle: "Management",
+            }}
+          />
+          <Stack.Screen
+            name="WorkplacesList"
+            component={WorkplacesListScreen}
+            options={{
+              headerTitle: "Workplaces",
+            }}
+          />
+          <Stack.Screen
+            name="WorkplaceDetail"
+            component={WorkplaceDetailScreen}
+            options={{
+              headerTitle: "Workplace",
+            }}
+          />
+          <Stack.Screen
+            name="WorkplaceEdit"
+            component={WorkplaceEditScreen}
+            options={({ route }) => ({
+              headerTitle: route.params?.workplaceId ? "Edit Workplace" : "New Workplace",
+            })}
+          />
+          <Stack.Screen
+            name="WorkerDirectory"
+            component={WorkerDirectoryScreen}
+            options={{
+              headerTitle: "Worker Directory",
+            }}
+          />
+          <Stack.Screen
+            name="InviteWorker"
+            component={InviteWorkerScreen}
+            options={{
+              headerTitle: "Add Worker",
+            }}
+          />
+          <Stack.Screen
+            name="AssignToWorkplace"
+            component={AssignToWorkplaceScreen}
+            options={{
+              headerTitle: "Assign to Workplace",
             }}
           />
         </>

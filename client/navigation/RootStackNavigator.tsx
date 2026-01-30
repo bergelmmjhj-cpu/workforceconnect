@@ -23,6 +23,8 @@ import WorkplaceEditScreen from "@/screens/WorkplaceEditScreen";
 import WorkerDirectoryScreen from "@/screens/WorkerDirectoryScreen";
 import InviteWorkerScreen from "@/screens/InviteWorkerScreen";
 import AssignToWorkplaceScreen from "@/screens/AssignToWorkplaceScreen";
+import TitoLogsAdminScreen from "@/screens/TitoLogsAdminScreen";
+import ApplicationsAdminScreen from "@/screens/ApplicationsAdminScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -226,6 +228,20 @@ export default function RootStackNavigator() {
             component={AssignToWorkplaceScreen}
             options={{
               headerTitle: "Assign to Workplace",
+            }}
+          />
+          <Stack.Screen
+            name="TitoLogsAdmin"
+            component={TitoLogsAdminScreen}
+            options={{
+              headerTitle: "TITO Logs",
+            }}
+          />
+          <Stack.Screen
+            name="ApplicationsAdmin"
+            component={ApplicationsAdminScreen}
+            options={{
+              headerTitle: "Applications",
             }}
           />
         </>

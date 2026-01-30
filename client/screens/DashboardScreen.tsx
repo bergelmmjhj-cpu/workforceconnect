@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, StyleSheet, RefreshControl, ScrollView } from "react-native";
+import { View, StyleSheet, RefreshControl, ScrollView, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -16,6 +17,8 @@ import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing } from "@/constants/theme";
 import { getGreeting } from "@/utils/format";
 import { TodoItem, DashboardStats } from "@/types";
+import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { Card } from "@/components/Card";
 import {
   getRequests,
   getShifts,
@@ -23,11 +26,13 @@ import {
   initializeStorage,
 } from "@/storage";
 
+type DashboardNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
-  const navigation = useNavigation();
+  const navigation = useNavigation<DashboardNavigationProp>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -264,6 +269,40 @@ export default function DashboardScreen() {
         )}
       </View>
 
+      {user?.role === "admin" && (
+        <View style={styles.quickActionsSection}>
+          <ThemedText type="h4" style={styles.sectionTitle}>
+            Quick Actions
+          </ThemedText>
+          <View style={styles.quickActionsGrid}>
+            <Pressable
+              style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
+              onPress={() => navigation.navigate("AdminManage")}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: theme.primary + "20" }]}>
+                <Feather name="settings" size={24} color={theme.primary} />
+              </View>
+              <ThemedText style={styles.quickActionTitle}>Management Hub</ThemedText>
+              <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
+                Workplaces, Workers, Assignments
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
+              onPress={() => navigation.navigate("WorkplacesList")}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: theme.success + "20" }]}>
+                <Feather name="map-pin" size={24} color={theme.success} />
+              </View>
+              <ThemedText style={styles.quickActionTitle}>Workplaces</ThemedText>
+              <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
+                Manage work sites
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       <View style={styles.todoSection}>
         <TodoWidget items={todos} onItemPress={() => {}} />
       </View>
@@ -292,5 +331,39 @@ const styles = StyleSheet.create({
   },
   todoSection: {
     marginBottom: Spacing.lg,
+  },
+  quickActionsSection: {
+    marginBottom: Spacing["2xl"],
+  },
+  sectionTitle: {
+    marginBottom: Spacing.md,
+  },
+  quickActionsGrid: {
+    flexDirection: "row",
+    gap: Spacing.md,
+  },
+  quickActionCard: {
+    flex: 1,
+    padding: Spacing.md,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.sm,
+  },
+  quickActionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: Spacing.xs,
+    textAlign: "center",
+  },
+  quickActionDesc: {
+    fontSize: 12,
+    textAlign: "center",
   },
 });

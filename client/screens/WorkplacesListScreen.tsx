@@ -92,32 +92,36 @@ export default function WorkplacesListScreen() {
   };
 
   const renderWorkplace = ({ item }: { item: Workplace }) => (
-    <Pressable
+    <Card 
+      style={styles.workplaceCard}
       onPress={() => navigation.navigate("WorkplaceDetail", { workplaceId: item.id })}
-      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
     >
-      <Card style={styles.workplaceCard}>
-        <View style={styles.workplaceHeader}>
-          <View style={[styles.statusDot, { backgroundColor: item.isActive ? "#22c55e" : "#ef4444" }]} />
-          <ThemedText style={styles.workplaceName} numberOfLines={1}>{item.name}</ThemedText>
-          <Pressable onPress={() => handleToggleActive(item)} hitSlop={8}>
-            <Feather name={item.isActive ? "toggle-right" : "toggle-left"} size={24} color={item.isActive ? "#22c55e" : theme.textSecondary} />
-          </Pressable>
+      <View style={styles.workplaceHeader}>
+        <View style={[styles.statusDot, { backgroundColor: item.isActive ? "#22c55e" : "#ef4444" }]} />
+        <ThemedText style={styles.workplaceName} numberOfLines={1}>{item.name}</ThemedText>
+        <Pressable 
+          onPress={(e) => {
+            e.stopPropagation();
+            handleToggleActive(item);
+          }} 
+          hitSlop={8}
+        >
+          <Feather name={item.isActive ? "toggle-right" : "toggle-left"} size={24} color={item.isActive ? "#22c55e" : theme.textSecondary} />
+        </Pressable>
+      </View>
+      <ThemedText style={styles.workplaceAddress} numberOfLines={2}>
+        {[item.addressLine1, item.city, item.province, item.postalCode].filter(Boolean).join(", ") || "No address set"}
+      </ThemedText>
+      <View style={styles.workplaceFooter}>
+        <View style={styles.footerItem}>
+          <Feather name="map-pin" size={14} color={theme.textSecondary} />
+          <ThemedText style={styles.footerText}>
+            {item.latitude && item.longitude ? `${item.geofenceRadiusMeters}m radius` : "GPS not set"}
+          </ThemedText>
         </View>
-        <ThemedText style={styles.workplaceAddress} numberOfLines={2}>
-          {[item.addressLine1, item.city, item.province, item.postalCode].filter(Boolean).join(", ") || "No address set"}
-        </ThemedText>
-        <View style={styles.workplaceFooter}>
-          <View style={styles.footerItem}>
-            <Feather name="map-pin" size={14} color={theme.textSecondary} />
-            <ThemedText style={styles.footerText}>
-              {item.latitude && item.longitude ? `${item.geofenceRadiusMeters}m radius` : "GPS not set"}
-            </ThemedText>
-          </View>
-          <Feather name="chevron-right" size={18} color={theme.textSecondary} />
-        </View>
-      </Card>
-    </Pressable>
+        <Feather name="chevron-right" size={18} color={theme.textSecondary} />
+      </View>
+    </Card>
   );
 
   return (

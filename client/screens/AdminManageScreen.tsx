@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable, Platform } from "react-native";
+import { View, StyleSheet, ScrollView } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,18 +23,16 @@ function AdminMenuItem({ icon, title, description, onPress }: AdminMenuItemProps
   const { theme } = useTheme();
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-      <Card style={styles.menuCard}>
-        <View style={[styles.iconContainer, { backgroundColor: theme.primary + "20" }]}>
-          <Feather name={icon} size={24} color={theme.primary} />
-        </View>
-        <View style={styles.menuTextContainer}>
-          <ThemedText style={styles.menuTitle}>{title}</ThemedText>
-          <ThemedText style={styles.menuDescription}>{description}</ThemedText>
-        </View>
-        <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-      </Card>
-    </Pressable>
+    <Card style={styles.menuCard} onPress={onPress}>
+      <View style={[styles.iconContainer, { backgroundColor: theme.primary + "20" }]}>
+        <Feather name={icon} size={24} color={theme.primary} />
+      </View>
+      <View style={styles.menuTextContainer}>
+        <ThemedText style={styles.menuTitle}>{title}</ThemedText>
+        <ThemedText style={styles.menuDescription}>{description}</ThemedText>
+      </View>
+      <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+    </Card>
   );
 }
 

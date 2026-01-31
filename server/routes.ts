@@ -1757,6 +1757,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================
+  // Google Places API Proxy (Address Autocomplete)
+  // ========================================
+
+  app.get("/api/places/autocomplete", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { input } = req.query;
+      
+      if (!input || typeof input !== "string" || input.length < 2) {
+        res.json({ predictions: [] });
+        return;
+      }
+
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey) {
+        res.status(500).json({ error: "Google Places API key not configured" });
+        return;
+      }
+
+      const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
+      url.searchParams.set("input", input);
+      url.searchParams.set("key", apiKey);
+      url.searchParams.set("types", "address");
+      url.searchParams.set("components", "country:ca|country:us");
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+
+      if (data.status === "OK" || data.status === "ZERO_RESULTS") {
+        res.json({ predictions: data.predictions || [] });
+      } else {
+        console.error("Google Places API error:", data.status, data.error_message);
+        res.status(500).json({ error: "Failed to fetch address suggestions" });
+      }
+    } catch (error) {
+      console.error("Error in address autocomplete:", error);
+      res.status(500).json({ error: "Failed to fetch address suggestions" });
+    }
+  });
+
+  app.get("/api/places/details/:placeId", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { placeId } = req.params;
+      
+      if (!placeId) {
+        res.status(400).json({ error: "Place ID is required" });
+        return;
+      }
+
+      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey) {
+        res.status(500).json({ error: "Google Places API key not configured" });
+        return;
+      }
+
+      const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
+      url.searchParams.set("place_id", placeId);
+      url.searchParams.set("key", apiKey);
+      url.searchParams.set("fields", "formatted_address,address_components,geometry");
+
+      const response = await fetch(url.toString());
+      const data = await response.json();
+
+      if (data.status === "OK" && data.result) {
+        const result = data.result;
+        const components = result.address_components || [];
+        
+        const getComponent = (types: string[]): string => {
+          const comp = components.find((c: { types: string[] }) => 
+            types.some((t: string) => c.types.includes(t))
+          );
+          return comp?.long_name || "";
+        };
+
+        const getShortComponent = (types: string[]): string => {
+          const comp = components.find((c: { types: string[] }) => 
+            types.some((t: string) => c.types.includes(t))
+          );
+          return comp?.short_name || "";
+        };
+
+        const streetNumber = getComponent(["street_number"]);
+        const streetName = getComponent(["route"]);
+        const addressLine1 = streetNumber && streetName 
+          ? `${streetNumber} ${streetName}` 
+          : streetName || getComponent(["premise", "subpremise"]);
+
+        const addressData = {
+          formattedAddress: result.formatted_address,
+          addressLine1,
+          city: getComponent(["locality", "sublocality", "administrative_area_level_3"]),
+          province: getShortComponent(["administrative_area_level_1"]),
+          postalCode: getComponent(["postal_code"]),
+          country: getComponent(["country"]),
+          latitude: result.geometry?.location?.lat || null,
+          longitude: result.geometry?.location?.lng || null,
+        };
+
+        res.json(addressData);
+      } else {
+        console.error("Google Places Details API error:", data.status, data.error_message);
+        res.status(500).json({ error: "Failed to fetch address details" });
+      }
+    } catch (error) {
+      console.error("Error in address details:", error);
+      res.status(500).json({ error: "Failed to fetch address details" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

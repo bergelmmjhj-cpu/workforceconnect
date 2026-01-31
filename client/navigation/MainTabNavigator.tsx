@@ -12,6 +12,7 @@ import MessagesScreen from "@/screens/MessagesScreen";
 import ProfileScreen from "@/screens/ProfileScreen";
 import WorkerCommunicationsScreen from "@/screens/WorkerCommunicationsScreen";
 import UserManagementScreen from "@/screens/UserManagementScreen";
+import AdminManageScreen from "@/screens/AdminManageScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,6 +27,7 @@ export type MainTabParamList = {
   Users: undefined;
   Reports: undefined;
   Communications: undefined;
+  Management: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -165,12 +167,12 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Requests"
-              component={RequestsScreen}
+              name="Management"
+              component={AdminManageScreen}
               options={{
-                headerTitle: "Requests",
+                headerTitle: "Management",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="inbox" size={size} color={color} />
+                  <Feather name="briefcase" size={size} color={color} />
                 ),
               }}
             />
@@ -233,12 +235,12 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Shifts"
-              component={ShiftsScreen}
+              name="Management"
+              component={AdminManageScreen}
               options={{
-                headerTitle: "All Shifts",
+                headerTitle: "Management",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="calendar" size={size} color={color} />
+                  <Feather name="briefcase" size={size} color={color} />
                 ),
               }}
             />

@@ -775,7 +775,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/workplaces", checkRoles("admin"), async (req: Request, res: Response) => {
+  app.post("/api/workplaces", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
       const { name, addressLine1, city, province, postalCode, country, latitude, longitude, geofenceRadiusMeters, isActive } = req.body;
       
@@ -804,7 +804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/workplaces/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+  app.put("/api/workplaces/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
       const { name, addressLine1, city, province, postalCode, country, latitude, longitude, geofenceRadiusMeters, isActive } = req.body;
       
@@ -837,7 +837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/workplaces/:id/toggle-active", checkRoles("admin"), async (req: Request, res: Response) => {
+  app.patch("/api/workplaces/:id/toggle-active", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
       const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
       if (!workplace) {

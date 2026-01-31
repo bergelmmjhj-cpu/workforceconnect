@@ -64,16 +64,19 @@ export function AddressAutocomplete({
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPredictions = useCallback(async (input: string) => {
     if (input.length < 2) {
       setPredictions([]);
       setShowDropdown(false);
+      setApiError(null);
       return;
     }
 
     setIsLoading(true);
+    setApiError(null);
     try {
       const url = new URL("/api/places/autocomplete", getApiUrl());
       url.searchParams.set("input", input);
@@ -89,9 +92,14 @@ export function AddressAutocomplete({
         const data = await response.json();
         setPredictions(data.predictions || []);
         setShowDropdown(data.predictions?.length > 0);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setApiError(errorData.message || "Address search unavailable. Please try again later.");
+        setShowDropdown(false);
       }
     } catch (err) {
       console.error("Error fetching predictions:", err);
+      setApiError("Address search unavailable. Please check your connection.");
     } finally {
       setIsLoading(false);
     }
@@ -231,6 +239,15 @@ export function AddressAutocomplete({
         ) : null}
       </View>
 
+      {apiError ? (
+        <View style={styles.apiErrorContainer}>
+          <Feather name="alert-circle" size={14} color={theme.warning} />
+          <ThemedText style={[styles.apiErrorText, { color: theme.warning }]}>
+            {apiError}
+          </ThemedText>
+        </View>
+      ) : null}
+
       {isAddressSelected ? (
         <View style={styles.selectedIndicator}>
           <Feather name="check-circle" size={14} color={theme.success} />
@@ -319,6 +336,20 @@ const styles = StyleSheet.create({
   predictionSecondary: {
     ...Typography.caption,
     marginTop: 2,
+  },
+  apiErrorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    backgroundColor: "rgba(255, 193, 7, 0.1)",
+    borderRadius: BorderRadius.sm,
+  },
+  apiErrorText: {
+    ...Typography.caption,
+    marginLeft: Spacing.xs,
+    flex: 1,
   },
   selectedIndicator: {
     flexDirection: "row",

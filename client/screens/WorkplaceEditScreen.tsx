@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { getErrorMessage } from "@/utils/errorHandler";
 
 type WorkplaceEditRouteProp = RouteProp<RootStackParamList, "WorkplaceEdit">;
 
@@ -131,7 +132,7 @@ export default function WorkplaceEditScreen() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      Alert.alert("Error", "Workplace name is required");
+      Alert.alert("Missing Information", "Please enter a workplace name.");
       return;
     }
 
@@ -175,7 +176,7 @@ export default function WorkplaceEditScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces"] });
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Error", "Failed to save workplace");
+      Alert.alert("Unable to Save", getErrorMessage(error));
     } finally {
       setSaving(false);
     }

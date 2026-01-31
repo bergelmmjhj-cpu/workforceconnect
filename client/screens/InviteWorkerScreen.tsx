@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { getErrorMessage } from "@/utils/errorHandler";
 
 type InviteWorkerRouteProp = RouteProp<RootStackParamList, "InviteWorker">;
 
@@ -88,7 +89,7 @@ export default function InviteWorkerScreen() {
       navigation.goBack();
     },
     onError: (error: Error) => {
-      Alert.alert("Error", error.message || "Failed to assign worker");
+      Alert.alert("Unable to Assign", getErrorMessage(error));
     },
   });
 

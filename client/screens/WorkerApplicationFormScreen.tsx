@@ -26,6 +26,7 @@ import { createWorkerApplication } from "@/storage";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import type { WorkerApplicationAddress } from "@/types";
 import { WORKER_ROLES } from "@/types";
+import { getErrorMessage } from "@/utils/errorHandler";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -291,7 +292,7 @@ export default function WorkerApplicationFormScreen() {
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
-      Alert.alert("Error", "Failed to submit application. Please try again.");
+      Alert.alert("Unable to Submit", getErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }

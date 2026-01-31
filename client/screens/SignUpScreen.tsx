@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { UserRole } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { getErrorMessage } from "@/utils/errorHandler";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -82,11 +83,7 @@ export default function SignUpScreen() {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: unknown) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Failed to create account");
-      }
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

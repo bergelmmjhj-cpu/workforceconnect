@@ -23,6 +23,7 @@ import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { createAgreementAcceptance, createAgreementSubmission } from "@/storage";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { getErrorMessage } from "@/utils/errorHandler";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -129,7 +130,7 @@ export default function AgreementSigningScreen() {
         [{ text: "Continue", onPress: () => navigation.goBack() }]
       );
     } catch (error) {
-      Alert.alert("Error", "Failed to submit agreement. Please try again.");
+      Alert.alert("Unable to Submit", getErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }

@@ -612,10 +612,17 @@ function setupErrorHandler(app: express.Application) {
   });
 }
 
+const isDemoMode = process.env.DEMO_MODE !== "false";
+
 (async () => {
-  await seedDemoUsers();
-  await seedWorkplaces();
-  await seedTimesheets();
+  if (isDemoMode) {
+    log("DEMO MODE enabled - seeding demo data...");
+    await seedDemoUsers();
+    await seedWorkplaces();
+    await seedTimesheets();
+  } else {
+    log("PRODUCTION MODE - skipping demo data seeding");
+  }
 
   setupCors(app);
   setupBodyParsing(app);

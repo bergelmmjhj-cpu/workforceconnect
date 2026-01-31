@@ -26,7 +26,7 @@ export default function ProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
   const { theme } = useTheme();
-  const { user, logout, switchRole, updateUser } = useAuth();
+  const { user, logout, updateUser } = useAuth();
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showClientTypeModal, setShowClientTypeModal] = useState(false);
@@ -85,13 +85,6 @@ export default function ProfileScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await logout();
   };
-
-  const handleRoleSwitch = async (role: UserRole) => {
-    await Haptics.selectionAsync();
-    await switchRole(role);
-  };
-
-  const roles: UserRole[] = ["client", "worker", "hr", "admin"];
 
   return (
     <ScrollView
@@ -176,37 +169,6 @@ export default function ProfileScreen() {
           </View>
         </View>
       ) : null}
-
-      <View style={styles.section}>
-        <ThemedText style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          Demo: Switch Role
-        </ThemedText>
-        <View style={[styles.card, { backgroundColor: theme.surface }]}>
-          {roles.map((role, index) => (
-            <Pressable
-              key={role}
-              onPress={() => handleRoleSwitch(role)}
-              style={({ pressed }) => [
-                styles.menuItem,
-                pressed && { backgroundColor: theme.backgroundSecondary },
-                index < roles.length - 1 && {
-                  borderBottomWidth: 1,
-                  borderBottomColor: theme.border,
-                },
-              ]}
-            >
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemText}>
-                  {roleLabels[role]}
-                </ThemedText>
-                {user?.role === role ? (
-                  <Feather name="check" size={20} color={theme.primary} />
-                ) : null}
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      </View>
 
       <View style={styles.section}>
         <ThemedText style={[styles.sectionTitle, { color: theme.textSecondary }]}>

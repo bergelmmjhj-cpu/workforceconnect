@@ -19,7 +19,6 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { UserRole } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -35,28 +34,22 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>("client");
-
-  const demoEmails: Record<UserRole, string> = {
-    client: "client@example.com",
-    worker: "worker@example.com",
-    hr: "hr@example.com",
-    admin: "admin@example.com",
-  };
-
-  const roles: { role: UserRole; label: string; icon: keyof typeof Feather.glyphMap }[] = [
-    { role: "client", label: "Client", icon: "briefcase" },
-    { role: "worker", label: "Worker", icon: "user" },
-    { role: "hr", label: "HR", icon: "users" },
-    { role: "admin", label: "Admin", icon: "settings" },
-  ];
 
   const handleLogin = async () => {
+    if (!email.trim()) {
+      setError("Please enter your email address");
+      return;
+    }
+    if (!password) {
+      setError("Please enter your password");
+      return;
+    }
+    
     setError("");
     setIsLoading(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await login(email || demoEmails[selectedRole], password);
+      await login(email.trim(), password);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: unknown) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -68,12 +61,6 @@ export default function LoginScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleRoleSelect = (role: UserRole) => {
-    setSelectedRole(role);
-    setEmail(demoEmails[role]);
-    Haptics.selectionAsync();
   };
 
   return (
@@ -99,60 +86,6 @@ export default function LoginScreen() {
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
           Staff deployment and shift management
         </ThemedText>
-      </View>
-
-      <View style={styles.roleSelector}>
-        <ThemedText style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-          Demo Login As
-        </ThemedText>
-        <View style={styles.roleGrid}>
-          {roles.map(({ role, label, icon }) => (
-            <Pressable
-              key={role}
-              onPress={() => handleRoleSelect(role)}
-              style={[
-                styles.roleCard,
-                {
-                  backgroundColor:
-                    selectedRole === role
-                      ? theme.primary + "15"
-                      : theme.surface,
-                  borderColor:
-                    selectedRole === role ? theme.primary : theme.border,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.roleIcon,
-                  {
-                    backgroundColor:
-                      selectedRole === role
-                        ? theme.primary
-                        : theme.backgroundSecondary,
-                  },
-                ]}
-              >
-                <Feather
-                  name={icon}
-                  size={18}
-                  color={selectedRole === role ? "#fff" : theme.textSecondary}
-                />
-              </View>
-              <ThemedText
-                style={[
-                  styles.roleLabel,
-                  {
-                    color: selectedRole === role ? theme.primary : theme.text,
-                    fontWeight: selectedRole === role ? "600" : "400",
-                  },
-                ]}
-              >
-                {label}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
       </View>
 
       {error ? (
@@ -206,9 +139,6 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.footer}>
-        <ThemedText style={[styles.footerText, { color: theme.textMuted }]}>
-          Demo mode - any password works
-        </ThemedText>
         <View style={styles.signupRow}>
           <ThemedText style={[styles.footerText, { color: theme.textMuted }]}>
             Don't have an account?{" "}
@@ -248,40 +178,6 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: "center",
     fontSize: 15,
-  },
-  roleSelector: {
-    marginBottom: Spacing["2xl"],
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    marginBottom: Spacing.md,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  roleGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.md,
-  },
-  roleCard: {
-    flex: 1,
-    minWidth: "45%",
-    alignItems: "center",
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-  },
-  roleIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.sm,
-  },
-  roleLabel: {
-    fontSize: 14,
   },
   form: {
     marginBottom: Spacing["2xl"],

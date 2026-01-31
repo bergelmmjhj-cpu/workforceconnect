@@ -44,3 +44,29 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - `DATABASE_URL`
 - `EXPO_PUBLIC_DOMAIN`
 - `REPLIT_DEV_DOMAIN`
+- `DEMO_MODE` - Set to "false" for production mode (disables demo data seeding and demo UI)
+- `GOOGLE_PLACES_API_KEY` - Google Places API for address autocomplete
+- `SESSION_SECRET` - Session secret for authentication
+
+## Production Mode
+
+The application runs in **production mode** with `DEMO_MODE=false`:
+
+- **No demo data seeding**: Server skips creating sample users, workplaces, and timesheets
+- **No demo login UI**: Login screen shows only email/password fields, no role selector
+- **No demo fallback authentication**: Login requires valid database credentials
+- **No role switching**: ProfileScreen does not include demo role switching functionality
+- **All users must register**: Use the Sign Up flow to create new accounts
+
+### Creating Initial Admin User
+
+To create an initial admin user, use the admin user creation endpoint or insert directly into the database:
+
+```sql
+INSERT INTO users (id, email, password, role, first_name, last_name)
+VALUES (gen_random_uuid(), 'admin@wfconnect.org', '<bcrypt_hash>', 'admin', 'Admin', 'User');
+```
+
+## App Store Links
+
+- **iOS App Store**: https://apps.apple.com/app/workforceconnect/id6758402360

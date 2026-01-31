@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, TextInput, Platform, Alert } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { View, StyleSheet, ScrollView, TextInput, Alert } from "react-native";
 import { useNavigation, NavigationProp, useRoute, RouteProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import * as Location from "expo-location";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
+import { AddressAutocomplete, AddressData } from "@/components/AddressAutocomplete";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -55,7 +54,8 @@ export default function WorkplaceEditScreen() {
     geofenceRadiusMeters: "150",
   });
   const [saving, setSaving] = useState(false);
-  const [gettingLocation, setGettingLocation] = useState(false);
+  const [isAddressSelected, setIsAddressSelected] = useState(false);
+  const [addressSearchValue, setAddressSearchValue] = useState("");
 
   const { data: existingWorkplace, isLoading } = useQuery({
     queryKey: ["/api/workplaces", workplaceId],
@@ -86,33 +86,57 @@ export default function WorkplaceEditScreen() {
         longitude: existingWorkplace.longitude?.toString() || "",
         geofenceRadiusMeters: existingWorkplace.geofenceRadiusMeters?.toString() || "150",
       });
+      if (existingWorkplace.addressLine1 && existingWorkplace.latitude && existingWorkplace.longitude) {
+        const fullAddress = [
+          existingWorkplace.addressLine1,
+          existingWorkplace.city,
+          existingWorkplace.province,
+          existingWorkplace.postalCode,
+          existingWorkplace.country
+        ].filter(Boolean).join(", ");
+        setAddressSearchValue(fullAddress);
+        setIsAddressSelected(true);
+      }
     }
   }, [existingWorkplace]);
 
-  const handleGetCurrentLocation = async () => {
-    setGettingLocation(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission Denied", "Location permission is required to get current coordinates");
-        return;
-      }
-      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setFormData(prev => ({
-        ...prev,
-        latitude: location.coords.latitude.toFixed(6),
-        longitude: location.coords.longitude.toFixed(6),
-      }));
-    } catch (error) {
-      Alert.alert("Error", "Failed to get current location");
-    } finally {
-      setGettingLocation(false);
-    }
+  const handleAddressSelect = (address: AddressData) => {
+    setFormData(prev => ({
+      ...prev,
+      addressLine1: address.addressLine1,
+      city: address.city,
+      province: address.province,
+      postalCode: address.postalCode,
+      country: address.country || "Canada",
+      latitude: address.latitude?.toString() || "",
+      longitude: address.longitude?.toString() || "",
+    }));
+    setIsAddressSelected(true);
+  };
+
+  const handleAddressClear = () => {
+    setFormData(prev => ({
+      ...prev,
+      addressLine1: "",
+      city: "",
+      province: "",
+      postalCode: "",
+      country: "Canada",
+      latitude: "",
+      longitude: "",
+    }));
+    setIsAddressSelected(false);
+    setAddressSearchValue("");
   };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
       Alert.alert("Error", "Workplace name is required");
+      return;
+    }
+
+    if (!isAddressSelected || !formData.latitude || !formData.longitude) {
+      Alert.alert("Address Required", "Please select an address from the suggested list to ensure accurate GPS coordinates for TITO validation.");
       return;
     }
 
@@ -195,101 +219,98 @@ export default function WorkplaceEditScreen() {
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <ThemedText style={styles.label}>Address</ThemedText>
-            <TextInput
-              style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-              value={formData.addressLine1}
-              onChangeText={(v) => updateField("addressLine1", v)}
-              placeholder="Street address"
-              placeholderTextColor={theme.textSecondary}
-            />
-          </View>
+          <AddressAutocomplete
+            label="Search Address *"
+            value={addressSearchValue}
+            onAddressSelect={handleAddressSelect}
+            onClear={handleAddressClear}
+            placeholder="Start typing an address..."
+            userRole={user?.role || ""}
+            userId={user?.id || ""}
+            isAddressSelected={isAddressSelected}
+            error={!isAddressSelected && formData.name.trim() ? "Please select an address from the suggestions" : undefined}
+          />
 
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 2 }]}>
-              <ThemedText style={styles.label}>City</ThemedText>
-              <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-                value={formData.city}
-                onChangeText={(v) => updateField("city", v)}
-                placeholder="City"
-                placeholderTextColor={theme.textSecondary}
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <ThemedText style={styles.label}>Province</ThemedText>
-              <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-                value={formData.province}
-                onChangeText={(v) => updateField("province", v)}
-                placeholder="ON"
-                placeholderTextColor={theme.textSecondary}
-              />
-            </View>
-          </View>
+          {isAddressSelected ? (
+            <>
+              <View style={styles.row}>
+                <View style={[styles.inputGroup, { flex: 2 }]}>
+                  <ThemedText style={styles.label}>Street Address</ThemedText>
+                  <TextInput
+                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    value={formData.addressLine1}
+                    editable={false}
+                  />
+                </View>
+              </View>
 
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <ThemedText style={styles.label}>Postal Code</ThemedText>
-              <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-                value={formData.postalCode}
-                onChangeText={(v) => updateField("postalCode", v)}
-                placeholder="A1B 2C3"
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="characters"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <ThemedText style={styles.label}>Country</ThemedText>
-              <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-                value={formData.country}
-                onChangeText={(v) => updateField("country", v)}
-                placeholder="Canada"
-                placeholderTextColor={theme.textSecondary}
-              />
-            </View>
-          </View>
+              <View style={styles.row}>
+                <View style={[styles.inputGroup, { flex: 2 }]}>
+                  <ThemedText style={styles.label}>City</ThemedText>
+                  <TextInput
+                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    value={formData.city}
+                    editable={false}
+                  />
+                </View>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <ThemedText style={styles.label}>Province</ThemedText>
+                  <TextInput
+                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    value={formData.province}
+                    editable={false}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.row}>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <ThemedText style={styles.label}>Postal Code</ThemedText>
+                  <TextInput
+                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    value={formData.postalCode}
+                    editable={false}
+                  />
+                </View>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                  <ThemedText style={styles.label}>Country</ThemedText>
+                  <TextInput
+                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    value={formData.country}
+                    editable={false}
+                  />
+                </View>
+              </View>
+            </>
+          ) : null}
         </Card>
 
         <Card style={styles.formCard}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>GPS Settings</ThemedText>
-            <Button
-              title={gettingLocation ? "Getting..." : "Use My Location"}
-              onPress={handleGetCurrentLocation}
-              variant="secondary"
-              disabled={gettingLocation}
-            />
-          </View>
+          <ThemedText style={styles.sectionTitle}>GPS Settings</ThemedText>
           
           <ThemedText style={styles.helpText}>
-            GPS coordinates are required for workers to clock in/out at this location.
+            GPS coordinates are automatically populated when you select an address. These are required for workers to clock in/out at this location.
           </ThemedText>
 
           <View style={styles.row}>
             <View style={[styles.inputGroup, { flex: 1 }]}>
               <ThemedText style={styles.label}>Latitude</ThemedText>
               <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: isAddressSelected && formData.latitude ? theme.success : theme.border }]}
                 value={formData.latitude}
-                onChangeText={(v) => updateField("latitude", v)}
-                placeholder="43.6532"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="numeric"
+                editable={false}
+                placeholder="Auto-populated from address"
+                placeholderTextColor={theme.textMuted}
               />
             </View>
             <View style={[styles.inputGroup, { flex: 1 }]}>
               <ThemedText style={styles.label}>Longitude</ThemedText>
               <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: isAddressSelected && formData.longitude ? theme.success : theme.border }]}
                 value={formData.longitude}
-                onChangeText={(v) => updateField("longitude", v)}
-                placeholder="-79.3832"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="numeric"
+                editable={false}
+                placeholder="Auto-populated from address"
+                placeholderTextColor={theme.textMuted}
               />
             </View>
           </View>
@@ -370,6 +391,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     fontSize: 16,
+  },
+  readOnlyInput: {
+    backgroundColor: "rgba(128, 128, 128, 0.1)",
   },
   row: {
     flexDirection: "row",

@@ -567,6 +567,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create new user (admin only)
+  app.post("/api/users", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { email, password, fullName, role } = req.body;
+
+      if (!email || !password || !fullName || !role) {
+        res.status(400).json({ error: "Email, password, full name, and role are required" });
+        return;
+      }
+
+      // Validate role
+      const validRoles = ["admin", "hr", "client", "worker"];
+      if (!validRoles.includes(role)) {
+        res.status(400).json({ error: "Invalid role. Must be one of: admin, hr, client, worker" });
+        return;
+      }
+
+      // Check if email already exists
+      const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+      if (existingUser.length > 0) {
+        res.status(409).json({ error: "A user with this email already exists" });
+        return;
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const [newUser] = await db.insert(users).values({
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        fullName,
+        role,
+        isActive: true,
+        onboardingStatus: role === "worker" ? "NOT_APPLIED" : null,
+      }).returning();
+
+      const { password: _, ...userWithoutPassword } = newUser;
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      res.status(500).json({ error: "Failed to create user" });
+    }
+  });
+
   app.post("/public/contact", async (req: Request, res: Response) => {
     try {
       const ip = getClientIp(req);

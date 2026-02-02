@@ -561,6 +561,18 @@ export default function UserManagementScreen() {
                       "Save Changes"
                     )}
                   </Button>
+                  <Pressable
+                    onPress={() => {
+                      setEditModalVisible(false);
+                      setTimeout(() => handleDeleteUser(selectedUser), 300);
+                    }}
+                    style={[styles.deleteButton, { backgroundColor: theme.error + "15" }]}
+                  >
+                    <Feather name="trash-2" size={18} color={theme.error} />
+                    <ThemedText style={[styles.deleteButtonText, { color: theme.error }]}>
+                      Delete User
+                    </ThemedText>
+                  </Pressable>
                 </View>
               </>
             ) : null}
@@ -1004,5 +1016,17 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  deleteButtonText: {
+    fontWeight: "600",
+    fontSize: 15,
   },
 });

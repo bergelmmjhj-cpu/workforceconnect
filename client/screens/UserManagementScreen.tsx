@@ -97,7 +97,10 @@ export default function UserManagementScreen() {
         body: JSON.stringify({ role, isActive }),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to update user");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to update user");
+      }
       return res.json();
     },
     onSuccess: () => {

@@ -215,6 +215,24 @@ export default function UserManagementScreen() {
     }
   };
 
+  const handleDeleteUser = (userToDelete: APIUser) => {
+    Alert.alert(
+      "Delete User",
+      `Are you sure you want to delete ${userToDelete.fullName}? This action cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteUserMutation.mutate(userToDelete.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          },
+        },
+      ]
+    );
+  };
+
   const getRoleIcon = (role: string): keyof typeof Feather.glyphMap => {
     switch (role) {
       case "admin": return "settings";
@@ -318,24 +336,90 @@ export default function UserManagementScreen() {
           </View>
         }
         ListHeaderComponent={
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
-              <ThemedText type="h2" style={{ color: theme.primary }}>
-                {users.length}
-              </ThemedText>
-              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Total Users
-              </ThemedText>
+          <>
+            <View style={styles.statsRow}>
+              <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <ThemedText type="h2" style={{ color: theme.primary }}>
+                  {users.length}
+                </ThemedText>
+                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Total Users
+                </ThemedText>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <ThemedText type="h2" style={{ color: theme.success }}>
+                  {users.filter((u) => u.isActive !== false).length}
+                </ThemedText>
+                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Active
+                </ThemedText>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
+                <ThemedText type="h2" style={{ color: theme.warning }}>
+                  {users.filter((u) => u.isActive === false).length}
+                </ThemedText>
+                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Pending
+                </ThemedText>
+              </View>
             </View>
-            <View style={[styles.statCard, { backgroundColor: theme.surface }]}>
-              <ThemedText type="h2" style={{ color: theme.success }}>
-                {users.filter((u) => u.isActive !== false).length}
-              </ThemedText>
-              <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Active
-              </ThemedText>
-            </View>
-          </View>
+            {users.filter((u) => u.isActive === false).length > 0 ? (
+              <View style={styles.pendingSection}>
+                <View style={[styles.pendingHeader, { backgroundColor: theme.warning + "15" }]}>
+                  <Feather name="clock" size={20} color={theme.warning} />
+                  <ThemedText style={[styles.pendingTitle, { color: theme.warning }]}>
+                    Pending Approval ({users.filter((u) => u.isActive === false).length})
+                  </ThemedText>
+                </View>
+                {users.filter((u) => u.isActive === false).map((pendingUser) => (
+                  <Card key={pendingUser.id} style={styles.pendingCard}>
+                    <View style={styles.pendingUserRow}>
+                      <View style={styles.pendingUserInfo}>
+                        <ThemedText style={[styles.pendingUserName, { fontWeight: "600" }]}>
+                          {pendingUser.fullName}
+                        </ThemedText>
+                        <ThemedText style={[styles.pendingUserEmail, { color: theme.textSecondary }]}>
+                          {pendingUser.email}
+                        </ThemedText>
+                        <View style={[styles.roleBadge, { backgroundColor: getRoleColor(pendingUser.role) + "15" }]}>
+                          <ThemedText style={[styles.roleText, { color: getRoleColor(pendingUser.role) }]}>
+                            {pendingUser.role.toUpperCase()}
+                          </ThemedText>
+                        </View>
+                      </View>
+                      <View style={styles.pendingActions}>
+                        <Pressable
+                          onPress={() => {
+                            updateUserMutation.mutate({
+                              id: pendingUser.id,
+                              role: pendingUser.role as UserRole,
+                              isActive: true,
+                            });
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          }}
+                          style={[styles.approveButton, { backgroundColor: theme.success }]}
+                        >
+                          <Feather name="check" size={18} color="#fff" />
+                          <ThemedText style={styles.approveButtonText}>Approve</ThemedText>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleDeleteUser(pendingUser)}
+                          style={[styles.rejectButton, { backgroundColor: theme.error + "15" }]}
+                        >
+                          <Feather name="x" size={18} color={theme.error} />
+                        </Pressable>
+                      </View>
+                    </View>
+                  </Card>
+                ))}
+                <View style={styles.sectionDivider}>
+                  <ThemedText style={[styles.sectionDividerText, { color: theme.textSecondary }]}>
+                    All Users
+                  </ThemedText>
+                </View>
+              </View>
+            ) : null}
+          </>
         }
       />
 
@@ -852,5 +936,73 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     flex: 1,
+  },
+  pendingSection: {
+    marginBottom: Spacing.lg,
+  },
+  pendingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+  },
+  pendingTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  pendingCard: {
+    marginBottom: Spacing.sm,
+  },
+  pendingUserRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  pendingUserInfo: {
+    flex: 1,
+  },
+  pendingUserName: {
+    fontSize: 16,
+  },
+  pendingUserEmail: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  pendingActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  approveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  approveButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  rejectButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionDivider: {
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  sectionDividerText: {
+    fontSize: 13,
+    fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 });

@@ -8,9 +8,12 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
+  TextInput,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
@@ -49,6 +52,7 @@ const ROLES: { value: UserRole; label: string }[] = [
 export default function UserManagementScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -57,6 +61,14 @@ export default function UserManagementScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editRole, setEditRole] = useState<UserRole>("worker");
   const [editIsActive, setEditIsActive] = useState(true);
+  
+  // Create user state
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [newUserFullName, setNewUserFullName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState<UserRole>("worker");
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const { data: users = [], isLoading, refetch, isRefetching } = useQuery<APIUser[]>({
     queryKey: ["/api/users"],
@@ -113,6 +125,74 @@ export default function UserManagementScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
   });
+
+  const createUserMutation = useMutation({
+    mutationFn: async (data: { email: string; password: string; fullName: string; role: UserRole }) => {
+      const baseUrl = getApiUrl();
+      const url = new URL("/api/users", baseUrl);
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": user?.role || "admin",
+        },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to create user");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setCreateModalVisible(false);
+      resetCreateForm();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: Error) => {
+      setCreateError(error.message);
+    },
+  });
+
+  const resetCreateForm = () => {
+    setNewUserFullName("");
+    setNewUserEmail("");
+    setNewUserPassword("");
+    setNewUserRole("worker");
+    setCreateError(null);
+  };
+
+  const handleOpenCreateModal = () => {
+    resetCreateForm();
+    setCreateModalVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleCreateUser = () => {
+    setCreateError(null);
+    
+    if (!newUserFullName.trim()) {
+      setCreateError("Full name is required");
+      return;
+    }
+    if (!newUserEmail.trim()) {
+      setCreateError("Email is required");
+      return;
+    }
+    if (!newUserPassword.trim() || newUserPassword.length < 6) {
+      setCreateError("Password must be at least 6 characters");
+      return;
+    }
+
+    createUserMutation.mutate({
+      email: newUserEmail.trim(),
+      password: newUserPassword,
+      fullName: newUserFullName.trim(),
+      role: newUserRole,
+    });
+  };
 
   const handleEditUser = (userToEdit: APIUser) => {
     setSelectedUser(userToEdit);
@@ -400,6 +480,166 @@ export default function UserManagementScreen() {
           </ScrollView>
         </ThemedView>
       </Modal>
+
+      {/* Create User Modal */}
+      <Modal
+        visible={createModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCreateModalVisible(false)}
+      >
+        <ThemedView style={[styles.modalContainer, { paddingTop: Spacing["2xl"] }]}>
+          <View style={styles.modalHeader}>
+            <ThemedText type="h2">Create User</ThemedText>
+            <Pressable onPress={() => setCreateModalVisible(false)}>
+              <Feather name="x" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            {createError ? (
+              <View style={[styles.errorBanner, { backgroundColor: theme.error + "15" }]}>
+                <Feather name="alert-circle" size={16} color={theme.error} />
+                <ThemedText style={[styles.errorText, { color: theme.error }]}>
+                  {createError}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            <View style={styles.formSection}>
+              <ThemedText style={[styles.formLabel, { color: theme.textSecondary }]}>
+                Full Name
+              </ThemedText>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
+                value={newUserFullName}
+                onChangeText={setNewUserFullName}
+                placeholder="Enter full name"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <ThemedText style={[styles.formLabel, { color: theme.textSecondary }]}>
+                Email
+              </ThemedText>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
+                value={newUserEmail}
+                onChangeText={setNewUserEmail}
+                placeholder="Enter email address"
+                placeholderTextColor={theme.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <ThemedText style={[styles.formLabel, { color: theme.textSecondary }]}>
+                Password
+              </ThemedText>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
+                value={newUserPassword}
+                onChangeText={setNewUserPassword}
+                placeholder="Enter password (min 6 characters)"
+                placeholderTextColor={theme.textMuted}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.formSection}>
+              <ThemedText style={[styles.formLabel, { color: theme.textSecondary }]}>
+                Role
+              </ThemedText>
+              <View style={styles.roleOptions}>
+                {ROLES.map(({ value, label }) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => {
+                      setNewUserRole(value);
+                      Haptics.selectionAsync();
+                    }}
+                    style={[
+                      styles.roleOption,
+                      {
+                        backgroundColor: newUserRole === value ? theme.primary + "15" : theme.surface,
+                        borderColor: newUserRole === value ? theme.primary : theme.border,
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name={getRoleIcon(value)}
+                      size={20}
+                      color={newUserRole === value ? theme.primary : theme.textSecondary}
+                    />
+                    <ThemedText
+                      style={{
+                        color: newUserRole === value ? theme.primary : theme.text,
+                        fontWeight: newUserRole === value ? "600" : "400",
+                      }}
+                    >
+                      {label}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.modalActions}>
+              <Button
+                onPress={handleCreateUser}
+                disabled={createUserMutation.isPending}
+                style={styles.saveButton}
+              >
+                {createUserMutation.isPending ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  "Create User"
+                )}
+              </Button>
+            </View>
+          </ScrollView>
+        </ThemedView>
+      </Modal>
+
+      {/* FAB Button */}
+      <Pressable
+        onPress={handleOpenCreateModal}
+        style={[
+          styles.fab,
+          {
+            backgroundColor: theme.primary,
+            bottom: tabBarHeight + Spacing.lg,
+          },
+        ]}
+      >
+        <Feather name="plus" size={24} color="#fff" />
+      </Pressable>
     </ThemedView>
   );
 }
@@ -577,5 +817,37 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginBottom: Spacing.xl,
+  },
+  textInput: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    fontSize: 16,
+  },
+  fab: {
+    position: "absolute",
+    right: Spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.lg,
+  },
+  errorText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

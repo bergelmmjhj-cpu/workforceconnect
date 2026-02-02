@@ -438,12 +438,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user
+      // Create user - new users require admin approval (isActive: false)
       const [newUser] = await db.insert(users).values({
         email: email.toLowerCase(),
         password: hashedPassword,
         fullName,
         role,
+        isActive: false,
         onboardingStatus: role === "worker" ? "NOT_APPLIED" : null,
       }).returning();
 
@@ -480,9 +481,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Check if user is active
+      // Check if user is active (requires admin approval)
       if (!user.isActive) {
-        res.status(401).json({ error: "Account is deactivated" });
+        res.status(401).json({ error: "Your account is pending approval. An admin will review and activate your account shortly." });
         return;
       }
 

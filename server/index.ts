@@ -285,6 +285,32 @@ async function seedTimesheets() {
   }
 }
 
+async function seedProductionAdmin() {
+  try {
+    // Check if production admin exists
+    const existingAdmin = await db.select().from(users).where(eq(users.email, "admin@wfconnect.org")).limit(1);
+    
+    if (existingAdmin.length === 0) {
+      // Create production admin user with password: @1900Dundas
+      const hashedPassword = await bcrypt.hash("@1900Dundas", 10);
+      await db.insert(users).values({
+        id: crypto.randomUUID(),
+        email: "admin@wfconnect.org",
+        password: hashedPassword,
+        fullName: "Admin User",
+        role: "admin",
+        timezone: "America/Toronto",
+        isActive: true,
+      });
+      log("Created production admin user: admin@wfconnect.org");
+    } else {
+      log("Production admin user already exists");
+    }
+  } catch (error) {
+    log("Error seeding production admin:", error);
+  }
+}
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
@@ -622,6 +648,8 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
     await seedTimesheets();
   } else {
     log("PRODUCTION MODE - skipping demo data seeding");
+    // Ensure production admin user exists
+    await seedProductionAdmin();
   }
 
   setupCors(app);

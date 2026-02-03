@@ -777,20 +777,24 @@
             <label class="form-label">Preferred Shift Times <span class="required">*</span> (Select all that apply)</label>
             <div class="multi-select">
               <label class="multi-select-item">
+                <input type="checkbox" name="preferredShifts" value="allday">
+                <span>All Day</span>
+              </label>
+              <label class="multi-select-item">
                 <input type="checkbox" name="preferredShifts" value="morning">
-                <span>Morning (6am - 12pm)</span>
+                <span>Morning</span>
               </label>
               <label class="multi-select-item">
                 <input type="checkbox" name="preferredShifts" value="afternoon">
-                <span>Afternoon (12pm - 6pm)</span>
+                <span>Afternoon</span>
               </label>
               <label class="multi-select-item">
                 <input type="checkbox" name="preferredShifts" value="evening">
-                <span>Evening (6pm - 12am)</span>
+                <span>Evening</span>
               </label>
               <label class="multi-select-item">
                 <input type="checkbox" name="preferredShifts" value="overnight">
-                <span>Overnight (12am - 6am)</span>
+                <span>Overnight</span>
               </label>
             </div>
             <span class="error-message">Please select at least one shift time</span>

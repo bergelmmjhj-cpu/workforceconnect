@@ -545,12 +545,64 @@ async function main() {
   console.log("Updating manifests and creating landing page...");
   updateManifests(manifests, timestamp, baseUrl, assetsByHash);
 
-  console.log("Build complete! Deploy to:", baseUrl);
-
+  // Stop Metro before web export
   if (metroProcess) {
+    console.log("Stopping Metro server...");
     metroProcess.kill();
+    metroProcess = null;
   }
+
+  // Build Expo web app for app.wfconnect.org subdomain
+  console.log("Building Expo web app...");
+  await buildWebApp(domain);
+
+  console.log("Build complete! Deploy to:", baseUrl);
+  console.log("- Landing page: https://wfconnect.org");
+  console.log("- Web app: https://app.wfconnect.org");
+
   process.exit(0);
+}
+
+// Build Expo web app to web-dist/ directory
+async function buildWebApp(domain) {
+  return new Promise((resolve, reject) => {
+    // Clean existing web-dist
+    if (fs.existsSync("web-dist")) {
+      fs.rmSync("web-dist", { recursive: true });
+    }
+
+    console.log("Running expo export --platform web...");
+    
+    const exportProcess = spawn("npx", [
+      "expo", "export",
+      "--platform", "web",
+      "--output-dir", "web-dist"
+    ], {
+      env: {
+        ...process.env,
+        EXPO_PUBLIC_DOMAIN: domain,
+      },
+      stdio: "inherit"
+    });
+
+    exportProcess.on("close", (code) => {
+      if (code === 0) {
+        // Verify web-dist/index.html exists
+        if (fs.existsSync("web-dist/index.html")) {
+          console.log("Web build successful - web-dist/index.html created");
+          resolve();
+        } else {
+          reject(new Error("Web build completed but index.html not found"));
+        }
+      } else {
+        reject(new Error(`Web export failed with code ${code}`));
+      }
+    });
+
+    exportProcess.on("error", (err) => {
+      reject(new Error(`Failed to start web export: ${err.message}`));
+    });
+  });
 }
 
 main().catch((error) => {

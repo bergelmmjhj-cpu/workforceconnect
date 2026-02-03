@@ -581,14 +581,33 @@ function configureExpoAndLanding(app: express.Application) {
 
   log("Serving static Expo files with dynamic manifest routing");
 
+  // Load webapp template for app.wfconnect.org
+  const webappPath = path.resolve(process.cwd(), "server", "templates", "webapp.html");
+  let webappTemplate = "";
+  if (fs.existsSync(webappPath)) {
+    webappTemplate = fs.readFileSync(webappPath, "utf-8");
+  }
+
   app.get("/", (req: Request, res: Response) => {
     const platform = req.header("expo-platform");
     if (platform && (platform === "ios" || platform === "android")) {
       return serveExpoManifest(platform, res);
     }
 
-    // Check if request is from guide subdomain
+    // Check if request is from app subdomain - serve webapp
     const host = req.hostname || req.headers.host || "";
+    if (host.startsWith("app.") || host.includes("app.wfconnect")) {
+      if (webappTemplate) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache");
+        return res.status(200).send(webappTemplate);
+      }
+      // Fallback: redirect to the Expo web app on port 8081 in development
+      const domain = process.env.REPLIT_DEV_DOMAIN || host;
+      return res.redirect(`https://${domain.replace(':5000', '')}:8081`);
+    }
+
+    // Check if request is from guide subdomain
     if (host.startsWith("guide.") || host.includes("guide.wfconnect")) {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "public, max-age=3600");

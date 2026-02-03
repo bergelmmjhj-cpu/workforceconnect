@@ -2,7 +2,7 @@
   "expo": {
     "name": "Workforce Connect",
     "slug": "workforce-connect",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "workforceconnect",
@@ -14,7 +14,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "5"
+      "buildNumber": "8"
     },
     "android": {
       "adaptiveIcon": {

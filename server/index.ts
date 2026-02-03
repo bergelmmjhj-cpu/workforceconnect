@@ -581,39 +581,83 @@ function configureExpoAndLanding(app: express.Application) {
 
   log("Serving static Expo files with dynamic manifest routing");
 
-  // Load webapp template for app.wfconnect.org
-  const webappPath = path.resolve(process.cwd(), "server", "templates", "webapp.html");
-  let webappTemplate = "";
-  if (fs.existsSync(webappPath)) {
-    webappTemplate = fs.readFileSync(webappPath, "utf-8");
+  // === DOMAIN-BASED ROUTING ===
+  // app.wfconnect.org -> Serve Expo Web app from web-dist/
+  // wfconnect.org -> Serve marketing landing page
+  // guide.wfconnect.org -> Serve contractor guide
+  
+  const webDistPath = path.resolve(process.cwd(), "web-dist");
+  const webDistIndexPath = path.join(webDistPath, "index.html");
+  const webBuildExists = fs.existsSync(webDistIndexPath);
+  
+  if (webBuildExists) {
+    log("Web build found at web-dist/index.html - app subdomain routing enabled");
+  } else {
+    log("WARNING: web-dist/index.html not found - app subdomain will return 500 error");
   }
 
+  // Helper to check if request is from app subdomain
+  function isAppSubdomain(req: Request): boolean {
+    const host = (req.hostname || req.headers.host || "").toLowerCase();
+    return host.startsWith("app.") || host.includes("app.wfconnect");
+  }
+
+  // Helper to check if request is from guide subdomain
+  function isGuideSubdomain(req: Request): boolean {
+    const host = (req.hostname || req.headers.host || "").toLowerCase();
+    return host.startsWith("guide.") || host.includes("guide.wfconnect");
+  }
+
+  // Serve static files from web-dist for app subdomain BEFORE other routes
+  // This handles assets like /_expo/static/js/*, /assets/*, etc.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (isAppSubdomain(req) && webBuildExists) {
+      // Skip API routes - they should work on all domains
+      if (req.path.startsWith("/api")) {
+        return next();
+      }
+      
+      // Check if the requested file exists in web-dist
+      const filePath = path.join(webDistPath, req.path);
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        // Set cache headers for static assets
+        if (req.path.includes("/_expo/") || req.path.includes("/assets/")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+        return res.sendFile(filePath);
+      }
+    }
+    next();
+  });
+
+  // Handle root path and Expo manifest
   app.get("/", (req: Request, res: Response) => {
     const platform = req.header("expo-platform");
     if (platform && (platform === "ios" || platform === "android")) {
       return serveExpoManifest(platform, res);
     }
 
-    // Check if request is from app subdomain - serve webapp
-    const host = req.hostname || req.headers.host || "";
-    if (host.startsWith("app.") || host.includes("app.wfconnect")) {
-      if (webappTemplate) {
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "no-cache");
-        return res.status(200).send(webappTemplate);
+    // App subdomain - serve Expo web app
+    if (isAppSubdomain(req)) {
+      if (!webBuildExists) {
+        return res.status(500).json({
+          error: "Web build not available",
+          message: "The Expo web build (web-dist/index.html) was not found. Please ensure the web build step completed successfully."
+        });
       }
-      // Fallback: redirect to the Expo web app on port 8081 in development
-      const domain = process.env.REPLIT_DEV_DOMAIN || host;
-      return res.redirect(`https://${domain.replace(':5000', '')}:8081`);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.sendFile(webDistIndexPath);
     }
 
-    // Check if request is from guide subdomain
-    if (host.startsWith("guide.") || host.includes("guide.wfconnect")) {
+    // Guide subdomain
+    if (isGuideSubdomain(req)) {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "public, max-age=3600");
       return res.status(200).send(contractorGuideTemplate);
     }
 
+    // Default - serve landing page
     return serveLandingPage({
       req,
       res,
@@ -633,7 +677,26 @@ function configureExpoAndLanding(app: express.Application) {
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
   app.use(express.static(path.resolve(process.cwd(), "static-build"), { index: false }));
 
+  // SPA fallback for app subdomain - serve index.html for any unmatched GET routes
+  // This enables client-side routing (e.g., /login, /dashboard)
+  app.get("*", (req: Request, res: Response, next: NextFunction) => {
+    // Skip API routes
+    if (req.path.startsWith("/api")) {
+      return next();
+    }
+    
+    // Only apply SPA fallback for app subdomain
+    if (isAppSubdomain(req) && webBuildExists) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.sendFile(webDistIndexPath);
+    }
+    
+    next();
+  });
+
   log("Expo routing: Checking expo-platform header on / and /manifest");
+  log("Domain routing: app.wfconnect.org -> web-dist/, wfconnect.org -> landing page");
 }
 
 function setupErrorHandler(app: express.Application) {

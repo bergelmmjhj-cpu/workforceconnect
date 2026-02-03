@@ -679,7 +679,13 @@ function configureExpoAndLanding(app: express.Application) {
 
   // SPA fallback for app subdomain - serve index.html for any unmatched GET routes
   // This enables client-side routing (e.g., /login, /dashboard)
-  app.get("*", (req: Request, res: Response, next: NextFunction) => {
+  // Using a middleware function instead of app.get("*") for compatibility with newer path-to-regexp
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Only handle GET requests for SPA fallback
+    if (req.method !== "GET") {
+      return next();
+    }
+    
     // Skip API routes
     if (req.path.startsWith("/api")) {
       return next();
@@ -687,6 +693,11 @@ function configureExpoAndLanding(app: express.Application) {
     
     // Only apply SPA fallback for app subdomain
     if (isAppSubdomain(req) && webBuildExists) {
+      // Check if it's a file request (has extension) - let static middleware handle those
+      if (path.extname(req.path)) {
+        return next();
+      }
+      
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache");
       return res.sendFile(webDistIndexPath);

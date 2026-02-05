@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Deletion Request | Workforce Connect</title>
+    <meta name="description" content="Request deletion of your Workforce Connect account and associated personal data.">
+    <meta name="keywords" content="workforce connect, account deletion, delete account, data deletion">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="canonical" href="https://wfconnect.org/account-deletion">
+    <meta property="og:title" content="Account Deletion Request | Workforce Connect">
+    <meta property="og:description" content="Request deletion of your Workforce Connect account and associated personal data.">
+    <meta property="og:url" content="https://wfconnect.org/account-deletion">
+    <meta property="og:type" content="website">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: #1a1a2e;
+        }
+
+        .logo img {
+            height: 40px;
+            width: auto;
+        }
+
+        .logo-text {
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 25px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #667eea;
+        }
+
+        .page-hero {
+            padding: 80px 0 60px;
+            text-align: center;
+            color: white;
+        }
+
+        .page-hero h1 {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .page-hero p {
+            font-size: 1.2rem;
+            opacity: 0.95;
+        }
+
+        .content-section {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .content-section h2 {
+            font-size: 1.6rem;
+            color: #1a1a2e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .content-section h2:first-child {
+            margin-top: 0;
+        }
+
+        .content-section p {
+            color: #4a5568;
+            margin-bottom: 15px;
+            line-height: 1.8;
+        }
+
+        .content-section ul {
+            color: #4a5568;
+            margin: 15px 0;
+            padding-left: 25px;
+        }
+
+        .content-section li {
+            margin-bottom: 10px;
+            line-height: 1.7;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .contact-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-top: 40px;
+            text-align: center;
+        }
+
+        .contact-box h3 {
+            color: white;
+            margin-bottom: 15px;
+            font-size: 1.4rem;
+        }
+
+        .contact-box p {
+            color: rgba(255, 255, 255, 0.95);
+            margin-bottom: 10px;
+        }
+
+        .contact-box a {
+            color: white;
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+
+        .email-link {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 12px 30px;
+            border-radius: 30px;
+            margin-top: 10px;
+            transition: background 0.3s;
+        }
+
+        .email-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        footer {
+            background: rgba(26, 26, 46, 0.95);
+            color: white;
+            padding: 40px 0;
+            margin-top: 60px;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 25px;
+        }
+
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .page-hero h1 {
+                font-size: 2rem;
+            }
+
+            .content-section {
+                padding: 30px 20px;
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .nav-links {
+                gap: 15px;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">
+                    <img src="/logo.png" alt="Workforce Connect Logo">
+                    <span class="logo-text">Workforce Connect</span>
+                </a>
+                <nav>
+                    <ul class="nav-links">
+                        <li><a href="/">Home</a></li>
+                        <li><a href="/privacy">Privacy</a></li>
+                        <li><a href="/support">Support</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <section class="page-hero">
+        <div class="container">
+            <h1>Account Deletion Request</h1>
+            <p>Request deletion of your account and personal data</p>
+        </div>
+    </section>
+
+    <main class="container">
+        <div class="content-section">
+            <h2>How to Request Account Deletion</h2>
+            <p>Users of Workforce Connect may request deletion of their account and associated personal data.</p>
+
+            <div class="highlight-box">
+                <p><strong>To request account deletion, please email:</strong></p>
+            </div>
+
+            <div class="contact-box">
+                <h3>Contact Us</h3>
+                <p>Send your deletion request to:</p>
+                <a href="mailto:workforceconnect@yahoo.com" class="email-link">workforceconnect@yahoo.com</a>
+            </div>
+
+            <h2>Information to Include</h2>
+            <p>Please include the following information in your email:</p>
+            <ul>
+                <li>Full name</li>
+                <li>Email address associated with the account</li>
+                <li>Company name (if applicable)</li>
+            </ul>
+
+            <h2>What Happens Next</h2>
+            <p>Once verified, the account and associated personal data will be permanently deleted within a reasonable timeframe, except where retention is required by law.</p>
+
+            <div class="highlight-box">
+                <p><strong>Note:</strong> Some records related to work history or legal compliance may be retained as required by applicable laws and regulations.</p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <p>&copy; 2025 Workforce Connect. All rights reserved.</p>
+                <div class="footer-links">
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/support">Support</a>
+                    <a href="/">Home</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

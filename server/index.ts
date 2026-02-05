@@ -549,6 +549,16 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(privacyTemplate);
   });
 
+  // Serve Account Deletion Request page
+  const accountDeletionPath = path.resolve(process.cwd(), "server", "templates", "account-deletion.html");
+  const accountDeletionTemplate = fs.readFileSync(accountDeletionPath, "utf-8");
+
+  app.get("/account-deletion", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(accountDeletionTemplate);
+  });
+
   // Serve Worker Application Form
   const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
   const applyTemplate = fs.readFileSync(applyPath, "utf-8");

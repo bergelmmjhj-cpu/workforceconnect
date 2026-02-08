@@ -503,3 +503,64 @@ export const insertPayrollBatchItemSchema = createInsertSchema(payrollBatchItems
 
 export type PayrollBatchItem = typeof payrollBatchItems.$inferSelect;
 export type InsertPayrollBatchItem = z.infer<typeof insertPayrollBatchItemSchema>;
+
+// ============================================
+// Payment Profiles Schema (Worker payment details)
+// ============================================
+
+export const paymentProfiles = pgTable("payment_profiles", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  workerUserId: varchar("worker_user_id")
+    .notNull()
+    .references(() => users.id)
+    .unique(),
+  etransferEmail: text("etransfer_email"),
+  bankInstitution: text("bank_institution"),
+  bankTransit: text("bank_transit"),
+  bankAccount: text("bank_account"),
+  voidChequeFileId: text("void_cheque_file_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertPaymentProfileSchema = createInsertSchema(paymentProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type PaymentProfile = typeof paymentProfiles.$inferSelect;
+export type InsertPaymentProfile = z.infer<typeof insertPaymentProfileSchema>;
+
+// ============================================
+// Export Audit Logs Schema (Compliance tracking)
+// ============================================
+
+export const exportAuditLogs = pgTable("export_audit_logs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id")
+    .notNull()
+    .references(() => users.id),
+  exportType: text("export_type").notNull(), // timesheet, paymentSummary, allHotels
+  fileFormat: text("file_format").notNull(), // csv, xlsx, zip
+  periodYear: integer("period_year").notNull(),
+  periodNumber: integer("period_number").notNull(),
+  workplaceId: varchar("workplace_id")
+    .references(() => workplaces.id),
+  workplaceName: text("workplace_name"),
+  fileName: text("file_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertExportAuditLogSchema = createInsertSchema(exportAuditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ExportAuditLog = typeof exportAuditLogs.$inferSelect;
+export type InsertExportAuditLog = z.infer<typeof insertExportAuditLogSchema>;

@@ -530,6 +530,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (onboardingStatus !== undefined) updateData.onboardingStatus = onboardingStatus;
       if (workerRoles !== undefined) updateData.workerRoles = workerRoles;
 
+      // When activating a worker, auto-advance onboarding to AGREEMENT_PENDING
+      if (isActive === true && onboardingStatus === undefined) {
+        const [existingUser] = await db.select().from(users).where(eq(users.id, id));
+        if (existingUser && existingUser.role === "worker" && 
+            (existingUser.onboardingStatus === "APPLICATION_SUBMITTED" || existingUser.onboardingStatus === "NOT_APPLIED")) {
+          updateData.onboardingStatus = "AGREEMENT_PENDING";
+        }
+      }
+
       const [updatedUser] = await db.update(users)
         .set(updateData)
         .where(eq(users.id, id))

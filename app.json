@@ -8,27 +8,32 @@
     "scheme": "workforceconnect",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.workforceconnect.app",
+      "buildNumber": "8",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "buildNumber": "8"
+      }
     },
+
     "android": {
+      "package": "com.workforceconnect.app",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#1E40AF",
         "foregroundImage": "./assets/images/icon.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.workforceconnect.app"
+      "predictiveBackGestureEnabled": false
     },
+
     "web": {
       "output": "single",
       "favicon": "./assets/images/icon.png"
     },
+
     "plugins": [
       [
         "expo-splash-screen",
@@ -44,14 +49,17 @@
       ],
       "expo-web-browser"
     ],
+
     "experiments": {
       "reactCompiler": true
     },
+
     "extra": {
       "eas": {
         "projectId": "c22a2ab9-db91-441e-8069-bfb4a4890f48"
       }
     },
+
     "owner": "bergel"
   }
 }

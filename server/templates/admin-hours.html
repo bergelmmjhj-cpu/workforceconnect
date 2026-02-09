@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hours Automation - Workforce Connect Admin</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+        :root {
+            --primary: #1E40AF;
+            --primary-light: #3B82F6;
+            --primary-bg: #EFF6FF;
+            --success: #22c55e;
+            --success-bg: #f0fdf4;
+            --warning: #f59e0b;
+            --warning-bg: #fffbeb;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-900: #111827;
+            --radius: 8px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            line-height: 1.5;
+        }
+
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 { font-size: 20px; font-weight: 600; }
+
+        .header-nav {
+            display: flex;
+            gap: 12px;
+        }
+
+        .header-nav a {
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 6px 12px;
+            border-radius: var(--radius);
+            transition: all 0.2s;
+        }
+
+        .header-nav a:hover, .header-nav a.active {
+            color: white;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 24px;
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--gray-500);
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover { color: var(--gray-700); }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .controls-card {
+            background: white;
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 24px;
+            border: 1px solid var(--gray-200);
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 200px;
+        }
+
+        .control-group label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        select, input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 14px;
+            background: white;
+            color: var(--gray-900);
+            min-width: 200px;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover { background: #1e3a8a; }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover { background: #16a34a; }
+
+        .btn-outline {
+            background: white;
+            color: var(--gray-700);
+            border: 1px solid var(--gray-300);
+        }
+
+        .btn-outline:hover { background: var(--gray-50); border-color: var(--gray-400); }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .summary-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 16px;
+            text-align: center;
+        }
+
+        .summary-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .summary-card .label {
+            font-size: 13px;
+            color: var(--gray-500);
+            margin-top: 4px;
+        }
+
+        .hotel-section {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .hotel-header {
+            background: var(--primary-bg);
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--gray-200);
+            cursor: pointer;
+        }
+
+        .hotel-header:hover { background: #dbeafe; }
+
+        .hotel-name {
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--primary);
+        }
+
+        .hotel-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 13px;
+            color: var(--gray-600);
+        }
+
+        .hotel-stats strong { color: var(--gray-900); }
+
+        .hotel-body { padding: 0; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        thead { background: var(--gray-50); }
+
+        th {
+            text-align: left;
+            padding: 10px 16px;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--gray-500);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        td {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--gray-100);
+            color: var(--gray-700);
+        }
+
+        tr:last-child td { border-bottom: none; }
+
+        tr:hover td { background: var(--gray-50); }
+
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+
+        .hours-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .masked {
+            color: var(--gray-400);
+            font-style: italic;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray-400);
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            stroke: var(--gray-300);
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: var(--gray-500);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--gray-400);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--gray-200);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-warning { background: var(--warning-bg); color: #92400e; }
+        .badge-success { background: var(--success-bg); color: #166534; }
+
+        .details-toggle {
+            font-size: 12px;
+            color: var(--primary-light);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .log-details {
+            display: none;
+            padding: 8px 16px 16px;
+        }
+
+        .log-details.visible { display: block; }
+
+        .log-details table {
+            font-size: 12px;
+            background: var(--gray-50);
+            border-radius: var(--radius);
+        }
+
+        .log-details th { font-size: 11px; padding: 6px 10px; }
+        .log-details td { padding: 6px 10px; font-size: 12px; }
+
+        .window-info {
+            background: var(--primary-bg);
+            border: 1px solid #bfdbfe;
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .window-info .dates {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        @media (max-width: 768px) {
+            .controls-row { flex-direction: column; }
+            .control-group { min-width: 100%; }
+            .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+            .hotel-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+            table { font-size: 12px; }
+            th, td { padding: 8px 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Hours Automation</h1>
+    <div class="header-nav">
+        <a href="/admin/applications">Applications</a>
+        <a href="/admin/timesheets">Timesheets</a>
+        <a href="/admin/hours" class="active">Hours</a>
+    </div>
+</div>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="weekly" onclick="switchTab('weekly')">Weekly Client Invoicing</button>
+        <button class="tab-btn" data-tab="cutoff" onclick="switchTab('cutoff')">Bi-weekly Payroll Cutoffs</button>
+    </div>
+
+    <!-- TAB 1: Weekly Client Invoicing -->
+    <div id="tab-weekly" class="tab-content active">
+        <div class="controls-card">
+            <div class="controls-row">
+                <div class="control-group">
+                    <label>Year</label>
+                    <select id="weekly-year" onchange="loadWeeks()">
+                        <option value="2026" selected>2026</option>
+                        <option value="2025">2025</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Week (Mon - Sun)</label>
+                    <select id="weekly-week">
+                        <option value="">Loading weeks...</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Hotel</label>
+                    <select id="weekly-hotel">
+                        <option value="all">All Hotels</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" onclick="loadWeeklyData()">Preview Hours</button>
+                </div>
+            </div>
+            <div class="btn-group" id="weekly-exports" style="display:none;">
+                <button class="btn btn-success" onclick="exportFile('weekly','invoiceSummary','csv')">Invoice Summary (CSV)</button>
+                <button class="btn btn-success" onclick="exportFile('weekly','invoiceSummary','xlsx')">Invoice Summary (XLSX)</button>
+                <button class="btn btn-outline" onclick="exportFile('weekly','invoiceDetailed','csv')">Detailed Backup (CSV)</button>
+                <button class="btn btn-outline" onclick="exportFile('weekly','invoiceDetailed','xlsx')">Detailed Backup (XLSX)</button>
+                <button class="btn btn-outline" onclick="exportAllHotels('weekly','invoiceSummary','csv')">All Hotels ZIP (CSV)</button>
+                <button class="btn btn-outline" onclick="exportAllHotels('weekly','invoiceSummary','xlsx')">All Hotels ZIP (XLSX)</button>
+            </div>
+        </div>
+        <div id="weekly-results"></div>
+    </div>
+
+    <!-- TAB 2: Bi-weekly Payroll Cutoffs -->
+    <div id="tab-cutoff" class="tab-content">
+        <div class="controls-card">
+            <div class="controls-row">
+                <div class="control-group">
+                    <label>Year</label>
+                    <select id="cutoff-year" onchange="loadCutoffs()">
+                        <option value="2026" selected>2026</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Cutoff Period</label>
+                    <select id="cutoff-period">
+                        <option value="">Loading periods...</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Hotel</label>
+                    <select id="cutoff-hotel">
+                        <option value="all">All Hotels</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" onclick="loadCutoffData()">Preview Hours</button>
+                </div>
+            </div>
+            <div class="btn-group" id="cutoff-exports" style="display:none;">
+                <button class="btn btn-success" onclick="exportFile('cutoff','payrollTimesheet','csv')">Payroll Timesheet (CSV)</button>
+                <button class="btn btn-success" onclick="exportFile('cutoff','payrollTimesheet','xlsx')">Payroll Timesheet (XLSX)</button>
+                <button class="btn btn-outline" onclick="exportFile('cutoff','payrollPaymentSummary','csv')">Payment Summary (CSV)</button>
+                <button class="btn btn-outline" onclick="exportFile('cutoff','payrollPaymentSummary','xlsx')">Payment Summary (XLSX)</button>
+                <button class="btn btn-outline" onclick="exportAllHotels('cutoff','payrollTimesheet','csv')">All Hotels ZIP (CSV)</button>
+                <button class="btn btn-outline" onclick="exportAllHotels('cutoff','payrollTimesheet','xlsx')">All Hotels ZIP (XLSX)</button>
+            </div>
+        </div>
+        <div id="cutoff-results"></div>
+    </div>
+</div>
+
+<script>
+const ADMIN_HEADERS = { 'x-user-role': 'admin', 'Content-Type': 'application/json' };
+
+let currentWeeklyData = null;
+let currentCutoffData = null;
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+async function apiFetch(url) {
+    const res = await fetch(url, { headers: ADMIN_HEADERS });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(err.error || 'Request failed');
+    }
+    return res.json();
+}
+
+async function loadHotels() {
+    try {
+        const data = await apiFetch('/api/admin/hours/hotels');
+        const options = '<option value="all">All Hotels</option>' +
+            data.hotels.map(h => `<option value="${h.id}">${h.name}${h.isActive ? '' : ' (Inactive)'}</option>`).join('');
+        document.getElementById('weekly-hotel').innerHTML = options;
+        document.getElementById('cutoff-hotel').innerHTML = options;
+    } catch (e) {
+        console.error('Failed to load hotels:', e);
+    }
+}
+
+async function loadWeeks() {
+    const year = document.getElementById('weekly-year').value;
+    try {
+        const data = await apiFetch(`/api/admin/hours/weeks?year=${year}`);
+        const today = new Date().toISOString().split('T')[0];
+        let defaultWeek = '';
+
+        const options = data.weeks.map(w => {
+            if (w.endDate < today) defaultWeek = w.startDate;
+            return `<option value="${w.startDate}">${w.label}</option>`;
+        }).join('');
+
+        document.getElementById('weekly-week').innerHTML = options;
+        if (defaultWeek) document.getElementById('weekly-week').value = defaultWeek;
+    } catch (e) {
+        console.error('Failed to load weeks:', e);
+    }
+}
+
+async function loadCutoffs() {
+    const year = document.getElementById('cutoff-year').value;
+    try {
+        const data = await apiFetch(`/api/admin/hours/cutoffs?year=${year}`);
+        const today = new Date().toISOString().split('T')[0];
+        let defaultPeriod = 1;
+
+        for (const p of data.periods) {
+            if (p.endDate < today) defaultPeriod = p.period;
+        }
+
+        const options = data.periods.map(p =>
+            `<option value="${p.period}">${p.label}</option>`
+        ).join('');
+
+        document.getElementById('cutoff-period').innerHTML = options;
+        document.getElementById('cutoff-period').value = defaultPeriod;
+    } catch (e) {
+        console.error('Failed to load cutoffs:', e);
+    }
+}
+
+async function loadWeeklyData() {
+    const weekStart = document.getElementById('weekly-week').value;
+    const hotelId = document.getElementById('weekly-hotel').value;
+    const container = document.getElementById('weekly-results');
+
+    if (!weekStart) { container.innerHTML = '<div class="empty-state"><h3>Please select a week</h3></div>'; return; }
+
+    container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading hours data...</p></div>';
+
+    try {
+        const data = await apiFetch(`/api/admin/hours/aggregate?mode=weekly&weekStart=${weekStart}&hotelId=${hotelId}`);
+        currentWeeklyData = data;
+        document.getElementById('weekly-exports').style.display = data.hotels.length > 0 ? 'flex' : 'none';
+        renderResults(container, data, false);
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${e.message}</p></div>`;
+    }
+}
+
+async function loadCutoffData() {
+    const year = document.getElementById('cutoff-year').value;
+    const period = document.getElementById('cutoff-period').value;
+    const hotelId = document.getElementById('cutoff-hotel').value;
+    const container = document.getElementById('cutoff-results');
+
+    if (!period) { container.innerHTML = '<div class="empty-state"><h3>Please select a cutoff period</h3></div>'; return; }
+
+    container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading hours data...</p></div>';
+
+    try {
+        const data = await apiFetch(`/api/admin/hours/aggregate?mode=cutoff&year=${year}&period=${period}&hotelId=${hotelId}`);
+        currentCutoffData = data;
+        document.getElementById('cutoff-exports').style.display = data.hotels.length > 0 ? 'flex' : 'none';
+        renderResults(container, data, true);
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><h3>Error</h3><p>${e.message}</p></div>`;
+    }
+}
+
+function renderResults(container, data, showPayment) {
+    if (!data.hotels || data.hotels.length === 0) {
+        container.innerHTML = `
+            <div class="window-info">
+                <span>Period: <span class="dates">${data.windowLabel}</span></span>
+                <span>${data.startDate} to ${data.endDate}</span>
+            </div>
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                </svg>
+                <h3>No approved work logs found</h3>
+                <p>No approved TITO logs found for this period and hotel selection.</p>
+            </div>`;
+        return;
+    }
+
+    const totalWorkers = data.hotels.reduce((s, h) => s + h.workers.length, 0);
+
+    let html = `
+        <div class="window-info">
+            <span>Period: <span class="dates">${data.windowLabel}</span></span>
+            <span>${data.startDate} to ${data.endDate}</span>
+        </div>
+        <div class="summary-cards">
+            <div class="summary-card"><div class="value">${data.hotels.length}</div><div class="label">Hotels</div></div>
+            <div class="summary-card"><div class="value">${totalWorkers}</div><div class="label">Workers</div></div>
+            <div class="summary-card"><div class="value">${data.grandTotalHours}</div><div class="label">Total Hours</div></div>
+            <div class="summary-card"><div class="value">${data.grandTotalLogs}</div><div class="label">Total Logs</div></div>
+        </div>`;
+
+    for (const hotel of data.hotels) {
+        html += `
+        <div class="hotel-section">
+            <div class="hotel-header" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">
+                <span class="hotel-name">${escapeHtml(hotel.workplaceName)}</span>
+                <div class="hotel-stats">
+                    <span>Workers: <strong>${hotel.workers.length}</strong></span>
+                    <span>Hours: <strong>${hotel.totalHours}</strong></span>
+                    <span>Logs: <strong>${hotel.totalLogs}</strong></span>
+                </div>
+            </div>
+            <div class="hotel-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Worker</th>
+                            <th class="text-right">Hours</th>
+                            <th class="text-right">Logs</th>
+                            <th>Dates Worked</th>
+                            ${showPayment ? '<th>eTransfer Email</th><th>Bank Ref</th>' : ''}
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+        for (const worker of hotel.workers) {
+            const workerId = worker.workerId.substring(0, 8);
+            html += `
+                        <tr>
+                            <td><strong>${escapeHtml(worker.workerName)}</strong><br><span style="font-size:11px;color:var(--gray-400)">${workerId}</span></td>
+                            <td class="text-right hours-value">${worker.totalHoursRounded}</td>
+                            <td class="text-right">${worker.logsCount}${worker.incompleteLogs > 0 ? ` <span class="badge badge-warning">${worker.incompleteLogs} incomplete</span>` : ''}</td>
+                            <td style="font-size:12px;">${worker.datesWorked.join(', ')}</td>
+                            ${showPayment ? `<td>${worker.etransferEmail ? escapeHtml(worker.etransferEmail) : '<span class="masked">Not set</span>'}</td><td>${worker.bankRef ? '<span class="masked">' + escapeHtml(worker.bankRef) + '</span>' : '<span class="masked">Not set</span>'}</td>` : ''}
+                            <td><span class="details-toggle" onclick="toggleLogs(this)">Details</span></td>
+                        </tr>
+                        <tr>
+                            <td colspan="${showPayment ? 7 : 5}" style="padding:0;">
+                                <div class="log-details" id="logs-${worker.workerId}-${hotel.workplaceId}">
+                                    <table>
+                                        <thead><tr><th>Date</th><th>Time In</th><th>Time Out</th><th class="text-right">Raw Hours</th><th class="text-right">Deduction</th><th class="text-right">Net Hours</th><th>Status</th></tr></thead>
+                                        <tbody>
+                                            ${worker.logs.map(l => `
+                                            <tr>
+                                                <td>${l.date}</td>
+                                                <td>${l.timeIn ? new Date(l.timeIn).toLocaleTimeString('en-CA', {hour:'2-digit',minute:'2-digit',timeZone:'America/Toronto'}) : '-'}</td>
+                                                <td>${l.timeOut ? new Date(l.timeOut).toLocaleTimeString('en-CA', {hour:'2-digit',minute:'2-digit',timeZone:'America/Toronto'}) : '-'}</td>
+                                                <td class="text-right">${l.rawHours}</td>
+                                                <td class="text-right">${l.deductionHours > 0 ? '-' + l.deductionHours : '-'}</td>
+                                                <td class="text-right hours-value">${l.netHoursRounded}</td>
+                                                <td>${l.isIncomplete ? '<span class="badge badge-warning">Incomplete</span>' : '<span class="badge badge-success">OK</span>'}</td>
+                                            </tr>`).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>`;
+        }
+
+        html += `</tbody></table></div></div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function toggleLogs(el) {
+    const detailsDiv = el.closest('tr').nextElementSibling.querySelector('.log-details');
+    detailsDiv.classList.toggle('visible');
+    el.textContent = detailsDiv.classList.contains('visible') ? 'Hide' : 'Details';
+}
+
+function getExportParams(mode) {
+    if (mode === 'weekly') {
+        const weekStart = document.getElementById('weekly-week').value;
+        const hotelId = document.getElementById('weekly-hotel').value;
+        return `mode=weekly&weekStart=${weekStart}&hotelId=${hotelId}`;
+    } else {
+        const year = document.getElementById('cutoff-year').value;
+        const period = document.getElementById('cutoff-period').value;
+        const hotelId = document.getElementById('cutoff-hotel').value;
+        return `mode=cutoff&year=${year}&period=${period}&hotelId=${hotelId}`;
+    }
+}
+
+function exportFile(mode, type, format) {
+    const params = getExportParams(mode);
+    const url = `/api/admin/hours/export?${params}&type=${type}&format=${format}`;
+    window.open(url, '_blank');
+}
+
+function exportAllHotels(mode, type, format) {
+    let params;
+    if (mode === 'weekly') {
+        const weekStart = document.getElementById('weekly-week').value;
+        params = `mode=weekly&weekStart=${weekStart}`;
+    } else {
+        const year = document.getElementById('cutoff-year').value;
+        const period = document.getElementById('cutoff-period').value;
+        params = `mode=cutoff&year=${year}&period=${period}`;
+    }
+    const url = `/api/admin/hours/export/all?${params}&type=${type}&format=${format}`;
+    window.open(url, '_blank');
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadHotels();
+    loadWeeks();
+    loadCutoffs();
+});
+</script>
+
+</body>
+</html>

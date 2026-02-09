@@ -1,6 +1,7 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { registerPayrollHoursRoutes } from "./payroll-hours";
 import * as fs from "fs";
 import * as path from "path";
 import bcrypt from "bcryptjs";
@@ -589,6 +590,16 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(adminTimesheetsTemplate);
   });
 
+  // Serve Admin Hours Automation Dashboard
+  const adminHoursPath = path.resolve(process.cwd(), "server", "templates", "admin-hours.html");
+  const adminHoursTemplate = fs.readFileSync(adminHoursPath, "utf-8");
+
+  app.get("/admin/hours", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.status(200).send(adminHoursTemplate);
+  });
+
   log("Serving static Expo files with dynamic manifest routing");
 
   // === DOMAIN-BASED ROUTING ===
@@ -761,6 +772,7 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
 
   configureExpoAndLanding(app);
 
+  registerPayrollHoursRoutes(app);
   const server = await registerRoutes(app);
 
   setupErrorHandler(app);

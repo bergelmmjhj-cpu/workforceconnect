@@ -30,6 +30,7 @@ interface Conversation {
   hrName: string;
   workerName: string;
   lastMessageText: string | null;
+  lastMessagePreview: string | null;
   lastMessageAt: string | null;
   unreadCount: number;
   createdAt: string;
@@ -122,7 +123,7 @@ export default function MessagesScreen() {
                 hasUnread && { fontWeight: "600" },
               ]}
             >
-              {item.lastMessageText || "No messages yet"}
+              {item.lastMessagePreview || item.lastMessageText || "No messages yet"}
             </ThemedText>
             {hasUnread ? (
               <View style={[styles.badge, { backgroundColor: theme.primary }]}>

@@ -120,6 +120,25 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type MessageLog = typeof messageLogs.$inferSelect;
 export type InsertMessageLog = z.infer<typeof insertMessageLogSchema>;
 
+// Push Notification Tokens
+export const pushTokens = pgTable("push_tokens", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
+  token: text("token").notNull(),
+  platform: text("platform").notNull().default("unknown"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("push_tokens_token_idx").on(table.token),
+]);
+
+export type PushToken = typeof pushTokens.$inferSelect;
+
 // Contact Lead Schema (for business website contact form)
 
 export const contactLeads = pgTable("contact_leads", {

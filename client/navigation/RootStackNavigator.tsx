@@ -29,6 +29,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
 import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -63,6 +64,7 @@ export default function RootStackNavigator() {
   const { hasCompletedOnboarding, isLoading: onboardingLoading } = useOnboarding();
   const { requiresOnboarding, isLoading: workerOnboardingLoading } = useWorkerOnboarding();
   const { theme } = useTheme();
+  useNotifications();
 
   if (authLoading || onboardingLoading || (isAuthenticated && workerOnboardingLoading)) {
     return (

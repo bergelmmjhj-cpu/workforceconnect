@@ -17,11 +17,12 @@ import {
   timesheets,
   timesheetEntries,
   payrollBatches,
-  payrollBatchItems
+  payrollBatchItems,
+  pushTokens
 } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
-import { eq, and, or, desc, isNull, sql } from "drizzle-orm";
+import { eq, and, or, desc, isNull, sql, inArray } from "drizzle-orm";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -35,6 +36,45 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
     Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+async function sendPushNotifications(userIds: string[], title: string, body: string, data?: Record<string, string>) {
+  try {
+    const tokens = await db.select({ token: pushTokens.token })
+      .from(pushTokens)
+      .where(and(
+        inArray(pushTokens.userId, userIds),
+        eq(pushTokens.isActive, true)
+      ));
+
+    if (tokens.length === 0) return;
+
+    const messages = tokens.map(t => ({
+      to: t.token,
+      sound: "default" as const,
+      title,
+      body,
+      data: data || {},
+    }));
+
+    const chunks: typeof messages[] = [];
+    for (let i = 0; i < messages.length; i += 100) {
+      chunks.push(messages.slice(i, i + 100));
+    }
+
+    for (const chunk of chunks) {
+      await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(chunk),
+      }).catch(err => console.error("Push notification error:", err));
+    }
+  } catch (error) {
+    console.error("Failed to send push notifications:", error);
+  }
 }
 
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -373,6 +413,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .from(users)
           .where(eq(users.id, userId));
 
+        sendPushNotifications(
+          [recipientUserId],
+          sender?.fullName || "New Message",
+          body.trim().length > 100 ? body.trim().substring(0, 97) + "..." : body.trim(),
+          { conversationId, type: "message" }
+        );
+
         res.json({ ...newMessage, senderName: sender?.fullName || "Unknown" });
       } catch (error) {
         console.error("Error sending message:", error);
@@ -468,6 +515,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error registering user:", error);
       res.status(500).json({ error: "Failed to register user" });
+    }
+  });
+
+  app.post("/api/push-tokens", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { token, platform } = req.body;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      if (!token) {
+        res.status(400).json({ error: "Token is required" });
+        return;
+      }
+
+      const existing = await db.select().from(pushTokens).where(eq(pushTokens.token, token)).limit(1);
+      
+      if (existing.length > 0) {
+        await db.update(pushTokens)
+          .set({ userId, platform: platform || "unknown", isActive: true, updatedAt: new Date() })
+          .where(eq(pushTokens.token, token));
+      } else {
+        await db.insert(pushTokens).values({
+          userId,
+          token,
+          platform: platform || "unknown",
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error registering push token:", error);
+      res.status(500).json({ error: "Failed to register push token" });
+    }
+  });
+
+  app.delete("/api/push-tokens", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        res.status(400).json({ error: "Token is required" });
+        return;
+      }
+
+      await db.update(pushTokens)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(pushTokens.token, token));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deactivating push token:", error);
+      res.status(500).json({ error: "Failed to deactivate push token" });
     }
   });
 

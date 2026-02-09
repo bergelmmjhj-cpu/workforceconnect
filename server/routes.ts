@@ -18,7 +18,9 @@ import {
   timesheetEntries,
   payrollBatches,
   payrollBatchItems,
-  pushTokens
+  pushTokens,
+  paymentProfiles,
+  exportAuditLogs
 } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
@@ -720,15 +722,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/users/:id", checkRoles("admin"), async (req: Request, res: Response) => {
     try {
       const id = req.params.id as string;
+      const adminId = req.headers["x-user-id"] as string;
 
-      const [deletedUser] = await db.delete(users)
-        .where(eq(users.id, id))
-        .returning();
+      if (id === adminId) {
+        res.status(400).json({ error: "You cannot delete your own account" });
+        return;
+      }
 
-      if (!deletedUser) {
+      const [existingUser] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      if (!existingUser) {
         res.status(404).json({ error: "User not found" });
         return;
       }
+
+      // Delete all related records in correct foreign key order
+      await db.execute(sql`DELETE FROM message_logs WHERE message_id IN (SELECT id FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id})`);
+      await db.execute(sql`DELETE FROM message_logs WHERE actor_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM conversations WHERE worker_user_id = ${id} OR hr_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM push_tokens WHERE user_id = ${id}`);
+      await db.execute(sql`DELETE FROM payroll_batch_items WHERE worker_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM timesheet_entries WHERE timesheet_id IN (SELECT id FROM timesheets WHERE worker_user_id = ${id})`);
+      await db.execute(sql`UPDATE timesheets SET approved_by_user_id = NULL WHERE approved_by_user_id = ${id}`);
+      await db.execute(sql`UPDATE timesheets SET disputed_by_user_id = NULL WHERE disputed_by_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM timesheets WHERE worker_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM tito_logs WHERE worker_id = ${id}`);
+      await db.execute(sql`UPDATE workplace_assignments SET invited_by_user_id = NULL WHERE invited_by_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM workplace_assignments WHERE worker_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM payment_profiles WHERE worker_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM export_audit_logs WHERE admin_user_id = ${id}`);
+      await db.execute(sql`UPDATE payroll_batches SET created_by_user_id = ${adminId} WHERE created_by_user_id = ${id}`);
+      await db.execute(sql`UPDATE payroll_batches SET finalized_by_user_id = NULL WHERE finalized_by_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM users WHERE id = ${id}`);
 
       res.json({ message: "User deleted successfully" });
     } catch (error) {

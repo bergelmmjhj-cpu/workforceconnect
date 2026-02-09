@@ -6,7 +6,6 @@ import MainTabNavigator from "@/navigation/MainTabNavigator";
 import LoginScreen from "@/screens/LoginScreen";
 import SignUpScreen from "@/screens/SignUpScreen";
 import OnboardingScreen from "@/screens/OnboardingScreen";
-import ChatScreen from "@/screens/ChatScreen";
 import CreateRequestScreen from "@/screens/CreateRequestScreen";
 import RequestDetailScreen from "@/screens/RequestDetailScreen";
 import ShiftDetailScreen from "@/screens/ShiftDetailScreen";
@@ -36,7 +35,6 @@ export type RootStackParamList = {
   Login: undefined;
   SignUp: undefined;
   Main: undefined;
-  ChatScreen: { conversationId: string };
   CreateRequest: undefined;
   RequestDetail: { requestId: string };
   ShiftDetail: { shiftId: string };
@@ -137,13 +135,6 @@ export default function RootStackNavigator() {
             name="Main"
             component={MainTabNavigator}
             options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="ChatScreen"
-            component={ChatScreen}
-            options={{
-              headerTitle: "Chat",
-            }}
           />
           <Stack.Screen
             name="CreateRequest"

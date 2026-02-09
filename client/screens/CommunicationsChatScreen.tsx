@@ -41,8 +41,11 @@ type Message = {
 type Conversation = {
   id: string;
   workerUserId: string;
+  hrUserId: string | null;
   workerName: string | null;
   workerEmail: string | null;
+  hrName?: string | null;
+  hrEmail?: string | null;
 };
 
 export default function CommunicationsChatScreen() {
@@ -58,20 +61,37 @@ export default function CommunicationsChatScreen() {
   const [inputText, setInputText] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
-  const { data: conversations } = useQuery<Conversation[]>({
+  const { data: conversations } = useQuery<any[]>({
     queryKey: ["/api/communications/conversations"],
-    enabled: false,
+    queryFn: async () => {
+      const res = await fetch(
+        `${getApiUrl()}api/communications/conversations`,
+        {
+          headers: {
+            "x-user-role": user?.role || "worker",
+            "x-user-id": user?.id || "",
+          },
+          credentials: "include",
+        }
+      );
+      if (!res.ok) throw new Error("Failed to fetch conversations");
+      return res.json();
+    },
+    enabled: !!user,
+    staleTime: 30000,
   });
 
   const conversation = conversations?.find((c) => c.id === conversationId);
 
   useLayoutEffect(() => {
     if (conversation) {
-      navigation.setOptions({
-        headerTitle: conversation.workerName || "Chat",
-      });
+      const isWorker = user?.role === "worker";
+      const title = isWorker 
+        ? (conversation as any).hrName || "HR Representative"
+        : conversation.workerName || "Worker";
+      navigation.setOptions({ headerTitle: title });
     }
-  }, [conversation, navigation]);
+  }, [conversation, navigation, user]);
 
   const { data: messages, isLoading, refetch } = useQuery<Message[]>({
     queryKey: ["/api/communications/conversations", conversationId, "messages"],
@@ -223,7 +243,7 @@ export default function CommunicationsChatScreen() {
     >
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={messages ? [...messages].reverse() : []}
         keyExtractor={(item) => item.id}
         renderItem={renderMessage}
         contentContainerStyle={[
@@ -232,11 +252,6 @@ export default function CommunicationsChatScreen() {
         ]}
         inverted={messages && messages.length > 0}
         ListEmptyComponent={isLoading ? null : <EmptyMessages />}
-        onContentSizeChange={() => {
-          if (messages && messages.length > 0) {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }
-        }}
         testID="messages-list"
       />
 
@@ -363,7 +378,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.lg,
-    transform: [{ scaleY: -1 }],
   },
   emptyTitle: {
     fontSize: 18,

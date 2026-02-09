@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React from "react";
 import {
   View,
   StyleSheet,
@@ -8,7 +8,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
+import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 
@@ -42,53 +43,25 @@ export default function MessagesScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-
-  const loadData = useCallback(async () => {
-    try {
-      if (!user?.id) return;
-
-      const response = await fetch(
+  const { data: conversations = [], isLoading, refetch, isRefetching } = useQuery<Conversation[]>({
+    queryKey: ["/api/communications/conversations"],
+    queryFn: async () => {
+      const res = await fetch(
         new URL("/api/communications/conversations", getApiUrl()).toString(),
         {
           headers: {
             "Content-Type": "application/json",
-            "x-user-id": user.id,
-            "x-user-role": user.role || "worker",
+            "x-user-id": user?.id || "",
+            "x-user-role": user?.role || "worker",
           },
         }
       );
-
-      if (response.ok) {
-        const data = await response.json();
-        setConversations(data);
-      }
-    } catch (error) {
-      console.error("Failed to load conversations:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-      const interval = setInterval(loadData, 5000);
-      return () => clearInterval(interval);
-    }, [loadData])
-  );
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  }, [loadData]);
+      if (!res.ok) throw new Error("Failed to load conversations");
+      return res.json();
+    },
+    enabled: !!user?.id,
+    refetchInterval: 5000,
+  });
 
   const handleConversationPress = (conversation: Conversation) => {
     Haptics.selectionAsync();
@@ -206,13 +179,13 @@ export default function MessagesScreen() {
             paddingTop: paddingTop,
             paddingBottom: tabBarHeight + Spacing.xl,
           },
-          conversations.length === 0 && styles.emptyContent,
+          conversations.length === 0 ? styles.emptyContent : undefined,
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
+            refreshing={isRefetching}
+            onRefresh={() => refetch()}
             tintColor={theme.primary}
           />
         }

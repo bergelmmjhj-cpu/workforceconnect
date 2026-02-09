@@ -178,14 +178,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(conversationsTable.isArchived, false))
           .orderBy(desc(conversationsTable.lastMessageAt));
         } else if (role === "worker") {
-          // Workers see only their conversations
-          convos = await db.select()
-            .from(conversationsTable)
-            .where(and(
-              eq(conversationsTable.workerUserId, userId),
-              eq(conversationsTable.isArchived, false)
-            ))
-            .orderBy(desc(conversationsTable.lastMessageAt));
+          // Workers see only their conversations with HR name
+          const workerConvos = await db.select({
+            id: conversationsTable.id,
+            type: conversationsTable.type,
+            workerUserId: conversationsTable.workerUserId,
+            hrUserId: conversationsTable.hrUserId,
+            lastMessageAt: conversationsTable.lastMessageAt,
+            lastMessagePreview: conversationsTable.lastMessagePreview,
+            isArchived: conversationsTable.isArchived,
+            createdAt: conversationsTable.createdAt,
+            updatedAt: conversationsTable.updatedAt,
+            hrName: users.fullName,
+            hrEmail: users.email,
+          })
+          .from(conversationsTable)
+          .leftJoin(users, eq(conversationsTable.hrUserId, users.id))
+          .where(and(
+            eq(conversationsTable.workerUserId, userId),
+            eq(conversationsTable.isArchived, false)
+          ))
+          .orderBy(desc(conversationsTable.lastMessageAt));
+          convos = workerConvos;
         } else {
           res.status(403).json({ error: "Access denied" });
           return;
@@ -554,6 +568,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // Worker self-service onboarding status update
+  app.patch("/api/users/me/onboarding-status", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as string;
+      const { onboardingStatus } = req.body;
+
+      if (!userId || !role) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      if (role !== "worker") {
+        res.status(403).json({ error: "Only workers can update their onboarding status" });
+        return;
+      }
+
+      const validStatuses = ["NOT_APPLIED", "APPLICATION_SUBMITTED", "AGREEMENT_PENDING", "AGREEMENT_ACCEPTED"];
+      if (!onboardingStatus || !validStatuses.includes(onboardingStatus)) {
+        res.status(400).json({ error: "Invalid onboarding status" });
+        return;
+      }
+
+      const [updatedUser] = await db.update(users)
+        .set({ onboardingStatus, updatedAt: new Date() })
+        .where(eq(users.id, userId))
+        .returning();
+
+      if (!updatedUser) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      res.json({ 
+        id: updatedUser.id, 
+        onboardingStatus: updatedUser.onboardingStatus 
+      });
+    } catch (error) {
+      console.error("Error updating onboarding status:", error);
+      res.status(500).json({ error: "Failed to update onboarding status" });
     }
   });
 

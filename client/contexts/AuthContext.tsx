@@ -110,6 +110,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateOnboardingStatus = async (status: WorkerOnboardingStatus) => {
     if (user) {
+      try {
+        await apiRequest("PATCH", "/api/users/me/onboarding-status", { onboardingStatus: status });
+      } catch (error) {
+        console.error("Failed to sync onboarding status to server:", error);
+      }
       const updatedUser = { ...user, onboardingStatus: status };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);

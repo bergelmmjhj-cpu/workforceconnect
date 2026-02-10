@@ -987,6 +987,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete worker application
+  app.delete("/api/admin/applications/:id", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const [deletedApplication] = await db.delete(workerApplications)
+        .where(eq(workerApplications.id, req.params.id))
+        .returning();
+
+      if (!deletedApplication) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      res.json({ success: true, message: "Application deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      res.status(500).json({ error: "Failed to delete application" });
+    }
+  });
+
   // ========================================
   // Workplaces API (Admin only)
   // ========================================

@@ -24,6 +24,7 @@ import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { createWorkerApplication } from "@/storage";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { AddressAutocomplete, type AddressData } from "@/components/AddressAutocomplete";
 import type { WorkerApplicationAddress } from "@/types";
 import { WORKER_ROLES } from "@/types";
 import { getErrorMessage } from "@/utils/errorHandler";
@@ -63,6 +64,7 @@ export default function WorkerApplicationFormScreen() {
 
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["personal"]));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddressSelected, setIsAddressSelected] = useState(false);
 
   const [formData, setFormData] = useState<{
     legalFirstName: string;
@@ -433,18 +435,51 @@ export default function WorkerApplicationFormScreen() {
                 <ThemedText style={[styles.subsectionTitle, { color: theme.text }]}>
                   Current Address
                 </ThemedText>
-                {renderInput("Street", formData.street, (v) =>
-                  setFormData((p) => ({ ...p, street: v })), { required: true }
-                )}
-                {renderInput("City", formData.city, (v) =>
-                  setFormData((p) => ({ ...p, city: v })), { required: true }
-                )}
-                {renderInput("Province/State", formData.provinceState, (v) =>
-                  setFormData((p) => ({ ...p, provinceState: v })), { required: true }
-                )}
-                {renderInput("Postal/Zip Code", formData.postalZip, (v) =>
-                  setFormData((p) => ({ ...p, postalZip: v })), { required: true }
-                )}
+                <AddressAutocomplete
+                  label="Search your address"
+                  value={formData.street}
+                  placeholder="Start typing your address..."
+                  userRole={user?.role || "worker"}
+                  userId={user?.id || ""}
+                  isAddressSelected={isAddressSelected}
+                  onAddressSelect={(address: AddressData) => {
+                    setFormData((p) => ({
+                      ...p,
+                      street: address.addressLine1,
+                      city: address.city,
+                      provinceState: address.province,
+                      postalZip: address.postalCode,
+                      country: address.country || "Canada",
+                    }));
+                    setIsAddressSelected(true);
+                  }}
+                  onClear={() => {
+                    setFormData((p) => ({
+                      ...p,
+                      street: "",
+                      city: "",
+                      provinceState: "",
+                      postalZip: "",
+                    }));
+                    setIsAddressSelected(false);
+                  }}
+                />
+                {isAddressSelected ? (
+                  <View style={styles.addressPreview}>
+                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
+                      Street: <ThemedText style={{ color: theme.text }}>{formData.street}</ThemedText>
+                    </ThemedText>
+                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
+                      City: <ThemedText style={{ color: theme.text }}>{formData.city}</ThemedText>
+                    </ThemedText>
+                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
+                      Province/State: <ThemedText style={{ color: theme.text }}>{formData.provinceState}</ThemedText>
+                    </ThemedText>
+                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
+                      Postal/Zip: <ThemedText style={{ color: theme.text }}>{formData.postalZip}</ThemedText>
+                    </ThemedText>
+                  </View>
+                ) : null}
                 {renderInput("Primary Language", formData.primaryLanguage, (v) =>
                   setFormData((p) => ({ ...p, primaryLanguage: v })), { required: true }
                 )}
@@ -856,5 +891,14 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: Spacing.lg,
+  },
+  addressPreview: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  addressPreviewLabel: {
+    fontSize: 13,
+    lineHeight: 20,
   },
 });

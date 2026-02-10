@@ -249,6 +249,7 @@ export default function CommunicationsChatScreen() {
         contentContainerStyle={[
           styles.messagesList,
           { paddingTop: Spacing.md },
+          messages && messages.length > 0 ? undefined : { flexGrow: 1 },
         ]}
         inverted={messages && messages.length > 0}
         ListEmptyComponent={isLoading ? null : <EmptyMessages />}
@@ -313,7 +314,6 @@ const styles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.md,
-    flexGrow: 1,
   },
   messageContainer: {
     marginVertical: Spacing.xs,

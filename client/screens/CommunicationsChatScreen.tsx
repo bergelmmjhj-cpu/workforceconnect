@@ -239,7 +239,7 @@ export default function CommunicationsChatScreen() {
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       behavior="padding"
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={headerHeight}
     >
       <FlatList
         ref={flatListRef}
@@ -248,7 +248,7 @@ export default function CommunicationsChatScreen() {
         renderItem={renderMessage}
         contentContainerStyle={[
           styles.messagesList,
-          { paddingTop: headerHeight + Spacing.md },
+          { paddingTop: Spacing.md },
         ]}
         inverted={messages && messages.length > 0}
         ListEmptyComponent={isLoading ? null : <EmptyMessages />}

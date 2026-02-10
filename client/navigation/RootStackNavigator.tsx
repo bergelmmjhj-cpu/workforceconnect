@@ -172,6 +172,8 @@ export default function RootStackNavigator() {
             component={CommunicationsChatScreen}
             options={{
               headerTitle: "Conversation",
+              headerTransparent: false,
+              headerBlurEffect: undefined,
             }}
           />
           <Stack.Screen

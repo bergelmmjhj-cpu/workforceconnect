@@ -2001,7 +2001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Google Places API Proxy (Address Autocomplete)
   // ========================================
 
-  app.get("/api/places/autocomplete", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+  app.get("/api/places/autocomplete", checkRoles("admin", "hr", "worker"), async (req: Request, res: Response) => {
     try {
       const { input } = req.query;
       
@@ -2037,7 +2037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/places/details/:placeId", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+  app.get("/api/places/details/:placeId", checkRoles("admin", "hr", "worker"), async (req: Request, res: Response) => {
     try {
       const { placeId } = req.params;
       

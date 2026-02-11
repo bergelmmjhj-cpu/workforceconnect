@@ -110,10 +110,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateOnboardingStatus = async (status: WorkerOnboardingStatus) => {
     if (user) {
-      try {
-        await apiRequest("PATCH", "/api/users/me/onboarding-status", { onboardingStatus: status });
-      } catch (error) {
-        console.error("Failed to sync onboarding status to server:", error);
+      let serverUpdated = false;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await apiRequest("PATCH", "/api/users/me/onboarding-status", { onboardingStatus: status });
+          serverUpdated = true;
+          break;
+        } catch (error) {
+          lastError = error;
+          console.error(`Failed to sync onboarding status (attempt ${attempt + 1}/3):`, error);
+          if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        }
+      }
+      if (!serverUpdated) {
+        throw lastError || new Error("Failed to update onboarding status on server");
       }
       const updatedUser = { ...user, onboardingStatus: status };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));

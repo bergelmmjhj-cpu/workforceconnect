@@ -117,10 +117,16 @@ export default function UserManagementScreen() {
       const url = new URL(`/api/users/${id}`, baseUrl);
       const res = await fetch(url, {
         method: "DELETE",
-        headers: { "x-user-role": user?.role || "admin" },
+        headers: {
+          "x-user-id": user?.id || "",
+          "x-user-role": user?.role || "admin",
+        },
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to delete user");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete user");
+      }
       return res.json();
     },
     onSuccess: () => {

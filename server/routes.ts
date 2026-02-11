@@ -980,6 +980,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      if (status === "approved" && updatedApplication.email) {
+        try {
+          await db.update(users)
+            .set({ 
+              onboardingStatus: "AGREEMENT_PENDING",
+              updatedAt: new Date()
+            })
+            .where(eq(users.email, updatedApplication.email));
+        } catch (linkError) {
+          console.error("Failed to update user onboarding status on approval:", linkError);
+        }
+      }
+
       res.json(updatedApplication);
     } catch (error) {
       console.error("Error updating application:", error);

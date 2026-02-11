@@ -1,9 +1,24 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-/**
- * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
- * @returns {string} The API base URL
- */
+const STORAGE_KEY = "@workforce_connect_user";
+
+let _cachedUser: { id: string; role: string } | null = null;
+
+export function setAuthUser(user: { id: string; role: string } | null) {
+  _cachedUser = user;
+}
+
+function getAuthHeaders(): Record<string, string> {
+  if (_cachedUser) {
+    return {
+      "x-user-id": _cachedUser.id,
+      "x-user-role": _cachedUser.role,
+    };
+  }
+  return {};
+}
+
 export function getApiUrl(): string {
   let host = process.env.EXPO_PUBLIC_DOMAIN;
 
@@ -31,9 +46,16 @@ export async function apiRequest(
   const baseUrl = getApiUrl();
   const url = new URL(route, baseUrl);
 
+  const headers: Record<string, string> = {
+    ...getAuthHeaders(),
+  };
+  if (data) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -52,6 +74,9 @@ export const getQueryFn: <T>(options: {
     const url = new URL(queryKey.join("/") as string, baseUrl);
 
     const res = await fetch(url, {
+      headers: {
+        ...getAuthHeaders(),
+      },
       credentials: "include",
     });
 

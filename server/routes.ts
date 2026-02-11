@@ -683,18 +683,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const role = req.headers["x-user-role"] as string;
       const { onboardingStatus } = req.body;
 
+      console.log(`[ONBOARDING] Status update request: userId=${userId}, role=${role}, newStatus=${onboardingStatus}`);
+
       if (!userId || !role) {
+        console.log(`[ONBOARDING] REJECTED: Missing auth headers (userId=${userId}, role=${role})`);
         res.status(401).json({ error: "Authentication required" });
         return;
       }
 
       if (role !== "worker") {
+        console.log(`[ONBOARDING] REJECTED: Non-worker role (${role}) tried to update status`);
         res.status(403).json({ error: "Only workers can update their onboarding status" });
         return;
       }
 
       const validStatuses = ["NOT_APPLIED", "APPLICATION_SUBMITTED", "AGREEMENT_PENDING", "AGREEMENT_ACCEPTED"];
       if (!onboardingStatus || !validStatuses.includes(onboardingStatus)) {
+        console.log(`[ONBOARDING] REJECTED: Invalid status value: ${onboardingStatus}`);
         res.status(400).json({ error: "Invalid onboarding status" });
         return;
       }
@@ -705,16 +710,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
 
       if (!updatedUser) {
+        console.log(`[ONBOARDING] REJECTED: User not found for id=${userId}`);
         res.status(404).json({ error: "User not found" });
         return;
       }
 
+      console.log(`[ONBOARDING] SUCCESS: User ${updatedUser.email} (${userId}) status updated to ${updatedUser.onboardingStatus}`);
       res.json({ 
         id: updatedUser.id, 
         onboardingStatus: updatedUser.onboardingStatus 
       });
     } catch (error) {
-      console.error("Error updating onboarding status:", error);
+      console.error("[ONBOARDING] ERROR updating onboarding status:", error);
       res.status(500).json({ error: "Failed to update onboarding status" });
     }
   });
@@ -724,18 +731,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = req.params.id as string;
       const adminId = req.headers["x-user-id"] as string;
 
+      console.log(`[DELETE USER] Admin ${adminId} requesting to delete user ${id}`);
+
       if (id === adminId) {
+        console.log(`[DELETE USER] REJECTED: Admin tried to delete themselves`);
         res.status(400).json({ error: "You cannot delete your own account" });
         return;
       }
 
       const [existingUser] = await db.select().from(users).where(eq(users.id, id)).limit(1);
       if (!existingUser) {
+        console.log(`[DELETE USER] REJECTED: User ${id} not found`);
         res.status(404).json({ error: "User not found" });
         return;
       }
 
-      // Delete all related records in correct foreign key order
+      console.log(`[DELETE USER] Deleting user: ${existingUser.email} (${existingUser.role})`);
+
       await db.execute(sql`DELETE FROM message_logs WHERE message_id IN (SELECT id FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id})`);
       await db.execute(sql`DELETE FROM message_logs WHERE actor_user_id = ${id}`);
       await db.execute(sql`DELETE FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id}`);
@@ -753,12 +765,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.execute(sql`DELETE FROM export_audit_logs WHERE admin_user_id = ${id}`);
       await db.execute(sql`UPDATE payroll_batches SET created_by_user_id = ${adminId} WHERE created_by_user_id = ${id}`);
       await db.execute(sql`UPDATE payroll_batches SET finalized_by_user_id = NULL WHERE finalized_by_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM worker_applications WHERE email = ${existingUser.email}`);
       await db.execute(sql`DELETE FROM users WHERE id = ${id}`);
 
+      console.log(`[DELETE USER] SUCCESS: User ${existingUser.email} (${id}) deleted by admin ${adminId}`);
       res.json({ message: "User deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting user:", error);
-      res.status(500).json({ error: "Failed to delete user" });
+    } catch (error: any) {
+      console.error("[DELETE USER] ERROR:", error);
+      const detail = error?.message || "Failed to delete user";
+      res.status(500).json({ error: `Failed to delete user: ${detail}` });
     }
   });
 
@@ -2152,6 +2167,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error in address details:", error);
       res.status(500).json({ error: "Failed to fetch address details" });
     }
+  });
+
+  app.get("/api/debug/whoami", (req: Request, res: Response) => {
+    res.json({
+      headers: {
+        "x-user-id": req.headers["x-user-id"] || null,
+        "x-user-role": req.headers["x-user-role"] || null,
+        host: req.headers["host"] || null,
+      },
+      timestamp: new Date().toISOString(),
+    });
   });
 
   const httpServer = createServer(app);

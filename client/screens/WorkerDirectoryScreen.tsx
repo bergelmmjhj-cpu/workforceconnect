@@ -10,10 +10,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
 
 type Worker = {
   id: string;
@@ -30,21 +28,10 @@ export default function WorkerDirectoryScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
-  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: workers = [], isLoading, refetch } = useQuery<Worker[]>({
     queryKey: ["/api/workers"],
-    queryFn: async () => {
-      const response = await fetch(new URL("/api/workers", getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch workers");
-      return response.json();
-    },
   });
 
   useFocusEffect(

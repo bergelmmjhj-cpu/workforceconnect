@@ -4,7 +4,7 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -61,15 +61,7 @@ export function useNotifications() {
       if (token) {
         setExpoPushToken(token);
         try {
-          await fetch(new URL("/api/push-tokens", getApiUrl()).toString(), {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-user-id": user.id,
-              "x-user-role": user.role,
-            },
-            body: JSON.stringify({ token, platform: Platform.OS }),
-          });
+          await apiRequest("POST", "/api/push-tokens", { token, platform: Platform.OS });
         } catch (error) {
           console.error("Failed to register push token:", error);
         }

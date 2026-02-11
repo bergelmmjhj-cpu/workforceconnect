@@ -20,7 +20,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
 import { formatDistanceToNow } from "date-fns";
 
 interface Conversation {
@@ -46,20 +45,6 @@ export default function MessagesScreen() {
 
   const { data: conversations = [], isLoading, refetch, isRefetching } = useQuery<Conversation[]>({
     queryKey: ["/api/communications/conversations"],
-    queryFn: async () => {
-      const res = await fetch(
-        new URL("/api/communications/conversations", getApiUrl()).toString(),
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "x-user-id": user?.id || "",
-            "x-user-role": user?.role || "worker",
-          },
-        }
-      );
-      if (!res.ok) throw new Error("Failed to load conversations");
-      return res.json();
-    },
     enabled: !!user?.id,
     refetchInterval: 5000,
   });

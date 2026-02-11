@@ -14,7 +14,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { getErrorMessage } from "@/utils/errorHandler";
 
 type WorkplaceEditRouteProp = RouteProp<RootStackParamList, "WorkplaceEdit">;
@@ -58,19 +58,8 @@ export default function WorkplaceEditScreen() {
   const [isAddressSelected, setIsAddressSelected] = useState(false);
   const [addressSearchValue, setAddressSearchValue] = useState("");
 
-  const { data: existingWorkplace, isLoading } = useQuery({
+  const { data: existingWorkplace, isLoading } = useQuery<any>({
     queryKey: ["/api/workplaces", workplaceId],
-    queryFn: async () => {
-      if (!workplaceId) return null;
-      const response = await fetch(new URL(`/api/workplaces/${workplaceId}`, getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch workplace");
-      return response.json();
-    },
     enabled: !!workplaceId,
   });
 
@@ -155,23 +144,11 @@ export default function WorkplaceEditScreen() {
         geofenceRadiusMeters: parseInt(formData.geofenceRadiusMeters) || 150,
       };
 
-      const url = isEditing 
-        ? new URL(`/api/workplaces/${workplaceId}`, getApiUrl()).toString()
-        : new URL("/api/workplaces", getApiUrl()).toString();
+      const route = isEditing 
+        ? `/api/workplaces/${workplaceId}`
+        : "/api/workplaces";
       
-      const response = await fetch(url, {
-        method: isEditing ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to save workplace");
-      }
+      await apiRequest(isEditing ? "PUT" : "POST", route, payload);
 
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces"] });
       navigation.goBack();

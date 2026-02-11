@@ -10,10 +10,9 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 
 type Workplace = {
   id: string;
@@ -34,21 +33,10 @@ export default function WorkplacesListScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: workplaces = [], isLoading, refetch } = useQuery<Workplace[]>({
     queryKey: ["/api/workplaces"],
-    queryFn: async () => {
-      const response = await fetch(new URL("/api/workplaces", getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch workplaces");
-      return response.json();
-    },
   });
 
   useFocusEffect(
@@ -59,15 +47,8 @@ export default function WorkplacesListScreen() {
 
   const toggleMutation = useMutation({
     mutationFn: async (workplaceId: string) => {
-      const response = await fetch(new URL(`/api/workplaces/${workplaceId}/toggle-active`, getApiUrl()).toString(), {
-        method: "PATCH",
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to toggle status");
-      return response.json();
+      const res = await apiRequest("PATCH", `/api/workplaces/${workplaceId}/toggle-active`);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces"] });

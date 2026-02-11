@@ -12,7 +12,7 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { BorderRadius, Spacing, Typography } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 
 export interface AddressData {
   formattedAddress: string;
@@ -78,25 +78,10 @@ export function AddressAutocomplete({
     setIsLoading(true);
     setApiError(null);
     try {
-      const url = new URL("/api/places/autocomplete", getApiUrl());
-      url.searchParams.set("input", input);
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          "x-user-role": userRole,
-          "x-user-id": userId,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPredictions(data.predictions || []);
-        setShowDropdown(data.predictions?.length > 0);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setApiError(errorData.message || "Address search unavailable. Please try again later.");
-        setShowDropdown(false);
-      }
+      const response = await apiRequest("GET", `/api/places/autocomplete?input=${encodeURIComponent(input)}`);
+      const data = await response.json();
+      setPredictions(data.predictions || []);
+      setShowDropdown(data.predictions?.length > 0);
     } catch (err) {
       console.error("Error fetching predictions:", err);
       setApiError("Address search unavailable. Please check your connection.");
@@ -122,20 +107,11 @@ export function AddressAutocomplete({
     setShowDropdown(false);
     
     try {
-      const url = new URL(`/api/places/details/${prediction.place_id}`, getApiUrl());
-      const response = await fetch(url.toString(), {
-        headers: {
-          "x-user-role": userRole,
-          "x-user-id": userId,
-        },
-      });
-
-      if (response.ok) {
-        const addressData: AddressData = await response.json();
-        setInputValue(addressData.formattedAddress);
-        onAddressSelect(addressData);
-        setPredictions([]);
-      }
+      const response = await apiRequest("GET", `/api/places/details/${prediction.place_id}`);
+      const addressData: AddressData = await response.json();
+      setInputValue(addressData.formattedAddress);
+      onAddressSelect(addressData);
+      setPredictions([]);
     } catch (err) {
       console.error("Error fetching address details:", err);
     } finally {

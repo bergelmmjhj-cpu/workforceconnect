@@ -9,7 +9,6 @@ import {
   Modal,
   ScrollView,
   TextInput,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -62,7 +61,6 @@ export default function UserManagementScreen() {
   const [editRole, setEditRole] = useState<UserRole>("worker");
   const [editIsActive, setEditIsActive] = useState(true);
   
-  // Create user state
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [newUserFullName, setNewUserFullName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -70,37 +68,17 @@ export default function UserManagementScreen() {
   const [newUserRole, setNewUserRole] = useState<UserRole>("worker");
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<APIUser | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const { data: users = [], isLoading, refetch, isRefetching } = useQuery<APIUser[]>({
     queryKey: ["/api/users"],
-    queryFn: async () => {
-      const baseUrl = getApiUrl();
-      const url = new URL("/api/users", baseUrl);
-      const res = await fetch(url, {
-        headers: { "x-user-role": user?.role || "admin" },
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch users");
-      return res.json();
-    },
   });
 
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, role, isActive }: { id: string; role: UserRole; isActive: boolean }) => {
-      const baseUrl = getApiUrl();
-      const url = new URL(`/api/users/${id}`, baseUrl);
-      const res = await fetch(url, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-role": user?.role || "admin",
-        },
-        body: JSON.stringify({ role, isActive }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to update user");
-      }
+      const res = await apiRequest("PATCH", `/api/users/${id}`, { role, isActive });
       return res.json();
     },
     onSuccess: () => {
@@ -113,45 +91,25 @@ export default function UserManagementScreen() {
 
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
-      const baseUrl = getApiUrl();
-      const url = new URL(`/api/users/${id}`, baseUrl);
-      const res = await fetch(url, {
-        method: "DELETE",
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "admin",
-        },
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to delete user");
-      }
+      const res = await apiRequest("DELETE", `/api/users/${id}`);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setDeleteModalVisible(false);
+      setUserToDelete(null);
+      setDeleteError(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: Error) => {
+      setDeleteError(error.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },
   });
 
   const createUserMutation = useMutation({
     mutationFn: async (data: { email: string; password: string; fullName: string; role: UserRole }) => {
-      const baseUrl = getApiUrl();
-      const url = new URL("/api/users", baseUrl);
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-role": user?.role || "admin",
-        },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to create user");
-      }
+      const res = await apiRequest("POST", "/api/users", data);
       return res.json();
     },
     onSuccess: () => {
@@ -221,22 +179,17 @@ export default function UserManagementScreen() {
     }
   };
 
-  const handleDeleteUser = (userToDelete: APIUser) => {
-    Alert.alert(
-      "Delete User",
-      `Are you sure you want to delete ${userToDelete.fullName}? This action cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            deleteUserMutation.mutate(userToDelete.id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          },
-        },
-      ]
-    );
+  const handleDeleteUser = (targetUser: APIUser) => {
+    setUserToDelete(targetUser);
+    setDeleteError(null);
+    setDeleteModalVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const confirmDelete = () => {
+    if (userToDelete) {
+      deleteUserMutation.mutate(userToDelete.id);
+    }
   };
 
   const getRoleIcon = (role: string): keyof typeof Feather.glyphMap => {
@@ -429,6 +382,7 @@ export default function UserManagementScreen() {
         }
       />
 
+      {/* Edit User Modal */}
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -584,6 +538,74 @@ export default function UserManagementScreen() {
             ) : null}
           </ScrollView>
         </ThemedView>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={deleteModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => {
+          if (!deleteUserMutation.isPending) {
+            setDeleteModalVisible(false);
+            setUserToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <View style={styles.deleteOverlay}>
+          <ThemedView style={[styles.deleteModal, { borderColor: theme.border }]}>
+            <View style={[styles.deleteIconContainer, { backgroundColor: theme.error + "15" }]}>
+              <Feather name="alert-triangle" size={32} color={theme.error} />
+            </View>
+            <ThemedText style={[styles.deleteModalTitle, { fontWeight: "700" }]}>
+              Delete User
+            </ThemedText>
+            <ThemedText style={[styles.deleteModalMessage, { color: theme.textSecondary }]}>
+              Are you sure you want to permanently delete{" "}
+              <ThemedText style={{ fontWeight: "600" }}>
+                {userToDelete?.fullName}
+              </ThemedText>
+              ? This action cannot be undone.
+            </ThemedText>
+
+            {deleteError ? (
+              <View style={[styles.errorBanner, { backgroundColor: theme.error + "15" }]}>
+                <Feather name="alert-circle" size={16} color={theme.error} />
+                <ThemedText style={[styles.errorText, { color: theme.error }]}>
+                  {deleteError}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            <View style={styles.deleteModalActions}>
+              <Pressable
+                onPress={() => {
+                  setDeleteModalVisible(false);
+                  setUserToDelete(null);
+                  setDeleteError(null);
+                }}
+                disabled={deleteUserMutation.isPending}
+                style={[styles.cancelButton, { borderColor: theme.border }]}
+              >
+                <ThemedText style={{ fontWeight: "600" }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={confirmDelete}
+                disabled={deleteUserMutation.isPending}
+                style={[styles.confirmDeleteButton, { backgroundColor: theme.error }]}
+              >
+                {deleteUserMutation.isPending ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <ThemedText style={[styles.confirmDeleteText, { color: "#fff" }]}>
+                    Delete
+                  </ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </ThemedView>
+        </View>
       </Modal>
 
       {/* Create User Modal */}
@@ -1033,6 +1055,63 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontWeight: "600",
+    fontSize: 15,
+  },
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  deleteModal: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  deleteIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.lg,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    marginBottom: Spacing.sm,
+  },
+  deleteModalMessage: {
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: Spacing.lg,
+  },
+  deleteModalActions: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    width: "100%",
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  confirmDeleteButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmDeleteText: {
+    fontWeight: "700",
     fontSize: 15,
   },
 });

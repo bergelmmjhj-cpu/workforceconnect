@@ -13,7 +13,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { getErrorMessage } from "@/utils/errorHandler";
 
 type InviteWorkerRouteProp = RouteProp<RootStackParamList, "InviteWorker">;
@@ -40,48 +40,16 @@ export default function InviteWorkerScreen() {
 
   const { data: workers = [], isLoading, refetch } = useQuery<Worker[]>({
     queryKey: ["/api/workers"],
-    queryFn: async () => {
-      const response = await fetch(new URL("/api/workers", getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch workers");
-      return response.json();
-    },
   });
 
   const { data: existingAssignments = [] } = useQuery<{ workerUserId: string }[]>({
     queryKey: ["/api/workplaces", workplaceId, "workers"],
-    queryFn: async () => {
-      const response = await fetch(new URL(`/api/workplaces/${workplaceId}/workers`, getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch assignments");
-      return response.json();
-    },
   });
 
   const inviteMutation = useMutation({
     mutationFn: async (workerId: string) => {
-      const response = await fetch(new URL(`/api/workplaces/${workplaceId}/invite-worker`, getApiUrl()).toString(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-        body: JSON.stringify({ workerUserId: workerId, status: "active" }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to invite worker");
-      }
-      return response.json();
+      const res = await apiRequest("POST", `/api/workplaces/${workplaceId}/invite-worker`, { workerUserId: workerId, status: "active" });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces", workplaceId, "workers"] });

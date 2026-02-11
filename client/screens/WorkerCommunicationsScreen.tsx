@@ -20,7 +20,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { formatRelativeTime } from "@/utils/format";
 
 type Worker = {
@@ -60,50 +60,18 @@ export default function WorkerCommunicationsScreen() {
 
   const { data: conversations, isLoading: loadingConversations, refetch } = useQuery<Conversation[]>({
     queryKey: ["/api/communications/conversations"],
-    queryFn: async () => {
-      const res = await fetch(`${getApiUrl()}api/communications/conversations`, {
-        headers: {
-          "x-user-role": user?.role || "hr",
-          "x-user-id": user?.id || "",
-        },
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch conversations");
-      return res.json();
-    },
     enabled: !!user && (user.role === "admin" || user.role === "hr"),
     refetchInterval: 5000,
   });
 
   const { data: workers, isLoading: loadingWorkers } = useQuery<Worker[]>({
     queryKey: ["/api/communications/workers"],
-    queryFn: async () => {
-      const res = await fetch(`${getApiUrl()}api/communications/workers`, {
-        headers: {
-          "x-user-role": user?.role || "hr",
-          "x-user-id": user?.id || "",
-        },
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch workers");
-      return res.json();
-    },
     enabled: !!user && (user.role === "admin" || user.role === "hr") && showNewMessage,
   });
 
   const createConversationMutation = useMutation({
     mutationFn: async (workerUserId: string) => {
-      const res = await fetch(`${getApiUrl()}api/communications/conversations`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-role": user?.role || "hr",
-          "x-user-id": user?.id || "",
-        },
-        credentials: "include",
-        body: JSON.stringify({ workerUserId }),
-      });
-      if (!res.ok) throw new Error("Failed to create conversation");
+      const res = await apiRequest("POST", "/api/communications/conversations", { workerUserId });
       return res.json();
     },
     onSuccess: (conversation) => {

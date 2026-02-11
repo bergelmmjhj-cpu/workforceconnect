@@ -13,7 +13,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { getErrorMessage } from "@/utils/errorHandler";
 
 type AssignToWorkplaceRouteProp = RouteProp<RootStackParamList, "AssignToWorkplace">;
@@ -39,34 +39,12 @@ export default function AssignToWorkplaceScreen() {
 
   const { data: workplaces = [], isLoading, refetch } = useQuery<Workplace[]>({
     queryKey: ["/api/workplaces"],
-    queryFn: async () => {
-      const response = await fetch(new URL("/api/workplaces", getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch workplaces");
-      return response.json();
-    },
   });
 
   const inviteMutation = useMutation({
     mutationFn: async (workplaceIdToAssign: string) => {
-      const response = await fetch(new URL(`/api/workplaces/${workplaceIdToAssign}/invite-worker`, getApiUrl()).toString(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-        body: JSON.stringify({ workerUserId: workerId, status: "active" }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to assign worker");
-      }
-      return response.json();
+      const res = await apiRequest("POST", `/api/workplaces/${workplaceIdToAssign}/invite-worker`, { workerUserId: workerId, status: "active" });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces"] });

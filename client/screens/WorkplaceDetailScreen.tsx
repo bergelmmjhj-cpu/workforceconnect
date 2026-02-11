@@ -14,7 +14,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 
 type WorkplaceDetailRouteProp = RouteProp<RootStackParamList, "WorkplaceDetail">;
 
@@ -56,30 +56,10 @@ export default function WorkplaceDetailScreen() {
 
   const { data: workplace, isLoading: loadingWorkplace, refetch: refetchWorkplace } = useQuery<Workplace>({
     queryKey: ["/api/workplaces", workplaceId],
-    queryFn: async () => {
-      const response = await fetch(new URL(`/api/workplaces/${workplaceId}`, getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch workplace");
-      return response.json();
-    },
   });
 
   const { data: assignments = [], isLoading: loadingAssignments, refetch: refetchAssignments } = useQuery<WorkerAssignment[]>({
     queryKey: ["/api/workplaces", workplaceId, "workers"],
-    queryFn: async () => {
-      const response = await fetch(new URL(`/api/workplaces/${workplaceId}/workers`, getApiUrl()).toString(), {
-        headers: {
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-      });
-      if (!response.ok) throw new Error("Failed to fetch workers");
-      return response.json();
-    },
   });
 
   useFocusEffect(
@@ -91,17 +71,8 @@ export default function WorkplaceDetailScreen() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ assignmentId, status }: { assignmentId: string; status: string }) => {
-      const response = await fetch(new URL(`/api/workplace-assignments/${assignmentId}`, getApiUrl()).toString(), {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": user?.id || "",
-          "x-user-role": user?.role || "",
-        },
-        body: JSON.stringify({ status }),
-      });
-      if (!response.ok) throw new Error("Failed to update status");
-      return response.json();
+      const res = await apiRequest("PATCH", `/api/workplace-assignments/${assignmentId}`, { status });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces", workplaceId, "workers"] });

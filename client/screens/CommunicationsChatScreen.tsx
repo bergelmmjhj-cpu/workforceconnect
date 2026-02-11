@@ -19,7 +19,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { getApiUrl } from "@/lib/query-client";
+import { apiRequest } from "@/lib/query-client";
 import { formatTime } from "@/utils/format";
 
 type RouteParams = { conversationId: string };
@@ -63,20 +63,6 @@ export default function CommunicationsChatScreen() {
 
   const { data: conversations } = useQuery<any[]>({
     queryKey: ["/api/communications/conversations"],
-    queryFn: async () => {
-      const res = await fetch(
-        `${getApiUrl()}api/communications/conversations`,
-        {
-          headers: {
-            "x-user-role": user?.role || "worker",
-            "x-user-id": user?.id || "",
-          },
-          credentials: "include",
-        }
-      );
-      if (!res.ok) throw new Error("Failed to fetch conversations");
-      return res.json();
-    },
     enabled: !!user,
     staleTime: 30000,
   });
@@ -95,53 +81,19 @@ export default function CommunicationsChatScreen() {
 
   const { data: messages, isLoading, refetch } = useQuery<Message[]>({
     queryKey: ["/api/communications/conversations", conversationId, "messages"],
-    queryFn: async () => {
-      const res = await fetch(
-        `${getApiUrl()}api/communications/conversations/${conversationId}/messages`,
-        {
-          headers: {
-            "x-user-role": user?.role || "hr",
-            "x-user-id": user?.id || "",
-          },
-          credentials: "include",
-        }
-      );
-      if (!res.ok) throw new Error("Failed to fetch messages");
-      return res.json();
-    },
     enabled: !!conversationId && !!user,
     refetchInterval: 3000,
   });
 
   useEffect(() => {
     if (messages && messages.length > 0) {
-      fetch(`${getApiUrl()}api/communications/conversations/${conversationId}/read`, {
-        method: "POST",
-        headers: {
-          "x-user-role": user?.role || "hr",
-          "x-user-id": user?.id || "",
-        },
-        credentials: "include",
-      }).catch(() => {});
+      apiRequest("POST", `/api/communications/conversations/${conversationId}/read`).catch(() => {});
     }
   }, [messages, conversationId, user]);
 
   const sendMessageMutation = useMutation({
     mutationFn: async (body: string) => {
-      const res = await fetch(
-        `${getApiUrl()}api/communications/conversations/${conversationId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-user-role": user?.role || "hr",
-            "x-user-id": user?.id || "",
-          },
-          credentials: "include",
-          body: JSON.stringify({ body }),
-        }
-      );
-      if (!res.ok) throw new Error("Failed to send message");
+      const res = await apiRequest("POST", `/api/communications/conversations/${conversationId}/messages`, { body });
       return res.json();
     },
     onSuccess: () => {

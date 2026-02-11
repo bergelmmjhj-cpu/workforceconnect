@@ -111,7 +111,9 @@ function checkRateLimit(ip: string): boolean {
 function checkRoles(...allowedRoles: UserRole[]) {
   return (req: Request, res: Response, next: () => void) => {
     const role = req.headers["x-user-role"] as UserRole;
+    const userId = req.headers["x-user-id"] as string;
     if (!role || !allowedRoles.includes(role)) {
+      console.log(`[AUTH REJECTED] ${req.method} ${req.path} - role="${role || 'MISSING'}" userId="${userId || 'MISSING'}" allowed=[${allowedRoles.join(",")}]`);
       res.status(403).json({ error: "Forbidden: Insufficient permissions" });
       return;
     }
@@ -120,6 +122,12 @@ function checkRoles(...allowedRoles: UserRole[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.use("/api", (req: Request, _res: Response, next: () => void) => {
+    const userId = req.headers["x-user-id"] as string;
+    const role = req.headers["x-user-role"] as string;
+    console.log(`[API] ${req.method} ${req.path} | userId=${userId || "NONE"} role=${role || "NONE"}`);
+    next();
+  });
   // ========================================
   // Internal Communications API (HR ↔ Worker)
   // ========================================

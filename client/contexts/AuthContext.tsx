@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, UserRole, WorkerOnboardingStatus } from "@/types";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 
 interface AuthContextType {
   user: User | null;
@@ -114,7 +114,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          await apiRequest("PATCH", "/api/users/me/onboarding-status", { onboardingStatus: status });
+          const baseUrl = getApiUrl();
+          const url = new URL("/api/users/me/onboarding-status", baseUrl);
+          const res = await fetch(url, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": user.id,
+              "x-user-role": user.role,
+            },
+            credentials: "include",
+            body: JSON.stringify({ onboardingStatus: status }),
+          });
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            throw new Error(`Server returned ${res.status}: ${errText}`);
+          }
           serverUpdated = true;
           break;
         } catch (error) {

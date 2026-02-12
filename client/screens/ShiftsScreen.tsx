@@ -23,7 +23,41 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { APIShift, ShiftStatus } from "@/types";
+import { APIShift, ShiftStatus, ShiftFrequency, ShiftCategory } from "@/types";
+
+const categoryColors: Record<ShiftCategory, string> = {
+  hotel: "#7C3AED",
+  banquet: "#D97706",
+  janitorial: "#059669",
+};
+
+const categoryLabels: Record<ShiftCategory, string> = {
+  hotel: "Hotel",
+  banquet: "Banquet",
+  janitorial: "Janitorial",
+};
+
+const frequencyIcons: Record<ShiftFrequency, string> = {
+  "one-time": "calendar",
+  "recurring": "repeat",
+  "open-ended": "clock",
+};
+
+const frequencyLabels: Record<ShiftFrequency, string> = {
+  "one-time": "One-Time",
+  "recurring": "Recurring",
+  "open-ended": "Open-Ended",
+};
+
+const dayAbbreviations: Record<string, string> = {
+  sunday: "Sun",
+  monday: "Mon",
+  tuesday: "Tue",
+  wednesday: "Wed",
+  thursday: "Thu",
+  friday: "Fri",
+  saturday: "Sat",
+};
 
 const filterOptions: { label: string; value: ShiftStatus | "all" }[] = [
   { label: "All", value: "all" },

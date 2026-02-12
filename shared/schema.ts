@@ -221,6 +221,14 @@ export const workerApplications = pgTable("worker_applications", {
   emergencyContactRelationship: text("emergency_contact_relationship").notNull(),
   emergencyContactPhone: text("emergency_contact_phone").notNull(),
   
+  // Payment Information
+  paymentMethod: text("payment_method"), // direct_deposit, etransfer
+  bankName: text("bank_name"),
+  bankInstitution: text("bank_institution"),
+  bankTransit: text("bank_transit"),
+  bankAccount: text("bank_account"),
+  etransferEmail: text("etransfer_email"),
+  
   // Acknowledgments
   titoAcknowledgment: boolean("tito_acknowledgment").default(false),
   siteRulesAcknowledgment: boolean("site_rules_acknowledgment").default(false),
@@ -535,6 +543,8 @@ export const paymentProfiles = pgTable("payment_profiles", {
     .notNull()
     .references(() => users.id)
     .unique(),
+  paymentMethod: text("payment_method"), // direct_deposit, etransfer
+  bankName: text("bank_name"),
   etransferEmail: text("etransfer_email"),
   bankInstitution: text("bank_institution"),
   bankTransit: text("bank_transit"),

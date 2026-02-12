@@ -162,14 +162,16 @@ export default function TitoScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      {renderFilter()}
+      <View style={[styles.filterContainer, { top: paddingTop }]}>
+        {renderFilter()}
+      </View>
       <FlatList
         data={filteredLogs}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingTop: paddingTop + Spacing["3xl"],
+            paddingTop: paddingTop + Spacing["3xl"] + Spacing.md,
             paddingBottom: tabBarHeight + Spacing.xl,
           },
           filteredLogs.length === 0 && styles.emptyContent,
@@ -203,7 +205,6 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     position: "absolute",
-    top: 0,
     left: 0,
     right: 0,
     zIndex: 10,

@@ -2,6 +2,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { registerPayrollHoursRoutes } from "./payroll-hours";
+import { setupWebSocket } from "./websocket";
 import * as fs from "fs";
 import * as path from "path";
 import bcrypt from "bcryptjs";
@@ -774,6 +775,7 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
 
   registerPayrollHoursRoutes(app);
   const server = await registerRoutes(app);
+  setupWebSocket(server);
 
   setupErrorHandler(app);
 

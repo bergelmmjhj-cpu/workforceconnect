@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import { broadcast, getConnectedClientsCount } from "./websocket";
 import { db } from "./db";
 import { 
   contactLeads, 
@@ -122,6 +123,17 @@ function checkRoles(...allowedRoles: UserRole[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get("/api/health", (_req: Request, res: Response) => {
+    res.json({
+      status: "ok",
+      version: "1.0.0",
+      environment: process.env.DEMO_MODE === "false" ? "production" : "demo",
+      dbIdentifier: process.env.PGDATABASE || "unknown",
+      wsClients: getConnectedClientsCount(),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   app.use("/api", (req: Request, _res: Response, next: () => void) => {
     const userId = req.headers["x-user-id"] as string;
     const role = req.headers["x-user-role"] as string;
@@ -697,6 +709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { password: _, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
+      broadcast({ type: "updated", entity: "user", id: req.params.id });
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ error: "Failed to update user" });
@@ -747,6 +760,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: updatedUser.id, 
         onboardingStatus: updatedUser.onboardingStatus 
       });
+      broadcast({ type: "updated", entity: "onboarding", id: userId });
     } catch (error) {
       console.error("[ONBOARDING] ERROR updating onboarding status:", error);
       res.status(500).json({ error: "Failed to update onboarding status" });
@@ -797,6 +811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[DELETE USER] SUCCESS: User ${existingUser.email} (${id}) deleted by admin ${adminId}`);
       res.json({ message: "User deleted successfully" });
+      broadcast({ type: "deleted", entity: "user", id });
     } catch (error: any) {
       console.error("[DELETE USER] ERROR:", error);
       const detail = error?.message || "Failed to delete user";
@@ -843,6 +858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { password: _, ...userWithoutPassword } = newUser;
       res.status(201).json(userWithoutPassword);
+      broadcast({ type: "created", entity: "user" });
     } catch (error) {
       console.error("Error creating user:", error);
       res.status(500).json({ error: "Failed to create user" });
@@ -1128,6 +1144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       res.json(newWorkplace);
+      broadcast({ type: "created", entity: "workplace" });
     } catch (error) {
       console.error("Error creating workplace:", error);
       res.status(500).json({ error: "Failed to create workplace" });
@@ -1161,6 +1178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(updatedWorkplace);
+      broadcast({ type: "updated", entity: "workplace", id: req.params.id });
     } catch (error) {
       console.error("Error updating workplace:", error);
       res.status(500).json({ error: "Failed to update workplace" });
@@ -1181,6 +1199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .returning();
 
       res.json(updatedWorkplace);
+      broadcast({ type: "updated", entity: "workplace", id: req.params.id });
     } catch (error) {
       console.error("Error toggling workplace status:", error);
       res.status(500).json({ error: "Failed to toggle workplace status" });
@@ -1269,6 +1288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       res.json(newAssignment);
+      broadcast({ type: "created", entity: "assignment", id: newAssignment.id, data: { workplaceId: req.params.id, workerUserId } });
     } catch (error) {
       console.error("Error inviting worker:", error);
       res.status(500).json({ error: "Failed to invite worker" });
@@ -1297,6 +1317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(updatedAssignment);
+      broadcast({ type: "updated", entity: "assignment", id: req.params.id });
     } catch (error) {
       console.error("Error updating assignment:", error);
       res.status(500).json({ error: "Failed to update assignment" });

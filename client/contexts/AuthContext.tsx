@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User, UserRole, WorkerOnboardingStatus } from "@/types";
 import { apiRequest, getApiUrl, setAuthUser } from "@/lib/query-client";
+import { connectWebSocket, disconnectWebSocket, setupAppStateSync } from "@/lib/websocket";
 
 interface AuthContextType {
   user: User | null;
@@ -36,6 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      const cleanup = setupAppStateSync();
+      return cleanup;
+    }
+  }, [user]);
+
   const loadUser = async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -43,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const parsed = JSON.parse(stored);
         setUser(parsed);
         setAuthUser({ id: parsed.id, role: parsed.role });
+        connectWebSocket();
       }
     } catch (error) {
       console.error("Failed to load user:", error);
@@ -73,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loginUser));
       setUser(loginUser);
+      connectWebSocket();
       return;
     }
     
@@ -106,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    disconnectWebSocket();
     await AsyncStorage.removeItem(STORAGE_KEY);
     setUser(null);
   };

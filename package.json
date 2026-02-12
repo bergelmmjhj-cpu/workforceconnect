@@ -28,6 +28,7 @@
     "@tanstack/react-query": "^5.90.7",
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^2.4.6",
+    "@types/ws": "^8.18.1",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.1.0",

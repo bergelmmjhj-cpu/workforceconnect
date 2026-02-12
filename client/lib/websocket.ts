@@ -52,6 +52,8 @@ function handleMessage(data: string) {
     } else if (entity === "user" || entity === "onboarding") {
       queryClient.invalidateQueries({ queryKey: ["/api/workers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+    } else if (entity === "shift") {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
     } else {
       queryClient.invalidateQueries();
     }

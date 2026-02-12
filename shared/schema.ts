@@ -555,6 +555,44 @@ export type PaymentProfile = typeof paymentProfiles.$inferSelect;
 export type InsertPaymentProfile = z.infer<typeof insertPaymentProfileSchema>;
 
 // ============================================
+// Shifts Schema (Scheduled work assignments)
+// ============================================
+
+export const shiftStatusEnum = z.enum(["scheduled", "in_progress", "completed", "cancelled"]);
+export type ShiftStatusDB = z.infer<typeof shiftStatusEnum>;
+
+export const shifts = pgTable("shifts", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  workplaceId: varchar("workplace_id")
+    .notNull()
+    .references(() => workplaces.id),
+  workerUserId: varchar("worker_user_id")
+    .notNull()
+    .references(() => users.id),
+  title: text("title").notNull(),
+  date: date("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  notes: text("notes"),
+  status: text("status").notNull().default("scheduled"),
+  createdByUserId: varchar("created_by_user_id")
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertShiftSchema = createInsertSchema(shifts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ShiftDB = typeof shifts.$inferSelect;
+export type InsertShift = z.infer<typeof insertShiftSchema>;
+
+// ============================================
 // Export Audit Logs Schema (Compliance tracking)
 // ============================================
 

@@ -21,7 +21,8 @@ import {
   payrollBatchItems,
   pushTokens,
   paymentProfiles,
-  exportAuditLogs
+  exportAuditLogs,
+  shifts
 } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
@@ -1666,6 +1667,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching workers:", error);
       res.status(500).json({ error: "Failed to fetch workers" });
+    }
+  });
+
+  // ========================================
+  // Shifts API
+  // ========================================
+
+  app.get("/api/shifts", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as UserRole;
+      const workplaceId = req.query.workplaceId as string | undefined;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      let conditions: any[] = [];
+
+      if (role === "worker") {
+        conditions.push(eq(shifts.workerUserId, userId));
+      }
+
+      if (workplaceId) {
+        conditions.push(eq(shifts.workplaceId, workplaceId));
+      }
+
+      const result = await db
+        .select({
+          id: shifts.id,
+          workplaceId: shifts.workplaceId,
+          workerUserId: shifts.workerUserId,
+          title: shifts.title,
+          date: shifts.date,
+          startTime: shifts.startTime,
+          endTime: shifts.endTime,
+          notes: shifts.notes,
+          status: shifts.status,
+          createdByUserId: shifts.createdByUserId,
+          createdAt: shifts.createdAt,
+          updatedAt: shifts.updatedAt,
+          workplaceName: workplaces.name,
+          workerName: users.fullName,
+          workerEmail: users.email,
+        })
+        .from(shifts)
+        .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
+        .leftJoin(users, eq(shifts.workerUserId, users.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(shifts.date));
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching shifts:", error);
+      res.status(500).json({ error: "Failed to fetch shifts" });
+    }
+  });
+
+  app.post("/api/shifts", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { workplaceId, workerUserId, title, date, startTime, endTime, notes } = req.body;
+
+      if (!workplaceId || !workerUserId || !title || !date || !startTime || !endTime) {
+        res.status(400).json({ error: "workplaceId, workerUserId, title, date, startTime, and endTime are required" });
+        return;
+      }
+
+      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
+      if (!workplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+
+      const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
+      if (!worker) {
+        res.status(404).json({ error: "Worker not found" });
+        return;
+      }
+
+      const [newShift] = await db.insert(shifts).values({
+        workplaceId,
+        workerUserId,
+        title,
+        date,
+        startTime,
+        endTime,
+        notes: notes || null,
+        status: "scheduled",
+        createdByUserId: userId,
+      }).returning();
+
+      broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workerUserId, workplaceId } });
+
+      res.status(201).json(newShift);
+    } catch (error) {
+      console.error("Error creating shift:", error);
+      res.status(500).json({ error: "Failed to create shift" });
+    }
+  });
+
+  app.patch("/api/shifts/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { title, date, startTime, endTime, notes, status } = req.body;
+
+      const [existing] = await db.select().from(shifts).where(eq(shifts.id, req.params.id));
+      if (!existing) {
+        res.status(404).json({ error: "Shift not found" });
+        return;
+      }
+
+      const updates: any = { updatedAt: new Date() };
+      if (title !== undefined) updates.title = title;
+      if (date !== undefined) updates.date = date;
+      if (startTime !== undefined) updates.startTime = startTime;
+      if (endTime !== undefined) updates.endTime = endTime;
+      if (notes !== undefined) updates.notes = notes;
+      if (status !== undefined) updates.status = status;
+
+      const [updated] = await db.update(shifts).set(updates).where(eq(shifts.id, req.params.id)).returning();
+
+      broadcast({ type: "updated", entity: "shift", id: updated.id, data: { workerUserId: existing.workerUserId, workplaceId: existing.workplaceId } });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating shift:", error);
+      res.status(500).json({ error: "Failed to update shift" });
+    }
+  });
+
+  app.delete("/api/shifts/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const [existing] = await db.select().from(shifts).where(eq(shifts.id, req.params.id));
+      if (!existing) {
+        res.status(404).json({ error: "Shift not found" });
+        return;
+      }
+
+      await db.delete(shifts).where(eq(shifts.id, req.params.id));
+
+      broadcast({ type: "deleted", entity: "shift", id: req.params.id, data: { workerUserId: existing.workerUserId, workplaceId: existing.workplaceId } });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting shift:", error);
+      res.status(500).json({ error: "Failed to delete shift" });
     }
   });
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, FlatList, Pressable, RefreshControl, TextInput, Alert } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, RefreshControl, TextInput, Modal, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
+import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -37,6 +38,9 @@ export default function InviteWorkerScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const { data: workers = [], isLoading, refetch } = useQuery<Worker[]>({
     queryKey: ["/api/workers"],
@@ -53,11 +57,15 @@ export default function InviteWorkerScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces", workplaceId, "workers"] });
-      Alert.alert("Success", "Worker has been assigned to this workplace");
-      navigation.goBack();
+      setShowConfirmModal(false);
+      setFeedbackMessage({ type: "success", text: `${selectedWorker?.fullName || "Worker"} has been assigned to this workplace` });
+      setTimeout(() => {
+        navigation.goBack();
+      }, 1500);
     },
     onError: (error: Error) => {
-      Alert.alert("Unable to Assign", getErrorMessage(error));
+      setShowConfirmModal(false);
+      setFeedbackMessage({ type: "error", text: getErrorMessage(error) });
     },
   });
 
@@ -74,36 +82,37 @@ export default function InviteWorkerScreen() {
   });
 
   const handleInvite = (worker: Worker) => {
-    Alert.alert(
-      "Assign Worker",
-      `Assign ${worker.fullName} to this workplace?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Assign", onPress: () => inviteMutation.mutate(worker.id) },
-      ]
-    );
+    setSelectedWorker(worker);
+    setShowConfirmModal(true);
+    setFeedbackMessage(null);
+  };
+
+  const confirmAssign = () => {
+    if (selectedWorker) {
+      inviteMutation.mutate(selectedWorker.id);
+    }
   };
 
   const renderWorker = ({ item }: { item: Worker }) => {
     const roles = item.workerRoles ? JSON.parse(item.workerRoles) : [];
 
     return (
-      <Pressable onPress={() => handleInvite(item)}>
+      <Pressable onPress={() => handleInvite(item)} testID={`worker-card-${item.id}`}>
         <Card style={styles.workerCard}>
           <View style={styles.workerHeader}>
             <View style={styles.avatar}>
               <ThemedText style={styles.avatarText}>
-                {item.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                {item.fullName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
               </ThemedText>
             </View>
             <View style={styles.workerInfo}>
               <ThemedText style={styles.workerName}>{item.fullName}</ThemedText>
               <ThemedText style={styles.workerEmail}>{item.email}</ThemedText>
-              {roles.length > 0 && (
+              {roles.length > 0 ? (
                 <ThemedText style={styles.rolesText}>
                   {roles.join(", ")}
                 </ThemedText>
-              )}
+              ) : null}
             </View>
             <Feather name="plus-circle" size={24} color={theme.primary} />
           </View>
@@ -120,17 +129,44 @@ export default function InviteWorkerScreen() {
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
             value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search workers..."
+            onChangeText={(text) => setSearchQuery(text.toUpperCase())}
+            placeholder="SEARCH WORKERS..."
             placeholderTextColor={theme.textSecondary}
+            autoCapitalize="characters"
+            testID="input-search-workers"
           />
-          {searchQuery.length > 0 && (
+          {searchQuery.length > 0 ? (
             <Pressable onPress={() => setSearchQuery("")}>
               <Feather name="x" size={18} color={theme.textSecondary} />
             </Pressable>
-          )}
+          ) : null}
         </View>
       </View>
+
+      {feedbackMessage ? (
+        <View style={[
+          styles.feedbackBanner,
+          { 
+            backgroundColor: feedbackMessage.type === "success" ? "#DCFCE7" : "#FEE2E2",
+            borderColor: feedbackMessage.type === "success" ? "#22C55E" : "#EF4444",
+          }
+        ]}>
+          <Feather 
+            name={feedbackMessage.type === "success" ? "check-circle" : "alert-circle"} 
+            size={18} 
+            color={feedbackMessage.type === "success" ? "#16A34A" : "#DC2626"} 
+          />
+          <ThemedText style={[
+            styles.feedbackText,
+            { color: feedbackMessage.type === "success" ? "#16A34A" : "#DC2626" }
+          ]}>
+            {feedbackMessage.text}
+          </ThemedText>
+          <Pressable onPress={() => setFeedbackMessage(null)}>
+            <Feather name="x" size={18} color={feedbackMessage.type === "success" ? "#16A34A" : "#DC2626"} />
+          </Pressable>
+        </View>
+      ) : null}
 
       <FlatList
         data={availableWorkers}
@@ -152,6 +188,45 @@ export default function InviteWorkerScreen() {
           </View>
         }
       />
+
+      <Modal
+        visible={showConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+            <ThemedText style={styles.modalTitle}>Assign Worker</ThemedText>
+            <ThemedText style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              Assign {selectedWorker?.fullName} to this workplace?
+            </ThemedText>
+            
+            {inviteMutation.isPending ? (
+              <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: Spacing.md }} />
+            ) : null}
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.cancelButton, { borderColor: theme.border }]}
+                onPress={() => setShowConfirmModal(false)}
+                disabled={inviteMutation.isPending}
+              >
+                <ThemedText style={{ color: theme.textSecondary }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.assignButton, { backgroundColor: theme.primary }]}
+                onPress={confirmAssign}
+                disabled={inviteMutation.isPending}
+              >
+                <ThemedText style={{ color: "#fff", fontWeight: "600" }}>
+                  {inviteMutation.isPending ? "Assigning..." : "Assign"}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -176,6 +251,21 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
+  },
+  feedbackBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  feedbackText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
   },
   listContent: {
     paddingHorizontal: Spacing.lg,
@@ -230,4 +320,44 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: Spacing.xl,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: Spacing.sm,
+  },
+  modalMessage: {
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: Spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    width: "100%",
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelButton: {
+    borderWidth: 1,
+  },
+  assignButton: {},
 });

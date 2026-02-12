@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Update Payment Information - Workforce Connect Management</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Submit or update your payment and banking details for Workforce Connect Management." />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#1E40AF" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      
+      :root {
+        --primary: #1E40AF;
+        --primary-light: #3B82F6;
+        --primary-dark: #1E3A8A;
+        --accent: #F59E0B;
+        --success: #10B981;
+        --warning: #F59E0B;
+        --error: #EF4444;
+        --info: #3B82F6;
+        --background: #F8FAFC;
+        --surface: #FFFFFF;
+        --border: #E2E8F0;
+        --text-primary: #0F172A;
+        --text-secondary: #64748B;
+        --text-muted: #94A3B8;
+      }
+      
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--background);
+        color: var(--text-primary);
+        line-height: 1.6;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      .header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      
+      .header-container {
+        max-width: 800px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .header-logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: var(--primary);
+        font-weight: 700;
+        font-size: 16px;
+      }
+      
+      .header-logo img {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        object-fit: contain;
+      }
+      
+      .header-back {
+        color: var(--primary);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      
+      .header-back:hover {
+        text-decoration: underline;
+      }
+      
+      .main {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 32px 24px;
+      }
+      
+      .page-header {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      
+      .page-title {
+        font-size: 32px;
+        font-weight: 800;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+        line-height: 1.2;
+      }
+      
+      .page-subtitle {
+        font-size: 16px;
+        color: var(--text-secondary);
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      
+      .form-section {
+        background: var(--surface);
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+      
+      .section-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .section-title::before {
+        content: '';
+        width: 4px;
+        height: 24px;
+        background: var(--primary);
+        border-radius: 2px;
+      }
+      
+      .form-row {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      
+      .form-row.two-col {
+        grid-template-columns: 1fr 1fr;
+      }
+      
+      .form-row.three-col {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+      
+      @media (max-width: 600px) {
+        .form-row.two-col,
+        .form-row.three-col {
+          grid-template-columns: 1fr;
+        }
+      }
+      
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      
+      .form-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      
+      .form-label .required {
+        color: var(--error);
+        margin-left: 2px;
+      }
+      
+      .form-input,
+      .form-select,
+      .form-textarea {
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 15px;
+        font-family: inherit;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: var(--surface);
+      }
+      
+      .form-input:focus,
+      .form-select:focus,
+      .form-textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+      }
+      
+      .form-select {
+        cursor: pointer;
+      }
+      
+      .radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      
+      .radio-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      
+      .radio-item:hover {
+        border-color: var(--primary-light);
+      }
+      
+      .radio-item input[type="radio"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+      }
+      
+      .radio-item label {
+        font-size: 14px;
+        cursor: pointer;
+      }
+      
+      .highlight-box {
+        padding: 16px;
+        border-radius: 8px;
+        margin: 16px 0;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      
+      .highlight-box.info {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+      }
+      
+      .highlight-icon {
+        flex-shrink: 0;
+        width: 24px;
+        height: 24px;
+      }
+      
+      .highlight-box.info .highlight-icon {
+        color: var(--info);
+      }
+      
+      .highlight-text {
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      
+      .highlight-box.info .highlight-text {
+        color: #1E40AF;
+      }
+      
+      .submit-section {
+        text-align: center;
+        padding: 32px 0;
+      }
+      
+      .submit-btn {
+        display: inline-block;
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: white;
+        font-weight: 700;
+        font-size: 18px;
+        padding: 16px 48px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      
+      .submit-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(30, 64, 175, 0.3);
+      }
+      
+      .submit-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      
+      .submit-note {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-top: 16px;
+      }
+      
+      .footer {
+        background: var(--primary-dark);
+        color: white;
+        padding: 32px 24px;
+        text-align: center;
+        margin-top: 48px;
+      }
+      
+      .footer-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 16px;
+        font-weight: 700;
+        font-size: 16px;
+      }
+      
+      .footer-logo img {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+      }
+      
+      .footer-links {
+        margin-bottom: 16px;
+        display: flex;
+        justify-content: center;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      
+      .footer-links a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        font-size: 14px;
+      }
+      
+      .footer-links a:hover {
+        color: white;
+        text-decoration: underline;
+      }
+      
+      .footer-copyright {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+      
+      .error-message {
+        color: var(--error);
+        font-size: 13px;
+        margin-top: 4px;
+        display: none;
+      }
+      
+      .form-group.error .form-input,
+      .form-group.error .form-select {
+        border-color: var(--error);
+      }
+      
+      .form-group.error .error-message {
+        display: block;
+      }
+      
+      .form-error-banner {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #991B1B;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        margin-bottom: 16px;
+        display: none;
+      }
+      
+      .form-error-banner.show {
+        display: block;
+      }
+      
+      .success-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      
+      .success-modal.show {
+        display: flex;
+      }
+      
+      .success-content {
+        background: white;
+        border-radius: 16px;
+        padding: 40px;
+        text-align: center;
+        max-width: 400px;
+        width: 100%;
+      }
+      
+      .success-icon {
+        width: 64px;
+        height: 64px;
+        background: var(--success);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+      }
+      
+      .success-icon svg {
+        width: 32px;
+        height: 32px;
+        color: white;
+      }
+      
+      .success-title {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      
+      .success-message {
+        font-size: 15px;
+        color: var(--text-secondary);
+        margin-bottom: 24px;
+      }
+      
+      .success-btn {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        font-weight: 600;
+        font-size: 15px;
+        padding: 12px 32px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      
+      @media (max-width: 480px) {
+        .main {
+          padding: 24px 16px;
+        }
+        
+        .form-section {
+          padding: 20px 16px;
+        }
+        
+        .page-title {
+          font-size: 26px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-container">
+        <a href="https://wfconnect.org" class="header-logo">
+          <img src="/logo.png" alt="Workforce Connect Logo" />
+          <span>Workforce Connect</span>
+        </a>
+        <a href="/guide" class="header-back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Back to Guide
+        </a>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="page-header">
+        <h1 class="page-title">Payment Information</h1>
+        <p class="page-subtitle">
+          Already applied? Use this form to submit or update your payment details. Enter the same email you used in your application.
+        </p>
+      </div>
+
+      <div class="highlight-box info">
+        <svg class="highlight-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span class="highlight-text">
+          <strong>Your information is secure.</strong> All banking and payment details are encrypted and stored securely. Only authorized administrators can access your payment information for processing purposes.
+        </span>
+      </div>
+
+      <div id="errorBanner" class="form-error-banner"></div>
+
+      <form id="paymentForm" novalidate>
+        <section class="form-section">
+          <h2 class="section-title">Payment Details</h2>
+          
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">Email Address <span class="required">*</span></label>
+            <input type="email" name="email" class="form-input" placeholder="your.email@example.com" required>
+            <span class="error-message">Please enter the email you used in your application</span>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">Payment Method <span class="required">*</span></label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" name="paymentMethod" value="direct_deposit" required onchange="togglePaymentFields()">
+                <span>Direct Deposit</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="paymentMethod" value="e_transfer" onchange="togglePaymentFields()">
+                <span>Interac E-Transfer</span>
+              </label>
+            </div>
+            <span class="error-message">Please select a payment method</span>
+          </div>
+
+          <div id="directDepositFields" style="display: none;">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label class="form-label">Bank Name <span class="required">*</span></label>
+              <select name="bankName" class="form-select">
+                <option value="">Select your bank</option>
+                <option value="TD Canada Trust">TD Canada Trust</option>
+                <option value="RBC Royal Bank">RBC Royal Bank</option>
+                <option value="Scotiabank">Scotiabank</option>
+                <option value="BMO Bank of Montreal">BMO Bank of Montreal</option>
+                <option value="CIBC">CIBC</option>
+                <option value="National Bank">National Bank</option>
+                <option value="Desjardins">Desjardins</option>
+                <option value="HSBC Canada">HSBC Canada</option>
+                <option value="Tangerine">Tangerine</option>
+                <option value="Simplii Financial">Simplii Financial</option>
+                <option value="Other">Other</option>
+              </select>
+              <span class="error-message">Please select your bank</span>
+            </div>
+
+            <div class="form-row three-col">
+              <div class="form-group">
+                <label class="form-label">Institution Number <span class="required">*</span></label>
+                <input type="text" name="institutionNumber" class="form-input" placeholder="3 digits" maxlength="3" pattern="\d{3}">
+                <span class="error-message">Must be exactly 3 digits</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Transit Number <span class="required">*</span></label>
+                <input type="text" name="transitNumber" class="form-input" placeholder="5 digits" maxlength="5" pattern="\d{5}">
+                <span class="error-message">Must be exactly 5 digits</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Account Number <span class="required">*</span></label>
+                <input type="text" name="accountNumber" class="form-input" placeholder="7-12 digits" maxlength="12" pattern="\d{7,12}">
+                <span class="error-message">Must be 7-12 digits</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="eTransferFields" style="display: none;">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label class="form-label">E-Transfer Email Address <span class="required">*</span></label>
+              <input type="email" name="eTransferEmail" class="form-input" placeholder="your.etransfer@example.com">
+              <span class="error-message">Please enter a valid email address for E-Transfer</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="submit-section">
+          <button type="submit" class="submit-btn" id="submitBtn">Submit Payment Information</button>
+          <p class="submit-note">
+            Need to apply first? <a href="/apply" style="color: var(--primary); font-weight: 600;">Go to Application Form</a>
+          </p>
+        </div>
+      </form>
+    </main>
+
+    <div class="success-modal" id="successModal">
+      <div class="success-content">
+        <div class="success-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h3 class="success-title">Payment Info Submitted!</h3>
+        <p class="success-message">Your payment details have been saved successfully. Our team will use this information for processing your payments.</p>
+        <a href="/guide" class="success-btn">Back to Guide</a>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <div class="footer-logo">
+        <img src="/logo.png" alt="Workforce Connect Logo" />
+        <span>Workforce Connect</span>
+      </div>
+      <div class="footer-links">
+        <a href="/apply">Apply</a>
+        <a href="/guide">Contractor Guide</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy Policy</a>
+      </div>
+      <p class="footer-copyright">Workforce Connect Management. All rights reserved.</p>
+    </footer>
+
+    <script>
+      function togglePaymentFields() {
+        var method = document.querySelector('input[name="paymentMethod"]:checked');
+        var directFields = document.getElementById('directDepositFields');
+        var eTransferFields = document.getElementById('eTransferFields');
+        
+        if (!method) {
+          directFields.style.display = 'none';
+          eTransferFields.style.display = 'none';
+          return;
+        }
+        
+        if (method.value === 'direct_deposit') {
+          directFields.style.display = 'block';
+          eTransferFields.style.display = 'none';
+        } else if (method.value === 'e_transfer') {
+          directFields.style.display = 'none';
+          eTransferFields.style.display = 'block';
+        }
+      }
+
+      function clearErrors() {
+        document.querySelectorAll('.form-group.error').forEach(function(el) {
+          el.classList.remove('error');
+        });
+        var banner = document.getElementById('errorBanner');
+        banner.classList.remove('show');
+        banner.textContent = '';
+      }
+
+      function showFieldError(fieldName, message) {
+        var input = document.querySelector('[name="' + fieldName + '"]');
+        if (input) {
+          var group = input.closest('.form-group');
+          if (group) {
+            group.classList.add('error');
+            var errMsg = group.querySelector('.error-message');
+            if (errMsg && message) errMsg.textContent = message;
+          }
+        }
+      }
+
+      function validateForm() {
+        clearErrors();
+        var valid = true;
+        var form = document.getElementById('paymentForm');
+        
+        var email = form.querySelector('[name="email"]').value.trim();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showFieldError('email');
+          valid = false;
+        }
+        
+        var method = document.querySelector('input[name="paymentMethod"]:checked');
+        if (!method) {
+          var radioGroup = document.querySelector('[name="paymentMethod"]');
+          if (radioGroup) {
+            var group = radioGroup.closest('.form-group');
+            if (group) group.classList.add('error');
+          }
+          valid = false;
+          return valid;
+        }
+        
+        if (method.value === 'direct_deposit') {
+          var bankName = form.querySelector('[name="bankName"]').value;
+          if (!bankName) {
+            showFieldError('bankName');
+            valid = false;
+          }
+          
+          var instNum = form.querySelector('[name="institutionNumber"]').value.trim();
+          if (!instNum || !/^\d{3}$/.test(instNum)) {
+            showFieldError('institutionNumber');
+            valid = false;
+          }
+          
+          var transitNum = form.querySelector('[name="transitNumber"]').value.trim();
+          if (!transitNum || !/^\d{5}$/.test(transitNum)) {
+            showFieldError('transitNumber');
+            valid = false;
+          }
+          
+          var acctNum = form.querySelector('[name="accountNumber"]').value.trim();
+          if (!acctNum || !/^\d{7,12}$/.test(acctNum)) {
+            showFieldError('accountNumber');
+            valid = false;
+          }
+        } else if (method.value === 'e_transfer') {
+          var eTransferEmail = form.querySelector('[name="eTransferEmail"]').value.trim();
+          if (!eTransferEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(eTransferEmail)) {
+            showFieldError('eTransferEmail');
+            valid = false;
+          }
+        }
+        
+        return valid;
+      }
+
+      document.getElementById('paymentForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        if (!validateForm()) return;
+        
+        var submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+        
+        var form = this;
+        var method = document.querySelector('input[name="paymentMethod"]:checked').value;
+        
+        var payload = {
+          email: form.querySelector('[name="email"]').value.trim(),
+          paymentMethod: method
+        };
+        
+        if (method === 'direct_deposit') {
+          payload.bankName = form.querySelector('[name="bankName"]').value;
+          payload.institutionNumber = form.querySelector('[name="institutionNumber"]').value.trim();
+          payload.transitNumber = form.querySelector('[name="transitNumber"]').value.trim();
+          payload.accountNumber = form.querySelector('[name="accountNumber"]').value.trim();
+        } else if (method === 'e_transfer') {
+          payload.eTransferEmail = form.querySelector('[name="eTransferEmail"]').value.trim();
+        }
+        
+        try {
+          var response = await fetch('/api/public/payment-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          
+          var data = await response.json();
+          
+          if (response.ok) {
+            document.getElementById('successModal').classList.add('show');
+          } else {
+            var banner = document.getElementById('errorBanner');
+            banner.textContent = data.message || data.error || 'Something went wrong. Please try again.';
+            banner.classList.add('show');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } catch (err) {
+          var banner = document.getElementById('errorBanner');
+          banner.textContent = 'Network error. Please check your connection and try again.';
+          banner.classList.add('show');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Payment Information';
+        }
+      });
+    </script>
+  </body>
+</html>

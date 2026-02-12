@@ -6,6 +6,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Avatar } from "@/components/Avatar";
@@ -16,6 +17,7 @@ import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { UserRole, ClientType, CLIENT_TYPES } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { apiRequest } from "@/lib/query-client";
 
 const roleLabels: Record<UserRole, string> = {
   client: "Client",
@@ -38,6 +40,31 @@ export default function ProfileScreen() {
   const [businessName, setBusinessName] = useState(user?.businessName || "");
   const [businessAddress, setBusinessAddress] = useState(user?.businessAddress || "");
   const [businessPhone, setBusinessPhone] = useState(user?.businessPhone || "");
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
+  const [bankName, setBankName] = useState<string>("");
+  const [bankInstitution, setBankInstitution] = useState<string>("");
+  const [bankTransit, setBankTransit] = useState<string>("");
+  const [bankAccount, setBankAccount] = useState<string>("");
+  const [etransferEmail, setEtransferEmail] = useState<string>("");
+
+  const queryClient = useQueryClient();
+  const { data: paymentProfile } = useQuery<any>({
+    queryKey: ["/api/payment-profile"],
+    enabled: user?.role === "worker",
+  });
+
+  const savePaymentMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PUT", "/api/payment-profile", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-profile"] });
+      setShowPaymentModal(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
 
   const handleSelectClientType = async (type: ClientType) => {
     await Haptics.selectionAsync();
@@ -71,6 +98,36 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await logout();
+  };
+
+  const handleOpenPaymentModal = () => {
+    if (paymentProfile) {
+      setPaymentMethod(paymentProfile.paymentMethod || "");
+      setBankName(paymentProfile.bankName || "");
+      setBankInstitution(paymentProfile.bankInstitution || "");
+      setBankTransit(paymentProfile.bankTransit || "");
+      setBankAccount(paymentProfile.bankAccount || "");
+      setEtransferEmail(paymentProfile.etransferEmail || "");
+    } else {
+      setPaymentMethod("");
+      setBankName("");
+      setBankInstitution("");
+      setBankTransit("");
+      setBankAccount("");
+      setEtransferEmail("");
+    }
+    setShowPaymentModal(true);
+  };
+
+  const handleSavePayment = () => {
+    savePaymentMutation.mutate({
+      paymentMethod,
+      bankName: paymentMethod === "direct_deposit" ? bankName : undefined,
+      bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : undefined,
+      bankTransit: paymentMethod === "direct_deposit" ? bankTransit : undefined,
+      bankAccount: paymentMethod === "direct_deposit" ? bankAccount : undefined,
+      etransferEmail: paymentMethod === "etransfer" ? etransferEmail : undefined,
+    });
   };
 
   return (
@@ -149,6 +206,45 @@ export default function ProfileScreen() {
                   <ThemedText style={[styles.menuItemValue, { color: theme.textSecondary }]}>
                     {user.businessName ? "Edit" : "Add"}
                   </ThemedText>
+                  <Feather name="chevron-right" size={20} color={theme.textMuted} />
+                </View>
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {user?.role === "worker" ? (
+        <View style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            Payment Information
+          </ThemedText>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
+            <Pressable
+              onPress={handleOpenPaymentModal}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && { backgroundColor: theme.backgroundSecondary },
+              ]}
+              testID="button-payment-info"
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <Feather name="credit-card" size={20} color={theme.text} />
+                  <View>
+                    <ThemedText style={styles.menuItemText}>Banking Details</ThemedText>
+                    {paymentProfile?.paymentMethod ? (
+                      <ThemedText style={[styles.paymentStatus, { color: theme.success }]}>
+                        {paymentProfile.paymentMethod === "direct_deposit" ? "Direct Deposit" : "E-Transfer"} configured
+                      </ThemedText>
+                    ) : (
+                      <ThemedText style={[styles.paymentStatus, { color: theme.warning || "#F59E0B" }]}>
+                        Not configured - tap to set up
+                      </ThemedText>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.menuItemRight}>
                   <Feather name="chevron-right" size={20} color={theme.textMuted} />
                 </View>
               </View>
@@ -353,6 +449,151 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showPaymentModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <Pressable 
+          style={styles.modalOverlay} 
+          onPress={() => setShowPaymentModal(false)}
+        >
+          <Pressable style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+            <ThemedText type="h3" style={styles.modalTitle}>Payment Information</ThemedText>
+            
+            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+              <ThemedText style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: Spacing.sm }]}>
+                Payment Method
+              </ThemedText>
+              <View style={{ flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.lg }}>
+                <Pressable
+                  onPress={() => setPaymentMethod("direct_deposit")}
+                  style={[
+                    styles.paymentMethodOption,
+                    {
+                      backgroundColor: paymentMethod === "direct_deposit" ? theme.primary + "15" : theme.backgroundSecondary || "#F1F5F9",
+                      borderColor: paymentMethod === "direct_deposit" ? theme.primary : theme.border,
+                      borderWidth: 1.5,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <Feather name={paymentMethod === "direct_deposit" ? "check-circle" : "circle"} size={18} color={paymentMethod === "direct_deposit" ? theme.primary : theme.textMuted} />
+                  <ThemedText style={[{ fontSize: 14, fontWeight: paymentMethod === "direct_deposit" ? "600" : "400" }]}>
+                    Direct Deposit
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => setPaymentMethod("etransfer")}
+                  style={[
+                    styles.paymentMethodOption,
+                    {
+                      backgroundColor: paymentMethod === "etransfer" ? theme.primary + "15" : theme.backgroundSecondary || "#F1F5F9",
+                      borderColor: paymentMethod === "etransfer" ? theme.primary : theme.border,
+                      borderWidth: 1.5,
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <Feather name={paymentMethod === "etransfer" ? "check-circle" : "circle"} size={18} color={paymentMethod === "etransfer" ? theme.primary : theme.textMuted} />
+                  <ThemedText style={[{ fontSize: 14, fontWeight: paymentMethod === "etransfer" ? "600" : "400" }]}>
+                    E-Transfer
+                  </ThemedText>
+                </Pressable>
+              </View>
+
+              {paymentMethod === "direct_deposit" ? (
+                <View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Bank Name</ThemedText>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                      placeholder="e.g. TD Canada Trust"
+                      placeholderTextColor={theme.textSecondary}
+                      value={bankName}
+                      onChangeText={setBankName}
+                      testID="input-bank-name"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Institution Number (3 digits)</ThemedText>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                      placeholder="e.g. 004"
+                      placeholderTextColor={theme.textSecondary}
+                      value={bankInstitution}
+                      onChangeText={setBankInstitution}
+                      keyboardType="number-pad"
+                      maxLength={3}
+                      testID="input-bank-institution"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Transit Number (5 digits)</ThemedText>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                      placeholder="e.g. 12345"
+                      placeholderTextColor={theme.textSecondary}
+                      value={bankTransit}
+                      onChangeText={setBankTransit}
+                      keyboardType="number-pad"
+                      maxLength={5}
+                      testID="input-bank-transit"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Account Number (7-12 digits)</ThemedText>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                      placeholder="e.g. 1234567"
+                      placeholderTextColor={theme.textSecondary}
+                      value={bankAccount}
+                      onChangeText={setBankAccount}
+                      keyboardType="number-pad"
+                      maxLength={12}
+                      testID="input-bank-account"
+                    />
+                  </View>
+                </View>
+              ) : null}
+
+              {paymentMethod === "etransfer" ? (
+                <View style={styles.inputGroup}>
+                  <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>E-Transfer Email</ThemedText>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                    placeholder="your.email@example.com"
+                    placeholderTextColor={theme.textSecondary}
+                    value={etransferEmail}
+                    onChangeText={setEtransferEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    testID="input-etransfer-email"
+                  />
+                </View>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <Pressable 
+                onPress={() => setShowPaymentModal(false)}
+                style={[styles.modalButton, { backgroundColor: theme.border }]}
+              >
+                <ThemedText>Cancel</ThemedText>
+              </Pressable>
+              <Pressable 
+                onPress={handleSavePayment}
+                style={[styles.modalButton, { backgroundColor: theme.primary, opacity: (!paymentMethod || savePaymentMutation.isPending) ? 0.5 : 1 }]}
+                disabled={!paymentMethod || savePaymentMutation.isPending}
+              >
+                <ThemedText style={{ color: "#fff" }}>{savePaymentMutation.isPending ? "Saving..." : "Save"}</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -425,6 +666,17 @@ const styles = StyleSheet.create({
   },
   menuItemValue: {
     fontSize: 14,
+  },
+  paymentStatus: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  paymentMethodOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
   },
   logoutSection: {
     marginTop: Spacing.lg,

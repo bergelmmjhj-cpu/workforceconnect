@@ -571,6 +571,16 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(applyTemplate);
   });
 
+  // Serve Payment Information Page
+  const paymentInfoPath = path.resolve(process.cwd(), "server", "templates", "payment-info.html");
+  const paymentInfoTemplate = fs.readFileSync(paymentInfoPath, "utf-8");
+
+  app.get("/payment-info", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(paymentInfoTemplate);
+  });
+
   // Serve Admin Applications Dashboard
   const adminAppsPath = path.resolve(process.cwd(), "server", "templates", "admin-applications.html");
   const adminAppsTemplate = fs.readFileSync(adminAppsPath, "utf-8");

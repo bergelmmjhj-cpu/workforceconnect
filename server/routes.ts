@@ -1095,6 +1095,217 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
+  // Payment Profiles API
+  // ========================================
+
+  // Get current user's payment profile (authenticated)
+  app.get("/api/payment-profile", async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).session?.userId;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const [profile] = await db.select().from(paymentProfiles).where(eq(paymentProfiles.workerUserId, userId));
+      res.json(profile || null);
+    } catch (error) {
+      console.error("Error fetching payment profile:", error);
+      res.status(500).json({ error: "Failed to fetch payment profile" });
+    }
+  });
+
+  // Create or update current user's payment profile (authenticated)
+  app.put("/api/payment-profile", async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).session?.userId;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const { paymentMethod, bankName, bankInstitution, bankTransit, bankAccount, etransferEmail } = req.body;
+
+      if (!paymentMethod) {
+        res.status(400).json({ error: "Payment method is required" });
+        return;
+      }
+
+      if (paymentMethod === "direct_deposit") {
+        if (!bankName || !bankInstitution || !bankTransit || !bankAccount) {
+          res.status(400).json({ error: "Bank details are required for direct deposit" });
+          return;
+        }
+      } else if (paymentMethod === "etransfer") {
+        if (!etransferEmail) {
+          res.status(400).json({ error: "E-Transfer email is required" });
+          return;
+        }
+      }
+
+      const [existing] = await db.select().from(paymentProfiles).where(eq(paymentProfiles.workerUserId, userId));
+
+      if (existing) {
+        const [updated] = await db.update(paymentProfiles)
+          .set({
+            paymentMethod,
+            bankName: paymentMethod === "direct_deposit" ? bankName : null,
+            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
+            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
+            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
+            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(paymentProfiles.workerUserId, userId))
+          .returning();
+        res.json(updated);
+      } else {
+        const [created] = await db.insert(paymentProfiles)
+          .values({
+            workerUserId: userId,
+            paymentMethod,
+            bankName: paymentMethod === "direct_deposit" ? bankName : null,
+            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
+            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
+            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
+            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
+          })
+          .returning();
+        res.json(created);
+      }
+    } catch (error) {
+      console.error("Error saving payment profile:", error);
+      res.status(500).json({ error: "Failed to save payment profile" });
+    }
+  });
+
+  // Public endpoint: Submit/update payment info by email (for existing workers)
+  app.post("/api/public/payment-info", async (req: Request, res: Response) => {
+    try {
+      const ip = getClientIp(req);
+      if (!checkRateLimit(ip)) {
+        res.status(429).json({ error: "Too many requests. Please try again later." });
+        return;
+      }
+
+      const { email, paymentMethod, bankName, bankInstitution, bankTransit, bankAccount, etransferEmail } = req.body;
+
+      if (!email) {
+        res.status(400).json({ error: "Email is required" });
+        return;
+      }
+
+      if (!paymentMethod) {
+        res.status(400).json({ error: "Payment method is required" });
+        return;
+      }
+
+      // Find the user by email
+      const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase()));
+      
+      if (!user) {
+        // Also check worker_applications
+        const [application] = await db.select().from(workerApplications).where(eq(workerApplications.email, email.trim().toLowerCase()));
+        
+        if (application) {
+          // Update the application's payment info
+          await db.update(workerApplications)
+            .set({
+              paymentMethod,
+              bankName: paymentMethod === "direct_deposit" ? bankName : null,
+              bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
+              bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
+              bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
+              etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
+              updatedAt: new Date(),
+            })
+            .where(eq(workerApplications.id, application.id));
+          
+          res.json({ ok: true, message: "Payment information updated for your application" });
+          return;
+        }
+
+        res.status(404).json({ error: "No account or application found with this email. Please apply first at /apply" });
+        return;
+      }
+
+      // Create or update payment profile for the user
+      const [existing] = await db.select().from(paymentProfiles).where(eq(paymentProfiles.workerUserId, user.id));
+
+      if (existing) {
+        await db.update(paymentProfiles)
+          .set({
+            paymentMethod,
+            bankName: paymentMethod === "direct_deposit" ? bankName : null,
+            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
+            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
+            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
+            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(paymentProfiles.workerUserId, user.id));
+      } else {
+        await db.insert(paymentProfiles)
+          .values({
+            workerUserId: user.id,
+            paymentMethod,
+            bankName: paymentMethod === "direct_deposit" ? bankName : null,
+            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
+            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
+            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
+            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
+          });
+      }
+
+      res.json({ ok: true, message: "Payment information saved successfully" });
+    } catch (error) {
+      console.error("Error saving public payment info:", error);
+      res.status(500).json({ error: "Failed to save payment information. Please try again." });
+    }
+  });
+
+  // Admin: Get all payment profiles
+  app.get("/api/admin/payment-profiles", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const profiles = await db.select({
+        id: paymentProfiles.id,
+        workerUserId: paymentProfiles.workerUserId,
+        paymentMethod: paymentProfiles.paymentMethod,
+        bankName: paymentProfiles.bankName,
+        bankInstitution: paymentProfiles.bankInstitution,
+        bankTransit: paymentProfiles.bankTransit,
+        bankAccount: paymentProfiles.bankAccount,
+        etransferEmail: paymentProfiles.etransferEmail,
+        workerName: users.fullName,
+        workerEmail: users.email,
+        createdAt: paymentProfiles.createdAt,
+        updatedAt: paymentProfiles.updatedAt,
+      })
+      .from(paymentProfiles)
+      .leftJoin(users, eq(paymentProfiles.workerUserId, users.id))
+      .orderBy(desc(paymentProfiles.updatedAt));
+
+      res.json(profiles);
+    } catch (error) {
+      console.error("Error fetching payment profiles:", error);
+      res.status(500).json({ error: "Failed to fetch payment profiles" });
+    }
+  });
+
+  // ========================================
   // Workplaces API (Admin only)
   // ========================================
 

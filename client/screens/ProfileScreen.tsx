@@ -41,7 +41,7 @@ export default function ProfileScreen() {
   const [businessAddress, setBusinessAddress] = useState(user?.businessAddress || "");
   const [businessPhone, setBusinessPhone] = useState(user?.businessPhone || "");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<string>("");
+  
   const [bankName, setBankName] = useState<string>("");
   const [bankInstitution, setBankInstitution] = useState<string>("");
   const [bankTransit, setBankTransit] = useState<string>("");
@@ -102,14 +102,12 @@ export default function ProfileScreen() {
 
   const handleOpenPaymentModal = () => {
     if (paymentProfile) {
-      setPaymentMethod(paymentProfile.paymentMethod || "");
       setBankName(paymentProfile.bankName || "");
       setBankInstitution(paymentProfile.bankInstitution || "");
       setBankTransit(paymentProfile.bankTransit || "");
       setBankAccount(paymentProfile.bankAccount || "");
       setEtransferEmail(paymentProfile.etransferEmail || "");
     } else {
-      setPaymentMethod("");
       setBankName("");
       setBankInstitution("");
       setBankTransit("");
@@ -121,12 +119,12 @@ export default function ProfileScreen() {
 
   const handleSavePayment = () => {
     savePaymentMutation.mutate({
-      paymentMethod,
-      bankName: paymentMethod === "direct_deposit" ? bankName : undefined,
-      bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : undefined,
-      bankTransit: paymentMethod === "direct_deposit" ? bankTransit : undefined,
-      bankAccount: paymentMethod === "direct_deposit" ? bankAccount : undefined,
-      etransferEmail: paymentMethod === "etransfer" ? etransferEmail : undefined,
+      paymentMethod: "both",
+      bankName,
+      bankInstitution,
+      bankTransit,
+      bankAccount,
+      etransferEmail,
     });
   };
 
@@ -233,9 +231,9 @@ export default function ProfileScreen() {
                   <Feather name="credit-card" size={20} color={theme.text} />
                   <View>
                     <ThemedText style={styles.menuItemText}>Banking Details</ThemedText>
-                    {paymentProfile?.paymentMethod ? (
+                    {paymentProfile?.bankName ? (
                       <ThemedText style={[styles.paymentStatus, { color: theme.success }]}>
-                        {paymentProfile.paymentMethod === "direct_deposit" ? "Direct Deposit" : "E-Transfer"} configured
+                        Payment details configured
                       </ThemedText>
                     ) : (
                       <ThemedText style={[styles.paymentStatus, { color: theme.warning || "#F59E0B" }]}>
@@ -463,117 +461,81 @@ export default function ProfileScreen() {
           <Pressable style={[styles.modalContent, { backgroundColor: theme.surface }]}>
             <ThemedText type="h3" style={styles.modalTitle}>Payment Information</ThemedText>
             
-            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
-              <ThemedText style={[styles.inputLabel, { color: theme.textSecondary, marginBottom: Spacing.sm }]}>
-                Payment Method
+            <ScrollView style={{ maxHeight: 450 }} showsVerticalScrollIndicator={false}>
+              <ThemedText style={[{ fontSize: 15, fontWeight: "600", marginBottom: 4 }]}>Direct Deposit</ThemedText>
+              <ThemedText style={[styles.paymentStatus, { color: theme.textSecondary, marginBottom: Spacing.md }]}>
+                Bank account details for receiving payments
               </ThemedText>
-              <View style={{ flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.lg }}>
-                <Pressable
-                  onPress={() => setPaymentMethod("direct_deposit")}
-                  style={[
-                    styles.paymentMethodOption,
-                    {
-                      backgroundColor: paymentMethod === "direct_deposit" ? theme.primary + "15" : theme.backgroundSecondary || "#F1F5F9",
-                      borderColor: paymentMethod === "direct_deposit" ? theme.primary : theme.border,
-                      borderWidth: 1.5,
-                      flex: 1,
-                    },
-                  ]}
-                >
-                  <Feather name={paymentMethod === "direct_deposit" ? "check-circle" : "circle"} size={18} color={paymentMethod === "direct_deposit" ? theme.primary : theme.textMuted} />
-                  <ThemedText style={[{ fontSize: 14, fontWeight: paymentMethod === "direct_deposit" ? "600" : "400" }]}>
-                    Direct Deposit
-                  </ThemedText>
-                </Pressable>
-                <Pressable
-                  onPress={() => setPaymentMethod("etransfer")}
-                  style={[
-                    styles.paymentMethodOption,
-                    {
-                      backgroundColor: paymentMethod === "etransfer" ? theme.primary + "15" : theme.backgroundSecondary || "#F1F5F9",
-                      borderColor: paymentMethod === "etransfer" ? theme.primary : theme.border,
-                      borderWidth: 1.5,
-                      flex: 1,
-                    },
-                  ]}
-                >
-                  <Feather name={paymentMethod === "etransfer" ? "check-circle" : "circle"} size={18} color={paymentMethod === "etransfer" ? theme.primary : theme.textMuted} />
-                  <ThemedText style={[{ fontSize: 14, fontWeight: paymentMethod === "etransfer" ? "600" : "400" }]}>
-                    E-Transfer
-                  </ThemedText>
-                </Pressable>
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Bank Name</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                  placeholder="e.g. TD Canada Trust"
+                  placeholderTextColor={theme.textSecondary}
+                  value={bankName}
+                  onChangeText={setBankName}
+                  testID="input-bank-name"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Institution Number (3 digits)</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                  placeholder="e.g. 004"
+                  placeholderTextColor={theme.textSecondary}
+                  value={bankInstitution}
+                  onChangeText={setBankInstitution}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  testID="input-bank-institution"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Transit Number (5 digits)</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                  placeholder="e.g. 12345"
+                  placeholderTextColor={theme.textSecondary}
+                  value={bankTransit}
+                  onChangeText={setBankTransit}
+                  keyboardType="number-pad"
+                  maxLength={5}
+                  testID="input-bank-transit"
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Account Number (7-12 digits)</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                  placeholder="e.g. 1234567"
+                  placeholderTextColor={theme.textSecondary}
+                  value={bankAccount}
+                  onChangeText={setBankAccount}
+                  keyboardType="number-pad"
+                  maxLength={12}
+                  testID="input-bank-account"
+                />
               </View>
 
-              {paymentMethod === "direct_deposit" ? (
-                <View>
-                  <View style={styles.inputGroup}>
-                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Bank Name</ThemedText>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-                      placeholder="e.g. TD Canada Trust"
-                      placeholderTextColor={theme.textSecondary}
-                      value={bankName}
-                      onChangeText={setBankName}
-                      testID="input-bank-name"
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Institution Number (3 digits)</ThemedText>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-                      placeholder="e.g. 004"
-                      placeholderTextColor={theme.textSecondary}
-                      value={bankInstitution}
-                      onChangeText={setBankInstitution}
-                      keyboardType="number-pad"
-                      maxLength={3}
-                      testID="input-bank-institution"
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Transit Number (5 digits)</ThemedText>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-                      placeholder="e.g. 12345"
-                      placeholderTextColor={theme.textSecondary}
-                      value={bankTransit}
-                      onChangeText={setBankTransit}
-                      keyboardType="number-pad"
-                      maxLength={5}
-                      testID="input-bank-transit"
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Account Number (7-12 digits)</ThemedText>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-                      placeholder="e.g. 1234567"
-                      placeholderTextColor={theme.textSecondary}
-                      value={bankAccount}
-                      onChangeText={setBankAccount}
-                      keyboardType="number-pad"
-                      maxLength={12}
-                      testID="input-bank-account"
-                    />
-                  </View>
-                </View>
-              ) : null}
+              <View style={{ height: 1, backgroundColor: theme.border, marginVertical: Spacing.lg }} />
 
-              {paymentMethod === "etransfer" ? (
-                <View style={styles.inputGroup}>
-                  <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>E-Transfer Email</ThemedText>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-                    placeholder="your.email@example.com"
-                    placeholderTextColor={theme.textSecondary}
-                    value={etransferEmail}
-                    onChangeText={setEtransferEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    testID="input-etransfer-email"
-                  />
-                </View>
-              ) : null}
+              <ThemedText style={[{ fontSize: 15, fontWeight: "600", marginBottom: 4 }]}>Interac E-Transfer</ThemedText>
+              <ThemedText style={[styles.paymentStatus, { color: theme.textSecondary, marginBottom: Spacing.md }]}>
+                Email for receiving E-Transfer payments
+              </ThemedText>
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>E-Transfer Email</ThemedText>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                  placeholder="your.email@example.com"
+                  placeholderTextColor={theme.textSecondary}
+                  value={etransferEmail}
+                  onChangeText={setEtransferEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  testID="input-etransfer-email"
+                />
+              </View>
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -585,8 +547,8 @@ export default function ProfileScreen() {
               </Pressable>
               <Pressable 
                 onPress={handleSavePayment}
-                style={[styles.modalButton, { backgroundColor: theme.primary, opacity: (!paymentMethod || savePaymentMutation.isPending) ? 0.5 : 1 }]}
-                disabled={!paymentMethod || savePaymentMutation.isPending}
+                style={[styles.modalButton, { backgroundColor: theme.primary, opacity: (!bankName || !bankInstitution || !bankTransit || !bankAccount || !etransferEmail || savePaymentMutation.isPending) ? 0.5 : 1 }]}
+                disabled={!bankName || !bankInstitution || !bankTransit || !bankAccount || !etransferEmail || savePaymentMutation.isPending}
               >
                 <ThemedText style={{ color: "#fff" }}>{savePaymentMutation.isPending ? "Saving..." : "Save"}</ThemedText>
               </Pressable>

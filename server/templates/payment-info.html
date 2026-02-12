@@ -519,66 +519,55 @@
             <span class="error-message">Please enter the email you used in your application</span>
           </div>
 
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Direct Deposit</h3>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">Your bank account details for receiving payments via direct deposit.</p>
+
           <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label">Payment Method <span class="required">*</span></label>
-            <div class="radio-group">
-              <label class="radio-item">
-                <input type="radio" name="paymentMethod" value="direct_deposit" required onchange="togglePaymentFields()">
-                <span>Direct Deposit</span>
-              </label>
-              <label class="radio-item">
-                <input type="radio" name="paymentMethod" value="e_transfer" onchange="togglePaymentFields()">
-                <span>Interac E-Transfer</span>
-              </label>
-            </div>
-            <span class="error-message">Please select a payment method</span>
+            <label class="form-label">Bank Name <span class="required">*</span></label>
+            <select name="bankName" class="form-select" required>
+              <option value="">Select your bank</option>
+              <option value="TD Canada Trust">TD Canada Trust</option>
+              <option value="RBC Royal Bank">RBC Royal Bank</option>
+              <option value="Scotiabank">Scotiabank</option>
+              <option value="BMO Bank of Montreal">BMO Bank of Montreal</option>
+              <option value="CIBC">CIBC</option>
+              <option value="National Bank">National Bank</option>
+              <option value="Desjardins">Desjardins</option>
+              <option value="HSBC Canada">HSBC Canada</option>
+              <option value="Tangerine">Tangerine</option>
+              <option value="Simplii Financial">Simplii Financial</option>
+              <option value="Other">Other</option>
+            </select>
+            <span class="error-message">Please select your bank</span>
           </div>
 
-          <div id="directDepositFields" style="display: none;">
-            <div class="form-group" style="margin-bottom: 16px;">
-              <label class="form-label">Bank Name <span class="required">*</span></label>
-              <select name="bankName" class="form-select">
-                <option value="">Select your bank</option>
-                <option value="TD Canada Trust">TD Canada Trust</option>
-                <option value="RBC Royal Bank">RBC Royal Bank</option>
-                <option value="Scotiabank">Scotiabank</option>
-                <option value="BMO Bank of Montreal">BMO Bank of Montreal</option>
-                <option value="CIBC">CIBC</option>
-                <option value="National Bank">National Bank</option>
-                <option value="Desjardins">Desjardins</option>
-                <option value="HSBC Canada">HSBC Canada</option>
-                <option value="Tangerine">Tangerine</option>
-                <option value="Simplii Financial">Simplii Financial</option>
-                <option value="Other">Other</option>
-              </select>
-              <span class="error-message">Please select your bank</span>
+          <div class="form-row three-col">
+            <div class="form-group">
+              <label class="form-label">Institution Number <span class="required">*</span></label>
+              <input type="text" name="institutionNumber" class="form-input" placeholder="3 digits" maxlength="3" pattern="\d{3}" required>
+              <span class="error-message">Must be exactly 3 digits</span>
             </div>
-
-            <div class="form-row three-col">
-              <div class="form-group">
-                <label class="form-label">Institution Number <span class="required">*</span></label>
-                <input type="text" name="institutionNumber" class="form-input" placeholder="3 digits" maxlength="3" pattern="\d{3}">
-                <span class="error-message">Must be exactly 3 digits</span>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Transit Number <span class="required">*</span></label>
-                <input type="text" name="transitNumber" class="form-input" placeholder="5 digits" maxlength="5" pattern="\d{5}">
-                <span class="error-message">Must be exactly 5 digits</span>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Account Number <span class="required">*</span></label>
-                <input type="text" name="accountNumber" class="form-input" placeholder="7-12 digits" maxlength="12" pattern="\d{7,12}">
-                <span class="error-message">Must be 7-12 digits</span>
-              </div>
+            <div class="form-group">
+              <label class="form-label">Transit Number <span class="required">*</span></label>
+              <input type="text" name="transitNumber" class="form-input" placeholder="5 digits" maxlength="5" pattern="\d{5}" required>
+              <span class="error-message">Must be exactly 5 digits</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Account Number <span class="required">*</span></label>
+              <input type="text" name="accountNumber" class="form-input" placeholder="7-12 digits" maxlength="12" pattern="\d{7,12}" required>
+              <span class="error-message">Must be 7-12 digits</span>
             </div>
           </div>
 
-          <div id="eTransferFields" style="display: none;">
-            <div class="form-group" style="margin-bottom: 16px;">
-              <label class="form-label">E-Transfer Email Address <span class="required">*</span></label>
-              <input type="email" name="eTransferEmail" class="form-input" placeholder="your.etransfer@example.com">
-              <span class="error-message">Please enter a valid email address for E-Transfer</span>
-            </div>
+          <hr style="border: none; border-top: 1px solid var(--border); margin: 24px 0;">
+
+          <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Interac E-Transfer</h3>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">Your email address for receiving Interac E-Transfer payments.</p>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">E-Transfer Email Address <span class="required">*</span></label>
+            <input type="email" name="eTransferEmail" class="form-input" placeholder="your.etransfer@example.com" required>
+            <span class="error-message">Please enter a valid email address for E-Transfer</span>
           </div>
         </section>
 
@@ -619,26 +608,6 @@
     </footer>
 
     <script>
-      function togglePaymentFields() {
-        var method = document.querySelector('input[name="paymentMethod"]:checked');
-        var directFields = document.getElementById('directDepositFields');
-        var eTransferFields = document.getElementById('eTransferFields');
-        
-        if (!method) {
-          directFields.style.display = 'none';
-          eTransferFields.style.display = 'none';
-          return;
-        }
-        
-        if (method.value === 'direct_deposit') {
-          directFields.style.display = 'block';
-          eTransferFields.style.display = 'none';
-        } else if (method.value === 'e_transfer') {
-          directFields.style.display = 'none';
-          eTransferFields.style.display = 'block';
-        }
-      }
-
       function clearErrors() {
         document.querySelectorAll('.form-group.error').forEach(function(el) {
           el.classList.remove('error');
@@ -671,47 +640,34 @@
           valid = false;
         }
         
-        var method = document.querySelector('input[name="paymentMethod"]:checked');
-        if (!method) {
-          var radioGroup = document.querySelector('[name="paymentMethod"]');
-          if (radioGroup) {
-            var group = radioGroup.closest('.form-group');
-            if (group) group.classList.add('error');
-          }
+        var bankName = form.querySelector('[name="bankName"]').value;
+        if (!bankName) {
+          showFieldError('bankName');
           valid = false;
-          return valid;
         }
         
-        if (method.value === 'direct_deposit') {
-          var bankName = form.querySelector('[name="bankName"]').value;
-          if (!bankName) {
-            showFieldError('bankName');
-            valid = false;
-          }
-          
-          var instNum = form.querySelector('[name="institutionNumber"]').value.trim();
-          if (!instNum || !/^\d{3}$/.test(instNum)) {
-            showFieldError('institutionNumber');
-            valid = false;
-          }
-          
-          var transitNum = form.querySelector('[name="transitNumber"]').value.trim();
-          if (!transitNum || !/^\d{5}$/.test(transitNum)) {
-            showFieldError('transitNumber');
-            valid = false;
-          }
-          
-          var acctNum = form.querySelector('[name="accountNumber"]').value.trim();
-          if (!acctNum || !/^\d{7,12}$/.test(acctNum)) {
-            showFieldError('accountNumber');
-            valid = false;
-          }
-        } else if (method.value === 'e_transfer') {
-          var eTransferEmail = form.querySelector('[name="eTransferEmail"]').value.trim();
-          if (!eTransferEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(eTransferEmail)) {
-            showFieldError('eTransferEmail');
-            valid = false;
-          }
+        var instNum = form.querySelector('[name="institutionNumber"]').value.trim();
+        if (!instNum || !/^\d{3}$/.test(instNum)) {
+          showFieldError('institutionNumber');
+          valid = false;
+        }
+        
+        var transitNum = form.querySelector('[name="transitNumber"]').value.trim();
+        if (!transitNum || !/^\d{5}$/.test(transitNum)) {
+          showFieldError('transitNumber');
+          valid = false;
+        }
+        
+        var acctNum = form.querySelector('[name="accountNumber"]').value.trim();
+        if (!acctNum || !/^\d{7,12}$/.test(acctNum)) {
+          showFieldError('accountNumber');
+          valid = false;
+        }
+
+        var eTransferEmail = form.querySelector('[name="eTransferEmail"]').value.trim();
+        if (!eTransferEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(eTransferEmail)) {
+          showFieldError('eTransferEmail');
+          valid = false;
         }
         
         return valid;
@@ -727,21 +683,16 @@
         submitBtn.textContent = 'Submitting...';
         
         var form = this;
-        var method = document.querySelector('input[name="paymentMethod"]:checked').value;
         
         var payload = {
           email: form.querySelector('[name="email"]').value.trim(),
-          paymentMethod: method
+          paymentMethod: 'both',
+          bankName: form.querySelector('[name="bankName"]').value,
+          bankInstitution: form.querySelector('[name="institutionNumber"]').value.trim(),
+          bankTransit: form.querySelector('[name="transitNumber"]').value.trim(),
+          bankAccount: form.querySelector('[name="accountNumber"]').value.trim(),
+          etransferEmail: form.querySelector('[name="eTransferEmail"]').value.trim()
         };
-        
-        if (method === 'direct_deposit') {
-          payload.bankName = form.querySelector('[name="bankName"]').value;
-          payload.institutionNumber = form.querySelector('[name="institutionNumber"]').value.trim();
-          payload.transitNumber = form.querySelector('[name="transitNumber"]').value.trim();
-          payload.accountNumber = form.querySelector('[name="accountNumber"]').value.trim();
-        } else if (method === 'e_transfer') {
-          payload.eTransferEmail = form.querySelector('[name="eTransferEmail"]').value.trim();
-        }
         
         try {
           var response = await fetch('/api/public/payment-info', {

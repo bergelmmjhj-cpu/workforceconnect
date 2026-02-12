@@ -1124,52 +1124,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { paymentMethod, bankName, bankInstitution, bankTransit, bankAccount, etransferEmail } = req.body;
+      const { bankName, bankInstitution, bankTransit, bankAccount, etransferEmail } = req.body;
 
-      if (!paymentMethod) {
-        res.status(400).json({ error: "Payment method is required" });
+      if (!bankName || !bankInstitution || !bankTransit || !bankAccount) {
+        res.status(400).json({ error: "Bank details are required (bank name, institution, transit, account)" });
         return;
       }
-
-      if (paymentMethod === "direct_deposit") {
-        if (!bankName || !bankInstitution || !bankTransit || !bankAccount) {
-          res.status(400).json({ error: "Bank details are required for direct deposit" });
-          return;
-        }
-      } else if (paymentMethod === "etransfer") {
-        if (!etransferEmail) {
-          res.status(400).json({ error: "E-Transfer email is required" });
-          return;
-        }
+      if (!etransferEmail) {
+        res.status(400).json({ error: "E-Transfer email is required" });
+        return;
       }
 
       const [existing] = await db.select().from(paymentProfiles).where(eq(paymentProfiles.workerUserId, userId));
 
+      const paymentData = {
+        paymentMethod: "both",
+        bankName,
+        bankInstitution,
+        bankTransit,
+        bankAccount,
+        etransferEmail,
+        updatedAt: new Date(),
+      };
+
       if (existing) {
         const [updated] = await db.update(paymentProfiles)
-          .set({
-            paymentMethod,
-            bankName: paymentMethod === "direct_deposit" ? bankName : null,
-            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
-            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
-            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
-            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
-            updatedAt: new Date(),
-          })
+          .set(paymentData)
           .where(eq(paymentProfiles.workerUserId, userId))
           .returning();
         res.json(updated);
       } else {
         const [created] = await db.insert(paymentProfiles)
-          .values({
-            workerUserId: userId,
-            paymentMethod,
-            bankName: paymentMethod === "direct_deposit" ? bankName : null,
-            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
-            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
-            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
-            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
-          })
+          .values({ workerUserId: userId, ...paymentData })
           .returning();
         res.json(created);
       }
@@ -1188,17 +1174,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { email, paymentMethod, bankName, bankInstitution, bankTransit, bankAccount, etransferEmail } = req.body;
+      const { email, bankName, bankInstitution, bankTransit, bankAccount, etransferEmail } = req.body;
 
       if (!email) {
         res.status(400).json({ error: "Email is required" });
         return;
       }
 
-      if (!paymentMethod) {
-        res.status(400).json({ error: "Payment method is required" });
+      if (!bankName || !bankInstitution || !bankTransit || !bankAccount) {
+        res.status(400).json({ error: "Bank details are required (bank name, institution, transit, account)" });
         return;
       }
+      if (!etransferEmail) {
+        res.status(400).json({ error: "E-Transfer email is required" });
+        return;
+      }
+
+      const paymentData = {
+        paymentMethod: "both" as const,
+        bankName,
+        bankInstitution,
+        bankTransit,
+        bankAccount,
+        etransferEmail,
+        updatedAt: new Date(),
+      };
 
       // Find the user by email
       const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase()));
@@ -1208,17 +1208,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const [application] = await db.select().from(workerApplications).where(eq(workerApplications.email, email.trim().toLowerCase()));
         
         if (application) {
-          // Update the application's payment info
           await db.update(workerApplications)
-            .set({
-              paymentMethod,
-              bankName: paymentMethod === "direct_deposit" ? bankName : null,
-              bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
-              bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
-              bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
-              etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
-              updatedAt: new Date(),
-            })
+            .set(paymentData)
             .where(eq(workerApplications.id, application.id));
           
           res.json({ ok: true, message: "Payment information updated for your application" });
@@ -1234,27 +1225,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (existing) {
         await db.update(paymentProfiles)
-          .set({
-            paymentMethod,
-            bankName: paymentMethod === "direct_deposit" ? bankName : null,
-            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
-            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
-            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
-            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
-            updatedAt: new Date(),
-          })
+          .set(paymentData)
           .where(eq(paymentProfiles.workerUserId, user.id));
       } else {
         await db.insert(paymentProfiles)
-          .values({
-            workerUserId: user.id,
-            paymentMethod,
-            bankName: paymentMethod === "direct_deposit" ? bankName : null,
-            bankInstitution: paymentMethod === "direct_deposit" ? bankInstitution : null,
-            bankTransit: paymentMethod === "direct_deposit" ? bankTransit : null,
-            bankAccount: paymentMethod === "direct_deposit" ? bankAccount : null,
-            etransferEmail: paymentMethod === "etransfer" ? etransferEmail : null,
-          });
+          .values({ workerUserId: user.id, ...paymentData });
       }
 
       res.json({ ok: true, message: "Payment information saved successfully" });

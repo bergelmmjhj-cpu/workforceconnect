@@ -113,7 +113,14 @@ export default function InviteWorkerScreen() {
                 </ThemedText>
               ) : null}
             </View>
-            <Feather name="plus-circle" size={24} color={theme.primary} />
+            <Pressable
+              style={[styles.assignBtn, { backgroundColor: theme.primary }]}
+              onPress={() => handleInvite(item)}
+              testID={`button-assign-${item.id}`}
+            >
+              <Feather name="plus" size={16} color="#fff" />
+              <ThemedText style={styles.assignBtnText}>ASSIGN</ThemedText>
+            </Pressable>
           </View>
         </Card>
       </Pressable>
@@ -195,7 +202,7 @@ export default function InviteWorkerScreen() {
         onRequestClose={() => setShowConfirmModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
             <ThemedText style={styles.modalTitle}>Assign Worker</ThemedText>
             <ThemedText style={[styles.modalMessage, { color: theme.textSecondary }]}>
               Assign {selectedWorker?.fullName} to this workplace?
@@ -359,4 +366,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   assignButton: {},
+  assignBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.sm,
+    gap: 4,
+  },
+  assignBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });

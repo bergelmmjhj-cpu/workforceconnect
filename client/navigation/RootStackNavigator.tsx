@@ -24,6 +24,7 @@ import InviteWorkerScreen from "@/screens/InviteWorkerScreen";
 import AssignToWorkplaceScreen from "@/screens/AssignToWorkplaceScreen";
 import TitoLogsAdminScreen from "@/screens/TitoLogsAdminScreen";
 import ApplicationsAdminScreen from "@/screens/ApplicationsAdminScreen";
+import DiagnosticsScreen from "@/screens/DiagnosticsScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -54,6 +55,7 @@ export type RootStackParamList = {
   AssignToWorkplace: { workerId: string; workerName: string };
   TitoLogsAdmin: undefined;
   ApplicationsAdmin: undefined;
+  Diagnostics: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -237,6 +239,13 @@ export default function RootStackNavigator() {
             component={ApplicationsAdminScreen}
             options={{
               headerTitle: "Applications",
+            }}
+          />
+          <Stack.Screen
+            name="Diagnostics"
+            component={DiagnosticsScreen}
+            options={{
+              headerTitle: "Diagnostics",
             }}
           />
         </>

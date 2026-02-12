@@ -1,7 +1,9 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, Switch, ScrollView, Alert, TextInput, Modal } from "react-native";
+import { View, StyleSheet, Pressable, Switch, ScrollView, TextInput, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
@@ -13,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { UserRole, ClientType, CLIENT_TYPES } from "@/types";
+import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 const roleLabels: Record<UserRole, string> = {
   client: "Client",
@@ -27,6 +30,7 @@ export default function ProfileScreen() {
   const { paddingTop, paddingBottom } = useContentPadding();
   const { theme } = useTheme();
   const { user, logout, updateUser } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showClientTypeModal, setShowClientTypeModal] = useState(false);
@@ -56,28 +60,11 @@ export default function ProfileScreen() {
   };
 
   const handleNotificationToggle = (value: boolean) => {
-    if (!value) {
-      Alert.alert(
-        "Disable Notifications?",
-        "You will not be notified when there is an upcoming shift. Are you sure you want to disable notifications?",
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
-          {
-            text: "Disable",
-            style: "destructive",
-            onPress: () => {
-              setNotificationsEnabled(false);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            },
-          },
-        ]
-      );
-    } else {
-      setNotificationsEnabled(true);
+    setNotificationsEnabled(value);
+    if (value) {
       Haptics.selectionAsync();
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
   };
 
@@ -219,6 +206,7 @@ export default function ProfileScreen() {
             style={({ pressed }) => [
               styles.menuItem,
               pressed && { backgroundColor: theme.backgroundSecondary },
+              { borderBottomWidth: 1, borderBottomColor: theme.border },
             ]}
           >
             <View style={styles.menuItemContent}>
@@ -232,6 +220,27 @@ export default function ProfileScreen() {
                 <ThemedText style={[styles.menuItemValue, { color: theme.textSecondary }]}>
                   v1.0.0
                 </ThemedText>
+                <Feather name="chevron-right" size={20} color={theme.textMuted} />
+              </View>
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.menuItem,
+              pressed && { backgroundColor: theme.backgroundSecondary },
+            ]}
+            onPress={() => navigation.navigate("Diagnostics")}
+            testID="button-diagnostics"
+          >
+            <View style={styles.menuItemContent}>
+              <View style={styles.menuItemLeft}>
+                <Feather name="activity" size={20} color={theme.text} />
+                <ThemedText style={styles.menuItemText}>
+                  Diagnostics
+                </ThemedText>
+              </View>
+              <View style={styles.menuItemRight}>
                 <Feather name="chevron-right" size={20} color={theme.textMuted} />
               </View>
             </View>

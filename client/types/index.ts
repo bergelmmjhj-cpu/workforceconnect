@@ -298,6 +298,9 @@ export interface Shift {
   createdAt: string;
 }
 
+export type ShiftFrequency = "one-time" | "recurring" | "open-ended";
+export type ShiftCategory = "hotel" | "banquet" | "janitorial";
+
 export interface APIShift {
   id: string;
   workplaceId: string;
@@ -305,9 +308,14 @@ export interface APIShift {
   title: string;
   date: string;
   startTime: string;
-  endTime: string;
+  endTime: string | null;
   notes: string | null;
   status: ShiftStatus;
+  frequencyType: ShiftFrequency;
+  category: ShiftCategory;
+  recurringDays: string | null;
+  recurringEndDate: string | null;
+  parentShiftId: string | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;

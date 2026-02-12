@@ -1706,6 +1706,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           endTime: shifts.endTime,
           notes: shifts.notes,
           status: shifts.status,
+          frequencyType: shifts.frequencyType,
+          category: shifts.category,
+          recurringDays: shifts.recurringDays,
+          recurringEndDate: shifts.recurringEndDate,
+          parentShiftId: shifts.parentShiftId,
           createdByUserId: shifts.createdByUserId,
           createdAt: shifts.createdAt,
           updatedAt: shifts.updatedAt,
@@ -1729,10 +1734,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/shifts", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
       const userId = req.headers["x-user-id"] as string;
-      const { workplaceId, workerUserId, title, date, startTime, endTime, notes } = req.body;
+      const { workplaceId, workerUserId, title, date, startTime, endTime, notes, frequencyType, category, recurringDays, recurringEndDate } = req.body;
 
-      if (!workplaceId || !workerUserId || !title || !date || !startTime || !endTime) {
-        res.status(400).json({ error: "workplaceId, workerUserId, title, date, startTime, and endTime are required" });
+      const freq = frequencyType || "one-time";
+      const cat = category || "janitorial";
+      const isOpenEnded = freq === "open-ended";
+
+      if (!workplaceId || !workerUserId || !title || !date || !startTime) {
+        res.status(400).json({ error: "workplaceId, workerUserId, title, date, and startTime are required" });
+        return;
+      }
+
+      if (!isOpenEnded && !endTime) {
+        res.status(400).json({ error: "endTime is required for non-open-ended shifts" });
+        return;
+      }
+
+      if (freq === "recurring" && (!recurringDays || recurringDays.length === 0)) {
+        res.status(400).json({ error: "recurringDays are required for recurring shifts" });
         return;
       }
 
@@ -1748,21 +1767,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const [newShift] = await db.insert(shifts).values({
-        workplaceId,
-        workerUserId,
-        title,
-        date,
-        startTime,
-        endTime,
-        notes: notes || null,
-        status: "scheduled",
-        createdByUserId: userId,
-      }).returning();
+      if (freq === "recurring" && recurringDays) {
+        const days: string[] = typeof recurringDays === "string" ? recurringDays.split(",") : recurringDays;
+        const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+        const endDateStr = recurringEndDate || (() => {
+          const d = new Date(date);
+          d.setDate(d.getDate() + 90);
+          return d.toISOString().split("T")[0];
+        })();
 
-      broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workerUserId, workplaceId } });
+        const [parentShift] = await db.insert(shifts).values({
+          workplaceId,
+          workerUserId,
+          title,
+          date,
+          startTime,
+          endTime: endTime || null,
+          notes: notes || null,
+          status: "scheduled",
+          frequencyType: freq,
+          category: cat,
+          recurringDays: days.join(","),
+          recurringEndDate: endDateStr,
+          createdByUserId: userId,
+        }).returning();
 
-      res.status(201).json(newShift);
+        const instances: any[] = [];
+        const startDate = new Date(date);
+        const finalDate = new Date(endDateStr);
+        const current = new Date(startDate);
+        current.setDate(current.getDate() + 1);
+
+        while (current <= finalDate) {
+          const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][current.getDay()];
+          if (days.includes(dayName)) {
+            instances.push({
+              workplaceId,
+              workerUserId,
+              title,
+              date: current.toISOString().split("T")[0],
+              startTime,
+              endTime: endTime || null,
+              notes: notes || null,
+              status: "scheduled",
+              frequencyType: "recurring",
+              category: cat,
+              recurringDays: days.join(","),
+              parentShiftId: parentShift.id,
+              createdByUserId: userId,
+            });
+          }
+          current.setDate(current.getDate() + 1);
+        }
+
+        if (instances.length > 0) {
+          await db.insert(shifts).values(instances);
+        }
+
+        broadcast({ type: "created", entity: "shift", id: parentShift.id, data: { workerUserId, workplaceId } });
+        res.status(201).json(parentShift);
+      } else {
+        const [newShift] = await db.insert(shifts).values({
+          workplaceId,
+          workerUserId,
+          title,
+          date,
+          startTime,
+          endTime: isOpenEnded ? null : endTime,
+          notes: notes || null,
+          status: "scheduled",
+          frequencyType: freq,
+          category: cat,
+          createdByUserId: userId,
+        }).returning();
+
+        broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workerUserId, workplaceId } });
+        res.status(201).json(newShift);
+      }
     } catch (error) {
       console.error("Error creating shift:", error);
       res.status(500).json({ error: "Failed to create shift" });
@@ -1779,6 +1860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const { frequencyType, category, recurringDays, recurringEndDate } = req.body;
       const updates: any = { updatedAt: new Date() };
       if (title !== undefined) updates.title = title;
       if (date !== undefined) updates.date = date;
@@ -1786,6 +1868,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (endTime !== undefined) updates.endTime = endTime;
       if (notes !== undefined) updates.notes = notes;
       if (status !== undefined) updates.status = status;
+      if (frequencyType !== undefined) updates.frequencyType = frequencyType;
+      if (category !== undefined) updates.category = category;
+      if (recurringDays !== undefined) updates.recurringDays = recurringDays;
+      if (recurringEndDate !== undefined) updates.recurringEndDate = recurringEndDate;
 
       const [updated] = await db.update(shifts).set(updates).where(eq(shifts.id, req.params.id)).returning();
 

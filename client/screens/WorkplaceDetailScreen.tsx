@@ -5,6 +5,7 @@ import { useNavigation, NavigationProp, useRoute, RouteProp, useFocusEffect } fr
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -16,7 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
-import { APIShift, ShiftStatus } from "@/types";
+import { APIShift, ShiftStatus, ShiftFrequency, ShiftCategory } from "@/types";
 
 type WorkplaceDetailRouteProp = RouteProp<RootStackParamList, "WorkplaceDetail">;
 
@@ -46,6 +47,47 @@ type WorkerAssignment = {
   workerRoles: string | null;
 };
 
+const FREQUENCY_OPTIONS: { value: ShiftFrequency; label: string }[] = [
+  { value: "one-time", label: "One-Time" },
+  { value: "recurring", label: "Recurring" },
+  { value: "open-ended", label: "Open-Ended" },
+];
+
+const CATEGORY_OPTIONS: { value: ShiftCategory; label: string }[] = [
+  { value: "hotel", label: "Hotel" },
+  { value: "banquet", label: "Banquet" },
+  { value: "janitorial", label: "Janitorial" },
+];
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const CATEGORY_COLORS: Record<ShiftCategory, string> = {
+  hotel: "#6366f1",
+  banquet: "#f59e0b",
+  janitorial: "#10b981",
+};
+
+const formatDate = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const formatTime = (date: Date): string => {
+  const h = String(date.getHours()).padStart(2, "0");
+  const m = String(date.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+};
+
+const formatDisplayDate = (date: Date): string => {
+  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+};
+
+const formatDisplayTime = (date: Date): string => {
+  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+};
+
 export default function WorkplaceDetailScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<WorkplaceDetailRouteProp>();
@@ -70,11 +112,25 @@ export default function WorkplaceDetailScreen() {
 
   const [showCreateShift, setShowCreateShift] = useState(false);
   const [shiftTitle, setShiftTitle] = useState("");
-  const [shiftDate, setShiftDate] = useState("");
-  const [shiftStartTime, setShiftStartTime] = useState("");
-  const [shiftEndTime, setShiftEndTime] = useState("");
+  const [shiftDate, setShiftDate] = useState(new Date());
+  const [shiftStartTime, setShiftStartTime] = useState(new Date());
+  const [shiftEndTime, setShiftEndTime] = useState(new Date());
   const [shiftNotes, setShiftNotes] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [frequencyType, setFrequencyType] = useState<ShiftFrequency>("one-time");
+  const [category, setCategory] = useState<ShiftCategory>("hotel");
+  const [recurringDays, setRecurringDays] = useState<string[]>([]);
+  const [recurringEndDate, setRecurringEndDate] = useState(new Date());
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+  const [showRecurringEndDatePicker, setShowRecurringEndDatePicker] = useState(false);
+
+  const [webDateText, setWebDateText] = useState("");
+  const [webStartTimeText, setWebStartTimeText] = useState("");
+  const [webEndTimeText, setWebEndTimeText] = useState("");
+  const [webRecurringEndDateText, setWebRecurringEndDateText] = useState("");
 
   const createShiftMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -100,23 +156,52 @@ export default function WorkplaceDetailScreen() {
 
   const resetShiftForm = () => {
     setShiftTitle("");
-    setShiftDate("");
-    setShiftStartTime("");
-    setShiftEndTime("");
+    setShiftDate(new Date());
+    setShiftStartTime(new Date());
+    setShiftEndTime(new Date());
     setShiftNotes("");
     setSelectedWorkerId("");
+    setFrequencyType("one-time");
+    setCategory("hotel");
+    setRecurringDays([]);
+    setRecurringEndDate(new Date());
+    setShowDatePicker(false);
+    setShowStartTimePicker(false);
+    setShowEndTimePicker(false);
+    setShowRecurringEndDatePicker(false);
+    setWebDateText("");
+    setWebStartTimeText("");
+    setWebEndTimeText("");
+    setWebRecurringEndDateText("");
   };
 
   const handleCreateShift = () => {
-    if (!shiftTitle || !shiftDate || !shiftStartTime || !shiftEndTime || !selectedWorkerId) return;
+    if (!shiftTitle || !selectedWorkerId) return;
+
+    const dateStr = Platform.OS === "web" && webDateText ? webDateText : formatDate(shiftDate);
+    const startTimeStr = Platform.OS === "web" && webStartTimeText ? webStartTimeText : formatTime(shiftStartTime);
+    const endTimeStr = frequencyType !== "open-ended"
+      ? (Platform.OS === "web" && webEndTimeText ? webEndTimeText : formatTime(shiftEndTime))
+      : undefined;
+
+    if (!dateStr || !startTimeStr) return;
+    if (frequencyType !== "open-ended" && !endTimeStr) return;
+    if (frequencyType === "recurring" && recurringDays.length === 0) return;
+
+    const recurringEndDateStr = frequencyType === "recurring" && (Platform.OS === "web" ? webRecurringEndDateText : formatDate(recurringEndDate));
+
     createShiftMutation.mutate({
       workplaceId,
       workerUserId: selectedWorkerId,
       title: shiftTitle,
-      date: shiftDate,
-      startTime: shiftStartTime,
-      endTime: shiftEndTime,
+      date: dateStr,
+      startTime: startTimeStr,
+      endTime: endTimeStr || null,
       notes: shiftNotes || undefined,
+      frequencyType,
+      category,
+      recurringDays: frequencyType === "recurring" ? recurringDays.join(",") : null,
+      recurringEndDate: frequencyType === "recurring" && recurringEndDateStr ? recurringEndDateStr : null,
     });
   };
 
@@ -181,6 +266,37 @@ export default function WorkplaceDetailScreen() {
     }
   };
 
+  const toggleRecurringDay = (day: string) => {
+    setRecurringDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
+
+  const getFrequencyLabel = (freq: ShiftFrequency | null | undefined): string => {
+    switch (freq) {
+      case "recurring": return "Recurring";
+      case "open-ended": return "Open-Ended";
+      default: return "One-Time";
+    }
+  };
+
+  const getRecurringDaysDisplay = (days: string | null): string => {
+    if (!days) return "";
+    return days.split(",").join(", ");
+  };
+
+  const isCreateDisabled = (): boolean => {
+    if (!shiftTitle || !selectedWorkerId || createShiftMutation.isPending) return true;
+
+    if (Platform.OS === "web") {
+      if (!webDateText || !webStartTimeText) return true;
+      if (frequencyType !== "open-ended" && !webEndTimeText) return true;
+    }
+
+    if (frequencyType === "recurring" && recurringDays.length === 0) return true;
+    return false;
+  };
+
   const activeWorkers = assignments.filter(a => a.status === "active" || a.status === "invited");
 
   if (loadingWorkplace || !workplace) {
@@ -234,14 +350,14 @@ export default function WorkplaceDetailScreen() {
             <ThemedText style={styles.infoLabel}>Geofence Radius:</ThemedText>
             <ThemedText style={styles.infoValue}>{workplace.geofenceRadiusMeters}m</ThemedText>
           </View>
-          {(!workplace.latitude || !workplace.longitude) && (
+          {(!workplace.latitude || !workplace.longitude) ? (
             <View style={styles.warningBox}>
               <Feather name="alert-triangle" size={16} color="#f59e0b" />
               <ThemedText style={styles.warningText}>
                 GPS coordinates required for TITO validation
               </ThemedText>
             </View>
-          )}
+          ) : null}
         </Card>
 
         <View style={styles.sectionHeader}>
@@ -279,13 +395,13 @@ export default function WorkplaceDetailScreen() {
                   </ThemedText>
                 </View>
               </View>
-              {assignment.workerRoles && (
+              {assignment.workerRoles ? (
                 <ThemedText style={styles.workerRoles}>
                   Roles: {JSON.parse(assignment.workerRoles).join(", ")}
                 </ThemedText>
-              )}
+              ) : null}
               <View style={styles.workerActions}>
-                {assignment.status !== "active" && (
+                {assignment.status !== "active" ? (
                   <Pressable 
                     style={styles.actionButton}
                     onPress={() => handleStatusChange(assignment, "active")}
@@ -293,8 +409,8 @@ export default function WorkplaceDetailScreen() {
                     <Feather name="check" size={16} color="#22c55e" />
                     <ThemedText style={[styles.actionText, { color: "#22c55e" }]}>Activate</ThemedText>
                   </Pressable>
-                )}
-                {assignment.status !== "suspended" && (
+                ) : null}
+                {assignment.status !== "suspended" ? (
                   <Pressable 
                     style={styles.actionButton}
                     onPress={() => handleStatusChange(assignment, "suspended")}
@@ -302,7 +418,7 @@ export default function WorkplaceDetailScreen() {
                     <Feather name="pause" size={16} color="#f59e0b" />
                     <ThemedText style={[styles.actionText, { color: "#f59e0b" }]}>Suspend</ThemedText>
                   </Pressable>
-                )}
+                ) : null}
                 <Pressable 
                   style={styles.actionButton}
                   onPress={() => handleStatusChange(assignment, "removed")}
@@ -372,15 +488,47 @@ export default function WorkplaceDetailScreen() {
                   </Pressable>
                 </View>
               </View>
+
+              <View style={styles.shiftBadgeRow}>
+                {shift.category ? (
+                  <View style={[styles.categoryBadge, { backgroundColor: (CATEGORY_COLORS[shift.category as ShiftCategory] || "#6b7280") + "20" }]}>
+                    <ThemedText style={[styles.categoryBadgeText, { color: CATEGORY_COLORS[shift.category as ShiftCategory] || "#6b7280" }]}>
+                      {shift.category.charAt(0).toUpperCase() + shift.category.slice(1)}
+                    </ThemedText>
+                  </View>
+                ) : null}
+                {shift.frequencyType ? (
+                  <View style={[styles.frequencyBadge, { backgroundColor: theme.primary + "15" }]}>
+                    <Feather
+                      name={shift.frequencyType === "recurring" ? "repeat" : shift.frequencyType === "open-ended" ? "clock" : "calendar"}
+                      size={11}
+                      color={theme.primary}
+                      style={{ marginRight: 4 }}
+                    />
+                    <ThemedText style={[styles.frequencyBadgeText, { color: theme.primary }]}>
+                      {getFrequencyLabel(shift.frequencyType)}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+
               <View style={styles.shiftItemDetails}>
                 <View style={styles.shiftDetailRow}>
                   <Feather name="clock" size={14} color={theme.textSecondary} />
-                  <ThemedText style={styles.shiftDetailText}>{shift.startTime} - {shift.endTime}</ThemedText>
+                  <ThemedText style={styles.shiftDetailText}>
+                    {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : " (Open-Ended)"}
+                  </ThemedText>
                 </View>
                 {shift.workerName ? (
                   <View style={styles.shiftDetailRow}>
                     <Feather name="user" size={14} color={theme.textSecondary} />
                     <ThemedText style={styles.shiftDetailText}>{shift.workerName}</ThemedText>
+                  </View>
+                ) : null}
+                {shift.frequencyType === "recurring" && shift.recurringDays ? (
+                  <View style={styles.shiftDetailRow}>
+                    <Feather name="repeat" size={14} color={theme.textSecondary} />
+                    <ThemedText style={styles.shiftDetailText}>{getRecurringDaysDisplay(shift.recurringDays)}</ThemedText>
                   </View>
                 ) : null}
                 {shift.notes ? (
@@ -418,6 +566,52 @@ export default function WorkplaceDetailScreen() {
                 testID="input-shift-title"
               />
 
+              <ThemedText style={styles.fieldLabel}>Category</ThemedText>
+              <View style={styles.chipRow}>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setCategory(opt.value)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: category === opt.value ? (CATEGORY_COLORS[opt.value] + "20") : theme.backgroundSecondary,
+                        borderColor: category === opt.value ? CATEGORY_COLORS[opt.value] : theme.border,
+                      },
+                    ]}
+                    testID={`chip-category-${opt.value}`}
+                  >
+                    <ThemedText style={[
+                      styles.chipText,
+                      { color: category === opt.value ? CATEGORY_COLORS[opt.value] : theme.textSecondary },
+                    ]}>{opt.label}</ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+
+              <ThemedText style={styles.fieldLabel}>Frequency</ThemedText>
+              <View style={styles.chipRow}>
+                {FREQUENCY_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setFrequencyType(opt.value)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: frequencyType === opt.value ? theme.primary + "20" : theme.backgroundSecondary,
+                        borderColor: frequencyType === opt.value ? theme.primary : theme.border,
+                      },
+                    ]}
+                    testID={`chip-frequency-${opt.value}`}
+                  >
+                    <ThemedText style={[
+                      styles.chipText,
+                      { color: frequencyType === opt.value ? theme.primary : theme.textSecondary },
+                    ]}>{opt.label}</ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+
               <ThemedText style={styles.fieldLabel}>Assign Worker</ThemedText>
               <View style={styles.workerPicker}>
                 {activeWorkers.map((w) => (
@@ -446,40 +640,175 @@ export default function WorkplaceDetailScreen() {
                 ))}
               </View>
 
-              <ThemedText style={styles.fieldLabel}>Date (YYYY-MM-DD)</ThemedText>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-                value={shiftDate}
-                onChangeText={setShiftDate}
-                placeholder="2026-02-15"
-                placeholderTextColor={theme.textMuted}
-                testID="input-shift-date"
-              />
+              <ThemedText style={styles.fieldLabel}>Date</ThemedText>
+              {Platform.OS === "web" ? (
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                  value={webDateText}
+                  onChangeText={setWebDateText}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={theme.textMuted}
+                  testID="input-shift-date"
+                />
+              ) : (
+                <View>
+                  <Pressable
+                    onPress={() => setShowDatePicker(true)}
+                    style={[styles.pickerButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
+                  >
+                    <Feather name="calendar" size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
+                    <ThemedText style={styles.pickerButtonText}>{formatDisplayDate(shiftDate)}</ThemedText>
+                  </Pressable>
+                  {showDatePicker ? (
+                    <DateTimePicker
+                      value={shiftDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        setShowDatePicker(Platform.OS === "ios");
+                        if (selectedDate) setShiftDate(selectedDate);
+                      }}
+                      testID="picker-shift-date"
+                    />
+                  ) : null}
+                </View>
+              )}
 
               <View style={styles.timeRow}>
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.fieldLabel}>Start Time</ThemedText>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-                    value={shiftStartTime}
-                    onChangeText={setShiftStartTime}
-                    placeholder="09:00"
-                    placeholderTextColor={theme.textMuted}
-                    testID="input-shift-start"
-                  />
+                  {Platform.OS === "web" ? (
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                      value={webStartTimeText}
+                      onChangeText={setWebStartTimeText}
+                      placeholder="HH:mm"
+                      placeholderTextColor={theme.textMuted}
+                      testID="input-shift-start"
+                    />
+                  ) : (
+                    <View>
+                      <Pressable
+                        onPress={() => setShowStartTimePicker(true)}
+                        style={[styles.pickerButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
+                      >
+                        <Feather name="clock" size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
+                        <ThemedText style={styles.pickerButtonText}>{formatDisplayTime(shiftStartTime)}</ThemedText>
+                      </Pressable>
+                      {showStartTimePicker ? (
+                        <DateTimePicker
+                          value={shiftStartTime}
+                          mode="time"
+                          display="default"
+                          onChange={(event, selectedDate) => {
+                            setShowStartTimePicker(Platform.OS === "ios");
+                            if (selectedDate) setShiftStartTime(selectedDate);
+                          }}
+                          testID="picker-shift-start"
+                        />
+                      ) : null}
+                    </View>
+                  )}
                 </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.fieldLabel}>End Time</ThemedText>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-                    value={shiftEndTime}
-                    onChangeText={setShiftEndTime}
-                    placeholder="17:00"
-                    placeholderTextColor={theme.textMuted}
-                    testID="input-shift-end"
-                  />
-                </View>
+                {frequencyType !== "open-ended" ? (
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={styles.fieldLabel}>End Time</ThemedText>
+                    {Platform.OS === "web" ? (
+                      <TextInput
+                        style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                        value={webEndTimeText}
+                        onChangeText={setWebEndTimeText}
+                        placeholder="HH:mm"
+                        placeholderTextColor={theme.textMuted}
+                        testID="input-shift-end"
+                      />
+                    ) : (
+                      <View>
+                        <Pressable
+                          onPress={() => setShowEndTimePicker(true)}
+                          style={[styles.pickerButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
+                        >
+                          <Feather name="clock" size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
+                          <ThemedText style={styles.pickerButtonText}>{formatDisplayTime(shiftEndTime)}</ThemedText>
+                        </Pressable>
+                        {showEndTimePicker ? (
+                          <DateTimePicker
+                            value={shiftEndTime}
+                            mode="time"
+                            display="default"
+                            onChange={(event, selectedDate) => {
+                              setShowEndTimePicker(Platform.OS === "ios");
+                              if (selectedDate) setShiftEndTime(selectedDate);
+                            }}
+                            testID="picker-shift-end"
+                          />
+                        ) : null}
+                      </View>
+                    )}
+                  </View>
+                ) : null}
               </View>
+
+              {frequencyType === "recurring" ? (
+                <View>
+                  <ThemedText style={styles.fieldLabel}>Recurring Days</ThemedText>
+                  <View style={styles.dayPickerRow}>
+                    {DAY_LABELS.map((day) => (
+                      <Pressable
+                        key={day}
+                        onPress={() => toggleRecurringDay(day)}
+                        style={[
+                          styles.dayButton,
+                          {
+                            backgroundColor: recurringDays.includes(day) ? theme.primary : theme.backgroundSecondary,
+                            borderColor: recurringDays.includes(day) ? theme.primary : theme.border,
+                          },
+                        ]}
+                        testID={`day-toggle-${day}`}
+                      >
+                        <ThemedText style={[
+                          styles.dayButtonText,
+                          { color: recurringDays.includes(day) ? "#fff" : theme.textSecondary },
+                        ]}>{day}</ThemedText>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <ThemedText style={styles.fieldLabel}>End Date (optional)</ThemedText>
+                  {Platform.OS === "web" ? (
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                      value={webRecurringEndDateText}
+                      onChangeText={setWebRecurringEndDateText}
+                      placeholder="YYYY-MM-DD (optional)"
+                      placeholderTextColor={theme.textMuted}
+                      testID="input-recurring-end-date"
+                    />
+                  ) : (
+                    <View>
+                      <Pressable
+                        onPress={() => setShowRecurringEndDatePicker(true)}
+                        style={[styles.pickerButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
+                      >
+                        <Feather name="calendar" size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
+                        <ThemedText style={styles.pickerButtonText}>{formatDisplayDate(recurringEndDate)}</ThemedText>
+                      </Pressable>
+                      {showRecurringEndDatePicker ? (
+                        <DateTimePicker
+                          value={recurringEndDate}
+                          mode="date"
+                          display="default"
+                          onChange={(event, selectedDate) => {
+                            setShowRecurringEndDatePicker(Platform.OS === "ios");
+                            if (selectedDate) setRecurringEndDate(selectedDate);
+                          }}
+                          testID="picker-recurring-end-date"
+                        />
+                      ) : null}
+                    </View>
+                  )}
+                </View>
+              ) : null}
 
               <ThemedText style={styles.fieldLabel}>Notes (optional)</ThemedText>
               <TextInput
@@ -504,9 +833,8 @@ export default function WorkplaceDetailScreen() {
               <Button
                 title={createShiftMutation.isPending ? "Creating..." : "Create Shift"}
                 onPress={handleCreateShift}
-                disabled={!shiftTitle || !shiftDate || !shiftStartTime || !shiftEndTime || !selectedWorkerId || createShiftMutation.isPending}
+                disabled={isCreateDisabled()}
                 style={{ flex: 1 }}
-                testID="button-create-shift"
               />
             </View>
           </View>
@@ -689,7 +1017,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   shiftItemTitle: {
     fontSize: 16,
@@ -704,6 +1032,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
+  },
+  shiftBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  categoryBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.sm,
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  frequencyBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.sm,
+  },
+  frequencyBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   shiftItemDetails: {
     gap: Spacing.xs,
@@ -784,5 +1139,48 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: "row",
     gap: Spacing.md,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  chip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  pickerButton: {
+    height: 44,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  pickerButtonText: {
+    fontSize: 15,
+  },
+  dayPickerRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    flexWrap: "wrap",
+  },
+  dayButton: {
+    width: 42,
+    height: 42,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

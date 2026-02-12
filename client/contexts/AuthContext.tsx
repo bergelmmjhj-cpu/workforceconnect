@@ -122,23 +122,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       let serverUpdated = false;
       let lastError: unknown = null;
+      let verifiedStatus: string | null = null;
+
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
+          console.log(`[ONBOARDING] Attempt ${attempt + 1}/3: PATCH /api/users/me/onboarding-status with status=${status}`);
           const res = await apiRequest("PATCH", "/api/users/me/onboarding-status", { onboardingStatus: status });
-          serverUpdated = true;
+          const responseData = await res.json();
+          console.log(`[ONBOARDING] Server response:`, JSON.stringify(responseData));
+
+          if (responseData.onboardingStatus === status) {
+            verifiedStatus = responseData.onboardingStatus;
+            serverUpdated = true;
+            console.log(`[ONBOARDING] Verified: server confirmed status=${verifiedStatus}`);
+          } else {
+            console.warn(`[ONBOARDING] Server returned unexpected status: ${responseData.onboardingStatus} (expected ${status})`);
+            serverUpdated = true;
+          }
           break;
         } catch (error) {
           lastError = error;
-          console.error(`Failed to sync onboarding status (attempt ${attempt + 1}/3):`, error);
+          const errMsg = error instanceof Error ? error.message : String(error);
+          console.error(`[ONBOARDING] PATCH failed (attempt ${attempt + 1}/3): ${errMsg}`);
           if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         }
       }
+
       if (!serverUpdated) {
-        throw lastError || new Error("Failed to update onboarding status on server");
+        console.error(`[ONBOARDING] All 3 attempts failed. Status NOT saved to server.`);
+        throw lastError || new Error("Failed to update onboarding status on server after 3 attempts. Please try again.");
       }
+
       const updatedUser = { ...user, onboardingStatus: status };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);
+      console.log(`[ONBOARDING] Local state updated to ${status}`);
     }
   };
 

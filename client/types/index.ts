@@ -298,6 +298,24 @@ export interface Shift {
   createdAt: string;
 }
 
+export interface APIShift {
+  id: string;
+  workplaceId: string;
+  workerUserId: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  notes: string | null;
+  status: ShiftStatus;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  workplaceName: string | null;
+  workerName: string | null;
+  workerEmail: string | null;
+}
+
 export type TitoApprovalStatus = "pending" | "approved" | "disputed";
 
 export interface TitoLog {

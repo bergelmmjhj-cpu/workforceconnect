@@ -5,6 +5,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { TodoWidget } from "@/components/TodoWidget";
@@ -16,12 +17,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing } from "@/constants/theme";
 import { getGreeting } from "@/utils/format";
-import { TodoItem, DashboardStats } from "@/types";
+import { TodoItem, DashboardStats, APIShift } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Card } from "@/components/Card";
 import {
   getRequests,
-  getShifts,
   getTitoLogs,
   initializeStorage,
 } from "@/storage";
@@ -46,21 +46,22 @@ export default function DashboardScreen() {
     upcomingShifts: 0,
   });
 
+  const { data: apiShifts = [], refetch: refetchShifts } = useQuery<APIShift[]>({
+    queryKey: ["/api/shifts"],
+  });
+
   const loadData = useCallback(async () => {
     try {
       await initializeStorage();
       
-      const [requests, shifts, titoLogs] = await Promise.all([
+      const [requests, titoLogs] = await Promise.all([
         getRequests(user?.id, user?.role),
-        getShifts(user?.id, user?.role),
         getTitoLogs(user?.id, user?.role),
       ]);
 
       const todoItems: TodoItem[] = [];
 
-      // Generate todos based on role
       if (user?.role === "hr" || user?.role === "admin") {
-        // SLA breach todos
         const now = new Date();
         requests.forEach((req) => {
           const slaDate = new Date(req.slaDeadline);
@@ -85,7 +86,6 @@ export default function DashboardScreen() {
           }
         });
 
-        // Pending TITO approvals
         const pendingTito = titoLogs.filter((t) => t.status === "pending");
         pendingTito.forEach((tito) => {
           todoItems.push({
@@ -99,39 +99,21 @@ export default function DashboardScreen() {
       }
 
       if (user?.role === "worker") {
-        // Upcoming shifts
-        const upcomingShifts = shifts.filter(
+        const upcomingShifts = apiShifts.filter(
           (s) => s.status === "scheduled" || s.status === "in_progress"
         );
         upcomingShifts.slice(0, 2).forEach((shift) => {
           todoItems.push({
             id: `shift-${shift.id}`,
             title: "Upcoming Shift",
-            description: `${shift.roleNeeded} at ${shift.locationMajorIntersection}`,
+            description: `${shift.title} at ${shift.workplaceName || "workplace"}`,
             type: "normal",
             actionUrl: `/shifts/${shift.id}`,
-          });
-        });
-
-        // Pending TITO submission
-        const pendingSubmit = shifts.filter(
-          (s) =>
-            s.status === "in_progress" &&
-            !titoLogs.some((t) => t.shiftId === s.id && t.timeOut)
-        );
-        pendingSubmit.forEach((shift) => {
-          todoItems.push({
-            id: `submit-${shift.id}`,
-            title: "Submit Time Out",
-            description: `Clock out from ${shift.roleNeeded}`,
-            type: "urgent",
-            actionUrl: `/tito/submit/${shift.id}`,
           });
         });
       }
 
       if (user?.role === "client") {
-        // Pending approvals
         const pendingApprovals = titoLogs.filter((t) => t.status === "pending");
         pendingApprovals.forEach((tito) => {
           todoItems.push({
@@ -143,7 +125,6 @@ export default function DashboardScreen() {
           });
         });
 
-        // Draft requests
         const draftRequests = requests.filter((r) => r.status === "draft");
         draftRequests.forEach((req) => {
           todoItems.push({
@@ -158,14 +139,13 @@ export default function DashboardScreen() {
 
       setTodos(todoItems.slice(0, 5));
 
-      // Calculate stats
       const activeReqs = requests.filter(
         (r) => !["completed", "cancelled"].includes(r.status)
       ).length;
       const pendingApprovals = titoLogs.filter((t) => t.status === "pending").length;
-      const completedShifts = shifts.filter((s) => s.status === "completed");
-      const hoursWorked = completedShifts.length * 8; // Simplified
-      const upcoming = shifts.filter((s) => s.status === "scheduled").length;
+      const completedShifts = apiShifts.filter((s) => s.status === "completed");
+      const hoursWorked = completedShifts.length * 8;
+      const upcoming = apiShifts.filter((s) => s.status === "scheduled").length;
 
       setStats({
         activeRequests: activeReqs,
@@ -178,7 +158,7 @@ export default function DashboardScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, apiShifts]);
 
   useEffect(() => {
     loadData();
@@ -186,6 +166,7 @@ export default function DashboardScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    refetchShifts();
     await loadData();
     setRefreshing(false);
   }, [loadData]);

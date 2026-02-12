@@ -284,6 +284,16 @@
         gap: 10px;
       }
       
+      .radio-group-row {
+        display: flex;
+        gap: 24px;
+        margin-top: 8px;
+      }
+      .radio-label {
+        font-size: 15px;
+        color: var(--text-primary);
+      }
+
       .radio-item {
         display: flex;
         align-items: center;
@@ -884,9 +894,87 @@
           </div>
         </section>
 
-        <!-- Section H: Acknowledgments -->
+        <!-- Section H: Payment Information -->
         <section class="form-section">
-          <h2 class="section-title">H. Acknowledgments & Consents</h2>
+          <h2 class="section-title">H. Payment Information</h2>
+          
+          <div class="highlight-box info">
+            <div class="highlight-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                <line x1="1" y1="10" x2="23" y2="10"></line>
+              </svg>
+            </div>
+            <p class="highlight-text">Your banking details are required so we can process your payments. This information is encrypted and stored securely. You can update it anytime through the app or the payment info page.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Payment Method <span class="required">*</span></label>
+            <div class="radio-group-row">
+              <label class="radio-item">
+                <input type="radio" name="paymentMethod" value="direct_deposit" onchange="togglePaymentFields()" required>
+                <span class="radio-label">Direct Deposit</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="paymentMethod" value="etransfer" onchange="togglePaymentFields()" required>
+                <span class="radio-label">Interac E-Transfer</span>
+              </label>
+            </div>
+            <span class="error-message">Please select a payment method</span>
+          </div>
+
+          <div id="directDepositFields" style="display: none;">
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label class="form-label">Bank Name <span class="required">*</span></label>
+                <select name="bankName" class="form-select" id="bankNameSelect">
+                  <option value="">Select your bank</option>
+                  <option value="TD Canada Trust">TD Canada Trust</option>
+                  <option value="RBC Royal Bank">RBC Royal Bank</option>
+                  <option value="Scotiabank">Scotiabank</option>
+                  <option value="BMO Bank of Montreal">BMO Bank of Montreal</option>
+                  <option value="CIBC">CIBC</option>
+                  <option value="National Bank">National Bank</option>
+                  <option value="Desjardins">Desjardins</option>
+                  <option value="HSBC Canada">HSBC Canada</option>
+                  <option value="Tangerine">Tangerine</option>
+                  <option value="Simplii Financial">Simplii Financial</option>
+                  <option value="Other">Other</option>
+                </select>
+                <span class="error-message">Please select your bank</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Institution Number <span class="required">*</span></label>
+                <input type="text" name="bankInstitution" class="form-input" placeholder="3 digits (e.g. 004)" maxlength="3" pattern="[0-9]{3}" id="bankInstitutionInput">
+                <span class="error-message">Please enter 3-digit institution number</span>
+              </div>
+            </div>
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label class="form-label">Transit Number <span class="required">*</span></label>
+                <input type="text" name="bankTransit" class="form-input" placeholder="5 digits (e.g. 12345)" maxlength="5" pattern="[0-9]{5}" id="bankTransitInput">
+                <span class="error-message">Please enter 5-digit transit number</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Account Number <span class="required">*</span></label>
+                <input type="text" name="bankAccount" class="form-input" placeholder="7-12 digits" maxlength="12" pattern="[0-9]{7,12}" id="bankAccountInput">
+                <span class="error-message">Please enter 7-12 digit account number</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="etransferFields" style="display: none;">
+            <div class="form-group">
+              <label class="form-label">E-Transfer Email Address <span class="required">*</span></label>
+              <input type="email" name="etransferEmail" class="form-input" placeholder="your.email@example.com" id="etransferEmailInput">
+              <span class="error-message">Please enter a valid email for E-Transfer</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section I: Acknowledgments -->
+        <section class="form-section">
+          <h2 class="section-title">I. Acknowledgments & Consents</h2>
           
           <div class="highlight-box warning">
             <div class="highlight-icon">
@@ -896,7 +984,7 @@
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
               </svg>
             </div>
-            <p class="highlight-text">Please read and acknowledge each item carefully. Your banking information for payment will only be collected after your application is approved.</p>
+            <p class="highlight-text">Please read and acknowledge each item carefully. Please ensure your payment information in Section H is accurate. You can update it anytime through the Workforce Connect app.</p>
           </div>
           
           <div class="checkbox-group">
@@ -931,9 +1019,9 @@
           </div>
         </section>
 
-        <!-- Section I: Electronic Signature -->
+        <!-- Section J: Electronic Signature -->
         <section class="form-section">
-          <h2 class="section-title">I. Electronic Signature</h2>
+          <h2 class="section-title">J. Electronic Signature</h2>
           
           <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;">
             By typing your full legal name below, you confirm that all information provided in this application is true and accurate to the best of your knowledge. This serves as your electronic signature.
@@ -992,6 +1080,31 @@
         month: 'long',
         day: 'numeric'
       });
+
+      function togglePaymentFields() {
+        const method = document.querySelector('input[name="paymentMethod"]:checked')?.value;
+        const ddFields = document.getElementById('directDepositFields');
+        const etFields = document.getElementById('etransferFields');
+        
+        document.getElementById('bankNameSelect').required = false;
+        document.getElementById('bankInstitutionInput').required = false;
+        document.getElementById('bankTransitInput').required = false;
+        document.getElementById('bankAccountInput').required = false;
+        document.getElementById('etransferEmailInput').required = false;
+        
+        if (method === 'direct_deposit') {
+          ddFields.style.display = 'block';
+          etFields.style.display = 'none';
+          document.getElementById('bankNameSelect').required = true;
+          document.getElementById('bankInstitutionInput').required = true;
+          document.getElementById('bankTransitInput').required = true;
+          document.getElementById('bankAccountInput').required = true;
+        } else if (method === 'etransfer') {
+          ddFields.style.display = 'none';
+          etFields.style.display = 'block';
+          document.getElementById('etransferEmailInput').required = true;
+        }
+      }
 
       // Show/hide "Other" role input
       document.querySelectorAll('input[name="preferredRoles"]').forEach(function(checkbox) {
@@ -1091,6 +1204,12 @@
           emergencyContactName: form.emergencyContactName.value,
           emergencyContactRelationship: form.emergencyContactRelationship.value,
           emergencyContactPhone: form.emergencyContactPhone.value,
+          paymentMethod: form.paymentMethod?.value || null,
+          bankName: form.bankName?.value || null,
+          bankInstitution: form.bankInstitution?.value || null,
+          bankTransit: form.bankTransit?.value || null,
+          bankAccount: form.bankAccount?.value || null,
+          etransferEmail: form.etransferEmail?.value || null,
           titoAcknowledgment: form.titoAcknowledgment.checked,
           siteRulesAcknowledgment: form.siteRulesAcknowledgment.checked,
           workerAgreementConsent: form.workerAgreementConsent.checked,

@@ -897,7 +897,7 @@
             '<td>' + escapeHtml(app.phone) + '</td>' +
             '<td>' + escapeHtml(app.city) + ', ' + escapeHtml(app.province) + '</td>' +
             '<td>' + roles.slice(0, 2).join(', ') + (roles.length > 2 ? '...' : '') + '</td>' +
-            '<td><span class="status-badge ' + app.status + '">' + app.status + '</span></td>' +
+            '<td><span class="status-badge ' + app.status + '">' + app.status + '</span>' + (!app.paymentMethod ? ' <span class="status-badge" style="background: #FEF3C7; color: #92400E; font-size: 11px;">No Payment Info</span>' : '') + '</td>' +
             '<td>' + new Date(app.createdAt).toLocaleDateString() + '</td>' +
             '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(app.fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
           '</tr>';
@@ -1010,6 +1010,33 @@
         html += '<div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">' + escapeHtml(app.emergencyContactName) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Relationship</div><div class="detail-value">' + escapeHtml(app.emergencyContactRelationship) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.emergencyContactPhone) + '</div></div>';
+        html += '</div></div>';
+        
+        // Payment Information
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Payment Information</h3>';
+        html += '<div class="detail-grid">';
+        if (app.paymentMethod) {
+          html += '<div class="detail-item"><div class="detail-label">Payment Method</div><div class="detail-value">' + (app.paymentMethod === 'direct_deposit' ? 'Direct Deposit' : 'Interac E-Transfer') + '</div></div>';
+        }
+        if (app.bankName) {
+          html += '<div class="detail-item"><div class="detail-label">Bank Name</div><div class="detail-value">' + escapeHtml(app.bankName) + '</div></div>';
+        }
+        if (app.bankInstitution) {
+          html += '<div class="detail-item"><div class="detail-label">Institution #</div><div class="detail-value">' + escapeHtml(app.bankInstitution) + '</div></div>';
+        }
+        if (app.bankTransit) {
+          html += '<div class="detail-item"><div class="detail-label">Transit #</div><div class="detail-value">' + escapeHtml(app.bankTransit) + '</div></div>';
+        }
+        if (app.bankAccount) {
+          html += '<div class="detail-item"><div class="detail-label">Account #</div><div class="detail-value">' + escapeHtml(app.bankAccount) + '</div></div>';
+        }
+        if (app.etransferEmail) {
+          html += '<div class="detail-item"><div class="detail-label">E-Transfer Email</div><div class="detail-value">' + escapeHtml(app.etransferEmail) + '</div></div>';
+        }
+        if (!app.paymentMethod) {
+          html += '<div class="detail-item full"><div class="detail-label">Status</div><div class="detail-value" style="color: var(--warning); font-weight: 600;">Payment information not provided</div></div>';
+        }
         html += '</div></div>';
         
         // Acknowledgments

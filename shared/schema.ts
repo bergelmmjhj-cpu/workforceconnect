@@ -561,6 +561,12 @@ export type InsertPaymentProfile = z.infer<typeof insertPaymentProfileSchema>;
 export const shiftStatusEnum = z.enum(["scheduled", "in_progress", "completed", "cancelled"]);
 export type ShiftStatusDB = z.infer<typeof shiftStatusEnum>;
 
+export const shiftFrequencyEnum = z.enum(["one-time", "recurring", "open-ended"]);
+export type ShiftFrequency = z.infer<typeof shiftFrequencyEnum>;
+
+export const shiftCategoryEnum = z.enum(["hotel", "banquet", "janitorial"]);
+export type ShiftCategory = z.infer<typeof shiftCategoryEnum>;
+
 export const shifts = pgTable("shifts", {
   id: varchar("id")
     .primaryKey()
@@ -574,9 +580,14 @@ export const shifts = pgTable("shifts", {
   title: text("title").notNull(),
   date: date("date").notNull(),
   startTime: text("start_time").notNull(),
-  endTime: text("end_time").notNull(),
+  endTime: text("end_time"),
   notes: text("notes"),
   status: text("status").notNull().default("scheduled"),
+  frequencyType: text("frequency_type").notNull().default("one-time"),
+  category: text("category").notNull().default("janitorial"),
+  recurringDays: text("recurring_days"),
+  recurringEndDate: date("recurring_end_date"),
+  parentShiftId: varchar("parent_shift_id"),
   createdByUserId: varchar("created_by_user_id")
     .references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),

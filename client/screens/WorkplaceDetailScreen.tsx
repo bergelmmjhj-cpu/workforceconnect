@@ -326,6 +326,9 @@ export default function WorkplaceDetailScreen() {
                 }
                 return;
               }
+              if (activeWorkers.length === 1) {
+                setSelectedWorkerId(activeWorkers[0].workerUserId);
+              }
               setShowCreateShift(true);
             }}
             style={styles.addButton}
@@ -342,7 +345,12 @@ export default function WorkplaceDetailScreen() {
             {activeWorkers.length > 0 ? (
               <Button
                 title="Schedule Shift"
-                onPress={() => setShowCreateShift(true)}
+                onPress={() => {
+                  if (activeWorkers.length === 1) {
+                    setSelectedWorkerId(activeWorkers[0].workerUserId);
+                  }
+                  setShowCreateShift(true);
+                }}
                 style={styles.emptyButton}
               />
             ) : null}
@@ -425,6 +433,11 @@ export default function WorkplaceDetailScreen() {
                     ]}
                     testID={`worker-option-${w.workerUserId}`}
                   >
+                    {selectedWorkerId === w.workerUserId ? (
+                      <Feather name="check-circle" size={16} color={theme.primary} style={{ marginRight: 6 }} />
+                    ) : (
+                      <Feather name="circle" size={16} color={theme.textMuted} style={{ marginRight: 6 }} />
+                    )}
                     <ThemedText style={[
                       styles.workerOptionText,
                       selectedWorkerId === w.workerUserId ? { color: theme.primary, fontWeight: "600" } : undefined,
@@ -754,6 +767,8 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   workerOption: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,

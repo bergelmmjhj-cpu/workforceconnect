@@ -64,6 +64,8 @@ export default function AgreementSigningScreen() {
   });
   const [dateLocal, setDateLocal] = useState(new Date().toISOString().split("T")[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const handleScroll = (event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
@@ -101,8 +103,12 @@ export default function AgreementSigningScreen() {
     }
 
     setIsSubmitting(true);
+    setSubmitError(null);
+    setSubmitSuccess(false);
 
     try {
+      console.log("[AGREEMENT] Starting agreement submission...");
+
       const acceptance = await createAgreementAcceptance({
         workerId: user.id,
         templateId: agreementTemplate.id,
@@ -114,23 +120,28 @@ export default function AgreementSigningScreen() {
         dateLocal,
         timeZone: user.timezone || "America/Toronto",
       });
+      console.log("[AGREEMENT] Acceptance created locally");
 
       await createAgreementSubmission({
         acceptanceId: acceptance.id,
         submittedToAdminAt: new Date().toISOString(),
         status: "submitted",
       });
+      console.log("[AGREEMENT] Submission created locally");
 
       await updateOnboardingStatus("AGREEMENT_ACCEPTED");
+      console.log("[AGREEMENT] Status updated on server successfully");
+
       await refreshOnboardingData();
 
-      Alert.alert(
-        "Agreement Signed",
-        "Thank you for signing the agreement. You now have full access to the app!",
-        [{ text: "Continue", onPress: () => navigation.goBack() }]
-      );
+      setSubmitSuccess(true);
+      setTimeout(() => {
+        navigation.goBack();
+      }, 2000);
     } catch (error) {
-      Alert.alert("Unable to Submit", getErrorMessage(error));
+      const errorMsg = getErrorMessage(error);
+      console.error("[AGREEMENT] Submit failed:", errorMsg);
+      setSubmitError(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -276,10 +287,36 @@ export default function AgreementSigningScreen() {
               />
             </View>
 
+            {submitError ? (
+              <View style={[styles.errorBanner, { backgroundColor: "#FEE2E2", borderColor: "#EF4444" }]}>
+                <Feather name="alert-circle" size={18} color="#DC2626" />
+                <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <ThemedText style={{ color: "#DC2626", fontWeight: "700", marginBottom: 4 }}>
+                    Unable to Submit
+                  </ThemedText>
+                  <ThemedText style={{ color: "#DC2626", fontSize: 13 }}>
+                    {submitError}
+                  </ThemedText>
+                </View>
+                <Pressable onPress={() => setSubmitError(null)}>
+                  <Feather name="x" size={18} color="#DC2626" />
+                </Pressable>
+              </View>
+            ) : null}
+
+            {submitSuccess ? (
+              <View style={[styles.errorBanner, { backgroundColor: "#DCFCE7", borderColor: "#22C55E" }]}>
+                <Feather name="check-circle" size={18} color="#16A34A" />
+                <ThemedText style={{ color: "#16A34A", fontWeight: "700", marginLeft: Spacing.sm, flex: 1 }}>
+                  Agreement signed successfully! Redirecting...
+                </ThemedText>
+              </View>
+            ) : null}
+
             <Button
               title={isSubmitting ? "Submitting..." : "Sign Agreement"}
               onPress={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || submitSuccess}
               style={styles.submitButton}
             />
           </Card>
@@ -415,6 +452,14 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     fontSize: 14,
     textAlign: "center",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.md,
   },
   submitButton: {
     marginTop: Spacing.xl,

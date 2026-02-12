@@ -128,6 +128,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`[API] ${req.method} ${req.path} | userId=${userId || "NONE"} role=${role || "NONE"}`);
     next();
   });
+
+  app.get("/api/debug/auth-test", (req: Request, res: Response) => {
+    const userId = req.headers["x-user-id"] as string;
+    const role = req.headers["x-user-role"] as string;
+    const contentType = req.headers["content-type"] as string;
+    const accept = req.headers["accept"] as string;
+    const userAgent = req.headers["user-agent"] as string;
+    console.log(`[DEBUG AUTH TEST] userId=${userId || "NONE"} role=${role || "NONE"} ua=${userAgent?.substring(0, 50) || "NONE"}`);
+    res.json({
+      authReceived: !!(userId && role),
+      userId: userId || null,
+      role: role || null,
+      contentType: contentType || null,
+      accept: accept || null,
+      userAgent: userAgent?.substring(0, 100) || null,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   // ========================================
   // Internal Communications API (HR ↔ Worker)
   // ========================================

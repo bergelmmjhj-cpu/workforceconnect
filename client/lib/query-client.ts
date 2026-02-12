@@ -77,28 +77,34 @@ export async function apiRequest(
   await ensureAuthLoaded();
 
   const baseUrl = getApiUrl();
-  const url = new URL(route, baseUrl);
+  const fullUrl = `${baseUrl.replace(/\/$/, '')}${route}`;
 
+  const authHeaders = getAuthHeaders();
   const headers: Record<string, string> = {
-    ...getAuthHeaders(),
+    ...authHeaders,
+    "Accept": "application/json",
   };
   if (data) {
     headers["Content-Type"] = "application/json";
   }
 
-  console.log(`[API REQUEST] ${method} ${url.toString()} | hasAuth=${!!headers["x-user-id"]} role=${headers["x-user-role"] || "NONE"}`);
+  console.log(`[API REQUEST] ${method} ${fullUrl} | userId=${authHeaders["x-user-id"] || "NONE"} role=${authHeaders["x-user-role"] || "NONE"}`);
 
-  const res = await fetch(url.toString(), {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  try {
+    const res = await fetch(fullUrl, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+    });
 
-  console.log(`[API RESPONSE] ${method} ${route} => ${res.status}`);
+    console.log(`[API RESPONSE] ${method} ${route} => ${res.status}`);
 
-  await throwIfResNotOk(res);
-  return res;
+    await throwIfResNotOk(res);
+    return res;
+  } catch (error: any) {
+    console.error(`[API ERROR] ${method} ${route} => ${error.message}`);
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -110,13 +116,16 @@ export const getQueryFn: <T>(options: {
     await ensureAuthLoaded();
 
     const baseUrl = getApiUrl();
-    const url = new URL(queryKey.join("/") as string, baseUrl);
+    const path = queryKey.join("/") as string;
+    const fullUrl = `${baseUrl.replace(/\/$/, '')}${path}`;
 
-    const headers = getAuthHeaders();
+    const headers: Record<string, string> = {
+      ...getAuthHeaders(),
+      "Accept": "application/json",
+    };
 
-    const res = await fetch(url.toString(), {
+    const res = await fetch(fullUrl, {
       headers,
-      credentials: "include",
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

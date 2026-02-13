@@ -347,6 +347,21 @@
         background: var(--primary-dark);
       }
       
+      .pdf-btn {
+        background: #059669;
+        color: white;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      
+      .pdf-btn:hover {
+        background: #047857;
+      }
+      
       .delete-btn {
         background: var(--error);
         color: white;
@@ -899,7 +914,7 @@
             '<td>' + roles.slice(0, 2).join(', ') + (roles.length > 2 ? '...' : '') + '</td>' +
             '<td><span class="status-badge ' + app.status + '">' + app.status + '</span>' + (!app.paymentMethod ? ' <span class="status-badge" style="background: #FEF3C7; color: #92400E; font-size: 11px;">No Payment Info</span>' : '') + '</td>' +
             '<td>' + new Date(app.createdAt).toLocaleDateString() + '</td>' +
-            '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(app.fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
+            '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="pdf-btn" onclick="downloadAgreementPdf(\'' + app.id + '\')">PDF</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(app.fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
           '</tr>';
         }).join('');
       }
@@ -1138,6 +1153,39 @@
           updateStatus('rejected');
         }
       });
+
+      function downloadAgreementPdf(id) {
+        var link = document.createElement('a');
+        link.href = '/api/admin/applications/' + id + '/agreement-pdf';
+        link.setAttribute('download', '');
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/admin/applications/' + id + '/agreement-pdf', true);
+        xhr.setRequestHeader('Authorization', 'Basic ' + authCredentials);
+        xhr.responseType = 'blob';
+        xhr.onload = function() {
+          if (xhr.status === 200) {
+            var disposition = xhr.getResponseHeader('Content-Disposition');
+            var filename = 'Subcontractor_Agreement.pdf';
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+              filename = disposition.split('filename=')[1].replace(/"/g, '');
+            }
+            var url = window.URL.createObjectURL(xhr.response);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+          } else {
+            alert('Failed to download PDF. Please try again.');
+          }
+        };
+        xhr.onerror = function() {
+          alert('Failed to download PDF. Please try again.');
+        };
+        xhr.send();
+      }
 
       // Delete application functionality
       var deleteTargetId = null;

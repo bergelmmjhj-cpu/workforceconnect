@@ -1094,6 +1094,182 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Download subcontractor agreement PDF for an application
+  app.get("/api/admin/applications/:id/agreement-pdf", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const [application] = await db.select().from(workerApplications)
+        .where(eq(workerApplications.id, req.params.id));
+
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      const PDFDocument = (await import("pdfkit")).default;
+      const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 60, right: 60 } });
+
+      const fileName = `Subcontractor_Agreement_${application.fullName.replace(/\s+/g, "_")}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      doc.pipe(res);
+
+      const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+      doc.fontSize(18).font("Helvetica-Bold").text("SUBCONTRACTOR AGREEMENT", { align: "center" });
+      doc.moveDown(0.3);
+      doc.fontSize(11).font("Helvetica").text("Workforce Connect Management", { align: "center" });
+      doc.moveDown(0.2);
+      doc.fontSize(9).fillColor("#666666").text("www.wfconnect.org", { align: "center" });
+      doc.fillColor("#000000");
+      doc.moveDown(1);
+
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
+      doc.moveDown(1);
+
+      doc.fontSize(13).font("Helvetica-Bold").text("1. Contractor Information");
+      doc.moveDown(0.5);
+
+      const addField = (label: string, value: string | null | undefined) => {
+        doc.fontSize(9).font("Helvetica-Bold").fillColor("#555555").text(label, { continued: true });
+        doc.font("Helvetica").fillColor("#000000").text(`  ${value || "N/A"}`);
+        doc.moveDown(0.2);
+      };
+
+      addField("Full Name:", application.fullName);
+      addField("Email:", application.email);
+      addField("Phone:", application.phone);
+      addField("Address:", `${application.address}, ${application.city}, ${application.province} ${application.postalCode}`);
+      if (application.dateOfBirth) addField("Date of Birth:", application.dateOfBirth);
+
+      const workStatusMap: Record<string, string> = {
+        citizen: "Canadian Citizen",
+        permanent_resident: "Permanent Resident",
+        work_permit: "Work Permit Holder"
+      };
+      addField("Work Status:", workStatusMap[application.workStatus] || application.workStatus);
+      doc.moveDown(0.5);
+
+      doc.fontSize(13).font("Helvetica-Bold").fillColor("#000000").text("2. Scope of Work");
+      doc.moveDown(0.5);
+
+      let roles: string[] = [];
+      try { roles = JSON.parse(application.preferredRoles); } catch (e) { roles = [application.preferredRoles]; }
+      addField("Preferred Roles:", roles.join(", "));
+
+      let days: string[] = [];
+      try { days = JSON.parse(application.availableDays); } catch (e) { days = [application.availableDays]; }
+      addField("Available Days:", days.join(", "));
+
+      let shifts: string[] = [];
+      try { shifts = JSON.parse(application.preferredShifts); } catch (e) { shifts = [application.preferredShifts]; }
+      addField("Preferred Shifts:", shifts.join(", "));
+      doc.moveDown(0.5);
+
+      doc.fontSize(13).font("Helvetica-Bold").text("3. Terms and Conditions");
+      doc.moveDown(0.5);
+      doc.fontSize(9).font("Helvetica").text(
+        "This Subcontractor Agreement (the \"Agreement\") is entered into by and between Workforce Connect Management (the \"Company\") and the above-named individual (the \"Contractor\"). The Contractor agrees to perform services as an independent subcontractor, NOT as an employee of the Company.",
+        { lineGap: 3 }
+      );
+      doc.moveDown(0.3);
+      doc.text(
+        "The Contractor acknowledges that they are responsible for their own tax obligations, including but not limited to income tax and HST/GST remittances. The Company will not withhold taxes, provide benefits, or make contributions to employment insurance or the Canada Pension Plan on behalf of the Contractor.",
+        { lineGap: 3 }
+      );
+      doc.moveDown(0.3);
+      doc.text(
+        "The Contractor agrees to comply with all applicable laws, regulations, and client site rules while performing services. The Contractor understands that failure to comply may result in immediate termination of this Agreement.",
+        { lineGap: 3 }
+      );
+      doc.moveDown(0.3);
+      doc.text(
+        "Either party may terminate this Agreement at any time with or without cause. The Contractor will be compensated for all services performed up to the date of termination.",
+        { lineGap: 3 }
+      );
+      doc.moveDown(0.5);
+
+      doc.fontSize(13).font("Helvetica-Bold").text("4. Time Tracking (TITO)");
+      doc.moveDown(0.5);
+      doc.fontSize(9).font("Helvetica").text(
+        "The Contractor acknowledges that they must accurately submit Time-In/Time-Out (TITO) records through the Workforce Connect platform. GPS verification may be required to confirm presence at work sites. Falsification of time records may result in immediate termination of this Agreement and forfeiture of payment for the affected period.",
+        { lineGap: 3 }
+      );
+      doc.moveDown(0.5);
+
+      doc.fontSize(13).font("Helvetica-Bold").text("5. Acknowledgments");
+      doc.moveDown(0.5);
+
+      const addCheckbox = (label: string, checked: boolean) => {
+        const checkmark = checked ? "[X]" : "[ ]";
+        doc.fontSize(9).font("Helvetica").text(`${checkmark}  ${label}`);
+        doc.moveDown(0.2);
+      };
+
+      addCheckbox("TITO System Acknowledgment - I understand that I must accurately submit Time-In/Time-Out records", application.titoAcknowledgment ?? false);
+      addCheckbox("Site Rules Agreement - I agree to adhere to client site-specific rules and regulations", application.siteRulesAcknowledgment ?? false);
+      addCheckbox("Worker Agreement - I understand I will be working as an independent subcontractor, NOT as an employee", application.workerAgreementConsent ?? false);
+      addCheckbox("Privacy Policy - I consent to the collection and use of my personal data (GDPR & PIPEDA compliant)", application.privacyConsent ?? false);
+      addCheckbox("Marketing Communications (optional)", application.marketingConsent ?? false);
+      doc.moveDown(0.5);
+
+      doc.fontSize(13).font("Helvetica-Bold").text("6. Emergency Contact");
+      doc.moveDown(0.5);
+      addField("Name:", application.emergencyContactName);
+      addField("Relationship:", application.emergencyContactRelationship);
+      addField("Phone:", application.emergencyContactPhone);
+      doc.moveDown(0.5);
+
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
+      doc.moveDown(1);
+
+      doc.fontSize(13).font("Helvetica-Bold").text("7. Electronic Signature");
+      doc.moveDown(0.5);
+      doc.fontSize(9).font("Helvetica").text(
+        "By signing below, the Contractor confirms that all information provided is true and accurate to the best of their knowledge. This electronic signature has the same legal effect as a handwritten signature.",
+        { lineGap: 3 }
+      );
+      doc.moveDown(0.8);
+
+      doc.fontSize(11).font("Helvetica-Bold").text("Signed:");
+      doc.moveDown(0.3);
+      doc.fontSize(14).font("Helvetica-Oblique").fillColor("#1a3a5c").text(application.signature, { underline: true });
+      doc.fillColor("#000000");
+      doc.moveDown(0.5);
+      addField("Date Signed:", application.signatureDate);
+      addField("Application Status:", application.status.toUpperCase());
+      addField("Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" }));
+
+      doc.moveDown(1.5);
+      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
+      doc.moveDown(0.5);
+      doc.fontSize(8).font("Helvetica").fillColor("#999999").text(
+        "This document was generated by Workforce Connect Management. For questions, contact admin@wfconnect.org",
+        { align: "center" }
+      );
+
+      doc.end();
+    } catch (error) {
+      console.error("Error generating agreement PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
+
   // ========================================
   // Payment Profiles API
   // ========================================

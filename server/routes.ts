@@ -2059,6 +2059,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let conditions: any[] = [];
 
+      const includePast = req.query.includePast === "true";
+      if (!includePast) {
+        const today = new Date().toISOString().split("T")[0];
+        conditions.push(
+          or(
+            gte(shifts.date, today),
+            and(not(eq(shifts.status, "completed")), not(eq(shifts.status, "cancelled")))
+          )!
+        );
+      }
+
       if (role === "worker") {
         conditions.push(eq(shifts.workerUserId, userId));
       }
@@ -2262,6 +2273,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!existing) {
         res.status(404).json({ error: "Shift not found" });
         return;
+      }
+
+      await db.delete(shiftOffers).where(eq(shiftOffers.shiftId, req.params.id));
+      await db.delete(shiftCheckins).where(eq(shiftCheckins.shiftId, req.params.id));
+
+      const childShifts = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.parentShiftId, req.params.id));
+      if (childShifts.length > 0) {
+        const childIds = childShifts.map(c => c.id);
+        await db.delete(shiftOffers).where(inArray(shiftOffers.shiftId, childIds));
+        await db.delete(shiftCheckins).where(inArray(shiftCheckins.shiftId, childIds));
+        await db.delete(shifts).where(eq(shifts.parentShiftId, req.params.id));
       }
 
       await db.delete(shifts).where(eq(shifts.id, req.params.id));
@@ -3012,6 +3034,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (role !== "admin" && role !== "hr" && role !== "client") {
         res.status(403).json({ error: "Access denied" });
         return;
+      }
+
+      const associatedShifts = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.requestId, requestId));
+      if (associatedShifts.length > 0) {
+        const shiftIds = associatedShifts.map(s => s.id);
+        await db.delete(shiftOffers).where(inArray(shiftOffers.shiftId, shiftIds));
+        await db.delete(shiftCheckins).where(inArray(shiftCheckins.shiftId, shiftIds));
+        await db.delete(shifts).where(eq(shifts.requestId, requestId));
       }
 
       await db.delete(shiftRequests).where(eq(shiftRequests.id, requestId));
@@ -3795,10 +3825,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         });
 
+        const eligibleOnly = result.filter(w => w.eligible);
         res.json({
           workers: result,
-          eligibleCount: result.filter(w => w.eligible).length,
+          eligibleWorkers: eligibleOnly,
+          eligibleCount: eligibleOnly.length,
+          totalEligible: eligibleOnly.length,
           totalWorkers: result.length,
+          totalActive: result.length,
         });
       } catch (error) {
         console.error("Error fetching eligible workers:", error);

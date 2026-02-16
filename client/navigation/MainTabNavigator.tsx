@@ -13,6 +13,9 @@ import ProfileScreen from "@/screens/ProfileScreen";
 import WorkerCommunicationsScreen from "@/screens/WorkerCommunicationsScreen";
 import UserManagementScreen from "@/screens/UserManagementScreen";
 import AdminManageScreen from "@/screens/AdminManageScreen";
+import ShiftRequestsScreen from "@/screens/ShiftRequestsScreen";
+import ShiftOffersScreen from "@/screens/ShiftOffersScreen";
+import NotificationsScreen from "@/screens/NotificationsScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,9 +23,12 @@ import { useAuth } from "@/contexts/AuthContext";
 export type MainTabParamList = {
   Dashboard: undefined;
   Requests: undefined;
+  ShiftRequests: undefined;
+  ShiftOffers: undefined;
   Shifts: undefined;
   Tito: undefined;
   Messages: undefined;
+  Notifications: undefined;
   Profile: undefined;
   Users: undefined;
   Reports: undefined;
@@ -110,6 +116,17 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
+              name="ShiftOffers"
+              component={ShiftOffersScreen}
+              options={{
+                title: "Offers",
+                headerTitle: "Shift Offers",
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="inbox" size={size} color={color} />
+                ),
+              }}
+            />
+            <Tab.Screen
               name="Shifts"
               component={ShiftsScreen}
               options={{
@@ -127,16 +144,6 @@ export default function MainTabNavigator() {
                 headerTitle: "Time Tracking",
                 tabBarIcon: ({ color, size }) => (
                   <Feather name="clock" size={size} color={color} />
-                ),
-              }}
-            />
-            <Tab.Screen
-              name="Messages"
-              component={MessagesScreen}
-              options={{
-                headerTitle: "Messages",
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="message-circle" size={size} color={color} />
                 ),
               }}
             />
@@ -167,6 +174,17 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
+              name="ShiftRequests"
+              component={ShiftRequestsScreen}
+              options={{
+                title: "Requests",
+                headerTitle: "Shift Requests",
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name="send" size={size} color={color} />
+                ),
+              }}
+            />
+            <Tab.Screen
               name="Management"
               component={AdminManageScreen}
               options={{
@@ -184,17 +202,6 @@ export default function MainTabNavigator() {
                 headerTitle: "Worker Communications",
                 tabBarIcon: ({ color, size }) => (
                   <Feather name="message-circle" size={size} color={color} />
-                ),
-              }}
-            />
-            <Tab.Screen
-              name="Tito"
-              component={TitoScreen}
-              options={{
-                title: "TITO",
-                headerTitle: "Time Review",
-                tabBarIcon: ({ color, size }) => (
-                  <Feather name="check-square" size={size} color={color} />
                 ),
               }}
             />
@@ -225,12 +232,13 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Users"
-              component={UserManagementScreen}
+              name="ShiftRequests"
+              component={ShiftRequestsScreen}
               options={{
-                headerTitle: "User Management",
+                title: "Requests",
+                headerTitle: "Shift Requests",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="users" size={size} color={color} />
+                  <Feather name="send" size={size} color={color} />
                 ),
               }}
             />

@@ -22,11 +22,21 @@ import {
   pushTokens,
   paymentProfiles,
   exportAuditLogs,
-  shifts
+  shifts,
+  shiftRequests,
+  insertShiftRequestSchema,
+  shiftOffers,
+  insertShiftOfferSchema,
+  appNotifications,
+  insertAppNotificationSchema,
+  shiftCheckins,
+  insertShiftCheckinSchema,
+  sentReminders,
 } from "../shared/schema";
+import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
-import { eq, and, or, desc, isNull, sql, inArray } from "drizzle-orm";
+import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not } from "drizzle-orm";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -2823,6 +2833,979 @@ export async function registerRoutes(app: Express): Promise<Server> {
       timestamp: new Date().toISOString(),
     });
   });
+
+  // ========================================
+  // Shift Requests CRUD
+  // ========================================
+
+  app.get("/api/shift-requests", async (req: Request, res: Response) => {
+    try {
+      const role = req.headers["x-user-role"] as UserRole;
+      const userId = req.headers["x-user-id"] as string;
+
+      if (!role || !userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      let results;
+      if (role === "admin" || role === "hr") {
+        results = await db.select({
+          id: shiftRequests.id,
+          clientId: shiftRequests.clientId,
+          workplaceId: shiftRequests.workplaceId,
+          roleType: shiftRequests.roleType,
+          date: shiftRequests.date,
+          startTime: shiftRequests.startTime,
+          endTime: shiftRequests.endTime,
+          notes: shiftRequests.notes,
+          requestedWorkerId: shiftRequests.requestedWorkerId,
+          status: shiftRequests.status,
+          createdAt: shiftRequests.createdAt,
+          updatedAt: shiftRequests.updatedAt,
+          workplaceName: workplaces.name,
+          clientName: users.fullName,
+        })
+        .from(shiftRequests)
+        .leftJoin(workplaces, eq(shiftRequests.workplaceId, workplaces.id))
+        .leftJoin(users, eq(shiftRequests.clientId, users.id))
+        .orderBy(desc(shiftRequests.createdAt));
+      } else if (role === "client") {
+        results = await db.select({
+          id: shiftRequests.id,
+          clientId: shiftRequests.clientId,
+          workplaceId: shiftRequests.workplaceId,
+          roleType: shiftRequests.roleType,
+          date: shiftRequests.date,
+          startTime: shiftRequests.startTime,
+          endTime: shiftRequests.endTime,
+          notes: shiftRequests.notes,
+          requestedWorkerId: shiftRequests.requestedWorkerId,
+          status: shiftRequests.status,
+          createdAt: shiftRequests.createdAt,
+          updatedAt: shiftRequests.updatedAt,
+          workplaceName: workplaces.name,
+          clientName: users.fullName,
+        })
+        .from(shiftRequests)
+        .leftJoin(workplaces, eq(shiftRequests.workplaceId, workplaces.id))
+        .leftJoin(users, eq(shiftRequests.clientId, users.id))
+        .where(eq(shiftRequests.clientId, userId))
+        .orderBy(desc(shiftRequests.createdAt));
+      } else {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching shift requests:", error);
+      res.status(500).json({ error: "Failed to fetch shift requests" });
+    }
+  });
+
+  app.post(
+    "/api/shift-requests",
+    checkRoles("admin", "hr", "client"),
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.headers["x-user-id"] as string;
+        const { clientId, workplaceId, roleType, date, startTime, endTime, notes, requestedWorkerId } = req.body;
+
+        const effectiveClientId = clientId || userId;
+
+        if (!workplaceId || !roleType || !date || !startTime || !endTime) {
+          res.status(400).json({ error: "workplaceId, roleType, date, startTime, and endTime are required" });
+          return;
+        }
+
+        const [newRequest] = await db.insert(shiftRequests).values({
+          clientId: effectiveClientId,
+          workplaceId,
+          roleType,
+          date,
+          startTime,
+          endTime,
+          notes: notes || null,
+          requestedWorkerId: requestedWorkerId || null,
+          status: "submitted",
+        }).returning();
+
+        broadcast({ type: "shift_request_created", data: newRequest });
+
+        res.json(newRequest);
+      } catch (error) {
+        console.error("Error creating shift request:", error);
+        res.status(500).json({ error: "Failed to create shift request" });
+      }
+    }
+  );
+
+  app.patch(
+    "/api/shift-requests/:id",
+    checkRoles("admin", "hr"),
+    async (req: Request, res: Response) => {
+      try {
+        const requestId = req.params.id;
+        const updates = req.body;
+
+        const [existing] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+        if (!existing) {
+          res.status(404).json({ error: "Shift request not found" });
+          return;
+        }
+
+        const [updated] = await db.update(shiftRequests)
+          .set({ ...updates, updatedAt: new Date() })
+          .where(eq(shiftRequests.id, requestId))
+          .returning();
+
+        if (updates.status === "filled" && existing.status !== "filled") {
+          await db.insert(appNotifications).values({
+            userId: existing.clientId,
+            type: "request_filled",
+            title: "Shift Request Filled",
+            body: `Your shift request for ${existing.roleType} on ${existing.date} has been filled.`,
+            deepLink: `/shift-requests/${requestId}`,
+          });
+
+          sendPushNotifications(
+            [existing.clientId],
+            "Shift Request Filled",
+            `Your shift request for ${existing.roleType} on ${existing.date} has been filled.`,
+            { type: "request_filled", requestId }
+          );
+        }
+
+        broadcast({ type: "shift_request_updated", data: updated });
+
+        res.json(updated);
+      } catch (error) {
+        console.error("Error updating shift request:", error);
+        res.status(500).json({ error: "Failed to update shift request" });
+      }
+    }
+  );
+
+  app.delete("/api/shift-requests/:id", async (req: Request, res: Response) => {
+    try {
+      const role = req.headers["x-user-role"] as UserRole;
+      const userId = req.headers["x-user-id"] as string;
+      const requestId = req.params.id;
+
+      if (!role || !userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const [existing] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+      if (!existing) {
+        res.status(404).json({ error: "Shift request not found" });
+        return;
+      }
+
+      if (role === "client" && existing.clientId !== userId) {
+        res.status(403).json({ error: "You can only delete your own requests" });
+        return;
+      }
+
+      if (role !== "admin" && role !== "hr" && role !== "client") {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      await db.delete(shiftRequests).where(eq(shiftRequests.id, requestId));
+
+      broadcast({ type: "shift_request_deleted", data: { id: requestId } });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting shift request:", error);
+      res.status(500).json({ error: "Failed to delete shift request" });
+    }
+  });
+
+  // ========================================
+  // Smart Assign & Broadcasting
+  // ========================================
+
+  app.post(
+    "/api/shift-requests/:id/assign",
+    checkRoles("admin", "hr"),
+    async (req: Request, res: Response) => {
+      try {
+        const requestId = req.params.id;
+        const userId = req.headers["x-user-id"] as string;
+        const { workerId } = req.body;
+
+        const [request] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+        if (!request) {
+          res.status(404).json({ error: "Shift request not found" });
+          return;
+        }
+
+        const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, request.workplaceId!));
+
+        if (workerId) {
+          const [newShift] = await db.insert(shifts).values({
+            requestId: requestId,
+            workplaceId: request.workplaceId!,
+            workerUserId: workerId,
+            roleType: request.roleType,
+            title: `${request.roleType} - ${workplace?.name || "Unknown"}`,
+            date: request.date,
+            startTime: request.startTime,
+            endTime: request.endTime,
+            notes: request.notes,
+            status: "scheduled",
+            createdByUserId: userId,
+          }).returning();
+
+          await db.update(shiftRequests)
+            .set({ status: "filled", updatedAt: new Date() })
+            .where(eq(shiftRequests.id, requestId));
+
+          await db.insert(appNotifications).values({
+            userId: workerId,
+            type: "shift_assigned",
+            title: "New Shift Assigned",
+            body: `You have been assigned a ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date}.`,
+            deepLink: `/shifts/${newShift.id}`,
+          });
+
+          sendPushNotifications(
+            [workerId],
+            "New Shift Assigned",
+            `You have been assigned a ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date}.`,
+            { type: "shift_assigned", shiftId: newShift.id }
+          );
+
+          await db.insert(appNotifications).values({
+            userId: request.clientId,
+            type: "request_filled",
+            title: "Shift Request Filled",
+            body: `Your shift request for ${request.roleType} on ${request.date} has been filled.`,
+            deepLink: `/shift-requests/${requestId}`,
+          });
+
+          sendPushNotifications(
+            [request.clientId],
+            "Shift Request Filled",
+            `Your shift request for ${request.roleType} on ${request.date} has been filled.`
+          );
+
+          broadcast({ type: "shift_created", data: newShift });
+          broadcast({ type: "shift_request_updated", data: { id: requestId, status: "filled" } });
+
+          res.json({ shift: newShift, assignedDirectly: true });
+        } else {
+          const [newShift] = await db.insert(shifts).values({
+            requestId: requestId,
+            workplaceId: request.workplaceId!,
+            workerUserId: null,
+            roleType: request.roleType,
+            title: `${request.roleType} - ${workplace?.name || "Unknown"}`,
+            date: request.date,
+            startTime: request.startTime,
+            endTime: request.endTime,
+            notes: request.notes,
+            status: "scheduled",
+            createdByUserId: userId,
+          }).returning();
+
+          const allWorkers = await db.select({
+            id: users.id,
+            fullName: users.fullName,
+            workerRoles: users.workerRoles,
+          })
+          .from(users)
+          .where(and(
+            eq(users.role, "worker"),
+            eq(users.isActive, true)
+          ));
+
+          let eligibleWorkers = allWorkers.filter(w => {
+            if (w.workerRoles) {
+              try {
+                const roles = JSON.parse(w.workerRoles);
+                if (Array.isArray(roles) && roles.length > 0) {
+                  return roles.some((r: string) => r.toLowerCase() === request.roleType.toLowerCase());
+                }
+              } catch {
+                return true;
+              }
+            }
+            return true;
+          });
+
+          const existingShifts = await db.select({
+            workerUserId: shifts.workerUserId,
+            startTime: shifts.startTime,
+            endTime: shifts.endTime,
+          })
+          .from(shifts)
+          .where(and(
+            eq(shifts.date, request.date),
+            not(isNull(shifts.workerUserId)),
+            ne(shifts.status, "cancelled")
+          ));
+
+          const conflictWorkerIds = new Set<string>();
+          for (const es of existingShifts) {
+            if (es.workerUserId && es.startTime && es.endTime) {
+              if (es.startTime < request.endTime && es.endTime > request.startTime) {
+                conflictWorkerIds.add(es.workerUserId);
+              }
+            }
+          }
+
+          eligibleWorkers = eligibleWorkers.filter(w => !conflictWorkerIds.has(w.id));
+
+          const offeredWorkerIds: string[] = [];
+          for (const worker of eligibleWorkers) {
+            await db.insert(shiftOffers).values({
+              shiftId: newShift.id,
+              workerId: worker.id,
+              status: "pending",
+            });
+
+            await db.insert(appNotifications).values({
+              userId: worker.id,
+              type: "shift_offer",
+              title: "New Shift Available",
+              body: `A ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date} is available. Tap to accept.`,
+              deepLink: `/shift-offers`,
+            });
+
+            offeredWorkerIds.push(worker.id);
+          }
+
+          if (offeredWorkerIds.length > 0) {
+            sendPushNotifications(
+              offeredWorkerIds,
+              "New Shift Available",
+              `A ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date} is available. Tap to accept.`,
+              { type: "shift_offer", shiftId: newShift.id }
+            );
+          }
+
+          await db.update(shiftRequests)
+            .set({ status: "offered", updatedAt: new Date() })
+            .where(eq(shiftRequests.id, requestId));
+
+          broadcast({ type: "shift_request_updated", data: { id: requestId, status: "offered" } });
+
+          res.json({
+            shift: newShift,
+            assignedDirectly: false,
+            offeredWorkers: eligibleWorkers.map(w => ({ id: w.id, fullName: w.fullName })),
+            offeredCount: eligibleWorkers.length,
+          });
+        }
+      } catch (error) {
+        console.error("Error assigning shift request:", error);
+        res.status(500).json({ error: "Failed to assign shift request" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/shift-requests/:id/offers",
+    checkRoles("admin", "hr"),
+    async (req: Request, res: Response) => {
+      try {
+        const requestId = req.params.id;
+
+        const requestShifts = await db.select({ id: shifts.id })
+          .from(shifts)
+          .where(eq(shifts.requestId, requestId));
+
+        if (requestShifts.length === 0) {
+          res.json({ offers: [], counts: { pending: 0, accepted: 0, declined: 0, cancelled: 0 } });
+          return;
+        }
+
+        const shiftIds = requestShifts.map(s => s.id);
+
+        const offers = await db.select({
+          id: shiftOffers.id,
+          shiftId: shiftOffers.shiftId,
+          workerId: shiftOffers.workerId,
+          status: shiftOffers.status,
+          offeredAt: shiftOffers.offeredAt,
+          respondedAt: shiftOffers.respondedAt,
+          workerName: users.fullName,
+          workerEmail: users.email,
+        })
+        .from(shiftOffers)
+        .leftJoin(users, eq(shiftOffers.workerId, users.id))
+        .where(inArray(shiftOffers.shiftId, shiftIds))
+        .orderBy(desc(shiftOffers.offeredAt));
+
+        const counts = {
+          pending: offers.filter(o => o.status === "pending").length,
+          accepted: offers.filter(o => o.status === "accepted").length,
+          declined: offers.filter(o => o.status === "declined").length,
+          cancelled: offers.filter(o => o.status === "cancelled").length,
+        };
+
+        res.json({ offers, counts });
+      } catch (error) {
+        console.error("Error fetching shift request offers:", error);
+        res.status(500).json({ error: "Failed to fetch offers" });
+      }
+    }
+  );
+
+  // ========================================
+  // Shift Offers for Workers
+  // ========================================
+
+  app.get("/api/shift-offers", async (req: Request, res: Response) => {
+    try {
+      const role = req.headers["x-user-role"] as UserRole;
+      const userId = req.headers["x-user-id"] as string;
+
+      if (!role || !userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      let results;
+      if (role === "worker") {
+        results = await db.select({
+          id: shiftOffers.id,
+          shiftId: shiftOffers.shiftId,
+          workerId: shiftOffers.workerId,
+          status: shiftOffers.status,
+          offeredAt: shiftOffers.offeredAt,
+          respondedAt: shiftOffers.respondedAt,
+          shiftDate: shifts.date,
+          shiftStartTime: shifts.startTime,
+          shiftEndTime: shifts.endTime,
+          shiftTitle: shifts.title,
+          shiftRoleType: shifts.roleType,
+          workplaceName: workplaces.name,
+          workplaceCity: workplaces.city,
+        })
+        .from(shiftOffers)
+        .innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id))
+        .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
+        .where(and(
+          eq(shiftOffers.workerId, userId),
+          eq(shiftOffers.status, "pending")
+        ))
+        .orderBy(desc(shiftOffers.offeredAt));
+      } else if (role === "admin" || role === "hr") {
+        results = await db.select({
+          id: shiftOffers.id,
+          shiftId: shiftOffers.shiftId,
+          workerId: shiftOffers.workerId,
+          status: shiftOffers.status,
+          offeredAt: shiftOffers.offeredAt,
+          respondedAt: shiftOffers.respondedAt,
+          shiftDate: shifts.date,
+          shiftStartTime: shifts.startTime,
+          shiftEndTime: shifts.endTime,
+          shiftTitle: shifts.title,
+          shiftRoleType: shifts.roleType,
+          workplaceName: workplaces.name,
+          workplaceCity: workplaces.city,
+          workerName: users.fullName,
+        })
+        .from(shiftOffers)
+        .innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id))
+        .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
+        .leftJoin(users, eq(shiftOffers.workerId, users.id))
+        .orderBy(desc(shiftOffers.offeredAt));
+      } else {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching shift offers:", error);
+      res.status(500).json({ error: "Failed to fetch shift offers" });
+    }
+  });
+
+  app.post(
+    "/api/shift-offers/:id/respond",
+    checkRoles("worker"),
+    async (req: Request, res: Response) => {
+      try {
+        const offerId = req.params.id;
+        const userId = req.headers["x-user-id"] as string;
+        const { response } = req.body;
+
+        if (!response || !["accepted", "declined"].includes(response)) {
+          res.status(400).json({ error: "response must be 'accepted' or 'declined'" });
+          return;
+        }
+
+        const [offer] = await db.select().from(shiftOffers).where(eq(shiftOffers.id, offerId));
+        if (!offer) {
+          res.status(404).json({ error: "Shift offer not found" });
+          return;
+        }
+
+        if (offer.workerId !== userId) {
+          res.status(403).json({ error: "This offer is not for you" });
+          return;
+        }
+
+        if (offer.status !== "pending") {
+          res.status(400).json({ error: `Offer already ${offer.status}` });
+          return;
+        }
+
+        if (response === "accepted") {
+          const [shift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
+          if (!shift) {
+            res.status(404).json({ error: "Associated shift not found" });
+            return;
+          }
+
+          if (shift.workerUserId) {
+            res.status(409).json({ error: "This shift has already been accepted by another worker" });
+            return;
+          }
+
+          await db.update(shifts)
+            .set({ workerUserId: userId, updatedAt: new Date() })
+            .where(and(eq(shifts.id, offer.shiftId), isNull(shifts.workerUserId)));
+
+          const [updatedShift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
+          if (!updatedShift || updatedShift.workerUserId !== userId) {
+            res.status(409).json({ error: "This shift has already been accepted by another worker" });
+            return;
+          }
+
+          await db.update(shiftOffers)
+            .set({ status: "accepted", respondedAt: new Date() })
+            .where(eq(shiftOffers.id, offerId));
+
+          const otherOffers = await db.select().from(shiftOffers)
+            .where(and(
+              eq(shiftOffers.shiftId, offer.shiftId),
+              ne(shiftOffers.id, offerId),
+              eq(shiftOffers.status, "pending")
+            ));
+
+          const cancelledWorkerIds: string[] = [];
+          for (const otherOffer of otherOffers) {
+            await db.update(shiftOffers)
+              .set({ status: "cancelled", respondedAt: new Date() })
+              .where(eq(shiftOffers.id, otherOffer.id));
+            cancelledWorkerIds.push(otherOffer.workerId);
+          }
+
+          if (shift.requestId) {
+            await db.update(shiftRequests)
+              .set({ status: "filled", updatedAt: new Date() })
+              .where(eq(shiftRequests.id, shift.requestId));
+          }
+
+          const hrAdmins = await db.select({ id: users.id })
+            .from(users)
+            .where(or(eq(users.role, "admin"), eq(users.role, "hr")));
+
+          const [worker] = await db.select({ fullName: users.fullName })
+            .from(users)
+            .where(eq(users.id, userId));
+
+          for (const ha of hrAdmins) {
+            await db.insert(appNotifications).values({
+              userId: ha.id,
+              type: "offer_accepted",
+              title: "Shift Offer Accepted",
+              body: `${worker?.fullName || "A worker"} accepted the ${shift.roleType || ""} shift at ${shift.title} on ${shift.date}.`,
+              deepLink: `/shifts/${shift.id}`,
+            });
+          }
+
+          sendPushNotifications(
+            hrAdmins.map(ha => ha.id),
+            "Shift Offer Accepted",
+            `${worker?.fullName || "A worker"} accepted the shift on ${shift.date}.`,
+            { type: "offer_accepted", shiftId: shift.id }
+          );
+
+          if (cancelledWorkerIds.length > 0) {
+            for (const cwId of cancelledWorkerIds) {
+              await db.insert(appNotifications).values({
+                userId: cwId,
+                type: "offer_cancelled",
+                title: "Shift Offer Cancelled",
+                body: `The ${shift.roleType || ""} shift at ${shift.title} on ${shift.date} has been filled by another worker.`,
+                deepLink: `/shift-offers`,
+              });
+            }
+
+            sendPushNotifications(
+              cancelledWorkerIds,
+              "Shift Offer Cancelled",
+              `The shift on ${shift.date} has been filled by another worker.`,
+              { type: "offer_cancelled", shiftId: shift.id }
+            );
+          }
+
+          if (shift.requestId) {
+            const [req2] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, shift.requestId));
+            if (req2) {
+              await db.insert(appNotifications).values({
+                userId: req2.clientId,
+                type: "request_filled",
+                title: "Shift Request Filled",
+                body: `Your shift request for ${req2.roleType} on ${req2.date} has been filled.`,
+                deepLink: `/shift-requests/${req2.id}`,
+              });
+              sendPushNotifications(
+                [req2.clientId],
+                "Shift Request Filled",
+                `Your shift request for ${req2.roleType} on ${req2.date} has been filled.`
+              );
+            }
+          }
+
+          broadcast({ type: "shift_offer_accepted", data: { offerId, shiftId: offer.shiftId } });
+
+          res.json({ success: true, status: "accepted" });
+        } else {
+          await db.update(shiftOffers)
+            .set({ status: "declined", respondedAt: new Date() })
+            .where(eq(shiftOffers.id, offerId));
+
+          const [shift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
+
+          const hrAdmins = await db.select({ id: users.id })
+            .from(users)
+            .where(or(eq(users.role, "admin"), eq(users.role, "hr")));
+
+          const [worker] = await db.select({ fullName: users.fullName })
+            .from(users)
+            .where(eq(users.id, userId));
+
+          for (const ha of hrAdmins) {
+            await db.insert(appNotifications).values({
+              userId: ha.id,
+              type: "offer_declined",
+              title: "Shift Offer Declined",
+              body: `${worker?.fullName || "A worker"} declined the ${shift?.roleType || ""} shift on ${shift?.date || "unknown date"}.`,
+              deepLink: `/shifts/${offer.shiftId}`,
+            });
+          }
+
+          sendPushNotifications(
+            hrAdmins.map(ha => ha.id),
+            "Shift Offer Declined",
+            `${worker?.fullName || "A worker"} declined a shift offer.`,
+            { type: "offer_declined", shiftId: offer.shiftId }
+          );
+
+          broadcast({ type: "shift_offer_declined", data: { offerId, shiftId: offer.shiftId } });
+
+          res.json({ success: true, status: "declined" });
+        }
+      } catch (error) {
+        console.error("Error responding to shift offer:", error);
+        res.status(500).json({ error: "Failed to respond to shift offer" });
+      }
+    }
+  );
+
+  // ========================================
+  // In-App Notifications
+  // ========================================
+
+  app.get("/api/notifications", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const notifications = await db.select()
+        .from(appNotifications)
+        .where(eq(appNotifications.userId, userId))
+        .orderBy(desc(appNotifications.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      const [unreadCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(appNotifications)
+        .where(and(
+          eq(appNotifications.userId, userId),
+          isNull(appNotifications.readAt)
+        ));
+
+      res.json({ notifications, unreadCount: Number(unreadCount?.count || 0) });
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const notifId = req.params.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const [updated] = await db.update(appNotifications)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(appNotifications.id, notifId),
+          eq(appNotifications.userId, userId)
+        ))
+        .returning();
+
+      if (!updated) {
+        res.status(404).json({ error: "Notification not found" });
+        return;
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  app.post("/api/notifications/read-all", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      await db.update(appNotifications)
+        .set({ readAt: new Date() })
+        .where(and(
+          eq(appNotifications.userId, userId),
+          isNull(appNotifications.readAt)
+        ));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // ========================================
+  // Shift Check-ins
+  // ========================================
+
+  app.post(
+    "/api/shifts/:id/checkin",
+    checkRoles("worker"),
+    async (req: Request, res: Response) => {
+      try {
+        const shiftId = req.params.id;
+        const userId = req.headers["x-user-id"] as string;
+        const { status, note } = req.body;
+
+        if (!status || !["on_my_way", "issue", "checked_in", "checked_out"].includes(status)) {
+          res.status(400).json({ error: "status must be 'on_my_way', 'issue', 'checked_in', or 'checked_out'" });
+          return;
+        }
+
+        const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+        if (!shift) {
+          res.status(404).json({ error: "Shift not found" });
+          return;
+        }
+
+        const [checkin] = await db.insert(shiftCheckins).values({
+          shiftId,
+          workerId: userId,
+          status,
+          note: note || null,
+        }).returning();
+
+        const [worker] = await db.select({ fullName: users.fullName })
+          .from(users)
+          .where(eq(users.id, userId));
+
+        const statusLabels: Record<string, string> = {
+          on_my_way: "is on their way",
+          issue: "reported an issue",
+          checked_in: "has checked in",
+          checked_out: "has checked out",
+        };
+
+        if (status === "issue") {
+          const hrAdmins = await db.select({ id: users.id })
+            .from(users)
+            .where(or(eq(users.role, "admin"), eq(users.role, "hr")));
+
+          for (const ha of hrAdmins) {
+            await db.insert(appNotifications).values({
+              userId: ha.id,
+              type: "checkin_issue",
+              title: "Worker Reported Issue",
+              body: `${worker?.fullName || "A worker"} reported an issue for shift on ${shift.date}${note ? ": " + note : ""}.`,
+              deepLink: `/shifts/${shiftId}`,
+            });
+          }
+
+          sendPushNotifications(
+            hrAdmins.map(ha => ha.id),
+            "Worker Reported Issue",
+            `${worker?.fullName || "A worker"} reported an issue${note ? ": " + note : ""}.`,
+            { type: "checkin_issue", shiftId }
+          );
+        } else {
+          const hrAdmins = await db.select({ id: users.id })
+            .from(users)
+            .where(or(eq(users.role, "admin"), eq(users.role, "hr")));
+
+          sendPushNotifications(
+            hrAdmins.map(ha => ha.id),
+            "Shift Status Update",
+            `${worker?.fullName || "A worker"} ${statusLabels[status] || status} for shift on ${shift.date}.`,
+            { type: "shift_checkin", shiftId }
+          );
+        }
+
+        broadcast({ type: "shift_checkin", data: checkin });
+
+        res.json(checkin);
+      } catch (error) {
+        console.error("Error creating shift checkin:", error);
+        res.status(500).json({ error: "Failed to create shift checkin" });
+      }
+    }
+  );
+
+  app.get("/api/shifts/:id/checkins", async (req: Request, res: Response) => {
+    try {
+      const shiftId = req.params.id;
+      const userId = req.headers["x-user-id"] as string;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const checkins = await db.select({
+        id: shiftCheckins.id,
+        shiftId: shiftCheckins.shiftId,
+        workerId: shiftCheckins.workerId,
+        status: shiftCheckins.status,
+        note: shiftCheckins.note,
+        createdAt: shiftCheckins.createdAt,
+        workerName: users.fullName,
+      })
+      .from(shiftCheckins)
+      .leftJoin(users, eq(shiftCheckins.workerId, users.id))
+      .where(eq(shiftCheckins.shiftId, shiftId))
+      .orderBy(desc(shiftCheckins.createdAt));
+
+      res.json(checkins);
+    } catch (error) {
+      console.error("Error fetching shift checkins:", error);
+      res.status(500).json({ error: "Failed to fetch shift checkins" });
+    }
+  });
+
+  // ========================================
+  // Worker Eligibility
+  // ========================================
+
+  app.get(
+    "/api/shift-requests/:id/eligible-workers",
+    checkRoles("admin", "hr"),
+    async (req: Request, res: Response) => {
+      try {
+        const requestId = req.params.id;
+
+        const [request] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+        if (!request) {
+          res.status(404).json({ error: "Shift request not found" });
+          return;
+        }
+
+        const allWorkers = await db.select({
+          id: users.id,
+          fullName: users.fullName,
+          email: users.email,
+          workerRoles: users.workerRoles,
+        })
+        .from(users)
+        .where(and(
+          eq(users.role, "worker"),
+          eq(users.isActive, true)
+        ));
+
+        const existingShifts = await db.select({
+          workerUserId: shifts.workerUserId,
+          startTime: shifts.startTime,
+          endTime: shifts.endTime,
+        })
+        .from(shifts)
+        .where(and(
+          eq(shifts.date, request.date),
+          not(isNull(shifts.workerUserId)),
+          ne(shifts.status, "cancelled")
+        ));
+
+        const conflictMap = new Map<string, boolean>();
+        for (const es of existingShifts) {
+          if (es.workerUserId && es.startTime && es.endTime) {
+            if (es.startTime < request.endTime && es.endTime > request.startTime) {
+              conflictMap.set(es.workerUserId, true);
+            }
+          }
+        }
+
+        const result = allWorkers.map(w => {
+          let roleMatch = true;
+          if (w.workerRoles) {
+            try {
+              const roles = JSON.parse(w.workerRoles);
+              if (Array.isArray(roles) && roles.length > 0) {
+                roleMatch = roles.some((r: string) => r.toLowerCase() === request.roleType.toLowerCase());
+              }
+            } catch {
+              roleMatch = true;
+            }
+          }
+
+          return {
+            id: w.id,
+            fullName: w.fullName,
+            email: w.email,
+            workerRoles: w.workerRoles,
+            roleMatch,
+            hasConflict: conflictMap.has(w.id),
+            eligible: roleMatch && !conflictMap.has(w.id),
+          };
+        });
+
+        res.json({
+          workers: result,
+          eligibleCount: result.filter(w => w.eligible).length,
+          totalWorkers: result.length,
+        });
+      } catch (error) {
+        console.error("Error fetching eligible workers:", error);
+        res.status(500).json({ error: "Failed to fetch eligible workers" });
+      }
+    }
+  );
 
   const httpServer = createServer(app);
 

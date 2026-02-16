@@ -67,6 +67,16 @@ INSERT INTO users (id, email, password, role, first_name, last_name)
 VALUES (gen_random_uuid(), 'admin@wfconnect.org', '<bcrypt_hash>', 'admin', 'Admin', 'User');
 ```
 
+## Recent Changes (Feb 16, 2026)
+
+- **Cascade Deletion**: DELETE /api/shifts/:id now properly deletes related shift_offers, shift_checkins, and child recurring shifts before deleting the parent. DELETE /api/shift-requests/:id similarly cascades to associated shifts and their dependencies.
+- **Eligible Workers API**: GET /api/shift-requests/:id/eligible-workers now returns both old format (workers, eligibleCount, totalWorkers) and new format (eligibleWorkers, totalEligible, totalActive) for frontend compatibility.
+- **Past Shift Filtering**: GET /api/shifts now excludes past completed/cancelled shifts by default. Use ?includePast=true to see all history.
+- **ShiftsScreen Delete**: Admin/HR users can now delete shifts directly from the Shifts tab with a custom confirmation modal (not Alert.alert).
+- **UUID Type Fixes**: ShiftRequestsScreen and ShiftOffersScreen interfaces now correctly use string types for IDs (matching UUID format from database).
+- **No End Date Toggle**: Recurring shift creation form now includes a "No End Date (ongoing)" checkbox, hiding the end date picker when checked.
+- **Custom Modals**: WorkplaceDetailScreen replaced Alert.alert with custom Modal components for delete and status change confirmations (Alert.alert can fail silently on mobile).
+
 ## App Store Links
 
 - **iOS App Store**: https://apps.apple.com/app/workforceconnect/id6758402360

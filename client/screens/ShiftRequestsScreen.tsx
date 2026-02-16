@@ -28,15 +28,15 @@ import { apiRequest, queryClient } from "@/lib/query-client";
 type ShiftRequestStatus = "submitted" | "offered" | "filled" | "cancelled";
 
 interface ShiftRequest {
-  id: number;
-  clientId: number;
-  workplaceId: number;
+  id: string;
+  clientId: string;
+  workplaceId: string;
   roleType: string;
   date: string;
   startTime: string;
   endTime: string;
   notes: string | null;
-  requestedWorkerId: number | null;
+  requestedWorkerId: string | null;
   status: ShiftRequestStatus;
   createdAt: string;
   updatedAt: string;
@@ -46,7 +46,7 @@ interface ShiftRequest {
 }
 
 interface EligibleWorker {
-  id: number;
+  id: string;
   fullName: string;
   roleMatch: boolean;
   hasConflict: boolean;
@@ -102,8 +102,8 @@ export default function ShiftRequestsScreen() {
   const { user } = useAuth();
 
   const [filter, setFilter] = useState<ShiftRequestStatus | "all">("all");
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [showWorkerPicker, setShowWorkerPicker] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showWorkerPicker, setShowWorkerPicker] = useState<string | null>(null);
 
   const { data: requestsData = [], isLoading, refetch, isRefetching } = useQuery<ShiftRequest[]>({
     queryKey: ["/api/shift-requests"],
@@ -115,7 +115,7 @@ export default function ShiftRequestsScreen() {
       : requestsData.filter((r) => r.status === filter);
 
   const assignMutation = useMutation({
-    mutationFn: async ({ requestId, workerId }: { requestId: number; workerId?: number }) => {
+    mutationFn: async ({ requestId, workerId }: { requestId: string; workerId?: string }) => {
       const body: any = {};
       if (workerId) {
         body.workerId = workerId;
@@ -130,23 +130,23 @@ export default function ShiftRequestsScreen() {
     },
   });
 
-  const handleToggleExpand = useCallback((id: number) => {
+  const handleToggleExpand = useCallback((id: string) => {
     Haptics.selectionAsync();
     setExpandedId((prev) => (prev === id ? null : id));
     setShowWorkerPicker(null);
   }, []);
 
-  const handleAssignWorker = useCallback((requestId: number) => {
+  const handleAssignWorker = useCallback((requestId: string) => {
     Haptics.selectionAsync();
     setShowWorkerPicker((prev) => (prev === requestId ? null : requestId));
   }, []);
 
-  const handleBroadcast = useCallback((requestId: number) => {
+  const handleBroadcast = useCallback((requestId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     assignMutation.mutate({ requestId });
   }, [assignMutation]);
 
-  const handleSelectWorker = useCallback((requestId: number, workerId: number) => {
+  const handleSelectWorker = useCallback((requestId: string, workerId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     assignMutation.mutate({ requestId, workerId });
   }, [assignMutation]);
@@ -340,7 +340,7 @@ function ExpandedSection({
   isPickerOpen: boolean;
   onAssignWorker: () => void;
   onBroadcast: () => void;
-  onSelectWorker: (workerId: number) => void;
+  onSelectWorker: (workerId: string) => void;
   isAssigning: boolean;
   theme: any;
 }) {
@@ -419,8 +419,8 @@ function WorkerPicker({
   isAssigning,
   theme,
 }: {
-  requestId: number;
-  onSelectWorker: (workerId: number) => void;
+  requestId: string;
+  onSelectWorker: (workerId: string) => void;
   isAssigning: boolean;
   theme: any;
 }) {

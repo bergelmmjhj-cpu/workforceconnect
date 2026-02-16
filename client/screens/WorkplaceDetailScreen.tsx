@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Alert, Platform, RefreshControl, TextInput, Modal } from "react-native";
+import Checkbox from "expo-checkbox";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, NavigationProp, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -132,6 +133,10 @@ export default function WorkplaceDetailScreen() {
   const [webEndTimeText, setWebEndTimeText] = useState("");
   const [webRecurringEndDateText, setWebRecurringEndDateText] = useState("");
 
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; title: string } | null>(null);
+  const [statusConfirmTarget, setStatusConfirmTarget] = useState<{ assignmentId: string; status: string; message: string } | null>(null);
+  const [noEndDate, setNoEndDate] = useState(false);
+
   const createShiftMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/shifts", data);
@@ -165,6 +170,7 @@ export default function WorkplaceDetailScreen() {
     setCategory("hotel");
     setRecurringDays([]);
     setRecurringEndDate(new Date());
+    setNoEndDate(false);
     setShowDatePicker(false);
     setShowStartTimePicker(false);
     setShowEndTimePicker(false);
@@ -188,7 +194,7 @@ export default function WorkplaceDetailScreen() {
     if (frequencyType !== "open-ended" && !endTimeStr) return;
     if (frequencyType === "recurring" && recurringDays.length === 0) return;
 
-    const recurringEndDateStr = frequencyType === "recurring" && (Platform.OS === "web" ? webRecurringEndDateText : formatDate(recurringEndDate));
+    const recurringEndDateStr = frequencyType === "recurring" && !noEndDate && (Platform.OS === "web" ? webRecurringEndDateText : formatDate(recurringEndDate));
 
     createShiftMutation.mutate({
       workplaceId,
@@ -206,16 +212,7 @@ export default function WorkplaceDetailScreen() {
   };
 
   const handleDeleteShift = (shiftId: string, shiftTitle: string) => {
-    if (Platform.OS === "web") {
-      if (window.confirm(`Delete shift "${shiftTitle}"?`)) {
-        deleteShiftMutation.mutate(shiftId);
-      }
-    } else {
-      Alert.alert("Delete Shift", `Delete shift "${shiftTitle}"?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => deleteShiftMutation.mutate(shiftId) },
-      ]);
-    }
+    setDeleteConfirmTarget({ id: shiftId, title: shiftTitle });
   };
 
   useFocusEffect(
@@ -243,17 +240,7 @@ export default function WorkplaceDetailScreen() {
       removed: "Remove",
     };
     const message = `${statusLabels[newStatus]} ${assignment.workerName} from this workplace?`;
-
-    if (Platform.OS === "web") {
-      if (window.confirm(message)) {
-        updateStatusMutation.mutate({ assignmentId: assignment.id, status: newStatus });
-      }
-    } else {
-      Alert.alert("Confirm Action", message, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Confirm", onPress: () => updateStatusMutation.mutate({ assignmentId: assignment.id, status: newStatus }) },
-      ]);
-    }
+    setStatusConfirmTarget({ assignmentId: assignment.id, status: newStatus, message });
   };
 
   const getStatusColor = (status: string) => {
@@ -774,39 +761,52 @@ export default function WorkplaceDetailScreen() {
                     ))}
                   </View>
 
-                  <ThemedText style={styles.fieldLabel}>End Date (optional)</ThemedText>
-                  {Platform.OS === "web" ? (
-                    <TextInput
-                      style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
-                      value={webRecurringEndDateText}
-                      onChangeText={setWebRecurringEndDateText}
-                      placeholder="YYYY-MM-DD (optional)"
-                      placeholderTextColor={theme.textMuted}
-                      testID="input-recurring-end-date"
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <Checkbox
+                      value={noEndDate}
+                      onValueChange={setNoEndDate}
+                      color={noEndDate ? theme.primary : undefined}
+                      testID="checkbox-no-end-date"
                     />
-                  ) : (
+                    <ThemedText style={{ fontSize: 14, color: theme.text }}>No End Date (ongoing)</ThemedText>
+                  </View>
+                  {!noEndDate ? (
                     <View>
-                      <Pressable
-                        onPress={() => setShowRecurringEndDatePicker(true)}
-                        style={[styles.pickerButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
-                      >
-                        <Feather name="calendar" size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
-                        <ThemedText style={styles.pickerButtonText}>{formatDisplayDate(recurringEndDate)}</ThemedText>
-                      </Pressable>
-                      {showRecurringEndDatePicker ? (
-                        <DateTimePicker
-                          value={recurringEndDate}
-                          mode="date"
-                          display="default"
-                          onChange={(event, selectedDate) => {
-                            setShowRecurringEndDatePicker(Platform.OS === "ios");
-                            if (selectedDate) setRecurringEndDate(selectedDate);
-                          }}
-                          testID="picker-recurring-end-date"
+                      <ThemedText style={styles.fieldLabel}>End Date</ThemedText>
+                      {Platform.OS === "web" ? (
+                        <TextInput
+                          style={[styles.input, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                          value={webRecurringEndDateText}
+                          onChangeText={setWebRecurringEndDateText}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor={theme.textMuted}
+                          testID="input-recurring-end-date"
                         />
-                      ) : null}
+                      ) : (
+                        <View>
+                          <Pressable
+                            onPress={() => setShowRecurringEndDatePicker(true)}
+                            style={[styles.pickerButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
+                          >
+                            <Feather name="calendar" size={16} color={theme.textSecondary} style={{ marginRight: 8 }} />
+                            <ThemedText style={styles.pickerButtonText}>{formatDisplayDate(recurringEndDate)}</ThemedText>
+                          </Pressable>
+                          {showRecurringEndDatePicker ? (
+                            <DateTimePicker
+                              value={recurringEndDate}
+                              mode="date"
+                              display="default"
+                              onChange={(event, selectedDate) => {
+                                setShowRecurringEndDatePicker(Platform.OS === "ios");
+                                if (selectedDate) setRecurringEndDate(selectedDate);
+                              }}
+                              testID="picker-recurring-end-date"
+                            />
+                          ) : null}
+                        </View>
+                      )}
                     </View>
-                  )}
+                  ) : null}
                 </View>
               ) : null}
 
@@ -839,6 +839,88 @@ export default function WorkplaceDetailScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={deleteConfirmTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteConfirmTarget(null)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}
+          onPress={() => setDeleteConfirmTarget(null)}
+        >
+          <Pressable
+            style={{ backgroundColor: theme.backgroundDefault, borderRadius: 12, padding: 24, width: "100%", maxWidth: 340 }}
+            onPress={() => {}}
+          >
+            <ThemedText type="h4" style={{ marginBottom: 12 }}>Delete Shift</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+              Are you sure you want to delete "{deleteConfirmTarget?.title}"? This will also remove all associated offers and check-ins.
+            </ThemedText>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable
+                onPress={() => setDeleteConfirmTarget(null)}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: theme.backgroundSecondary }}
+              >
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (deleteConfirmTarget) {
+                    deleteShiftMutation.mutate(deleteConfirmTarget.id);
+                    setDeleteConfirmTarget(null);
+                  }
+                }}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: "#EF4444" }}
+              >
+                <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Delete</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={statusConfirmTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStatusConfirmTarget(null)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}
+          onPress={() => setStatusConfirmTarget(null)}
+        >
+          <Pressable
+            style={{ backgroundColor: theme.backgroundDefault, borderRadius: 12, padding: 24, width: "100%", maxWidth: 340 }}
+            onPress={() => {}}
+          >
+            <ThemedText type="h4" style={{ marginBottom: 12 }}>Confirm Action</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+              {statusConfirmTarget?.message}
+            </ThemedText>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable
+                onPress={() => setStatusConfirmTarget(null)}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: theme.backgroundSecondary }}
+              >
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (statusConfirmTarget) {
+                    updateStatusMutation.mutate({ assignmentId: statusConfirmTarget.assignmentId, status: statusConfirmTarget.status });
+                    setStatusConfirmTarget(null);
+                  }
+                }}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: theme.primary }}
+              >
+                <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Confirm</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </ThemedView>
   );

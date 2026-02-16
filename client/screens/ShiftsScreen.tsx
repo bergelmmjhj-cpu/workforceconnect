@@ -5,6 +5,8 @@ import {
   FlatList,
   RefreshControl,
   Pressable,
+  Modal,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -12,8 +14,9 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
+import { apiRequest, queryClient } from "@/lib/query-client";
 import { ThemedText } from "@/components/ThemedText";
 import { EmptyState } from "@/components/EmptyState";
 import { ListSkeleton } from "@/components/LoadingSkeleton";
@@ -101,6 +104,7 @@ export default function ShiftsScreen() {
   const { user } = useAuth();
 
   const [filter, setFilter] = useState<ShiftStatus | "all">("all");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
   const { data: shiftsData = [], isLoading, refetch, isRefetching } = useQuery<APIShift[]>({
     queryKey: ["/api/shifts"],
@@ -110,6 +114,20 @@ export default function ShiftsScreen() {
     filter === "all"
       ? shiftsData
       : shiftsData.filter((s) => s.status === filter);
+
+  const deleteShiftMutation = useMutation({
+    mutationFn: async (shiftId: string) => {
+      const res = await apiRequest("DELETE", `/api/shifts/${shiftId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      setDeleteTarget(null);
+    },
+    onError: () => {
+      setDeleteTarget(null);
+    },
+  });
 
   const renderFilter = () => (
     <View style={[styles.filterContainer, { top: headerHeight }]}>
@@ -189,7 +207,7 @@ export default function ShiftsScreen() {
           <View style={styles.detailRow}>
             <Feather name="clock" size={14} color={theme.textMuted} />
             <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>
-              {formatTimeRange(item.startTime, item.endTime)}
+              {formatTimeRange(item.startTime, item.endTime || "TBD")}
             </ThemedText>
           </View>
           {item.workplaceName ? (
@@ -216,6 +234,22 @@ export default function ShiftsScreen() {
             <ThemedText style={[styles.notesText, { color: theme.textMuted }]} numberOfLines={2}>
               {item.notes}
             </ThemedText>
+          </View>
+        ) : null}
+
+        {(user?.role === "admin" || user?.role === "hr") ? (
+          <View style={[styles.deleteRow, { borderTopColor: theme.border }]}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setDeleteTarget({ id: item.id, title: item.title });
+              }}
+              style={styles.deleteButton}
+              testID={`delete-shift-${item.id}`}
+            >
+              <Feather name="trash-2" size={14} color="#EF4444" />
+              <ThemedText style={styles.deleteButtonText}>Delete</ThemedText>
+            </Pressable>
           </View>
         ) : null}
       </Pressable>
@@ -277,6 +311,50 @@ export default function ShiftsScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={renderEmpty}
       />
+      <Modal
+        visible={deleteTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteTarget(null)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setDeleteTarget(null)}
+        >
+          <Pressable
+            style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
+            onPress={() => {}}
+          >
+            <ThemedText type="h4" style={styles.modalTitle}>Delete Shift</ThemedText>
+            <ThemedText style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              Are you sure you want to delete "{deleteTarget?.title}"? This will also remove all associated offers and check-ins.
+            </ThemedText>
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setDeleteTarget(null)}
+                style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}
+              >
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (deleteTarget) {
+                    deleteShiftMutation.mutate(deleteTarget.id);
+                  }
+                }}
+                disabled={deleteShiftMutation.isPending}
+                style={[styles.modalButton, { backgroundColor: "#EF4444" }]}
+              >
+                {deleteShiftMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Delete</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -365,5 +443,56 @@ const styles = StyleSheet.create({
   notesText: {
     fontSize: 12,
     fontStyle: "italic",
+  },
+  deleteRow: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  deleteButtonText: {
+    color: "#EF4444",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    width: "100%",
+    maxWidth: 340,
+  },
+  modalTitle: {
+    marginBottom: Spacing.md,
+  },
+  modalMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: Spacing.xl,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

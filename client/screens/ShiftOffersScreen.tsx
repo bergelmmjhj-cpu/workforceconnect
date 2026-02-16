@@ -23,9 +23,9 @@ import { apiRequest, queryClient } from "@/lib/query-client";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
 interface ShiftOffer {
-  id: number;
-  shiftId: number;
-  workerId: number;
+  id: string;
+  shiftId: string;
+  workerId: string;
   status: string;
   offeredAt: string;
   respondedAt: string | null;
@@ -56,14 +56,14 @@ export default function ShiftOffersScreen() {
   const { paddingTop, paddingBottom } = useContentPadding();
   const { theme } = useTheme();
   const { user } = useAuth();
-  const [respondingId, setRespondingId] = useState<number | null>(null);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const { data: offers = [], isLoading, refetch, isRefetching } = useQuery<ShiftOffer[]>({
     queryKey: ["/api/shift-offers"],
   });
 
   const respondMutation = useMutation({
-    mutationFn: async ({ id, response }: { id: number; response: "accepted" | "declined" }) => {
+    mutationFn: async ({ id, response }: { id: string; response: "accepted" | "declined" }) => {
       const res = await apiRequest("POST", `/api/shift-offers/${id}/respond`, { response });
       return res.json();
     },
@@ -77,7 +77,7 @@ export default function ShiftOffersScreen() {
     },
   });
 
-  const handleRespond = (id: number, response: "accepted" | "declined") => {
+  const handleRespond = (id: string, response: "accepted" | "declined") => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRespondingId(id);
     respondMutation.mutate({ id, response });

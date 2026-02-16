@@ -581,12 +581,13 @@ export const shifts = pgTable("shifts", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  requestId: varchar("request_id"),
   workplaceId: varchar("workplace_id")
     .notNull()
     .references(() => workplaces.id),
   workerUserId: varchar("worker_user_id")
-    .notNull()
     .references(() => users.id),
+  roleType: text("role_type"),
   title: text("title").notNull(),
   date: date("date").notNull(),
   startTime: text("start_time").notNull(),
@@ -612,6 +613,157 @@ export const insertShiftSchema = createInsertSchema(shifts).omit({
 
 export type ShiftDB = typeof shifts.$inferSelect;
 export type InsertShift = z.infer<typeof insertShiftSchema>;
+
+// ============================================
+// Shift Requests Schema (Client requests for workers)
+// ============================================
+
+export const shiftRequestStatusEnum = z.enum(["draft", "submitted", "offered", "filled", "cancelled", "expired"]);
+export type ShiftRequestStatus = z.infer<typeof shiftRequestStatusEnum>;
+
+export const shiftRequests = pgTable("shift_requests", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id")
+    .notNull()
+    .references(() => users.id),
+  workplaceId: varchar("workplace_id")
+    .references(() => workplaces.id),
+  roleType: text("role_type").notNull(),
+  date: date("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  notes: text("notes"),
+  requestedWorkerId: varchar("requested_worker_id")
+    .references(() => users.id),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertShiftRequestSchema = createInsertSchema(shiftRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ShiftRequest = typeof shiftRequests.$inferSelect;
+export type InsertShiftRequest = z.infer<typeof insertShiftRequestSchema>;
+
+// ============================================
+// Shift Offers Schema (Offers sent to workers)
+// ============================================
+
+export const shiftOfferStatusEnum = z.enum(["pending", "accepted", "declined", "expired", "cancelled"]);
+export type ShiftOfferStatus = z.infer<typeof shiftOfferStatusEnum>;
+
+export const shiftOffers = pgTable("shift_offers", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  shiftId: varchar("shift_id")
+    .notNull()
+    .references(() => shifts.id),
+  workerId: varchar("worker_id")
+    .notNull()
+    .references(() => users.id),
+  status: text("status").notNull().default("pending"),
+  offeredAt: timestamp("offered_at").defaultNow().notNull(),
+  respondedAt: timestamp("responded_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueShiftWorker: uniqueIndex("unique_shift_worker_offer").on(table.shiftId, table.workerId),
+}));
+
+export const insertShiftOfferSchema = createInsertSchema(shiftOffers).omit({
+  id: true,
+  offeredAt: true,
+  createdAt: true,
+});
+
+export type ShiftOffer = typeof shiftOffers.$inferSelect;
+export type InsertShiftOffer = z.infer<typeof insertShiftOfferSchema>;
+
+// ============================================
+// Notifications Schema (In-app notifications)
+// ============================================
+
+export const appNotifications = pgTable("app_notifications", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  deepLink: text("deep_link"),
+  metadata: text("metadata"),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAppNotificationSchema = createInsertSchema(appNotifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AppNotification = typeof appNotifications.$inferSelect;
+export type InsertAppNotification = z.infer<typeof insertAppNotificationSchema>;
+
+// ============================================
+// Shift Checkins Schema (Worker check-in/out status)
+// ============================================
+
+export const shiftCheckinStatusEnum = z.enum(["on_my_way", "issue", "checked_in", "checked_out"]);
+export type ShiftCheckinStatus = z.infer<typeof shiftCheckinStatusEnum>;
+
+export const shiftCheckins = pgTable("shift_checkins", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  shiftId: varchar("shift_id")
+    .notNull()
+    .references(() => shifts.id),
+  workerId: varchar("worker_id")
+    .notNull()
+    .references(() => users.id),
+  status: text("status").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertShiftCheckinSchema = createInsertSchema(shiftCheckins).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type ShiftCheckin = typeof shiftCheckins.$inferSelect;
+export type InsertShiftCheckin = z.infer<typeof insertShiftCheckinSchema>;
+
+// ============================================
+// Sent Reminders Schema (Idempotency for automated reminders)
+// ============================================
+
+export const sentReminders = pgTable("sent_reminders", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  shiftId: varchar("shift_id")
+    .notNull()
+    .references(() => shifts.id),
+  workerId: varchar("worker_id")
+    .notNull()
+    .references(() => users.id),
+  reminderType: text("reminder_type").notNull(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueReminder: uniqueIndex("unique_shift_worker_reminder").on(table.shiftId, table.workerId, table.reminderType),
+}));
+
+export type SentReminder = typeof sentReminders.$inferSelect;
 
 // ============================================
 // Export Audit Logs Schema (Compliance tracking)

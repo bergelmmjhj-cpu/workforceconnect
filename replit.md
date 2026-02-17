@@ -70,6 +70,11 @@ VALUES (gen_random_uuid(), 'admin@wfconnect.org', '<bcrypt_hash>', 'admin', 'Adm
 ## Recent Changes (Feb 17, 2026)
 
 ### Phase 2 Bug Fixes & Features
+- **Admin Delete Users Fix**: Added missing cascade deletions for app_notifications, sent_reminders, shift_checkins, shift_offers, recurrence_exceptions, shift_series, shifts, shift_requests, user_photos, and audit_log before deleting user.
+- **Shift Request Notifications**: New shift requests now send push + in-app notifications to all HR/admin users. If a specific worker is requested, they also get notified.
+- **Profile Photo Camera Chooser**: Added camera/gallery chooser modal to ProfileScreen photo upload. Users can now take a photo with camera or choose from gallery (previously only gallery was available).
+- **Clock-In Time Validation**: Workers can only clock in within 15 minutes of shift start time. Shows countdown message when too early.
+- **Clock-Out Geofence Relaxation**: Workers can now clock out from anywhere. Out-of-radius clock-outs show a confirmation modal warning and are flagged as "flagged" status for admin/HR review. Backend returns success (200) with flaggedForReview=true instead of blocking.
 - **Timezone Fix**: /api/my-today and /api/shifts now use `America/Toronto` timezone for "today" calculation instead of UTC. Prevents showing tomorrow's shifts as today during evening hours.
 - **Cache Invalidation Fix**: WorkplaceDetailScreen shift create/delete/series-delete mutations now invalidate the correct workplace-specific query key (`/api/shifts?workplaceId=X`) plus `/api/my-today`.
 - **Delete Workplace**: Admin-only DELETE /api/workplaces/:id endpoint with full cascade cleanup (shifts, shift_offers, shift_checkins, sent_reminders, shift_series, shift_requests, workplace_assignments, tito_logs). Timesheet entries and export audit logs have workplaceId nulled rather than deleted. UI: trash icon in WorkplaceDetailScreen header with confirmation modal.

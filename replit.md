@@ -69,6 +69,18 @@ VALUES (gen_random_uuid(), 'admin@wfconnect.org', '<bcrypt_hash>', 'admin', 'Adm
 
 ## Recent Changes (Feb 17, 2026)
 
+### ClockInOutScreen Map Redesign
+- **Map-Based UI**: Complete rewrite of ClockInOutScreen to use react-native-maps with full-screen map view showing worker GPS location, workplace marker, and geofence circle visualization. Web fallback shows distance info.
+- **Large Circular Button**: 120px circular Start/End Shift button centered at bottom. Tap to clock in/out, long-press to show shift details modal.
+- **Backend API Integration**: Now uses /api/tito/time-in and /api/tito/time-out backend APIs directly instead of AsyncStorage-based functions.
+- **Bottom Quick-Access**: My Requests and My Timesheet buttons flanking the main action button.
+- **Dashboard Worker Navigation**: Worker tapping their shift on Dashboard now navigates to ClockInOut (map-based clock-in) instead of ShiftDetail.
+
+### Late & Unusual Hours Notifications
+- **Late Clock-In**: When a worker clocks in more than 10 minutes after shift start time, push + in-app notification sent to the worker and all HR/admin users with minutes late.
+- **Unusual Hours**: Clock-in or clock-out between 11pm-5am triggers unusual hours notifications to worker and HR/admin.
+- **Flagged Clock-Out**: Out-of-geofence clock-outs send flagged notification to all HR/admin with distance details.
+
 ### Phase 2 Bug Fixes & Features
 - **Admin Delete Users Fix**: Added missing cascade deletions for app_notifications, sent_reminders, shift_checkins, shift_offers, recurrence_exceptions, shift_series, shifts, shift_requests, user_photos, and audit_log before deleting user.
 - **Shift Request Notifications**: New shift requests now send push + in-app notifications to all HR/admin users. If a specific worker is requested, they also get notified.

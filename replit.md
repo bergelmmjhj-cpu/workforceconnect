@@ -69,6 +69,14 @@ VALUES (gen_random_uuid(), 'admin@wfconnect.org', '<bcrypt_hash>', 'admin', 'Adm
 
 ## Recent Changes (Feb 17, 2026)
 
+### Phase 2: Two-Factor Authentication (6 tasks completed)
+- **2FA Database Schema**: Added totpSecret, totpEnabled, recoveryCodes columns to users table.
+- **2FA Backend API**: OTPAuth library for TOTP. Endpoints: POST /api/2fa/setup (generate secret+URI), POST /api/2fa/verify-setup (verify code, enable 2FA, return recovery codes), POST /api/2fa/disable (verify code, disable 2FA), POST /api/2fa/verify (login verification, supports TOTP + single-use recovery codes), GET /api/2fa/status (check if enabled).
+- **2FA Login Flow**: Login endpoint returns { requires2FA: true, userId } when user has 2FA enabled. Client navigates to TwoFactorVerifyScreen for code entry. AuthContext has complete2FALogin() method.
+- **2FA Setup UI**: ProfileScreen Security section with shield icon, "Two-Factor Authentication" menu item showing enabled/disabled status. Modal flow: intro -> QR code scan (react-native-qrcode-svg) -> verify code -> display 8 recovery codes.
+- **2FA Login Screen**: TwoFactorVerifyScreen with 6-digit code input (large centered digits), toggle for recovery code mode, back to sign in link. Supports both TOTP codes and recovery codes.
+- **Recovery Codes**: 8 random uppercase hex codes, single-use, stored as JSON. Warning when < 3 remaining.
+
 ### Phase 1 Platform Upgrade (11 tasks completed)
 - **Shift Series Model**: shift_series table with on-the-fly occurrence expansion. POST /api/shifts creates series instead of pre-generating rows. Series cards UI in WorkplaceDetailScreen.
 - **Multi-mode Roster View**: RosterScreen with Daily/Weekly/Bi-weekly/Monthly/Semi-monthly tabs, date navigation, unified shift/series display via GET /api/roster.

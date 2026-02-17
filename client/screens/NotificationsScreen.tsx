@@ -41,7 +41,9 @@ const typeIcons: Record<string, keyof typeof Feather.glyphMap> = {
   shift_assigned: "check-circle",
   shift_declined: "x-circle",
   shift_cancelled: "slash",
+  shift_reminder: "clock",
   checkin_issue: "alert-triangle",
+  message: "message-circle",
 };
 
 function getIconForType(type: string): keyof typeof Feather.glyphMap {

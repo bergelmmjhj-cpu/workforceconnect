@@ -69,6 +69,12 @@ VALUES (gen_random_uuid(), 'admin@wfconnect.org', '<bcrypt_hash>', 'admin', 'Adm
 
 ## Recent Changes (Feb 17, 2026)
 
+### Phase 2 Bug Fixes & Features
+- **Timezone Fix**: /api/my-today and /api/shifts now use `America/Toronto` timezone for "today" calculation instead of UTC. Prevents showing tomorrow's shifts as today during evening hours.
+- **Cache Invalidation Fix**: WorkplaceDetailScreen shift create/delete/series-delete mutations now invalidate the correct workplace-specific query key (`/api/shifts?workplaceId=X`) plus `/api/my-today`.
+- **Delete Workplace**: Admin-only DELETE /api/workplaces/:id endpoint with full cascade cleanup (shifts, shift_offers, shift_checkins, sent_reminders, shift_series, shift_requests, workplace_assignments, tito_logs). Timesheet entries and export audit logs have workplaceId nulled rather than deleted. UI: trash icon in WorkplaceDetailScreen header with confirmation modal.
+- **Alert.alert Elimination**: Replaced all 19 remaining Alert.alert calls across 6 screens (WorkplaceDetailScreen, WorkplaceEditScreen, WorkplacesListScreen, WorkerApplicationFormScreen, AgreementSigningScreen, AssignToWorkplaceScreen) with custom Modal-based dialogs. Alert.alert can fail silently on React Native mobile.
+
 ### Phase 2: Two-Factor Authentication (6 tasks completed)
 - **2FA Database Schema**: Added totpSecret, totpEnabled, recoveryCodes columns to users table.
 - **2FA Backend API**: OTPAuth library for TOTP. Endpoints: POST /api/2fa/setup (generate secret+URI), POST /api/2fa/verify-setup (verify code, enable 2FA, return recovery codes), POST /api/2fa/disable (verify code, disable 2FA), POST /api/2fa/verify (login verification, supports TOTP + single-use recovery codes), GET /api/2fa/status (check if enabled).

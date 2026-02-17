@@ -32,6 +32,11 @@ import {
   shiftCheckins,
   insertShiftCheckinSchema,
   sentReminders,
+  shiftSeries,
+  insertShiftSeriesSchema,
+  recurrenceExceptions,
+  auditLog,
+  userPhotos,
 } from "../shared/schema";
 import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
@@ -131,6 +136,90 @@ function checkRoles(...allowedRoles: UserRole[]) {
     }
     next();
   };
+}
+
+function expandSeriesOccurrences(series: any, exceptions: any[], rangeStart: string, rangeEnd: string) {
+  const occurrences: any[] = [];
+  const startDate = new Date(Math.max(new Date(series.startDate).getTime(), new Date(rangeStart).getTime()));
+  let endDate: Date;
+
+  if (series.endType === "date" && series.endDate) {
+    endDate = new Date(Math.min(new Date(series.endDate).getTime(), new Date(rangeEnd).getTime()));
+  } else {
+    endDate = new Date(rangeEnd);
+  }
+
+  const days = series.recurringDays ? series.recurringDays.split(",") : [];
+  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const dayNums = days.map((d: string) => dayMap[d]).filter((n: number | undefined) => n !== undefined);
+
+  const exceptionMap = new Map<string, any>();
+  exceptions.forEach(ex => exceptionMap.set(ex.date, ex));
+
+  const current = new Date(startDate);
+  let count = 0;
+  const maxCount = series.endType === "count" ? (series.endAfterCount || 999) : 999;
+
+  while (current <= endDate && count < maxCount) {
+    const dateStr = current.toISOString().split("T")[0];
+    let include = false;
+
+    if (series.frequency === "daily") {
+      include = true;
+    } else if (series.frequency === "weekly" || series.frequency === "biweekly") {
+      include = dayNums.includes(current.getDay());
+      if (series.frequency === "biweekly" && include) {
+        const weeksSinceStart = Math.floor((current.getTime() - new Date(series.startDate).getTime()) / (7 * 24 * 60 * 60 * 1000));
+        include = weeksSinceStart % 2 === 0;
+      }
+    } else if (series.frequency === "monthly") {
+      include = current.getDate() === new Date(series.startDate).getDate();
+    }
+
+    if (include && current >= new Date(series.startDate)) {
+      const exception = exceptionMap.get(dateStr);
+      if (exception && exception.type === "cancelled") {
+        occurrences.push({
+          seriesId: series.id,
+          date: dateStr,
+          startTime: series.startTime,
+          endTime: series.endTime,
+          status: "cancelled",
+          isException: true,
+          exceptionType: "cancelled",
+          reason: exception.reason,
+        });
+      } else if (exception && exception.type === "modified") {
+        occurrences.push({
+          seriesId: series.id,
+          date: dateStr,
+          startTime: exception.overrideStartTime || series.startTime,
+          endTime: exception.overrideEndTime || series.endTime,
+          workerUserId: exception.overrideWorkerUserId || series.workerUserId,
+          notes: exception.overrideNotes || series.notes,
+          status: "scheduled",
+          isException: true,
+          exceptionType: "modified",
+        });
+      } else {
+        occurrences.push({
+          seriesId: series.id,
+          date: dateStr,
+          startTime: series.startTime,
+          endTime: series.endTime,
+          workerUserId: series.workerUserId,
+          notes: series.notes,
+          status: "scheduled",
+          isException: false,
+        });
+      }
+      count++;
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return occurrences;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -2152,63 +2241,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (freq === "recurring" && recurringDays) {
         const days: string[] = typeof recurringDays === "string" ? recurringDays.split(",") : recurringDays;
-        const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-        const endDateStr = recurringEndDate || (() => {
-          const d = new Date(date);
-          d.setDate(d.getDate() + 90);
-          return d.toISOString().split("T")[0];
-        })();
+        const endType = recurringEndDate ? "date" : "never";
 
-        const [parentShift] = await db.insert(shifts).values({
+        const [newSeries] = await db.insert(shiftSeries).values({
           workplaceId,
           workerUserId,
           title,
-          date,
           startTime,
           endTime: endTime || null,
           notes: notes || null,
-          status: "scheduled",
-          frequencyType: freq,
           category: cat,
+          frequency: "weekly",
           recurringDays: days.join(","),
-          recurringEndDate: endDateStr,
+          startDate: date,
+          endType,
+          endDate: recurringEndDate || null,
+          status: "active",
           createdByUserId: userId,
         }).returning();
 
-        const instances: any[] = [];
-        const startDate = new Date(date);
-        const finalDate = new Date(endDateStr);
-        const current = new Date(startDate);
-        current.setDate(current.getDate() + 1);
+        await db.insert(auditLog).values({
+          userId,
+          action: "create_series",
+          entityType: "shift_series",
+          entityId: newSeries.id,
+          details: JSON.stringify({ title, frequency: "weekly", workplaceId }),
+        });
 
-        while (current <= finalDate) {
-          const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][current.getDay()];
-          if (days.includes(dayName)) {
-            instances.push({
-              workplaceId,
-              workerUserId,
-              title,
-              date: current.toISOString().split("T")[0],
-              startTime,
-              endTime: endTime || null,
-              notes: notes || null,
-              status: "scheduled",
-              frequencyType: "recurring",
-              category: cat,
-              recurringDays: days.join(","),
-              parentShiftId: parentShift.id,
-              createdByUserId: userId,
-            });
-          }
-          current.setDate(current.getDate() + 1);
-        }
-
-        if (instances.length > 0) {
-          await db.insert(shifts).values(instances);
-        }
-
-        broadcast({ type: "created", entity: "shift", id: parentShift.id, data: { workerUserId, workplaceId } });
-        res.status(201).json(parentShift);
+        broadcast({ type: "created", entity: "shift_series", id: newSeries.id, data: { workerUserId, workplaceId } });
+        res.status(201).json({ ...newSeries, type: "series" });
       } else {
         const [newShift] = await db.insert(shifts).values({
           workplaceId,
@@ -2294,6 +2355,546 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting shift:", error);
       res.status(500).json({ error: "Failed to delete shift" });
+    }
+  });
+
+  // ========================================
+  // Shift Series API
+  // ========================================
+
+  app.get("/api/shift-series", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const workplaceIdFilter = req.query.workplaceId as string | undefined;
+      const statusFilter = req.query.status as string || "active";
+
+      const conditions: any[] = [eq(shiftSeries.status, statusFilter)];
+      if (workplaceIdFilter) {
+        conditions.push(eq(shiftSeries.workplaceId, workplaceIdFilter));
+      }
+
+      const results = await db.select({
+        id: shiftSeries.id,
+        workplaceId: shiftSeries.workplaceId,
+        workerUserId: shiftSeries.workerUserId,
+        title: shiftSeries.title,
+        roleType: shiftSeries.roleType,
+        startTime: shiftSeries.startTime,
+        endTime: shiftSeries.endTime,
+        notes: shiftSeries.notes,
+        category: shiftSeries.category,
+        frequency: shiftSeries.frequency,
+        recurringDays: shiftSeries.recurringDays,
+        startDate: shiftSeries.startDate,
+        endType: shiftSeries.endType,
+        endDate: shiftSeries.endDate,
+        endAfterCount: shiftSeries.endAfterCount,
+        status: shiftSeries.status,
+        createdByUserId: shiftSeries.createdByUserId,
+        createdAt: shiftSeries.createdAt,
+        updatedAt: shiftSeries.updatedAt,
+        workplaceName: workplaces.name,
+        workerName: users.fullName,
+      })
+      .from(shiftSeries)
+      .leftJoin(workplaces, eq(shiftSeries.workplaceId, workplaces.id))
+      .leftJoin(users, eq(shiftSeries.workerUserId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(shiftSeries.startDate));
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching shift series:", error);
+      res.status(500).json({ error: "Failed to fetch shift series" });
+    }
+  });
+
+  app.get("/api/shift-series/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const [series] = await db.select({
+        id: shiftSeries.id,
+        workplaceId: shiftSeries.workplaceId,
+        workerUserId: shiftSeries.workerUserId,
+        title: shiftSeries.title,
+        roleType: shiftSeries.roleType,
+        startTime: shiftSeries.startTime,
+        endTime: shiftSeries.endTime,
+        notes: shiftSeries.notes,
+        category: shiftSeries.category,
+        frequency: shiftSeries.frequency,
+        recurringDays: shiftSeries.recurringDays,
+        startDate: shiftSeries.startDate,
+        endType: shiftSeries.endType,
+        endDate: shiftSeries.endDate,
+        endAfterCount: shiftSeries.endAfterCount,
+        status: shiftSeries.status,
+        createdByUserId: shiftSeries.createdByUserId,
+        createdAt: shiftSeries.createdAt,
+        updatedAt: shiftSeries.updatedAt,
+        workplaceName: workplaces.name,
+        workerName: users.fullName,
+      })
+      .from(shiftSeries)
+      .leftJoin(workplaces, eq(shiftSeries.workplaceId, workplaces.id))
+      .leftJoin(users, eq(shiftSeries.workerUserId, users.id))
+      .where(eq(shiftSeries.id, req.params.id));
+
+      if (!series) {
+        res.status(404).json({ error: "Shift series not found" });
+        return;
+      }
+
+      const exceptions = await db.select()
+        .from(recurrenceExceptions)
+        .where(eq(recurrenceExceptions.seriesId, req.params.id));
+
+      res.json({ ...series, exceptions });
+    } catch (error) {
+      console.error("Error fetching shift series:", error);
+      res.status(500).json({ error: "Failed to fetch shift series" });
+    }
+  });
+
+  app.post("/api/shift-series", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { workplaceId, workerUserId, title, roleType, startTime, endTime, notes, category, frequency, recurringDays, startDate, endType, endDate, endAfterCount } = req.body;
+
+      if (!workplaceId || !title || !startTime || !startDate || !frequency) {
+        res.status(400).json({ error: "workplaceId, title, startTime, startDate, and frequency are required" });
+        return;
+      }
+
+      if ((frequency === "weekly" || frequency === "biweekly") && !recurringDays) {
+        res.status(400).json({ error: "recurringDays is required for weekly/biweekly frequency" });
+        return;
+      }
+
+      if (endType === "date" && !endDate) {
+        res.status(400).json({ error: "endDate is required when endType is 'date'" });
+        return;
+      }
+
+      if (endType === "count" && !endAfterCount) {
+        res.status(400).json({ error: "endAfterCount is required when endType is 'count'" });
+        return;
+      }
+
+      const [newSeries] = await db.insert(shiftSeries).values({
+        workplaceId,
+        workerUserId: workerUserId || null,
+        title,
+        roleType: roleType || null,
+        startTime,
+        endTime: endTime || null,
+        notes: notes || null,
+        category: category || "janitorial",
+        frequency,
+        recurringDays: recurringDays || null,
+        startDate,
+        endType: endType || "never",
+        endDate: endDate || null,
+        endAfterCount: endAfterCount || null,
+        status: "active",
+        createdByUserId: userId,
+      }).returning();
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "create_series",
+        entityType: "shift_series",
+        entityId: newSeries.id,
+        details: JSON.stringify({ title, frequency, workplaceId }),
+      });
+
+      broadcast({ type: "created", entity: "shift_series", id: newSeries.id, data: { workplaceId } });
+      res.status(201).json(newSeries);
+    } catch (error) {
+      console.error("Error creating shift series:", error);
+      res.status(500).json({ error: "Failed to create shift series" });
+    }
+  });
+
+  app.patch("/api/shift-series/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { title, workerUserId, startTime, endTime, notes, category, recurringDays, endType, endDate, endAfterCount, status } = req.body;
+
+      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      if (!existing) {
+        res.status(404).json({ error: "Shift series not found" });
+        return;
+      }
+
+      const updates: any = { updatedAt: new Date() };
+      if (title !== undefined) updates.title = title;
+      if (workerUserId !== undefined) updates.workerUserId = workerUserId;
+      if (startTime !== undefined) updates.startTime = startTime;
+      if (endTime !== undefined) updates.endTime = endTime;
+      if (notes !== undefined) updates.notes = notes;
+      if (category !== undefined) updates.category = category;
+      if (recurringDays !== undefined) updates.recurringDays = recurringDays;
+      if (endType !== undefined) updates.endType = endType;
+      if (endDate !== undefined) updates.endDate = endDate;
+      if (endAfterCount !== undefined) updates.endAfterCount = endAfterCount;
+      if (status !== undefined) updates.status = status;
+
+      const [updated] = await db.update(shiftSeries).set(updates).where(eq(shiftSeries.id, req.params.id)).returning();
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "update_series",
+        entityType: "shift_series",
+        entityId: req.params.id,
+        details: JSON.stringify(updates),
+      });
+
+      broadcast({ type: "updated", entity: "shift_series", id: updated.id, data: { workplaceId: existing.workplaceId } });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating shift series:", error);
+      res.status(500).json({ error: "Failed to update shift series" });
+    }
+  });
+
+  app.delete("/api/shift-series/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+
+      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      if (!existing) {
+        res.status(404).json({ error: "Shift series not found" });
+        return;
+      }
+
+      await db.delete(recurrenceExceptions).where(eq(recurrenceExceptions.seriesId, req.params.id));
+
+      await db.delete(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "delete_series",
+        entityType: "shift_series",
+        entityId: req.params.id,
+        details: JSON.stringify({ title: existing.title, workplaceId: existing.workplaceId }),
+      });
+
+      broadcast({ type: "deleted", entity: "shift_series", id: req.params.id, data: { workplaceId: existing.workplaceId } });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting shift series:", error);
+      res.status(500).json({ error: "Failed to delete shift series" });
+    }
+  });
+
+  app.post("/api/shift-series/:id/cancel-occurrence", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { date, reason } = req.body;
+
+      if (!date) {
+        res.status(400).json({ error: "date is required" });
+        return;
+      }
+
+      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      if (!existing) {
+        res.status(404).json({ error: "Shift series not found" });
+        return;
+      }
+
+      const [exception] = await db.insert(recurrenceExceptions).values({
+        seriesId: req.params.id,
+        date,
+        type: "cancelled",
+        reason: reason || null,
+        cancelledByUserId: userId,
+      }).returning();
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "cancel_occurrence",
+        entityType: "shift_series",
+        entityId: req.params.id,
+        details: JSON.stringify({ date, reason }),
+      });
+
+      broadcast({ type: "updated", entity: "shift_series", id: req.params.id, data: { workplaceId: existing.workplaceId } });
+      res.json(exception);
+    } catch (error) {
+      console.error("Error cancelling occurrence:", error);
+      res.status(500).json({ error: "Failed to cancel occurrence" });
+    }
+  });
+
+  app.post("/api/shift-series/:id/delete-future", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { fromDate } = req.body;
+
+      if (!fromDate) {
+        res.status(400).json({ error: "fromDate is required" });
+        return;
+      }
+
+      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      if (!existing) {
+        res.status(404).json({ error: "Shift series not found" });
+        return;
+      }
+
+      const newEndDate = new Date(fromDate);
+      newEndDate.setDate(newEndDate.getDate() - 1);
+      const newEndDateStr = newEndDate.toISOString().split("T")[0];
+
+      if (existing.endType === "never" || (existing.endDate && existing.endDate > fromDate)) {
+        await db.update(shiftSeries).set({
+          endType: "date",
+          endDate: newEndDateStr,
+          updatedAt: new Date(),
+        }).where(eq(shiftSeries.id, req.params.id));
+      }
+
+      await db.delete(recurrenceExceptions).where(
+        and(
+          eq(recurrenceExceptions.seriesId, req.params.id),
+          gte(recurrenceExceptions.date, fromDate)
+        )
+      );
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "delete_future_occurrences",
+        entityType: "shift_series",
+        entityId: req.params.id,
+        details: JSON.stringify({ fromDate }),
+      });
+
+      const [updated] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      broadcast({ type: "updated", entity: "shift_series", id: req.params.id, data: { workplaceId: existing.workplaceId } });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error deleting future occurrences:", error);
+      res.status(500).json({ error: "Failed to delete future occurrences" });
+    }
+  });
+
+  app.post("/api/shift-series/:id/modify-occurrence", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { date, startTime, endTime, workerUserId, notes } = req.body;
+
+      if (!date) {
+        res.status(400).json({ error: "date is required" });
+        return;
+      }
+
+      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      if (!existing) {
+        res.status(404).json({ error: "Shift series not found" });
+        return;
+      }
+
+      const [exception] = await db.insert(recurrenceExceptions).values({
+        seriesId: req.params.id,
+        date,
+        type: "modified",
+        overrideStartTime: startTime || null,
+        overrideEndTime: endTime || null,
+        overrideWorkerUserId: workerUserId || null,
+        overrideNotes: notes || null,
+      }).returning();
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "modify_occurrence",
+        entityType: "shift_series",
+        entityId: req.params.id,
+        details: JSON.stringify({ date, startTime, endTime, workerUserId, notes }),
+      });
+
+      broadcast({ type: "updated", entity: "shift_series", id: req.params.id, data: { workplaceId: existing.workplaceId } });
+      res.json(exception);
+    } catch (error) {
+      console.error("Error modifying occurrence:", error);
+      res.status(500).json({ error: "Failed to modify occurrence" });
+    }
+  });
+
+  app.get("/api/shift-series/:id/occurrences", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const startDateParam = req.query.startDate as string;
+      const endDateParam = req.query.endDate as string;
+
+      if (!startDateParam || !endDateParam) {
+        res.status(400).json({ error: "startDate and endDate query parameters are required" });
+        return;
+      }
+
+      const [series] = await db.select({
+        id: shiftSeries.id,
+        workplaceId: shiftSeries.workplaceId,
+        workerUserId: shiftSeries.workerUserId,
+        title: shiftSeries.title,
+        roleType: shiftSeries.roleType,
+        startTime: shiftSeries.startTime,
+        endTime: shiftSeries.endTime,
+        notes: shiftSeries.notes,
+        category: shiftSeries.category,
+        frequency: shiftSeries.frequency,
+        recurringDays: shiftSeries.recurringDays,
+        startDate: shiftSeries.startDate,
+        endType: shiftSeries.endType,
+        endDate: shiftSeries.endDate,
+        endAfterCount: shiftSeries.endAfterCount,
+        status: shiftSeries.status,
+        workerName: users.fullName,
+      })
+      .from(shiftSeries)
+      .leftJoin(users, eq(shiftSeries.workerUserId, users.id))
+      .where(eq(shiftSeries.id, req.params.id));
+
+      if (!series) {
+        res.status(404).json({ error: "Shift series not found" });
+        return;
+      }
+
+      const exceptions = await db.select()
+        .from(recurrenceExceptions)
+        .where(eq(recurrenceExceptions.seriesId, req.params.id));
+
+      const occurrences = expandSeriesOccurrences(series, exceptions, startDateParam, endDateParam);
+
+      const enriched = occurrences.map(occ => ({
+        ...occ,
+        workerName: series.workerName,
+        title: series.title,
+        category: series.category,
+      }));
+
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching occurrences:", error);
+      res.status(500).json({ error: "Failed to fetch occurrences" });
+    }
+  });
+
+  app.get("/api/roster", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const workplaceId = req.query.workplaceId as string;
+      const startDateParam = req.query.startDate as string;
+      const endDateParam = req.query.endDate as string;
+
+      if (!workplaceId || !startDateParam || !endDateParam) {
+        res.status(400).json({ error: "workplaceId, startDate, and endDate query parameters are required" });
+        return;
+      }
+
+      const oneTimeShifts = await db.select({
+        id: shifts.id,
+        date: shifts.date,
+        startTime: shifts.startTime,
+        endTime: shifts.endTime,
+        title: shifts.title,
+        workerUserId: shifts.workerUserId,
+        workerName: users.fullName,
+        category: shifts.category,
+        status: shifts.status,
+        notes: shifts.notes,
+      })
+      .from(shifts)
+      .leftJoin(users, eq(shifts.workerUserId, users.id))
+      .where(and(
+        eq(shifts.workplaceId, workplaceId),
+        gte(shifts.date, startDateParam),
+        lte(shifts.date, endDateParam)
+      ))
+      .orderBy(shifts.date, shifts.startTime);
+
+      const shiftItems = oneTimeShifts.map(s => ({
+        id: s.id,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        title: s.title,
+        workerUserId: s.workerUserId,
+        workerName: s.workerName,
+        category: s.category,
+        status: s.status,
+        notes: s.notes,
+        type: "shift" as const,
+        seriesId: null,
+      }));
+
+      const activeSeries = await db.select({
+        id: shiftSeries.id,
+        workplaceId: shiftSeries.workplaceId,
+        workerUserId: shiftSeries.workerUserId,
+        title: shiftSeries.title,
+        roleType: shiftSeries.roleType,
+        startTime: shiftSeries.startTime,
+        endTime: shiftSeries.endTime,
+        notes: shiftSeries.notes,
+        category: shiftSeries.category,
+        frequency: shiftSeries.frequency,
+        recurringDays: shiftSeries.recurringDays,
+        startDate: shiftSeries.startDate,
+        endType: shiftSeries.endType,
+        endDate: shiftSeries.endDate,
+        endAfterCount: shiftSeries.endAfterCount,
+        status: shiftSeries.status,
+        workerName: users.fullName,
+      })
+      .from(shiftSeries)
+      .leftJoin(users, eq(shiftSeries.workerUserId, users.id))
+      .where(and(
+        eq(shiftSeries.workplaceId, workplaceId),
+        eq(shiftSeries.status, "active")
+      ));
+
+      const seriesItems: any[] = [];
+      for (const s of activeSeries) {
+        const exceptions = await db.select()
+          .from(recurrenceExceptions)
+          .where(eq(recurrenceExceptions.seriesId, s.id));
+
+        const occurrences = expandSeriesOccurrences(s, exceptions, startDateParam, endDateParam);
+        for (const occ of occurrences) {
+          let workerName = s.workerName;
+          if (occ.isException && occ.exceptionType === "modified" && occ.workerUserId && occ.workerUserId !== s.workerUserId) {
+            const [overrideWorker] = await db.select({ fullName: users.fullName })
+              .from(users)
+              .where(eq(users.id, occ.workerUserId));
+            if (overrideWorker) workerName = overrideWorker.fullName;
+          }
+          seriesItems.push({
+            id: null,
+            date: occ.date,
+            startTime: occ.startTime,
+            endTime: occ.endTime,
+            title: s.title,
+            workerUserId: occ.workerUserId || s.workerUserId,
+            workerName,
+            category: s.category,
+            status: occ.status,
+            notes: occ.notes || s.notes,
+            type: "series_occurrence" as const,
+            seriesId: s.id,
+            isException: occ.isException,
+            exceptionType: occ.exceptionType || null,
+          });
+        }
+      }
+
+      const merged = [...shiftItems, ...seriesItems].sort((a, b) => {
+        const dateCompare = (a.date || "").localeCompare(b.date || "");
+        if (dateCompare !== 0) return dateCompare;
+        return (a.startTime || "").localeCompare(b.startTime || "");
+      });
+
+      res.json(merged);
+    } catch (error) {
+      console.error("Error fetching roster:", error);
+      res.status(500).json({ error: "Failed to fetch roster" });
     }
   });
 

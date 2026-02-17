@@ -577,6 +577,104 @@ export type ShiftFrequency = z.infer<typeof shiftFrequencyEnum>;
 export const shiftCategoryEnum = z.enum(["hotel", "banquet", "janitorial"]);
 export type ShiftCategory = z.infer<typeof shiftCategoryEnum>;
 
+export const seriesFrequencyEnum = z.enum(["daily", "weekly", "biweekly", "monthly"]);
+export type SeriesFrequency = z.infer<typeof seriesFrequencyEnum>;
+
+export const seriesEndTypeEnum = z.enum(["date", "count", "never"]);
+export type SeriesEndType = z.infer<typeof seriesEndTypeEnum>;
+
+export const shiftSeries = pgTable("shift_series", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  workplaceId: varchar("workplace_id")
+    .notNull()
+    .references(() => workplaces.id),
+  workerUserId: varchar("worker_user_id")
+    .references(() => users.id),
+  title: text("title").notNull(),
+  roleType: text("role_type"),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time"),
+  notes: text("notes"),
+  category: text("category").notNull().default("janitorial"),
+  frequency: text("frequency").notNull().default("weekly"),
+  recurringDays: text("recurring_days"),
+  startDate: date("start_date").notNull(),
+  endType: text("end_type").notNull().default("never"),
+  endDate: date("end_date"),
+  endAfterCount: integer("end_after_count"),
+  status: text("status").notNull().default("active"),
+  createdByUserId: varchar("created_by_user_id")
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertShiftSeriesSchema = createInsertSchema(shiftSeries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ShiftSeries = typeof shiftSeries.$inferSelect;
+export type InsertShiftSeries = z.infer<typeof insertShiftSeriesSchema>;
+
+export const recurrenceExceptions = pgTable("recurrence_exceptions", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  seriesId: varchar("series_id")
+    .notNull()
+    .references(() => shiftSeries.id),
+  date: date("date").notNull(),
+  type: text("type").notNull().default("cancelled"),
+  overrideStartTime: text("override_start_time"),
+  overrideEndTime: text("override_end_time"),
+  overrideWorkerUserId: varchar("override_worker_user_id")
+    .references(() => users.id),
+  overrideNotes: text("override_notes"),
+  reason: text("reason"),
+  cancelledByUserId: varchar("cancelled_by_user_id")
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type RecurrenceException = typeof recurrenceExceptions.$inferSelect;
+
+export const auditLog = pgTable("audit_log", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .references(() => users.id),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id"),
+  details: text("details"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AuditLogEntry = typeof auditLog.$inferSelect;
+
+export const userPhotos = pgTable("user_photos", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
+  url: text("url").notNull(),
+  status: text("status").notNull().default("pending_review"),
+  reviewerId: varchar("reviewer_id")
+    .references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type UserPhoto = typeof userPhotos.$inferSelect;
+
 export const shifts = pgTable("shifts", {
   id: varchar("id")
     .primaryKey()

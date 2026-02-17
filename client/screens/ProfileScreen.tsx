@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, Switch, ScrollView, TextInput, Modal, Image, Platform } from "react-native";
+import { View, StyleSheet, Pressable, Switch, ScrollView, TextInput, Modal, Image, Platform, ActivityIndicator } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -19,6 +19,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { UserRole, ClientType, CLIENT_TYPES } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { apiRequest } from "@/lib/query-client";
+import QRCode from "react-native-qrcode-svg";
 
 const roleLabels: Record<UserRole, string> = {
   client: "Client",
@@ -57,8 +58,56 @@ export default function ProfileScreen() {
 
   const queryClient = useQueryClient();
 
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [twoFAStep, setTwoFAStep] = useState<"setup" | "verify" | "recovery" | "disable">("setup");
+  const [twoFAUri, setTwoFAUri] = useState("");
+  const [twoFACode, setTwoFACode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [twoFADisableCode, setTwoFADisableCode] = useState("");
+
   const { data: photoData, refetch: refetchPhoto } = useQuery<any>({
     queryKey: ["/api/profile-photo"],
+  });
+
+  const { data: twoFAStatus, refetch: refetch2FA } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/2fa/status"],
+  });
+
+  const setup2FAMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/2fa/setup");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setTwoFAUri(data.uri);
+      setTwoFAStep("verify");
+    },
+  });
+
+  const verify2FAMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest("POST", "/api/2fa/verify-setup", { code });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setRecoveryCodes(data.recoveryCodes);
+      setTwoFAStep("recovery");
+      refetch2FA();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
+  const disable2FAMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await apiRequest("POST", "/api/2fa/disable", { code });
+      return res.json();
+    },
+    onSuccess: () => {
+      setShow2FAModal(false);
+      setTwoFADisableCode("");
+      refetch2FA();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
   });
 
   const uploadPhotoMutation = useMutation({
@@ -217,6 +266,19 @@ export default function ProfileScreen() {
       bankAccount,
       etransferEmail,
     });
+  };
+
+  const handleOpen2FA = () => {
+    if (twoFAStatus?.enabled) {
+      setTwoFAStep("disable");
+      setTwoFADisableCode("");
+    } else {
+      setTwoFAStep("setup");
+      setTwoFACode("");
+      setTwoFAUri("");
+      setRecoveryCodes([]);
+    }
+    setShow2FAModal(true);
   };
 
   return (
@@ -378,6 +440,37 @@ export default function ProfileScreen() {
           </View>
         </View>
       ) : null}
+
+      <View style={styles.section}>
+        <ThemedText style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+          Security
+        </ThemedText>
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Pressable
+            onPress={handleOpen2FA}
+            style={({ pressed }) => [
+              styles.menuItem,
+              pressed && { backgroundColor: theme.backgroundSecondary },
+            ]}
+            testID="button-2fa-settings"
+          >
+            <View style={styles.menuItemContent}>
+              <View style={styles.menuItemLeft}>
+                <Feather name="shield" size={20} color={theme.text} />
+                <View>
+                  <ThemedText style={styles.menuItemText}>
+                    Two-Factor Authentication
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 12, color: twoFAStatus?.enabled ? "#10b981" : theme.textMuted }}>
+                    {twoFAStatus?.enabled ? "Enabled" : "Not enabled"}
+                  </ThemedText>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={20} color={theme.textMuted} />
+            </View>
+          </Pressable>
+        </View>
+      </View>
 
       <View style={styles.section}>
         <ThemedText style={[styles.sectionTitle, { color: theme.textSecondary }]}>
@@ -811,6 +904,213 @@ export default function ProfileScreen() {
             ) : null}
           </Pressable>
         </Pressable>
+      </Modal>
+
+      <Modal
+        visible={show2FAModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShow2FAModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: Spacing.xl }}>
+          <View style={{ backgroundColor: theme.backgroundSecondary, borderRadius: BorderRadius.xl, padding: Spacing.xl, maxHeight: "80%" }}>
+            {twoFAStep === "setup" ? (
+              <>
+                <View style={{ alignItems: "center", marginBottom: Spacing.lg }}>
+                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: theme.primary + "15", alignItems: "center", justifyContent: "center", marginBottom: Spacing.md }}>
+                    <Feather name="shield" size={28} color={theme.primary} />
+                  </View>
+                  <ThemedText type="h3" style={{ textAlign: "center", marginBottom: Spacing.sm }}>
+                    Enable Two-Factor Authentication
+                  </ThemedText>
+                  <ThemedText style={{ textAlign: "center", color: theme.textSecondary, fontSize: 14 }}>
+                    Add an extra layer of security to your account using an authenticator app like Google Authenticator or Microsoft Authenticator.
+                  </ThemedText>
+                </View>
+                <Pressable
+                  onPress={() => setup2FAMutation.mutate()}
+                  style={{ backgroundColor: theme.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.lg, alignItems: "center" }}
+                  testID="button-start-2fa-setup"
+                >
+                  {setup2FAMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Get Started</ThemedText>
+                  )}
+                </Pressable>
+                <Pressable
+                  onPress={() => setShow2FAModal(false)}
+                  style={{ paddingVertical: Spacing.md, alignItems: "center", marginTop: Spacing.sm }}
+                >
+                  <ThemedText style={{ color: theme.textSecondary }}>Cancel</ThemedText>
+                </Pressable>
+              </>
+            ) : twoFAStep === "verify" ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ alignItems: "center", marginBottom: Spacing.lg }}>
+                  <ThemedText type="h3" style={{ textAlign: "center", marginBottom: Spacing.md }}>
+                    Scan QR Code
+                  </ThemedText>
+                  <ThemedText style={{ textAlign: "center", color: theme.textSecondary, fontSize: 14, marginBottom: Spacing.lg }}>
+                    Open your authenticator app and scan this QR code to add your account.
+                  </ThemedText>
+                  {twoFAUri ? (
+                    <View style={{ padding: Spacing.lg, backgroundColor: "#fff", borderRadius: BorderRadius.lg, marginBottom: Spacing.lg }}>
+                      <QRCode value={twoFAUri} size={200} />
+                    </View>
+                  ) : null}
+                  <ThemedText style={{ textAlign: "center", color: theme.textSecondary, fontSize: 13, marginBottom: Spacing.lg }}>
+                    Enter the 6-digit code from your authenticator app to verify setup.
+                  </ThemedText>
+                </View>
+                <TextInput
+                  value={twoFACode}
+                  onChangeText={setTwoFACode}
+                  placeholder="Enter 6-digit code"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  style={{
+                    backgroundColor: theme.backgroundTertiary,
+                    color: theme.text,
+                    fontSize: 24,
+                    fontWeight: "700",
+                    textAlign: "center",
+                    letterSpacing: 8,
+                    paddingVertical: Spacing.md,
+                    borderRadius: BorderRadius.lg,
+                    marginBottom: Spacing.lg,
+                  }}
+                  testID="input-2fa-code"
+                />
+                {verify2FAMutation.isError ? (
+                  <ThemedText style={{ color: theme.error, textAlign: "center", marginBottom: Spacing.md, fontSize: 13 }}>
+                    Invalid code. Please try again.
+                  </ThemedText>
+                ) : null}
+                <Pressable
+                  onPress={() => verify2FAMutation.mutate(twoFACode)}
+                  disabled={twoFACode.length !== 6 || verify2FAMutation.isPending}
+                  style={{
+                    backgroundColor: twoFACode.length === 6 ? theme.primary : theme.backgroundTertiary,
+                    paddingVertical: Spacing.md,
+                    borderRadius: BorderRadius.lg,
+                    alignItems: "center",
+                    opacity: twoFACode.length === 6 ? 1 : 0.5,
+                  }}
+                  testID="button-verify-2fa"
+                >
+                  {verify2FAMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <ThemedText style={{ color: twoFACode.length === 6 ? "#fff" : theme.textMuted, fontWeight: "600" }}>Verify & Enable</ThemedText>
+                  )}
+                </Pressable>
+                <Pressable
+                  onPress={() => setShow2FAModal(false)}
+                  style={{ paddingVertical: Spacing.md, alignItems: "center", marginTop: Spacing.sm }}
+                >
+                  <ThemedText style={{ color: theme.textSecondary }}>Cancel</ThemedText>
+                </Pressable>
+              </ScrollView>
+            ) : twoFAStep === "recovery" ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={{ alignItems: "center", marginBottom: Spacing.lg }}>
+                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#10b98115", alignItems: "center", justifyContent: "center", marginBottom: Spacing.md }}>
+                    <Feather name="check-circle" size={28} color="#10b981" />
+                  </View>
+                  <ThemedText type="h3" style={{ textAlign: "center", marginBottom: Spacing.sm }}>
+                    2FA Enabled
+                  </ThemedText>
+                  <ThemedText style={{ textAlign: "center", color: theme.textSecondary, fontSize: 14, marginBottom: Spacing.lg }}>
+                    Save these recovery codes in a safe place. You can use them to access your account if you lose your authenticator device.
+                  </ThemedText>
+                </View>
+                <View style={{ backgroundColor: theme.backgroundTertiary, borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.lg }}>
+                  {recoveryCodes.map((code, i) => (
+                    <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 }}>
+                      <ThemedText style={{ fontFamily: "monospace", fontSize: 15, fontWeight: "600" }}>{code}</ThemedText>
+                      <ThemedText style={{ color: theme.textMuted, fontSize: 12 }}>#{i + 1}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+                <ThemedText style={{ textAlign: "center", color: "#f59e0b", fontSize: 12, marginBottom: Spacing.lg }}>
+                  Each code can only be used once. Store them securely.
+                </ThemedText>
+                <Pressable
+                  onPress={() => setShow2FAModal(false)}
+                  style={{ backgroundColor: theme.primary, paddingVertical: Spacing.md, borderRadius: BorderRadius.lg, alignItems: "center" }}
+                  testID="button-done-2fa"
+                >
+                  <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Done</ThemedText>
+                </Pressable>
+              </ScrollView>
+            ) : twoFAStep === "disable" ? (
+              <>
+                <View style={{ alignItems: "center", marginBottom: Spacing.lg }}>
+                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#ef444415", alignItems: "center", justifyContent: "center", marginBottom: Spacing.md }}>
+                    <Feather name="shield-off" size={28} color="#ef4444" />
+                  </View>
+                  <ThemedText type="h3" style={{ textAlign: "center", marginBottom: Spacing.sm }}>
+                    Disable Two-Factor Authentication
+                  </ThemedText>
+                  <ThemedText style={{ textAlign: "center", color: theme.textSecondary, fontSize: 14 }}>
+                    Enter your current authenticator code to disable 2FA. This will make your account less secure.
+                  </ThemedText>
+                </View>
+                <TextInput
+                  value={twoFADisableCode}
+                  onChangeText={setTwoFADisableCode}
+                  placeholder="Enter 6-digit code"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  style={{
+                    backgroundColor: theme.backgroundTertiary,
+                    color: theme.text,
+                    fontSize: 24,
+                    fontWeight: "700",
+                    textAlign: "center",
+                    letterSpacing: 8,
+                    paddingVertical: Spacing.md,
+                    borderRadius: BorderRadius.lg,
+                    marginBottom: Spacing.lg,
+                  }}
+                  testID="input-2fa-disable-code"
+                />
+                {disable2FAMutation.isError ? (
+                  <ThemedText style={{ color: theme.error, textAlign: "center", marginBottom: Spacing.md, fontSize: 13 }}>
+                    Invalid code. Please try again.
+                  </ThemedText>
+                ) : null}
+                <Pressable
+                  onPress={() => disable2FAMutation.mutate(twoFADisableCode)}
+                  disabled={twoFADisableCode.length !== 6 || disable2FAMutation.isPending}
+                  style={{
+                    backgroundColor: twoFADisableCode.length === 6 ? "#ef4444" : theme.backgroundTertiary,
+                    paddingVertical: Spacing.md,
+                    borderRadius: BorderRadius.lg,
+                    alignItems: "center",
+                    opacity: twoFADisableCode.length === 6 ? 1 : 0.5,
+                  }}
+                  testID="button-confirm-disable-2fa"
+                >
+                  {disable2FAMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <ThemedText style={{ color: twoFADisableCode.length === 6 ? "#fff" : theme.textMuted, fontWeight: "600" }}>Disable 2FA</ThemedText>
+                  )}
+                </Pressable>
+                <Pressable
+                  onPress={() => setShow2FAModal(false)}
+                  style={{ paddingVertical: Spacing.md, alignItems: "center", marginTop: Spacing.sm }}
+                >
+                  <ThemedText style={{ color: theme.textSecondary }}>Cancel</ThemedText>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        </View>
       </Modal>
     </ScrollView>
   );

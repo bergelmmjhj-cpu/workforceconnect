@@ -258,7 +258,6 @@ export default function ClockInOutScreen() {
 
   const canClockIn =
     !titoLog && isWithinGeofence && isWithinClockInWindow && shift?.latitude != null;
-  const canClockOut = titoLog && !titoLog.timeOut && userLocation;
   const hasCompletedShift = titoLog?.timeOut;
 
   const handleClockIn = async () => {
@@ -302,7 +301,12 @@ export default function ClockInOutScreen() {
   };
 
   const handleClockOutPress = () => {
-    if (!shift || !userLocation || !titoLog) return;
+    if (!shift || !titoLog) return;
+    if (!userLocation) {
+      refreshLocation();
+      setShowClockOutConfirm(true);
+      return;
+    }
     if (!isWithinGeofence) {
       setShowClockOutConfirm(true);
     } else {
@@ -311,7 +315,7 @@ export default function ClockInOutScreen() {
   };
 
   const executeClockOut = async () => {
-    if (!shift || !userLocation || !titoLog) return;
+    if (!shift || !titoLog) return;
     setShowClockOutConfirm(false);
     setErrorMessage(null);
     setIsClockingOut(true);
@@ -320,8 +324,8 @@ export default function ClockInOutScreen() {
     try {
       const res = await apiRequest("POST", "/api/tito/time-out", {
         titoLogId: titoLog.id,
-        gpsLat: userLocation.latitude,
-        gpsLng: userLocation.longitude,
+        gpsLat: userLocation?.latitude || 0,
+        gpsLng: userLocation?.longitude || 0,
       });
       const data = await res.json();
       if (data.success) {
@@ -406,25 +410,42 @@ export default function ClockInOutScreen() {
       }
     : null;
 
+  const clockInBlockReason = useMemo(() => {
+    if (titoLog || hasCompletedShift) return null;
+    if (!shift?.latitude || !shift?.longitude) return "Workplace GPS not configured. Contact admin.";
+    if (!userLocation) return "Getting your location...";
+    if (!isWithinClockInWindow && clockInTimeMessage) return clockInTimeMessage;
+    if (!isWithinClockInWindow) return "Outside clock-in window";
+    if (!isWithinGeofence && distance !== null) {
+      return `You are ${formatDistance(distance)} away. Move closer to work site.`;
+    }
+    if (!isWithinGeofence) return "Checking distance to work site...";
+    return null;
+  }, [titoLog, hasCompletedShift, shift, userLocation, isWithinClockInWindow, clockInTimeMessage, isWithinGeofence, distance]);
+
+  const canClockOut = titoLog && !titoLog.timeOut;
+
   const buttonColor = hasCompletedShift
     ? theme.success
-    : titoLog && !titoLog.timeOut
+    : canClockOut
     ? "#EF4444"
     : canClockIn
-    ? "#5B9BD5"
-    : theme.textMuted;
+    ? "#10B981"
+    : "#94A3B8";
 
   const buttonLabel = hasCompletedShift
     ? "Completed"
-    : titoLog && !titoLog.timeOut
-    ? "End shift"
-    : "Start shift";
+    : canClockOut
+    ? "Clock Out"
+    : canClockIn
+    ? "Clock In"
+    : "Clock In";
 
   const buttonIcon = hasCompletedShift
     ? "check-circle"
-    : titoLog && !titoLog.timeOut
-    ? "square"
-    : "clock";
+    : canClockOut
+    ? "log-out"
+    : "log-in";
 
   const isButtonDisabled =
     hasCompletedShift ||
@@ -434,7 +455,7 @@ export default function ClockInOutScreen() {
 
   const handleBigButtonPress = () => {
     if (hasCompletedShift) return;
-    if (titoLog && !titoLog.timeOut) {
+    if (canClockOut) {
       handleClockOutPress();
     } else if (canClockIn) {
       handleClockIn();
@@ -555,19 +576,17 @@ export default function ClockInOutScreen() {
               </View>
             ) : null}
 
-            {clockInTimeMessage && !titoLog ? (
-              <View style={[styles.infoBanner, { backgroundColor: theme.warning + "15" }]}>
-                <Feather name="clock" size={14} color={theme.warning} />
-                <ThemedText style={{ color: theme.warning, fontSize: 13, flex: 1 }}>{clockInTimeMessage}</ThemedText>
+            {clockInBlockReason ? (
+              <View style={[styles.infoBanner, { backgroundColor: "#F59E0B15" }]}>
+                <Feather name="info" size={14} color="#F59E0B" />
+                <ThemedText style={{ color: "#F59E0B", fontSize: 13, flex: 1, fontWeight: "500" }}>{clockInBlockReason}</ThemedText>
               </View>
             ) : null}
 
-            {!isWithinGeofence && !titoLog && distance !== null ? (
-              <View style={[styles.infoBanner, { backgroundColor: "#ef444415" }]}>
-                <Feather name="alert-triangle" size={14} color="#ef4444" />
-                <ThemedText style={{ color: "#ef4444", fontSize: 13, flex: 1 }}>
-                  Move {formatDistance(Math.max(0, distance - geofenceRadius))} closer to clock in
-                </ThemedText>
+            {canClockIn && !titoLog ? (
+              <View style={[styles.infoBanner, { backgroundColor: "#10B98115" }]}>
+                <Feather name="check-circle" size={14} color="#10B981" />
+                <ThemedText style={{ color: "#10B981", fontSize: 13, flex: 1, fontWeight: "500" }}>Ready to clock in</ThemedText>
               </View>
             ) : null}
 

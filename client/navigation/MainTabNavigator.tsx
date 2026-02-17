@@ -137,13 +137,12 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Tito"
-              component={TitoScreen}
+              name="Messages"
+              component={MessagesScreen}
               options={{
-                title: "Time",
-                headerTitle: "Time Tracking",
+                headerTitle: "Messages",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="clock" size={size} color={color} />
+                  <Feather name="message-circle" size={size} color={color} />
                 ),
               }}
             />

@@ -95,6 +95,11 @@ export default function ClockInOutScreen() {
   const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showLateReasonModal, setShowLateReasonModal] = useState(false);
+  const [lateReasonTitoId, setLateReasonTitoId] = useState<string | null>(null);
+  const [selectedLateReason, setSelectedLateReason] = useState<string | null>(null);
+  const [lateNote, setLateNote] = useState("");
+  const [isSubmittingLateReason, setIsSubmittingLateReason] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -236,6 +241,16 @@ export default function ClockInOutScreen() {
     return "";
   }, [shift?.startTime, shift?.date]);
 
+  const isLateForShift = useMemo(() => {
+    if (!shift?.startTime || !shift?.date) return false;
+    const now = new Date();
+    const [hours, minutes] = shift.startTime.split(":").map(Number);
+    const shiftStart = new Date(shift.date + "T00:00:00");
+    shiftStart.setHours(hours, minutes, 0, 0);
+    const diffMinutes = (now.getTime() - shiftStart.getTime()) / (1000 * 60);
+    return diffMinutes > 10;
+  }, [shift?.startTime, shift?.date]);
+
   const isWithinGeofence =
     distance !== null && shift?.geofenceRadiusMeters
       ? distance <= shift.geofenceRadiusMeters
@@ -271,6 +286,10 @@ export default function ClockInOutScreen() {
           timeInDistanceMeters: data.distance,
           timeOutDistanceMeters: null,
         });
+        if (isLateForShift) {
+          setLateReasonTitoId(data.titoLogId);
+          setShowLateReasonModal(true);
+        }
       } else {
         setErrorMessage(data.error || "Failed to clock in");
       }
@@ -325,6 +344,24 @@ export default function ClockInOutScreen() {
   const handleLongPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShowDetailModal(true);
+  };
+
+  const handleSubmitLateReason = async () => {
+    if (!lateReasonTitoId || !selectedLateReason) return;
+    setIsSubmittingLateReason(true);
+    try {
+      await apiRequest("POST", `/api/tito/${lateReasonTitoId}/late-reason`, {
+        lateReason: selectedLateReason,
+        lateNote: lateNote.trim() || undefined,
+      });
+    } catch (err) {
+      console.error("Failed to submit late reason:", err);
+    } finally {
+      setIsSubmittingLateReason(false);
+      setShowLateReasonModal(false);
+      setSelectedLateReason(null);
+      setLateNote("");
+    }
   };
 
   if (isLoading) {
@@ -708,6 +745,95 @@ export default function ClockInOutScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showLateReasonModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowLateReasonModal(false);
+          setSelectedLateReason(null);
+          setLateNote("");
+        }}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {}}
+        >
+          <Pressable
+            style={[styles.lateReasonModal, { backgroundColor: theme.backgroundDefault }]}
+            onPress={() => {}}
+          >
+            <View style={styles.lateReasonHeader}>
+              <Feather name="alert-triangle" size={24} color="#F59E0B" />
+              <ThemedText type="h4" style={{ marginLeft: 8 }}>Late Clock-In</ThemedText>
+            </View>
+            <ThemedText style={{ color: theme.textSecondary, fontSize: 14, marginBottom: Spacing.lg }}>
+              You are clocking in late. Please select a reason:
+            </ThemedText>
+            {["Traffic", "Transportation", "Personal Emergency", "Other"].map((reason) => (
+              <Pressable
+                key={reason}
+                onPress={() => setSelectedLateReason(reason)}
+                style={[
+                  styles.lateReasonOption,
+                  {
+                    backgroundColor: selectedLateReason === reason ? theme.primary + "20" : theme.backgroundSecondary,
+                    borderColor: selectedLateReason === reason ? theme.primary : theme.border,
+                  },
+                ]}
+              >
+                <View style={styles.lateReasonRadio}>
+                  {selectedLateReason === reason ? (
+                    <View style={[styles.lateReasonRadioFilled, { backgroundColor: theme.primary }]} />
+                  ) : null}
+                </View>
+                <ThemedText style={{ fontSize: 14 }}>{reason}</ThemedText>
+              </Pressable>
+            ))}
+            <View style={{ marginTop: Spacing.md }}>
+              <ThemedText style={{ color: theme.textMuted, fontSize: 12, marginBottom: 4 }}>Note (optional)</ThemedText>
+              <View style={[styles.lateNoteInput, { borderColor: theme.border, backgroundColor: theme.backgroundSecondary }]}>
+                <ThemedText
+                  style={{ color: lateNote ? theme.text : theme.textMuted, fontSize: 14 }}
+                  numberOfLines={2}
+                >
+                  {lateNote || "Tap to add a note..."}
+                </ThemedText>
+              </View>
+            </View>
+            <View style={styles.lateReasonButtons}>
+              <Pressable
+                onPress={() => {
+                  setShowLateReasonModal(false);
+                  setSelectedLateReason(null);
+                  setLateNote("");
+                }}
+                style={[styles.lateReasonBtn, { backgroundColor: theme.backgroundSecondary }]}
+              >
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Skip</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={handleSubmitLateReason}
+                disabled={!selectedLateReason || isSubmittingLateReason}
+                style={[
+                  styles.lateReasonBtn,
+                  {
+                    backgroundColor: selectedLateReason ? theme.primary : theme.textMuted,
+                    opacity: isSubmittingLateReason ? 0.6 : 1,
+                  },
+                ]}
+              >
+                {isSubmittingLateReason ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>Submit</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -974,5 +1100,59 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     alignItems: "center",
     width: "100%",
+  },
+  lateReasonModal: {
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    width: "90%",
+    maxWidth: 380,
+  },
+  lateReasonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
+  lateReasonOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+    gap: 10,
+  },
+  lateReasonRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#94A3B8",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  lateReasonRadioFilled: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  lateNoteInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 40,
+  },
+  lateReasonButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.xl,
+  },
+  lateReasonBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

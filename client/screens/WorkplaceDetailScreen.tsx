@@ -148,7 +148,9 @@ export default function WorkplaceDetailScreen() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts?workplaceId=" + workplaceId] });
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-today"] });
       setShowCreateShift(false);
       resetShiftForm();
     },
@@ -160,7 +162,9 @@ export default function WorkplaceDetailScreen() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts?workplaceId=" + workplaceId] });
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-today"] });
     },
   });
 
@@ -171,6 +175,9 @@ export default function WorkplaceDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/shift-series"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts?workplaceId=" + workplaceId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-today"] });
     },
   });
 

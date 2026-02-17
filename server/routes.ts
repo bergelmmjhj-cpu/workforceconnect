@@ -2386,7 +2386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
 
       let todayShiftsQuery = db
         .select({
@@ -2486,7 +2486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const includePast = req.query.includePast === "true";
       if (!includePast) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
         conditions.push(
           or(
             gte(shifts.date, today),

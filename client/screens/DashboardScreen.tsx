@@ -343,7 +343,13 @@ export default function DashboardScreen() {
               {myToday.todayShifts.map((shift) => (
                 <Pressable
                   key={shift.id}
-                  onPress={() => navigation.navigate("ShiftDetail", { shiftId: shift.id })}
+                  onPress={() => {
+                    if (user?.role === "worker" && shift.workerUserId === user?.id) {
+                      navigation.navigate("ClockInOut", { shiftId: shift.id });
+                    } else {
+                      navigation.navigate("ShiftDetail", { shiftId: shift.id });
+                    }
+                  }}
                 >
                   <Card style={styles.todayShiftCard}>
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>

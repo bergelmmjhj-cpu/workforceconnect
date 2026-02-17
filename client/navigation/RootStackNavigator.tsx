@@ -25,6 +25,7 @@ import AssignToWorkplaceScreen from "@/screens/AssignToWorkplaceScreen";
 import TitoLogsAdminScreen from "@/screens/TitoLogsAdminScreen";
 import ApplicationsAdminScreen from "@/screens/ApplicationsAdminScreen";
 import DiagnosticsScreen from "@/screens/DiagnosticsScreen";
+import RosterScreen from "@/screens/RosterScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -49,6 +50,7 @@ export type RootStackParamList = {
   AdminManage: undefined;
   WorkplacesList: undefined;
   WorkplaceDetail: { workplaceId: string };
+  Roster: { workplaceId: string; workplaceName: string };
   WorkplaceEdit: { workplaceId?: string };
   WorkerDirectory: undefined;
   InviteWorker: { workplaceId: string };
@@ -198,6 +200,11 @@ export default function RootStackNavigator() {
             options={{
               headerTitle: "Workplace",
             }}
+          />
+          <Stack.Screen
+            name="Roster"
+            component={RosterScreen}
+            options={{ headerTitle: "Roster View" }}
           />
           <Stack.Screen
             name="WorkplaceEdit"

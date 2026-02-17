@@ -544,6 +544,13 @@ export default function WorkplaceDetailScreen() {
 
         <View style={[styles.sectionHeader, { marginTop: Spacing.xl }]}>
           <ThemedText style={styles.sectionTitle}>Shift Series ({seriesList.length})</ThemedText>
+          <Pressable
+            onPress={() => navigation.navigate("Roster", { workplaceId, workplaceName: workplace.name })}
+            style={styles.addButton}
+          >
+            <Feather name="grid" size={18} color={theme.primary} />
+            <ThemedText style={[styles.addButtonText, { color: theme.primary }]}>Roster</ThemedText>
+          </Pressable>
         </View>
 
         {seriesList.length === 0 ? (

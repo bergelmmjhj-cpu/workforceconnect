@@ -324,6 +324,34 @@ export interface APIShift {
   workerEmail: string | null;
 }
 
+export type SeriesFrequency = "daily" | "weekly" | "biweekly" | "monthly";
+export type SeriesEndType = "date" | "count" | "never";
+export type SeriesStatus = "active" | "paused" | "cancelled";
+
+export interface ShiftSeries {
+  id: string;
+  workplaceId: string;
+  workerUserId: string | null;
+  title: string;
+  roleType: string | null;
+  startTime: string;
+  endTime: string | null;
+  notes: string | null;
+  category: string;
+  frequency: SeriesFrequency;
+  recurringDays: string | null;
+  startDate: string;
+  endType: SeriesEndType;
+  endDate: string | null;
+  endAfterCount: number | null;
+  status: SeriesStatus;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  workplaceName?: string | null;
+  workerName?: string | null;
+}
+
 export type TitoApprovalStatus = "pending" | "approved" | "disputed";
 
 export interface TitoLog {

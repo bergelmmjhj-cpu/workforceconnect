@@ -18,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
-import { APIShift, ShiftStatus, ShiftFrequency, ShiftCategory } from "@/types";
+import { APIShift, ShiftStatus, ShiftFrequency, ShiftCategory, ShiftSeries } from "@/types";
 
 type WorkplaceDetailRouteProp = RouteProp<RootStackParamList, "WorkplaceDetail">;
 
@@ -111,6 +111,10 @@ export default function WorkplaceDetailScreen() {
     queryKey: ["/api/shifts?workplaceId=" + workplaceId],
   });
 
+  const { data: seriesList = [], isLoading: loadingSeries, refetch: refetchSeries } = useQuery<ShiftSeries[]>({
+    queryKey: ["/api/shift-series?workplaceId=" + workplaceId],
+  });
+
   const [showCreateShift, setShowCreateShift] = useState(false);
   const [shiftTitle, setShiftTitle] = useState("");
   const [shiftDate, setShiftDate] = useState(new Date());
@@ -134,6 +138,7 @@ export default function WorkplaceDetailScreen() {
   const [webRecurringEndDateText, setWebRecurringEndDateText] = useState("");
 
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleteSeriesConfirmTarget, setDeleteSeriesConfirmTarget] = useState<{ id: string; title: string } | null>(null);
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<{ assignmentId: string; status: string; message: string } | null>(null);
   const [noEndDate, setNoEndDate] = useState(false);
 
@@ -156,6 +161,16 @@ export default function WorkplaceDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+    },
+  });
+
+  const deleteSeriesMutation = useMutation({
+    mutationFn: async (seriesId: string) => {
+      const res = await apiRequest("DELETE", `/api/shift-series/${seriesId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/shift-series"] });
     },
   });
 
@@ -220,7 +235,8 @@ export default function WorkplaceDetailScreen() {
       refetchWorkplace();
       refetchAssignments();
       refetchShifts();
-    }, [refetchWorkplace, refetchAssignments, refetchShifts])
+      refetchSeries();
+    }, [refetchWorkplace, refetchAssignments, refetchShifts, refetchSeries])
   );
 
   const updateStatusMutation = useMutation({
@@ -520,6 +536,78 @@ export default function WorkplaceDetailScreen() {
                 ) : null}
                 {shift.notes ? (
                   <ThemedText style={[styles.shiftNotes, { color: theme.textMuted }]}>{shift.notes}</ThemedText>
+                ) : null}
+              </View>
+            </Card>
+          ))
+        )}
+
+        <View style={[styles.sectionHeader, { marginTop: Spacing.xl }]}>
+          <ThemedText style={styles.sectionTitle}>Shift Series ({seriesList.length})</ThemedText>
+        </View>
+
+        {seriesList.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Feather name="repeat" size={32} color={theme.textSecondary} />
+            <ThemedText style={styles.emptyText}>No recurring series</ThemedText>
+          </Card>
+        ) : (
+          seriesList.map((series) => (
+            <Card key={series.id} style={styles.shiftItemCard}>
+              <View style={styles.shiftItemHeader}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.shiftItemTitle}>{series.title}</ThemedText>
+                  <ThemedText style={styles.shiftItemDate}>
+                    Starts {new Date(series.startDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {series.endDate ? ` - Ends ${new Date(series.endDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : " (Ongoing)"}
+                  </ThemedText>
+                </View>
+                <View style={styles.shiftItemActions}>
+                  <View style={[styles.frequencyBadge, { backgroundColor: series.status === "active" ? "#22c55e20" : "#ef444420" }]}>
+                    <ThemedText style={{ fontSize: 11, fontWeight: "600", color: series.status === "active" ? "#22c55e" : "#ef4444" }}>
+                      {series.status.charAt(0).toUpperCase() + series.status.slice(1)}
+                    </ThemedText>
+                  </View>
+                  <Pressable onPress={() => setDeleteSeriesConfirmTarget({ id: series.id, title: series.title })}>
+                    <Feather name="trash-2" size={16} color="#ef4444" />
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.shiftBadgeRow}>
+                {series.category ? (
+                  <View style={[styles.categoryBadge, { backgroundColor: (CATEGORY_COLORS[series.category as ShiftCategory] || "#6b7280") + "20" }]}>
+                    <ThemedText style={[styles.categoryBadgeText, { color: CATEGORY_COLORS[series.category as ShiftCategory] || "#6b7280" }]}>
+                      {series.category.charAt(0).toUpperCase() + series.category.slice(1)}
+                    </ThemedText>
+                  </View>
+                ) : null}
+                <View style={[styles.frequencyBadge, { backgroundColor: theme.primary + "15" }]}>
+                  <Feather name="repeat" size={11} color={theme.primary} style={{ marginRight: 4 }} />
+                  <ThemedText style={[styles.frequencyBadgeText, { color: theme.primary }]}>
+                    {series.frequency.charAt(0).toUpperCase() + series.frequency.slice(1)}
+                  </ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.shiftItemDetails}>
+                <View style={styles.shiftDetailRow}>
+                  <Feather name="clock" size={14} color={theme.textSecondary} />
+                  <ThemedText style={styles.shiftDetailText}>
+                    {series.startTime}{series.endTime ? ` - ${series.endTime}` : " (Open-Ended)"}
+                  </ThemedText>
+                </View>
+                {series.workerName ? (
+                  <View style={styles.shiftDetailRow}>
+                    <Feather name="user" size={14} color={theme.textSecondary} />
+                    <ThemedText style={styles.shiftDetailText}>{series.workerName}</ThemedText>
+                  </View>
+                ) : null}
+                {series.recurringDays ? (
+                  <View style={styles.shiftDetailRow}>
+                    <Feather name="repeat" size={14} color={theme.textSecondary} />
+                    <ThemedText style={styles.shiftDetailText}>{series.recurringDays.split(",").join(", ")}</ThemedText>
+                  </View>
                 ) : null}
               </View>
             </Card>
@@ -871,6 +959,47 @@ export default function WorkplaceDetailScreen() {
                   if (deleteConfirmTarget) {
                     deleteShiftMutation.mutate(deleteConfirmTarget.id);
                     setDeleteConfirmTarget(null);
+                  }
+                }}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: "#EF4444" }}
+              >
+                <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Delete</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={deleteSeriesConfirmTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteSeriesConfirmTarget(null)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}
+          onPress={() => setDeleteSeriesConfirmTarget(null)}
+        >
+          <Pressable
+            style={{ backgroundColor: theme.backgroundDefault, borderRadius: 12, padding: 24, width: "100%", maxWidth: 340 }}
+            onPress={() => {}}
+          >
+            <ThemedText type="h4" style={{ marginBottom: 12 }}>Delete Series</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+              Are you sure you want to delete the series "{deleteSeriesConfirmTarget?.title}"? This will remove all future occurrences.
+            </ThemedText>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable
+                onPress={() => setDeleteSeriesConfirmTarget(null)}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: theme.backgroundSecondary }}
+              >
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (deleteSeriesConfirmTarget) {
+                    deleteSeriesMutation.mutate(deleteSeriesConfirmTarget.id);
+                    setDeleteSeriesConfirmTarget(null);
                   }
                 }}
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: "#EF4444" }}

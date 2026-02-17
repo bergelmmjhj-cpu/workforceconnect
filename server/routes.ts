@@ -3940,6 +3940,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         broadcast({ type: "shift_request_created", data: newRequest });
 
+        const [wp] = newRequest.workplaceId ? await db.select().from(workplaces).where(eq(workplaces.id, newRequest.workplaceId)) : [null];
+        const wpName = wp?.name || "a workplace";
+
+        const adminsAndHR = await db.select({ id: users.id }).from(users)
+          .where(and(
+            or(eq(users.role, "admin"), eq(users.role, "hr")),
+            eq(users.isActive, true),
+            ne(users.id, userId)
+          ));
+        const notifyIds = adminsAndHR.map(u => u.id);
+
+        if (notifyIds.length > 0) {
+          for (const uid of notifyIds) {
+            await db.insert(appNotifications).values({
+              userId: uid,
+              type: "shift_request_created",
+              title: "New Shift Request",
+              body: `A ${newRequest.roleType} shift has been requested at ${wpName} on ${newRequest.date}.`,
+              deepLink: `/shift-requests/${newRequest.id}`,
+            });
+          }
+          sendPushNotifications(
+            notifyIds,
+            "New Shift Request",
+            `A ${newRequest.roleType} shift has been requested at ${wpName} on ${newRequest.date}.`,
+            { type: "shift_request_created", requestId: newRequest.id }
+          );
+        }
+
+        if (newRequest.requestedWorkerId) {
+          await db.insert(appNotifications).values({
+            userId: newRequest.requestedWorkerId,
+            type: "shift_request_for_you",
+            title: "Shift Requested For You",
+            body: `A ${newRequest.roleType} shift at ${wpName} on ${newRequest.date} has been requested for you.`,
+            deepLink: `/shift-requests/${newRequest.id}`,
+          });
+          sendPushNotifications(
+            [newRequest.requestedWorkerId],
+            "Shift Requested For You",
+            `A ${newRequest.roleType} shift at ${wpName} on ${newRequest.date} has been requested for you.`,
+            { type: "shift_request_for_you", requestId: newRequest.id }
+          );
+        }
+
         res.json(newRequest);
       } catch (error) {
         console.error("Error creating shift request:", error);

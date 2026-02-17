@@ -4,11 +4,21 @@ import { User, UserRole, WorkerOnboardingStatus } from "@/types";
 import { apiRequest, getApiUrl, setAuthUser } from "@/lib/query-client";
 import { connectWebSocket, disconnectWebSocket, setupAppStateSync } from "@/lib/websocket";
 
+export class TwoFactorRequiredError extends Error {
+  userId: string;
+  constructor(userId: string) {
+    super("Two-factor authentication required");
+    this.name = "TwoFactorRequiredError";
+    this.userId = userId;
+  }
+}
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  complete2FALogin: (userId: string, code: string) => Promise<{ remainingRecoveryCodes?: number }>;
   register: (email: string, password: string, fullName: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
@@ -66,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await apiRequest("POST", "/api/auth/login", { email: lowerEmail, password });
     const data = await response.json();
     
+    if (data.requires2FA) {
+      throw new TwoFactorRequiredError(data.userId);
+    }
+    
     if (data.user) {
       const loginUser: User = {
         id: data.user.id,
@@ -87,6 +101,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     throw new Error(data.error || "Invalid email or password");
+  };
+
+  const complete2FALogin = async (userId: string, code: string) => {
+    const response = await apiRequest("POST", "/api/2fa/verify", { userId, code });
+    const data = await response.json();
+    
+    if (data.verified && data.user) {
+      const loginUser: User = {
+        id: data.user.id,
+        email: data.user.email,
+        fullName: data.user.fullName,
+        role: data.user.role as UserRole,
+        timezone: data.user.timezone || "America/Toronto",
+        onboardingStatus: data.user.onboardingStatus as WorkerOnboardingStatus | undefined,
+        workerRoles: data.user.workerRoles ? JSON.parse(data.user.workerRoles) : undefined,
+        businessName: data.user.businessName,
+        businessAddress: data.user.businessAddress,
+        businessPhone: data.user.businessPhone,
+        createdAt: data.user.createdAt,
+      };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loginUser));
+      setUser(loginUser);
+      connectWebSocket();
+      return { remainingRecoveryCodes: data.remainingRecoveryCodes };
+    }
+    
+    throw new Error(data.error || "Invalid verification code");
   };
 
   const register = async (email: string, password: string, fullName: string, role: UserRole) => {
@@ -190,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        complete2FALogin,
         register,
         logout,
         switchRole,

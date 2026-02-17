@@ -17,7 +17,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, TwoFactorRequiredError } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getLoginErrorMessage } from "@/utils/errorHandler";
@@ -53,6 +53,11 @@ export default function LoginScreen() {
       await login(email.trim(), password);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: unknown) {
+      if (err instanceof TwoFactorRequiredError) {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        navigation.navigate("TwoFactorVerify", { userId: err.userId });
+        return;
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(getLoginErrorMessage(err));
     } finally {

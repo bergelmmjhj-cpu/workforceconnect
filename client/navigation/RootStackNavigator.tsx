@@ -26,6 +26,7 @@ import TitoLogsAdminScreen from "@/screens/TitoLogsAdminScreen";
 import ApplicationsAdminScreen from "@/screens/ApplicationsAdminScreen";
 import DiagnosticsScreen from "@/screens/DiagnosticsScreen";
 import RosterScreen from "@/screens/RosterScreen";
+import TwoFactorVerifyScreen from "@/screens/TwoFactorVerifyScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -37,6 +38,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   SignUp: undefined;
+  TwoFactorVerify: { userId: string };
   Main: undefined;
   CreateRequest: undefined;
   RequestDetail: { requestId: string };
@@ -103,6 +105,11 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="SignUp"
             component={SignUpScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="TwoFactorVerify"
+            component={TwoFactorVerifyScreen}
             options={{ headerShown: false }}
           />
         </>

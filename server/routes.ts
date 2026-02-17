@@ -4442,6 +4442,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // ========================================
+  // Safe Trial Reset API
+  // ========================================
+
+  app.post("/api/trial-reset/dry-run", checkRoles("admin"), async (_req: Request, res: Response) => {
+    try {
+      const counts: Record<string, number> = {};
+
+      const tables = [
+        { name: "shift_checkins", table: shiftCheckins },
+        { name: "shift_offers", table: shiftOffers },
+        { name: "shift_requests", table: shiftRequests },
+        { name: "shifts", table: shifts },
+        { name: "recurrence_exceptions", table: recurrenceExceptions },
+        { name: "shift_series", table: shiftSeries },
+        { name: "sent_reminders", table: sentReminders },
+        { name: "app_notifications", table: appNotifications },
+        { name: "tito_logs", table: titoLogs },
+        { name: "timesheet_entries", table: timesheetEntries },
+        { name: "timesheets", table: timesheets },
+        { name: "payroll_batch_items", table: payrollBatchItems },
+        { name: "payroll_batches", table: payrollBatches },
+        { name: "messages", table: messages },
+        { name: "conversations", table: conversations },
+        { name: "workplace_assignments", table: workplaceAssignments },
+        { name: "user_photos", table: userPhotos },
+        { name: "audit_log", table: auditLog },
+      ];
+
+      for (const { name, table } of tables) {
+        const result = await db.select({ count: sql<number>`count(*)::int` }).from(table);
+        counts[name] = result[0]?.count || 0;
+      }
+
+      const nonAdminUsers = await db.select({ count: sql<number>`count(*)::int` }).from(users).where(ne(users.role, "admin"));
+      counts["non_admin_users"] = nonAdminUsers[0]?.count || 0;
+
+      const adminUsers = await db.select({ count: sql<number>`count(*)::int` }).from(users).where(eq(users.role, "admin"));
+      counts["admin_users_preserved"] = adminUsers[0]?.count || 0;
+
+      const totalRecords = Object.entries(counts)
+        .filter(([k]) => k !== "admin_users_preserved")
+        .reduce((sum, [, v]) => sum + v, 0);
+
+      res.json({ counts, totalRecords, adminUsersPreserved: counts["admin_users_preserved"] });
+    } catch (error) {
+      console.error("Error in trial reset dry run:", error);
+      res.status(500).json({ error: "Failed to perform dry run" });
+    }
+  });
+
+  app.post("/api/trial-reset/execute", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { confirmPhrase } = req.body;
+
+      if (confirmPhrase !== "RESET TRIAL DATA") {
+        res.status(400).json({ error: "Invalid confirmation phrase. Type 'RESET TRIAL DATA' to proceed." });
+        return;
+      }
+
+      const deletionOrder = [
+        { name: "export_audit_logs", q: sql`DELETE FROM export_audit_logs` },
+        { name: "shift_checkins", q: sql`DELETE FROM shift_checkins` },
+        { name: "shift_offers", q: sql`DELETE FROM shift_offers` },
+        { name: "shift_requests", q: sql`DELETE FROM shift_requests` },
+        { name: "shifts", q: sql`DELETE FROM shifts` },
+        { name: "recurrence_exceptions", q: sql`DELETE FROM recurrence_exceptions` },
+        { name: "shift_series", q: sql`DELETE FROM shift_series` },
+        { name: "sent_reminders", q: sql`DELETE FROM sent_reminders` },
+        { name: "app_notifications", q: sql`DELETE FROM app_notifications` },
+        { name: "tito_logs", q: sql`DELETE FROM tito_logs` },
+        { name: "timesheet_entries", q: sql`DELETE FROM timesheet_entries` },
+        { name: "timesheets", q: sql`DELETE FROM timesheets` },
+        { name: "payroll_batch_items", q: sql`DELETE FROM payroll_batch_items` },
+        { name: "payroll_batches", q: sql`DELETE FROM payroll_batches` },
+        { name: "messages", q: sql`DELETE FROM messages` },
+        { name: "message_logs", q: sql`DELETE FROM message_logs` },
+        { name: "conversations", q: sql`DELETE FROM conversations` },
+        { name: "workplace_assignments", q: sql`DELETE FROM workplace_assignments` },
+        { name: "user_photos", q: sql`DELETE FROM user_photos` },
+        { name: "push_tokens", q: sql`DELETE FROM push_tokens WHERE user_id NOT IN (SELECT id FROM users WHERE role = 'admin')` },
+        { name: "worker_applications", q: sql`DELETE FROM worker_applications` },
+        { name: "payment_profiles", q: sql`DELETE FROM payment_profiles WHERE user_id NOT IN (SELECT id FROM users WHERE role = 'admin')` },
+        { name: "non_admin_users", q: sql`DELETE FROM users WHERE role != 'admin'` },
+        { name: "audit_log", q: sql`DELETE FROM audit_log` },
+      ];
+
+      const results: Record<string, string> = {};
+
+      for (const { name, q } of deletionOrder) {
+        try {
+          await db.execute(q);
+          results[name] = "cleared";
+        } catch (e: any) {
+          results[name] = `error: ${e.message}`;
+        }
+      }
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "trial_reset",
+        entityType: "system",
+        details: JSON.stringify({ results, timestamp: new Date().toISOString() }),
+      });
+
+      res.json({ success: true, results, message: "Trial data has been reset. Admin accounts are preserved." });
+    } catch (error) {
+      console.error("Error executing trial reset:", error);
+      res.status(500).json({ error: "Failed to execute trial reset" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

@@ -48,6 +48,12 @@ export default function ProfileScreen() {
   const [bankAccount, setBankAccount] = useState<string>("");
   const [etransferEmail, setEtransferEmail] = useState<string>("");
 
+  const [showTrialResetModal, setShowTrialResetModal] = useState(false);
+  const [trialResetStep, setTrialResetStep] = useState<"preview" | "confirm" | "done">("preview");
+  const [dryRunData, setDryRunData] = useState<any>(null);
+  const [confirmPhrase, setConfirmPhrase] = useState("");
+  const [resetResult, setResetResult] = useState<any>(null);
+
   const queryClient = useQueryClient();
   const { data: paymentProfile } = useQuery<any>({
     queryKey: ["/api/payment-profile"],
@@ -98,6 +104,37 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await logout();
+  };
+
+  const dryRunMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/trial-reset/dry-run");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setDryRunData(data);
+      setTrialResetStep("confirm");
+    },
+  });
+
+  const executeResetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/trial-reset/execute", { confirmPhrase });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setResetResult(data);
+      setTrialResetStep("done");
+      queryClient.invalidateQueries();
+    },
+  });
+
+  const handleOpenTrialReset = () => {
+    setTrialResetStep("preview");
+    setDryRunData(null);
+    setConfirmPhrase("");
+    setResetResult(null);
+    setShowTrialResetModal(true);
   };
 
   const handleOpenPaymentModal = () => {
@@ -342,6 +379,30 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {user?.role === "admin" ? (
+        <View style={{ marginTop: Spacing.xl }}>
+          <ThemedText style={[styles.sectionLabel, { color: "#ef4444" }]}>DANGER ZONE</ThemedText>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderWidth: 1, borderColor: "#ef444440" }]}>
+            <Pressable
+              onPress={handleOpenTrialReset}
+              style={[styles.menuItem]}
+              testID="button-trial-reset"
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <Feather name="alert-triangle" size={20} color="#ef4444" />
+                  <View>
+                    <ThemedText style={[styles.menuItemText, { color: "#ef4444" }]}>Reset Trial Data</ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>Remove all non-admin data</ThemedText>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={20} color="#ef4444" />
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.logoutSection}>
         <Button onPress={handleLogout} style={[styles.logoutButton, { backgroundColor: theme.error }]}>
           Sign Out
@@ -556,6 +617,110 @@ export default function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showTrialResetModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTrialResetModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowTrialResetModal(false)}
+        >
+          <Pressable
+            style={[styles.modalContent, { backgroundColor: theme.surface, maxHeight: 500 }]}
+            onPress={() => {}}
+          >
+            {trialResetStep === "preview" ? (
+              <View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: Spacing.md }}>
+                  <Feather name="alert-triangle" size={24} color="#ef4444" />
+                  <ThemedText type="h3" style={{ color: "#ef4444" }}>Reset Trial Data</ThemedText>
+                </View>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: Spacing.lg }}>
+                  This will permanently delete all non-admin data including users, shifts, timesheets, messages, and more. Admin accounts will be preserved.
+                </ThemedText>
+                <View style={styles.modalActions}>
+                  <Pressable
+                    onPress={() => setShowTrialResetModal(false)}
+                    style={[styles.modalButton, { backgroundColor: theme.border }]}
+                  >
+                    <ThemedText>Cancel</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => dryRunMutation.mutate()}
+                    style={[styles.modalButton, { backgroundColor: "#ef4444", opacity: dryRunMutation.isPending ? 0.5 : 1 }]}
+                    disabled={dryRunMutation.isPending}
+                  >
+                    <ThemedText style={{ color: "#fff" }}>{dryRunMutation.isPending ? "Scanning..." : "Preview Impact"}</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : trialResetStep === "confirm" && dryRunData ? (
+              <ScrollView style={{ maxHeight: 400 }}>
+                <ThemedText type="h3" style={{ marginBottom: Spacing.sm, color: "#ef4444" }}>Impact Preview</ThemedText>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 13, marginBottom: Spacing.md }}>
+                  Total records to delete: {dryRunData.totalRecords} | Admin accounts preserved: {dryRunData.adminUsersPreserved}
+                </ThemedText>
+                {Object.entries(dryRunData.counts as Record<string, number>)
+                  .filter(([k]) => k !== "admin_users_preserved")
+                  .filter(([, v]) => (v as number) > 0)
+                  .map(([table, count]) => (
+                    <View key={table} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 }}>
+                      <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>{table.replace(/_/g, " ")}</ThemedText>
+                      <ThemedText style={{ fontSize: 13, fontWeight: "600", color: "#ef4444" }}>{String(count)}</ThemedText>
+                    </View>
+                  ))}
+                <View style={{ marginTop: Spacing.lg }}>
+                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary, marginBottom: Spacing.xs }}>Type RESET TRIAL DATA to confirm:</ThemedText>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text, borderWidth: 1, borderColor: "#ef444440" }]}
+                    value={confirmPhrase}
+                    onChangeText={setConfirmPhrase}
+                    placeholder="RESET TRIAL DATA"
+                    placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="characters"
+                    testID="input-confirm-reset"
+                  />
+                </View>
+                <View style={[styles.modalActions, { marginTop: Spacing.md }]}>
+                  <Pressable
+                    onPress={() => setShowTrialResetModal(false)}
+                    style={[styles.modalButton, { backgroundColor: theme.border }]}
+                  >
+                    <ThemedText>Cancel</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => executeResetMutation.mutate()}
+                    style={[styles.modalButton, { backgroundColor: "#ef4444", opacity: confirmPhrase !== "RESET TRIAL DATA" || executeResetMutation.isPending ? 0.5 : 1 }]}
+                    disabled={confirmPhrase !== "RESET TRIAL DATA" || executeResetMutation.isPending}
+                    testID="button-execute-reset"
+                  >
+                    <ThemedText style={{ color: "#fff" }}>{executeResetMutation.isPending ? "Resetting..." : "Execute Reset"}</ThemedText>
+                  </Pressable>
+                </View>
+              </ScrollView>
+            ) : trialResetStep === "done" ? (
+              <View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: Spacing.md }}>
+                  <Feather name="check-circle" size={24} color="#22c55e" />
+                  <ThemedText type="h3">Reset Complete</ThemedText>
+                </View>
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: Spacing.lg }}>
+                  {resetResult?.message || "All trial data has been cleared. Admin accounts are preserved."}
+                </ThemedText>
+                <Pressable
+                  onPress={() => setShowTrialResetModal(false)}
+                  style={[styles.modalButton, { backgroundColor: theme.primary, alignSelf: "flex-end" }]}
+                >
+                  <ThemedText style={{ color: "#fff" }}>Done</ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -588,6 +753,13 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.xs,
   },
   section: {
     marginBottom: Spacing["2xl"],

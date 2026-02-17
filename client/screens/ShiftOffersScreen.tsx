@@ -6,6 +6,7 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -57,9 +58,11 @@ export default function ShiftOffersScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [declineOffer, setDeclineOffer] = useState<ShiftOffer | null>(null);
 
   const { data: offers = [], isLoading, refetch, isRefetching } = useQuery<ShiftOffer[]>({
     queryKey: ["/api/shift-offers"],
+    refetchInterval: 30000,
   });
 
   const respondMutation = useMutation({
@@ -70,10 +73,14 @@ export default function ShiftOffersScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/shift-offers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-today"] });
       setRespondingId(null);
+      setDeclineOffer(null);
     },
     onError: () => {
       setRespondingId(null);
+      setDeclineOffer(null);
     },
   });
 
@@ -81,6 +88,17 @@ export default function ShiftOffersScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRespondingId(id);
     respondMutation.mutate({ id, response });
+  };
+
+  const handleDeclinePress = (offer: ShiftOffer) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDeclineOffer(offer);
+  };
+
+  const confirmDecline = () => {
+    if (declineOffer) {
+      handleRespond(declineOffer.id, "declined");
+    }
   };
 
   const sections = useMemo(() => {
@@ -175,7 +193,7 @@ export default function ShiftOffersScreen() {
             </Pressable>
             <Pressable
               testID={`button-decline-${item.id}`}
-              onPress={() => handleRespond(item.id, "declined")}
+              onPress={() => handleDeclinePress(item)}
               disabled={isResponding}
               style={[
                 styles.actionButton,
@@ -270,6 +288,51 @@ export default function ShiftOffersScreen() {
           }
         />
       )}
+
+      <Modal
+        visible={declineOffer !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeclineOffer(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setDeclineOffer(null)}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundSecondary }]}>
+            <View style={[styles.modalIconCircle, { backgroundColor: theme.error + "15" }]}>
+              <Feather name="alert-triangle" size={28} color={theme.error} />
+            </View>
+            <ThemedText type="h3" style={{ textAlign: "center", marginBottom: Spacing.sm }}>
+              Decline this offer?
+            </ThemedText>
+            <ThemedText style={{ textAlign: "center", color: theme.textSecondary, marginBottom: Spacing.xs }}>
+              {declineOffer ? `${declineOffer.shiftRoleType || declineOffer.shiftTitle}` : ""}
+            </ThemedText>
+            {declineOffer ? (
+              <ThemedText type="small" style={{ textAlign: "center", color: theme.textMuted, marginBottom: Spacing.lg }}>
+                {formatDate(declineOffer.shiftDate)} {formatTime(declineOffer.shiftStartTime)} - {formatTime(declineOffer.shiftEndTime)}
+              </ThemedText>
+            ) : null}
+            <ThemedText type="small" style={{ textAlign: "center", color: theme.textMuted, marginBottom: Spacing.xl }}>
+              This action cannot be undone. The shift may be offered to another worker.
+            </ThemedText>
+            <View style={styles.modalButtons}>
+              <Pressable
+                testID="button-cancel-decline"
+                onPress={() => setDeclineOffer(null)}
+                style={[styles.modalButton, { backgroundColor: theme.backgroundTertiary }]}
+              >
+                <ThemedText style={{ fontWeight: "600" }}>Keep Offer</ThemedText>
+              </Pressable>
+              <Pressable
+                testID="button-confirm-decline"
+                onPress={confirmDecline}
+                style={[styles.modalButton, { backgroundColor: theme.error }]}
+              >
+                <ThemedText style={{ color: "#FFFFFF", fontWeight: "600" }}>Decline</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -333,5 +396,38 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    alignItems: "center",
+  },
+  modalIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    width: "100%",
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    alignItems: "center",
   },
 });

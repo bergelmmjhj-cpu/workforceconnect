@@ -2132,6 +2132,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
+  // My Today Dashboard API
+  // ========================================
+
+  app.get("/api/my-today", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as UserRole;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const today = new Date().toISOString().split("T")[0];
+
+      let todayShiftsQuery = db
+        .select({
+          id: shifts.id,
+          title: shifts.title,
+          date: shifts.date,
+          startTime: shifts.startTime,
+          endTime: shifts.endTime,
+          status: shifts.status,
+          category: shifts.category,
+          workplaceId: shifts.workplaceId,
+          workerUserId: shifts.workerUserId,
+          workplaceName: workplaces.name,
+          workerName: users.fullName,
+        })
+        .from(shifts)
+        .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
+        .leftJoin(users, eq(shifts.workerUserId, users.id))
+        .where(
+          role === "worker"
+            ? and(eq(shifts.date, today), eq(shifts.workerUserId, userId))
+            : eq(shifts.date, today)
+        )
+        .orderBy(shifts.startTime);
+
+      const todayShifts = await todayShiftsQuery;
+
+      let pendingOffers: any[] = [];
+      if (role === "worker") {
+        pendingOffers = await db
+          .select({
+            id: shiftOffers.id,
+            shiftId: shiftOffers.shiftId,
+            status: shiftOffers.status,
+            offeredAt: shiftOffers.offeredAt,
+            shiftTitle: shifts.title,
+            shiftDate: shifts.date,
+            shiftStartTime: shifts.startTime,
+            shiftEndTime: shifts.endTime,
+            workplaceName: workplaces.name,
+          })
+          .from(shiftOffers)
+          .innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id))
+          .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
+          .where(
+            and(
+              eq(shiftOffers.workerId, userId),
+              eq(shiftOffers.status, "pending")
+            )
+          )
+          .orderBy(shifts.date);
+      }
+
+      let pendingRequestsCount = 0;
+      let unfilledTodayCount = 0;
+      if (role === "admin" || role === "hr") {
+        const [reqCount] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(shiftRequests)
+          .where(eq(shiftRequests.status, "pending"));
+        pendingRequestsCount = reqCount?.count || 0;
+
+        unfilledTodayCount = todayShifts.filter(
+          (s) => !s.workerUserId && s.status !== "cancelled"
+        ).length;
+      }
+
+      res.json({
+        today,
+        todayShifts,
+        pendingOffers,
+        pendingRequestsCount,
+        unfilledTodayCount,
+        totalTodayShifts: todayShifts.length,
+      });
+    } catch (error) {
+      console.error("Error fetching my-today data:", error);
+      res.status(500).json({ error: "Failed to fetch today data" });
+    }
+  });
+
   // Shifts API
   // ========================================
 

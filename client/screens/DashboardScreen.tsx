@@ -15,7 +15,7 @@ import { StatCardSkeleton } from "@/components/LoadingSkeleton";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
-import { Spacing } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { getGreeting } from "@/utils/format";
 import { TodoItem, DashboardStats, APIShift } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -25,6 +25,42 @@ import {
   getTitoLogs,
   initializeStorage,
 } from "@/storage";
+
+interface MyTodayData {
+  today: string;
+  todayShifts: Array<{
+    id: string;
+    title: string;
+    date: string;
+    startTime: string;
+    endTime: string | null;
+    status: string;
+    category: string | null;
+    workplaceId: string | null;
+    workerUserId: string | null;
+    workplaceName: string | null;
+    workerName: string | null;
+  }>;
+  pendingOffers: Array<{
+    id: string;
+    shiftId: string;
+    status: string;
+    shiftTitle: string;
+    shiftDate: string;
+    shiftStartTime: string;
+    shiftEndTime: string | null;
+    workplaceName: string | null;
+  }>;
+  pendingRequestsCount: number;
+  unfilledTodayCount: number;
+  totalTodayShifts: number;
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  hotel: "#6366f1",
+  banquet: "#f59e0b",
+  janitorial: "#10b981",
+};
 
 type DashboardNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -48,6 +84,11 @@ export default function DashboardScreen() {
 
   const { data: apiShifts = [], refetch: refetchShifts } = useQuery<APIShift[]>({
     queryKey: ["/api/shifts"],
+  });
+
+  const { data: myToday, refetch: refetchMyToday } = useQuery<MyTodayData>({
+    queryKey: ["/api/my-today"],
+    enabled: !!user,
   });
 
   const loadData = useCallback(async () => {
@@ -167,6 +208,7 @@ export default function DashboardScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     refetchShifts();
+    refetchMyToday();
     await loadData();
     setRefreshing(false);
   }, [loadData]);
@@ -249,6 +291,114 @@ export default function DashboardScreen() {
           ))
         )}
       </View>
+
+      {myToday ? (
+        <View style={styles.myTodaySection}>
+          <ThemedText type="h4" style={styles.sectionTitle}>
+            My Today
+          </ThemedText>
+
+          {(user?.role === "admin" || user?.role === "hr") && myToday.unfilledTodayCount > 0 ? (
+            <Card style={{ ...styles.alertCard, borderLeftColor: "#f59e0b" }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Feather name="alert-triangle" size={16} color="#f59e0b" />
+                <ThemedText style={{ fontSize: 13, fontWeight: "600" }}>
+                  {myToday.unfilledTodayCount} unfilled shift{myToday.unfilledTodayCount !== 1 ? "s" : ""} today
+                </ThemedText>
+              </View>
+            </Card>
+          ) : null}
+
+          {user?.role === "worker" && myToday.pendingOffers.length > 0 ? (
+            <View style={{ marginBottom: Spacing.md }}>
+              <ThemedText style={[styles.subSectionLabel, { color: theme.warning }]}>
+                PENDING OFFERS ({myToday.pendingOffers.length})
+              </ThemedText>
+              {myToday.pendingOffers.map((offer) => (
+                <Card key={offer.id} style={styles.todayShiftCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{offer.shiftTitle}</ThemedText>
+                      <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                        {offer.shiftDate} {offer.shiftStartTime}{offer.shiftEndTime ? ` - ${offer.shiftEndTime}` : ""}
+                      </ThemedText>
+                      {offer.workplaceName ? (
+                        <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{offer.workplaceName}</ThemedText>
+                      ) : null}
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: "#f59e0b20" }]}>
+                      <ThemedText style={{ fontSize: 10, fontWeight: "600", color: "#f59e0b" }}>Pending</ThemedText>
+                    </View>
+                  </View>
+                </Card>
+              ))}
+            </View>
+          ) : null}
+
+          {myToday.todayShifts.length > 0 ? (
+            <View>
+              <ThemedText style={[styles.subSectionLabel, { color: theme.primary }]}>
+                TODAY'S SHIFTS ({myToday.todayShifts.length})
+              </ThemedText>
+              {myToday.todayShifts.map((shift) => (
+                <Pressable
+                  key={shift.id}
+                  onPress={() => navigation.navigate("ShiftDetail", { shiftId: shift.id })}
+                >
+                  <Card style={styles.todayShiftCard}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{shift.title}</ThemedText>
+                        <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                          {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : " (Open)"}
+                        </ThemedText>
+                        {shift.workplaceName ? (
+                          <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workplaceName}</ThemedText>
+                        ) : null}
+                        {shift.workerName ? (
+                          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 }}>
+                            <Feather name="user" size={11} color={theme.textSecondary} />
+                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workerName}</ThemedText>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        {shift.category ? (
+                          <View style={[styles.statusBadge, { backgroundColor: (CATEGORY_COLORS[shift.category] || "#6b7280") + "20" }]}>
+                            <ThemedText style={{ fontSize: 10, fontWeight: "600", color: CATEGORY_COLORS[shift.category] || "#6b7280" }}>
+                              {shift.category.charAt(0).toUpperCase() + shift.category.slice(1)}
+                            </ThemedText>
+                          </View>
+                        ) : null}
+                        <View style={[styles.statusBadge, {
+                          backgroundColor: shift.status === "completed" ? "#10b98120" :
+                            shift.status === "in_progress" ? "#3b82f620" :
+                            shift.status === "cancelled" ? "#ef444420" : theme.primary + "15"
+                        }]}>
+                          <ThemedText style={{ fontSize: 10, fontWeight: "600", color:
+                            shift.status === "completed" ? "#10b981" :
+                            shift.status === "in_progress" ? "#3b82f6" :
+                            shift.status === "cancelled" ? "#ef4444" : theme.primary
+                          }}>
+                            {shift.status.charAt(0).toUpperCase() + shift.status.slice(1).replace("_", " ")}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </View>
+                  </Card>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Card style={styles.emptyTodayCard}>
+              <Feather name="sun" size={24} color={theme.textSecondary} />
+              <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, fontSize: 13 }}>
+                {user?.role === "worker" ? "No shifts scheduled for today" : "No shifts today"}
+              </ThemedText>
+            </Card>
+          )}
+        </View>
+      ) : null}
 
       {user?.role === "admin" && (
         <View style={styles.quickActionsSection}>
@@ -346,5 +496,35 @@ const styles = StyleSheet.create({
   quickActionDesc: {
     fontSize: 12,
     textAlign: "center",
+  },
+  myTodaySection: {
+    marginBottom: Spacing["2xl"],
+  },
+  subSectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginBottom: Spacing.sm,
+  },
+  alertCard: {
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    borderLeftWidth: 3,
+  },
+  todayShiftCard: {
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  emptyTodayCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.xl,
   },
 });

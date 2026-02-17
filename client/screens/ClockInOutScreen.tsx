@@ -1,29 +1,25 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   View,
   StyleSheet,
   ActivityIndicator,
   Platform,
   Linking,
-  ScrollView,
   Modal,
   Pressable,
+  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Card } from "@/components/Card";
-import { Button } from "@/components/Button";
-import { StatusPill } from "@/components/StatusPill";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { Shift, TitoLog, LocationCoordinates } from "@/types";
-import { getShift, getTitoLogs, createTitoLog, updateTitoLog } from "@/storage";
+import { LocationCoordinates } from "@/types";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import {
   calculateDistance,
   formatDistance,
@@ -34,28 +30,71 @@ import {
 } from "@/utils/location";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
+const isNative = Platform.OS === "ios" || Platform.OS === "android";
+let MapView: any = null;
+let Circle: any = null;
+let Marker: any = null;
+if (isNative) {
+  try {
+    const Maps = require("react-native-maps");
+    MapView = Maps.default;
+    Circle = Maps.Circle;
+    Marker = Maps.Marker;
+  } catch {}
+}
+
 type ClockInOutRouteProp = RouteProp<RootStackParamList, "ClockInOut">;
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const BIG_BUTTON_SIZE = 120;
+
+interface ShiftData {
+  id: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string | null;
+  status: string;
+  workplaceId: string;
+  workplaceName: string | null;
+  workerUserId: string | null;
+  roleType?: string;
+  category?: string;
+  latitude?: number;
+  longitude?: number;
+  geofenceRadiusMeters?: number;
+}
+
+interface TitoLogData {
+  id: string;
+  timeIn: string;
+  timeOut: string | null;
+  timeInGpsVerified: boolean;
+  timeOutGpsVerified: boolean | null;
+  status: string;
+  timeInDistanceMeters: number | null;
+  timeOutDistanceMeters: number | null;
+}
 
 export default function ClockInOutScreen() {
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<ClockInOutRouteProp>();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const mapRef = useRef<any>(null);
 
-  const [shift, setShift] = useState<Shift | null>(null);
-  const [titoLog, setTitoLog] = useState<TitoLog | null>(null);
+  const [shift, setShift] = useState<ShiftData | null>(null);
+  const [titoLog, setTitoLog] = useState<TitoLogData | null>(null);
   const [userLocation, setUserLocation] = useState<LocationCoordinates | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isClockingIn, setIsClockingIn] = useState(false);
   const [isClockingOut, setIsClockingOut] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
-
-  const isWeb = Platform.OS === "web";
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -63,8 +102,11 @@ export default function ClockInOutScreen() {
   }, []);
 
   useEffect(() => {
-    if (userLocation && shift?.locationCoordinates) {
-      const dist = calculateDistance(userLocation, shift.locationCoordinates);
+    if (userLocation && shift?.latitude && shift?.longitude) {
+      const dist = calculateDistance(userLocation, {
+        latitude: shift.latitude,
+        longitude: shift.longitude,
+      });
       setDistance(dist);
     }
   }, [userLocation, shift]);
@@ -84,16 +126,66 @@ export default function ClockInOutScreen() {
         setIsLoading(false);
         return;
       }
-      
-      const shiftData = await getShift(shiftId);
-      setShift(shiftData);
 
-      if (shiftData && user) {
-        const logs = await getTitoLogs(user.id, user.role);
-        const existingLog = logs.find(
-          (l) => l.shiftId === shiftData.id && !l.timeOut
-        );
-        setTitoLog(existingLog || null);
+      const baseUrl = getApiUrl();
+      const shiftRes = await fetch(new URL(`/api/shifts?shiftId=${shiftId}`, baseUrl).toString(), {
+        headers: {
+          "x-user-id": user?.id || "",
+          "x-user-role": user?.role || "",
+        },
+      });
+      const shiftsData = await shiftRes.json();
+      let shiftItem = Array.isArray(shiftsData)
+        ? shiftsData.find((s: any) => s.id === shiftId)
+        : null;
+
+      if (!shiftItem && shiftsData?.id) {
+        shiftItem = shiftsData;
+      }
+
+      if (shiftItem?.workplaceId) {
+        try {
+          const wpRes = await fetch(new URL(`/api/workplaces/${shiftItem.workplaceId}`, baseUrl).toString(), {
+            headers: {
+              "x-user-id": user?.id || "",
+              "x-user-role": user?.role || "",
+            },
+          });
+          if (wpRes.ok) {
+            const wp = await wpRes.json();
+            shiftItem.latitude = wp.latitude;
+            shiftItem.longitude = wp.longitude;
+            shiftItem.geofenceRadiusMeters = wp.geofenceRadiusMeters || 150;
+            if (!shiftItem.workplaceName) shiftItem.workplaceName = wp.name;
+          }
+        } catch {}
+      }
+
+      setShift(shiftItem || null);
+
+      if (shiftItem && user) {
+        try {
+          const titoRes = await fetch(new URL("/api/tito/my-logs", baseUrl).toString(), {
+            headers: {
+              "x-user-id": user.id,
+              "x-user-role": user.role,
+            },
+          });
+          if (titoRes.ok) {
+            const logs = await titoRes.json();
+            const existingLog = Array.isArray(logs)
+              ? logs.find((l: any) => l.shiftId === shiftItem.id && !l.timeOut)
+              : null;
+            if (existingLog) {
+              setTitoLog(existingLog);
+            } else {
+              const completedLog = Array.isArray(logs)
+                ? logs.find((l: any) => l.shiftId === shiftItem.id && l.timeOut)
+                : null;
+              if (completedLog) setTitoLog(completedLog);
+            }
+          }
+        } catch {}
       }
     } catch (error) {
       console.error("Failed to load shift:", error);
@@ -103,12 +195,10 @@ export default function ClockInOutScreen() {
   };
 
   const refreshLocation = async () => {
-    setIsRefreshing(true);
     const location = await getCurrentLocation();
     if (location) {
       setUserLocation(location);
     }
-    setIsRefreshing(false);
   };
 
   const handleRequestPermission = async () => {
@@ -117,17 +207,6 @@ export default function ClockInOutScreen() {
     setLocationPermission(granted);
     if (granted) {
       refreshLocation();
-    }
-  };
-
-  const handleOpenSettings = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (Platform.OS !== "web") {
-      try {
-        await Linking.openSettings();
-      } catch (error) {
-        console.error("Cannot open settings:", error);
-      }
     }
   };
 
@@ -149,49 +228,55 @@ export default function ClockInOutScreen() {
     shiftStart.setHours(hours, minutes, 0, 0);
     const diffMinutes = Math.ceil((shiftStart.getTime() - now.getTime()) / (1000 * 60));
     if (diffMinutes > 15) {
-      return `Clock-in opens ${diffMinutes} min before shift (${shift.startTime})`;
+      const hrs = Math.floor(diffMinutes / 60);
+      const mins = diffMinutes % 60;
+      const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins} min`;
+      return `Clock-in opens in ${timeStr}`;
     }
     return "";
   }, [shift?.startTime, shift?.date]);
 
+  const isWithinGeofence =
+    distance !== null && shift?.geofenceRadiusMeters
+      ? distance <= shift.geofenceRadiusMeters
+      : false;
+
+  const canClockIn =
+    !titoLog && isWithinGeofence && isWithinClockInWindow && shift?.latitude != null;
+  const canClockOut = titoLog && !titoLog.timeOut && userLocation;
+  const hasCompletedShift = titoLog?.timeOut;
+
   const handleClockIn = async () => {
-    if (!shift || !userLocation || !user || !shift.locationCoordinates) return;
-
-    const withinRadius = isWithinRadius(
-      userLocation,
-      shift.locationCoordinates,
-      shift.geofenceRadius
-    );
-
-    if (!withinRadius) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-
-    if (!isWithinClockInWindow) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-
+    if (!shift || !userLocation || !user) return;
+    setErrorMessage(null);
     setIsClockingIn(true);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      const newLog = await createTitoLog({
+      const res = await apiRequest("POST", "/api/tito/time-in", {
+        workplaceId: shift.workplaceId,
         shiftId: shift.id,
-        workerId: user.id,
-        workerName: user.fullName,
-        timeIn: new Date().toISOString(),
-        timeInLocation: shift.locationMajorIntersection,
-        timeInCoordinates: userLocation,
-        timeInDistance: distance || 0,
-        verificationMethod: "gps",
-        status: "pending",
-        shiftDate: new Date().toISOString().split("T")[0],
+        gpsLat: userLocation.latitude,
+        gpsLng: userLocation.longitude,
       });
-      setTitoLog(newLog);
-    } catch (error) {
-      console.error("Failed to clock in:", error);
+      const data = await res.json();
+      if (data.success) {
+        setTitoLog({
+          id: data.titoLogId,
+          timeIn: data.timeIn || new Date().toISOString(),
+          timeOut: null,
+          timeInGpsVerified: data.gpsVerified,
+          timeOutGpsVerified: null,
+          status: "pending",
+          timeInDistanceMeters: data.distance,
+          timeOutDistanceMeters: null,
+        });
+      } else {
+        setErrorMessage(data.error || "Failed to clock in");
+      }
+    } catch (error: any) {
+      const msg = error?.data?.error || error?.message || "Failed to clock in";
+      setErrorMessage(msg);
     } finally {
       setIsClockingIn(false);
     }
@@ -208,46 +293,43 @@ export default function ClockInOutScreen() {
 
   const executeClockOut = async () => {
     if (!shift || !userLocation || !titoLog) return;
-
     setShowClockOutConfirm(false);
+    setErrorMessage(null);
     setIsClockingOut(true);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      const updated = await updateTitoLog(titoLog.id, {
-        timeOut: new Date().toISOString(),
-        timeOutLocation: shift.locationMajorIntersection,
-        timeOutCoordinates: userLocation,
-        timeOutDistance: distance || 0,
+      const res = await apiRequest("POST", "/api/tito/time-out", {
+        titoLogId: titoLog.id,
+        gpsLat: userLocation.latitude,
+        gpsLng: userLocation.longitude,
       });
-      if (updated) {
-        setTitoLog(updated);
+      const data = await res.json();
+      if (data.success) {
+        setTitoLog({
+          ...titoLog,
+          timeOut: data.timeOut || new Date().toISOString(),
+          timeOutGpsVerified: data.gpsVerified,
+          timeOutDistanceMeters: data.distance,
+          status: data.flaggedForReview ? "flagged" : titoLog.status,
+        });
       }
-    } catch (error) {
-      console.error("Failed to clock out:", error);
+    } catch (error: any) {
+      const msg = error?.data?.error || error?.message || "Failed to clock out";
+      setErrorMessage(msg);
     } finally {
       setIsClockingOut(false);
     }
   };
 
-  const isWithinGeofence =
-    distance !== null && shift?.geofenceRadius
-      ? distance <= shift.geofenceRadius
-      : false;
-
-  const canClockIn = !titoLog && isWithinGeofence && isWithinClockInWindow && shift?.locationCoordinates;
-  const canClockOut =
-    titoLog && !titoLog.timeOut && userLocation && shift?.locationCoordinates;
-  const hasCompletedShift = titoLog?.timeOut;
+  const handleLongPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setShowDetailModal(true);
+  };
 
   if (isLoading) {
     return (
-      <View
-        style={[
-          styles.loadingContainer,
-          { backgroundColor: theme.backgroundRoot },
-        ]}
-      >
+      <View style={[styles.fullScreen, { backgroundColor: theme.backgroundRoot }]}>
         <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
@@ -255,301 +337,280 @@ export default function ClockInOutScreen() {
 
   if (!shift) {
     return (
-      <View
-        style={[
-          styles.errorContainer,
-          { backgroundColor: theme.backgroundRoot },
-        ]}
-      >
-        <ThemedText>Shift not found</ThemedText>
+      <View style={[styles.fullScreen, { backgroundColor: theme.backgroundRoot }]}>
+        <Feather name="alert-circle" size={48} color={theme.textMuted} />
+        <ThemedText style={{ marginTop: Spacing.md, color: theme.textSecondary }}>
+          Shift not found
+        </ThemedText>
       </View>
     );
   }
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: Platform.OS === "web" ? Spacing.lg : headerHeight + Spacing.lg,
-          paddingBottom: insets.bottom + Spacing.xl,
-        },
-      ]}
-    >
-      <Card style={styles.shiftCard}>
-        <View style={styles.shiftHeader}>
-          <ThemedText style={styles.shiftRole}>{shift.roleNeeded}</ThemedText>
-          <StatusPill status={shift.status} />
-        </View>
-        <View style={styles.shiftDetail}>
-          <Feather name="map-pin" size={16} color={theme.textSecondary} />
-          <ThemedText style={[styles.shiftText, { color: theme.textSecondary }]}>
-            {shift.locationMajorIntersection}
-          </ThemedText>
-        </View>
-        <View style={styles.shiftDetail}>
-          <Feather name="briefcase" size={16} color={theme.textSecondary} />
-          <ThemedText style={[styles.shiftText, { color: theme.textSecondary }]}>
-            {shift.clientName}
-          </ThemedText>
-        </View>
-        <View style={styles.shiftDetail}>
-          <Feather name="target" size={16} color={theme.textSecondary} />
-          <ThemedText style={[styles.shiftText, { color: theme.textSecondary }]}>
-            {shift.geofenceRadius}m geofence radius
-          </ThemedText>
-        </View>
-      </Card>
+  const workplaceCoords =
+    shift.latitude != null && shift.longitude != null
+      ? { latitude: shift.latitude, longitude: shift.longitude }
+      : null;
 
+  const geofenceRadius = shift.geofenceRadiusMeters || 150;
+
+  const mapRegion = workplaceCoords
+    ? {
+        latitude: workplaceCoords.latitude,
+        longitude: workplaceCoords.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }
+    : userLocation
+    ? {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }
+    : null;
+
+  const buttonColor = hasCompletedShift
+    ? theme.success
+    : titoLog && !titoLog.timeOut
+    ? "#EF4444"
+    : canClockIn
+    ? "#5B9BD5"
+    : theme.textMuted;
+
+  const buttonLabel = hasCompletedShift
+    ? "Completed"
+    : titoLog && !titoLog.timeOut
+    ? "End shift"
+    : "Start shift";
+
+  const buttonIcon = hasCompletedShift
+    ? "check-circle"
+    : titoLog && !titoLog.timeOut
+    ? "square"
+    : "clock";
+
+  const isButtonDisabled =
+    hasCompletedShift ||
+    isClockingIn ||
+    isClockingOut ||
+    (!titoLog && !canClockIn);
+
+  const handleBigButtonPress = () => {
+    if (hasCompletedShift) return;
+    if (titoLog && !titoLog.timeOut) {
+      handleClockOutPress();
+    } else if (canClockIn) {
+      handleClockIn();
+    }
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       {locationPermission === false ? (
-        <Card style={styles.permissionCard}>
-          <View style={styles.permissionContent}>
-            <View
-              style={[
-                styles.permissionIcon,
-                { backgroundColor: theme.warning + "20" },
-              ]}
-            >
-              <Feather name="map-pin" size={32} color={theme.warning} />
-            </View>
-            <ThemedText style={styles.permissionTitle}>
-              Location Access Required
-            </ThemedText>
-            <ThemedText
-              style={[styles.permissionText, { color: theme.textSecondary }]}
-            >
-              To clock in or out, we need to verify you're at the work site.
-              Please enable location access.
-            </ThemedText>
-            <Button onPress={handleRequestPermission} style={styles.permissionButton}>
-              Enable Location
-            </Button>
-            {Platform.OS !== "web" && (
-              <Button onPress={handleOpenSettings} style={styles.settingsButton}>
-                Open Settings
-              </Button>
-            )}
+        <View style={[styles.fullScreen, { backgroundColor: theme.backgroundRoot }]}>
+          <View style={[styles.permIcon, { backgroundColor: theme.warning + "20" }]}>
+            <Feather name="map-pin" size={40} color={theme.warning} />
           </View>
-        </Card>
-      ) : locationPermission === null ? (
-        <Card style={styles.permissionCard}>
-          <View style={styles.permissionContent}>
-            <ActivityIndicator size="large" color={theme.primary} />
-            <ThemedText style={[styles.permissionText, { marginTop: Spacing.md }]}>
-              Checking location permissions...
-            </ThemedText>
-          </View>
-        </Card>
+          <ThemedText style={styles.permTitle}>Location Access Required</ThemedText>
+          <ThemedText style={[styles.permText, { color: theme.textSecondary }]}>
+            We need your location to verify you are at the work site.
+          </ThemedText>
+          <Pressable
+            onPress={handleRequestPermission}
+            style={[styles.permButton, { backgroundColor: theme.primary }]}
+          >
+            <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Enable Location</ThemedText>
+          </Pressable>
+          {Platform.OS !== "web" ? (
+            <Pressable
+              onPress={() => {
+                try { Linking.openSettings(); } catch {}
+              }}
+              style={[styles.permButton, { backgroundColor: theme.backgroundSecondary, marginTop: Spacing.sm }]}
+            >
+              <ThemedText style={{ fontWeight: "600" }}>Open Settings</ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
       ) : (
         <>
-          <Card style={styles.locationCard}>
-            <View style={styles.locationHeader}>
-              <View style={styles.locationIcon}>
-                <Feather name="navigation" size={24} color={theme.primary} />
-              </View>
-              <View style={styles.locationInfo}>
-                <ThemedText style={styles.locationTitle}>
-                  {shift.locationMajorIntersection}
+          <View style={styles.mapContainer}>
+            {isNative && MapView && mapRegion ? (
+              <MapView
+                ref={mapRef}
+                style={StyleSheet.absoluteFillObject}
+                initialRegion={mapRegion}
+                showsUserLocation
+                showsMyLocationButton={false}
+                showsCompass={false}
+              >
+                {workplaceCoords ? (
+                  <>
+                    <Circle
+                      center={workplaceCoords}
+                      radius={geofenceRadius}
+                      fillColor="rgba(91, 155, 213, 0.15)"
+                      strokeColor="rgba(91, 155, 213, 0.4)"
+                      strokeWidth={2}
+                    />
+                    <Marker
+                      coordinate={workplaceCoords}
+                      title={shift.workplaceName || "Work Site"}
+                    />
+                  </>
+                ) : null}
+              </MapView>
+            ) : (
+              <View style={[styles.webMapFallback, { backgroundColor: theme.backgroundSecondary }]}>
+                <Feather name="map" size={64} color={theme.textMuted} />
+                <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.md, textAlign: "center" }}>
+                  {Platform.OS === "web"
+                    ? "Open in Expo Go for live map"
+                    : workplaceCoords
+                    ? "Loading map..."
+                    : "No workplace coordinates configured"}
                 </ThemedText>
-                <ThemedText style={[styles.locationSubtitle, { color: theme.textSecondary }]}>
-                  Work site location
-                </ThemedText>
-              </View>
-            </View>
-            
-            {isWeb && (
-              <View style={[styles.webNotice, { backgroundColor: theme.backgroundSecondary }]}>
-                <Feather name="smartphone" size={16} color={theme.textSecondary} />
-                <ThemedText style={[styles.webNoticeText, { color: theme.textSecondary }]}>
-                  Open in Expo Go for map view
-                </ThemedText>
-              </View>
-            )}
-          </Card>
-
-          <Card style={styles.statusCard}>
-            <View style={styles.statusRow}>
-              <View style={styles.statusItem}>
-                <View
-                  style={[
-                    styles.statusIconContainer,
-                    { backgroundColor: isWithinGeofence ? theme.success + "20" : theme.error + "20" },
-                  ]}
-                >
-                  <Feather
-                    name={isWithinGeofence ? "check-circle" : "x-circle"}
-                    size={24}
-                    color={isWithinGeofence ? theme.success : theme.error}
-                  />
-                </View>
-                <View>
-                  <ThemedText style={styles.statusLabel}>
-                    {isWithinGeofence ? "Within Range" : "Outside Range"}
-                  </ThemedText>
-                  <ThemedText style={[styles.statusHint, { color: theme.textSecondary }]}>
-                    {isWithinGeofence
-                      ? "You can clock in/out"
-                      : `Must be within ${shift.geofenceRadius}m`}
-                  </ThemedText>
-                </View>
-              </View>
-              {distance !== null && (
-                <View style={styles.distanceContainer}>
-                  <ThemedText
-                    style={[
-                      styles.distanceText,
-                      { color: isWithinGeofence ? theme.success : theme.error },
-                    ]}
-                  >
-                    {formatDistance(distance)}
-                  </ThemedText>
-                  <ThemedText style={[styles.distanceLabel, { color: theme.textSecondary }]}>
-                    from site
-                  </ThemedText>
-                </View>
-              )}
-            </View>
-
-            {!isWithinGeofence && distance !== null && (
-              <View style={[styles.warningBanner, { backgroundColor: theme.error + "15" }]}>
-                <Feather name="alert-triangle" size={16} color={theme.error} />
-                <ThemedText style={[styles.warningText, { color: theme.error }]}>
-                  {titoLog && !titoLog.timeOut
-                    ? `You are outside the geofence. Clock-out will be flagged for admin review.`
-                    : `Move ${formatDistance(Math.max(0, distance - shift.geofenceRadius))} closer to clock in`}
-                </ThemedText>
+                {distance !== null ? (
+                  <View style={[styles.distanceBadgeAlt, { backgroundColor: isWithinGeofence ? theme.success + "20" : theme.error + "20" }]}>
+                    <Feather name="navigation" size={14} color={isWithinGeofence ? theme.success : theme.error} />
+                    <ThemedText style={{ color: isWithinGeofence ? theme.success : theme.error, fontWeight: "600", fontSize: 14 }}>
+                      {formatDistance(distance)} away
+                    </ThemedText>
+                  </View>
+                ) : null}
               </View>
             )}
 
-            {clockInTimeMessage ? (
-              <View style={[styles.warningBanner, { backgroundColor: theme.warning + "15" }]}>
-                <Feather name="clock" size={16} color={theme.warning} />
-                <ThemedText style={[styles.warningText, { color: theme.warning }]}>
-                  {clockInTimeMessage}
+            {isNative && distance !== null ? (
+              <View style={[styles.distanceBadge, { backgroundColor: isWithinGeofence ? "#10b981" : "#ef4444" }]}>
+                <Feather name="navigation" size={12} color="#fff" />
+                <ThemedText style={styles.distanceBadgeText}>
+                  {formatDistance(distance)}
                 </ThemedText>
               </View>
             ) : null}
 
-            <Button
-              onPress={refreshLocation}
-              disabled={isRefreshing}
-              style={[styles.refreshButton, { backgroundColor: theme.backgroundSecondary }]}
+            <Pressable
+              onPress={() => refreshLocation()}
+              style={[styles.refreshBtn, { backgroundColor: theme.backgroundRoot }]}
             >
-              <View style={styles.refreshContent}>
-                {isRefreshing ? (
-                  <ActivityIndicator size="small" color={theme.text} />
-                ) : (
-                  <Feather name="refresh-cw" size={16} color={theme.text} />
-                )}
-                <ThemedText style={{ marginLeft: Spacing.sm }}>
-                  {isRefreshing ? "Refreshing..." : "Refresh Location"}
+              <Feather name="crosshair" size={20} color={theme.text} />
+            </Pressable>
+          </View>
+
+          <View style={[styles.bottomPanel, { backgroundColor: theme.backgroundRoot, paddingBottom: insets.bottom + Spacing.md }]}>
+            <View style={styles.shiftInfoRow}>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.shiftTitle} numberOfLines={1}>
+                  {shift.title || shift.roleType || "Shift"}
+                </ThemedText>
+                <ThemedText style={[styles.shiftSub, { color: theme.textSecondary }]} numberOfLines={1}>
+                  {shift.workplaceName || "Unknown Location"} · {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : ""}
                 </ThemedText>
               </View>
-            </Button>
-          </Card>
-
-          {hasCompletedShift ? (
-            <Card style={styles.completedCard}>
-              <Feather name="check-circle" size={48} color={theme.success} />
-              <ThemedText style={styles.completedTitle}>Shift Completed</ThemedText>
-              <ThemedText style={[styles.completedText, { color: theme.textSecondary }]}>
-                You have clocked in and out for this shift.
-              </ThemedText>
-              {titoLog && (
-                <View style={styles.completedTimes}>
-                  <View style={styles.completedTimeRow}>
-                    <Feather name="log-in" size={16} color={theme.success} />
-                    <ThemedText style={{ color: theme.textSecondary }}>In: </ThemedText>
-                    <ThemedText>
-                      {new Date(titoLog.timeIn!).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.completedTimeRow}>
-                    <Feather name="log-out" size={16} color={theme.error} />
-                    <ThemedText style={{ color: theme.textSecondary }}>Out: </ThemedText>
-                    <ThemedText>
-                      {new Date(titoLog.timeOut!).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </ThemedText>
-                  </View>
-                </View>
-              )}
-            </Card>
-          ) : (
-            <View style={styles.actionButtons}>
-              {!titoLog ? (
-                <Button
-                  onPress={handleClockIn}
-                  disabled={!canClockIn || isClockingIn}
-                  style={[
-                    styles.clockButton,
-                    { backgroundColor: canClockIn ? theme.success : theme.textMuted },
-                  ]}
-                >
-                  {isClockingIn ? (
-                    <ActivityIndicator color={theme.buttonText} />
-                  ) : (
-                    <View style={styles.clockButtonContent}>
-                      <Feather name="log-in" size={20} color={theme.buttonText} />
-                      <ThemedText style={[styles.clockButtonText, { color: theme.buttonText }]}>
-                        Clock In
-                      </ThemedText>
-                    </View>
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  onPress={handleClockOutPress}
-                  disabled={!canClockOut || isClockingOut}
-                  style={[
-                    styles.clockButton,
-                    { backgroundColor: canClockOut ? theme.error : theme.textMuted },
-                  ]}
-                >
-                  {isClockingOut ? (
-                    <ActivityIndicator color={theme.buttonText} />
-                  ) : (
-                    <View style={styles.clockButtonContent}>
-                      <Feather name="log-out" size={20} color={theme.buttonText} />
-                      <ThemedText style={[styles.clockButtonText, { color: theme.buttonText }]}>
-                        Clock Out
-                      </ThemedText>
-                    </View>
-                  )}
-                </Button>
-              )}
+              {distance !== null && !isNative ? null : null}
             </View>
-          )}
 
-          {titoLog && !titoLog.timeOut && (
-            <Card style={styles.titoInfoCard}>
-              <View style={styles.titoRow}>
-                <View style={[styles.titoIconContainer, { backgroundColor: theme.success + "20" }]}>
-                  <Feather name="log-in" size={16} color={theme.success} />
-                </View>
-                <View style={styles.titoInfo}>
-                  <ThemedText style={styles.titoLabel}>Clocked In</ThemedText>
-                  <ThemedText style={[styles.titoTime, { color: theme.textSecondary }]}>
-                    {new Date(titoLog.timeIn!).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </ThemedText>
-                </View>
-                {titoLog.timeInDistance !== undefined && (
-                  <ThemedText style={[styles.titoDistance, { color: theme.textMuted }]}>
-                    {formatDistance(titoLog.timeInDistance)} from site
-                  </ThemedText>
-                )}
+            {errorMessage ? (
+              <View style={[styles.errorBanner, { backgroundColor: "#ef444415" }]}>
+                <Feather name="alert-circle" size={14} color="#ef4444" />
+                <ThemedText style={{ color: "#ef4444", fontSize: 13, flex: 1 }}>{errorMessage}</ThemedText>
               </View>
-            </Card>
-          )}
+            ) : null}
+
+            {clockInTimeMessage && !titoLog ? (
+              <View style={[styles.infoBanner, { backgroundColor: theme.warning + "15" }]}>
+                <Feather name="clock" size={14} color={theme.warning} />
+                <ThemedText style={{ color: theme.warning, fontSize: 13, flex: 1 }}>{clockInTimeMessage}</ThemedText>
+              </View>
+            ) : null}
+
+            {!isWithinGeofence && !titoLog && distance !== null ? (
+              <View style={[styles.infoBanner, { backgroundColor: "#ef444415" }]}>
+                <Feather name="alert-triangle" size={14} color="#ef4444" />
+                <ThemedText style={{ color: "#ef4444", fontSize: 13, flex: 1 }}>
+                  Move {formatDistance(Math.max(0, distance - geofenceRadius))} closer to clock in
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {titoLog && !titoLog.timeOut && !isWithinGeofence && distance !== null ? (
+              <View style={[styles.infoBanner, { backgroundColor: theme.warning + "15" }]}>
+                <Feather name="alert-triangle" size={14} color={theme.warning} />
+                <ThemedText style={{ color: theme.warning, fontSize: 13, flex: 1 }}>
+                  Outside geofence. Clock-out will be flagged for review.
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {hasCompletedShift && titoLog ? (
+              <View style={[styles.completedRow, { backgroundColor: theme.success + "12" }]}>
+                <View style={styles.completedTimeItem}>
+                  <Feather name="log-in" size={14} color={theme.success} />
+                  <ThemedText style={{ fontSize: 13, color: theme.success }}>
+                    In: {new Date(titoLog.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </ThemedText>
+                </View>
+                <View style={styles.completedTimeItem}>
+                  <Feather name="log-out" size={14} color={theme.success} />
+                  <ThemedText style={{ fontSize: 13, color: theme.success }}>
+                    Out: {titoLog.timeOut ? new Date(titoLog.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--"}
+                  </ThemedText>
+                </View>
+              </View>
+            ) : null}
+
+            {titoLog && !titoLog.timeOut ? (
+              <View style={[styles.clockedInBanner, { backgroundColor: theme.success + "12" }]}>
+                <Feather name="check-circle" size={14} color={theme.success} />
+                <ThemedText style={{ fontSize: 13, color: theme.success, fontWeight: "500" }}>
+                  Clocked in at {new Date(titoLog.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            <View style={styles.bigButtonRow}>
+              <Pressable
+                onPress={() => navigation.navigate("MainTabs", { screen: "Shifts" })}
+                style={[styles.quickButton, { backgroundColor: theme.backgroundSecondary }]}
+              >
+                <Feather name="check-square" size={22} color={theme.primary} />
+                <ThemedText style={[styles.quickLabel, { color: theme.text }]}>My requests</ThemedText>
+              </Pressable>
+
+              <Pressable
+                onPress={handleBigButtonPress}
+                onLongPress={handleLongPress}
+                disabled={!!(isButtonDisabled && !hasCompletedShift)}
+                style={({ pressed }) => [
+                  styles.bigButton,
+                  {
+                    backgroundColor: buttonColor,
+                    opacity: isButtonDisabled && !hasCompletedShift ? 0.5 : pressed ? 0.85 : 1,
+                    transform: [{ scale: pressed && !isButtonDisabled ? 0.95 : 1 }],
+                  },
+                ]}
+                testID="button-clock-action"
+              >
+                {isClockingIn || isClockingOut ? (
+                  <ActivityIndicator size="large" color="#fff" />
+                ) : (
+                  <>
+                    <Feather name={buttonIcon as any} size={32} color="#fff" />
+                    <ThemedText style={styles.bigButtonLabel}>{buttonLabel}</ThemedText>
+                  </>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => navigation.navigate("MainTabs", { screen: "Time" })}
+                style={[styles.quickButton, { backgroundColor: theme.backgroundSecondary }]}
+              >
+                <Feather name="clock" size={22} color={theme.primary} />
+                <ThemedText style={[styles.quickLabel, { color: theme.text }]}>My timesheet</ThemedText>
+              </Pressable>
+            </View>
+          </View>
         </>
       )}
 
@@ -561,24 +622,24 @@ export default function ClockInOutScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.backgroundRoot }]}>
-            <View style={[styles.modalIconContainer, { backgroundColor: theme.warning + "20" }]}>
+            <View style={[styles.modalIcon, { backgroundColor: theme.warning + "20" }]}>
               <Feather name="alert-triangle" size={32} color={theme.warning} />
             </View>
             <ThemedText style={styles.modalTitle}>Outside Work Site</ThemedText>
-            <ThemedText style={[styles.modalMessage, { color: theme.textSecondary }]}>
-              You are {distance ? formatDistance(distance) : "unknown distance"} from the work site.
+            <ThemedText style={[styles.modalMsg, { color: theme.textSecondary }]}>
+              You are {distance ? formatDistance(distance) : "far"} from the work site.
               Your clock-out will be flagged for admin review.
             </ThemedText>
-            <View style={styles.modalButtons}>
+            <View style={styles.modalBtns}>
               <Pressable
                 onPress={() => setShowClockOutConfirm(false)}
-                style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}
+                style={[styles.modalBtn, { backgroundColor: theme.backgroundSecondary }]}
               >
                 <ThemedText style={{ fontWeight: "600" }}>Cancel</ThemedText>
               </Pressable>
               <Pressable
                 onPress={executeClockOut}
-                style={[styles.modalButton, { backgroundColor: theme.warning }]}
+                style={[styles.modalBtn, { backgroundColor: theme.warning }]}
               >
                 <ThemedText style={{ fontWeight: "600", color: "#fff" }}>Clock Out Anyway</ThemedText>
               </Pressable>
@@ -586,7 +647,68 @@ export default function ClockInOutScreen() {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+
+      <Modal
+        visible={showDetailModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDetailModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowDetailModal(false)}>
+          <View style={[styles.detailModal, { backgroundColor: theme.backgroundRoot }]}>
+            <View style={styles.detailHandle} />
+            <ThemedText style={styles.detailTitle}>{shift.title || shift.roleType || "Shift Details"}</ThemedText>
+            <View style={styles.detailRow}>
+              <Feather name="map-pin" size={16} color={theme.textSecondary} />
+              <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>
+                {shift.workplaceName || "Unknown Location"}
+              </ThemedText>
+            </View>
+            <View style={styles.detailRow}>
+              <Feather name="calendar" size={16} color={theme.textSecondary} />
+              <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>
+                {shift.date}
+              </ThemedText>
+            </View>
+            <View style={styles.detailRow}>
+              <Feather name="clock" size={16} color={theme.textSecondary} />
+              <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>
+                {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : ""}
+              </ThemedText>
+            </View>
+            <View style={styles.detailRow}>
+              <Feather name="target" size={16} color={theme.textSecondary} />
+              <ThemedText style={[styles.detailText, { color: theme.textSecondary }]}>
+                {geofenceRadius}m geofence radius
+              </ThemedText>
+            </View>
+            {distance !== null ? (
+              <View style={styles.detailRow}>
+                <Feather name="navigation" size={16} color={isWithinGeofence ? theme.success : theme.error} />
+                <ThemedText style={{ color: isWithinGeofence ? theme.success : theme.error, fontSize: 14 }}>
+                  {formatDistance(distance)} from work site {isWithinGeofence ? "(within range)" : "(outside range)"}
+                </ThemedText>
+              </View>
+            ) : null}
+            {titoLog ? (
+              <View style={[styles.detailRow, { marginTop: Spacing.sm }]}>
+                <Feather name="log-in" size={16} color={theme.success} />
+                <ThemedText style={{ fontSize: 14, color: theme.textSecondary }}>
+                  Clocked in: {new Date(titoLog.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {titoLog.timeOut ? ` | Out: ${new Date(titoLog.timeOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                </ThemedText>
+              </View>
+            ) : null}
+            <Pressable
+              onPress={() => setShowDetailModal(false)}
+              style={[styles.detailCloseBtn, { backgroundColor: theme.primary }]}
+            >
+              <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Close</ThemedText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
   );
 }
 
@@ -594,231 +716,182 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.lg,
-  },
-  loadingContainer: {
+  fullScreen: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: Spacing.xl,
   },
-  errorContainer: {
+  mapContainer: {
+    flex: 1,
+  },
+  webMapFallback: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: Spacing.xl,
   },
-  shiftCard: {
-    padding: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  shiftHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.xs,
-  },
-  shiftRole: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  shiftDetail: {
+  distanceBadge: {
+    position: "absolute",
+    top: 60,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  shiftText: {
-    fontSize: 14,
-  },
-  locationCard: {
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  locationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-  },
-  locationIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#E0E7FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  locationTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  locationSubtitle: {
+  distanceBadgeText: {
+    color: "#fff",
     fontSize: 13,
-  },
-  webNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    padding: Spacing.sm,
-    borderRadius: BorderRadius.sm,
-  },
-  webNoticeText: {
-    fontSize: 13,
-  },
-  statusCard: {
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  statusRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statusItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-  },
-  statusIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  statusHint: {
-    fontSize: 13,
-  },
-  distanceContainer: {
-    alignItems: "flex-end",
-  },
-  distanceText: {
-    fontSize: 24,
     fontWeight: "700",
   },
-  distanceLabel: {
-    fontSize: 12,
-  },
-  warningBanner: {
+  distanceBadgeAlt: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: Spacing.md,
   },
-  warningText: {
-    fontSize: 14,
-    flex: 1,
-  },
-  refreshButton: {
-    marginTop: Spacing.sm,
-  },
-  refreshContent: {
-    flexDirection: "row",
-    alignItems: "center",
+  refreshBtn: {
+    position: "absolute",
+    top: 60,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  actionButtons: {
-    gap: Spacing.md,
+  bottomPanel: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  clockButton: {
-    height: 56,
-  },
-  clockButtonContent: {
+  shiftInfoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
-  clockButtonText: {
-    fontSize: 18,
-    fontWeight: "600",
+  shiftTitle: {
+    fontSize: 17,
+    fontWeight: "700",
   },
-  completedCard: {
-    padding: Spacing.xl,
+  shiftSub: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  errorBanner: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.md,
+    gap: 8,
+    padding: 10,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
   },
-  completedTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+  infoBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
   },
-  completedText: {
+  completedRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    padding: 10,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+  },
+  completedTimeItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  clockedInBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+  },
+  bigButtonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingTop: Spacing.md,
+  },
+  quickButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  quickLabel: {
+    fontSize: 11,
+    fontWeight: "500",
     textAlign: "center",
   },
-  completedTimes: {
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  completedTimeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  titoInfoCard: {
-    padding: Spacing.lg,
-  },
-  titoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-  },
-  titoIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
+  bigButton: {
+    width: BIG_BUTTON_SIZE,
+    height: BIG_BUTTON_SIZE,
+    borderRadius: BIG_BUTTON_SIZE / 2,
     justifyContent: "center",
-  },
-  titoInfo: {
-    flex: 1,
-  },
-  titoLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  titoTime: {
-    fontSize: 13,
-  },
-  titoDistance: {
-    fontSize: 12,
-  },
-  permissionCard: {
-    padding: Spacing.xl,
-  },
-  permissionContent: {
     alignItems: "center",
-    gap: Spacing.md,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  permissionIcon: {
+  bigButtonLabel: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  permIcon: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    alignItems: "center",
     justifyContent: "center",
+    alignItems: "center",
+    marginBottom: Spacing.lg,
+  },
+  permTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
     marginBottom: Spacing.sm,
   },
-  permissionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  permissionText: {
+  permText: {
     fontSize: 15,
     textAlign: "center",
     lineHeight: 22,
+    marginBottom: Spacing.lg,
   },
-  permissionButton: {
-    marginTop: Spacing.md,
-    width: "100%",
-  },
-  settingsButton: {
-    width: "100%",
+  permButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.md,
   },
   modalOverlay: {
     flex: 1,
@@ -835,7 +908,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.md,
   },
-  modalIconContainer: {
+  modalIcon: {
     width: 64,
     height: 64,
     borderRadius: 32,
@@ -846,21 +919,60 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  modalMessage: {
+  modalMsg: {
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
   },
-  modalButtons: {
+  modalBtns: {
     flexDirection: "row",
     gap: Spacing.md,
     marginTop: Spacing.sm,
     width: "100%",
   },
-  modalButton: {
+  modalBtn: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: BorderRadius.md,
     alignItems: "center",
+  },
+  detailModal: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: Spacing.xl,
+    paddingTop: Spacing.md,
+  },
+  detailHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#ccc",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: Spacing.lg,
+  },
+  detailTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: Spacing.lg,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  detailText: {
+    fontSize: 14,
+  },
+  detailCloseBtn: {
+    marginTop: Spacing.lg,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    width: "100%",
   },
 });

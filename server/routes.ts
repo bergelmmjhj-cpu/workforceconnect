@@ -1909,6 +1909,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/workplaces/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const workplaceId = req.params.id;
+      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
+      if (!workplace) {
+        res.status(404).json({ error: "Workplace not found" });
+        return;
+      }
+
+      const workplaceShifts = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.workplaceId, workplaceId));
+      if (workplaceShifts.length > 0) {
+        const shiftIds = workplaceShifts.map(s => s.id);
+        await db.delete(shiftOffers).where(inArray(shiftOffers.shiftId, shiftIds));
+        await db.delete(shiftCheckins).where(inArray(shiftCheckins.shiftId, shiftIds));
+        await db.delete(sentReminders).where(inArray(sentReminders.shiftId, shiftIds));
+      }
+      await db.delete(shifts).where(eq(shifts.workplaceId, workplaceId));
+
+      await db.delete(shiftSeries).where(eq(shiftSeries.workplaceId, workplaceId));
+      await db.delete(shiftRequests).where(eq(shiftRequests.workplaceId, workplaceId));
+      await db.delete(workplaceAssignments).where(eq(workplaceAssignments.workplaceId, workplaceId));
+      await db.delete(titoLogs).where(eq(titoLogs.workplaceId, workplaceId));
+      await db.update(timesheetEntries).set({ workplaceId: null }).where(eq(timesheetEntries.workplaceId, workplaceId));
+      await db.update(exportAuditLogs).set({ workplaceId: null }).where(eq(exportAuditLogs.workplaceId, workplaceId));
+
+      await db.delete(workplaces).where(eq(workplaces.id, workplaceId));
+
+      broadcast({ type: "deleted", entity: "workplace", id: workplaceId });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting workplace:", error);
+      res.status(500).json({ error: "Failed to delete workplace" });
+    }
+  });
+
   // ========================================
   // Workplace Assignments API (Admin only)
   // ========================================

@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   businessName: text("business_name"), // For clients
   businessAddress: text("business_address"),
   businessPhone: text("business_phone"),
+  profilePhotoUrl: text("profile_photo_url"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

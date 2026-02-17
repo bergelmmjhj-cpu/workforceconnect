@@ -4245,6 +4245,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // In-App Notifications
   // ========================================
 
+  // ========================================
+  // Profile Photo API
+  // ========================================
+
+  app.post("/api/profile-photo", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const { photoData } = req.body;
+      if (!photoData || typeof photoData !== "string") {
+        res.status(400).json({ error: "Photo data is required" });
+        return;
+      }
+
+      if (!photoData.startsWith("data:image/")) {
+        res.status(400).json({ error: "Invalid image format. Must be a base64 data URI." });
+        return;
+      }
+
+      const sizeInBytes = Buffer.byteLength(photoData, "utf8");
+      if (sizeInBytes > 5 * 1024 * 1024) {
+        res.status(400).json({ error: "Photo is too large. Maximum 5MB allowed." });
+        return;
+      }
+
+      const [photo] = await db.insert(userPhotos).values({
+        userId,
+        url: photoData,
+        status: "pending_review",
+      }).returning();
+
+      res.json({ photo: { id: photo.id, status: photo.status, createdAt: photo.createdAt } });
+    } catch (error) {
+      console.error("Error uploading profile photo:", error);
+      res.status(500).json({ error: "Failed to upload photo" });
+    }
+  });
+
+  app.get("/api/profile-photo", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const targetUserId = (req.query.userId as string) || userId;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const photos = await db
+        .select()
+        .from(userPhotos)
+        .where(eq(userPhotos.userId, targetUserId))
+        .orderBy(desc(userPhotos.createdAt))
+        .limit(1);
+
+      res.json({ photo: photos[0] || null });
+    } catch (error) {
+      console.error("Error fetching profile photo:", error);
+      res.status(500).json({ error: "Failed to fetch photo" });
+    }
+  });
+
+  app.get("/api/admin/photos-pending", async (req: Request, res: Response) => {
+    try {
+      const role = req.headers["x-user-role"] as string;
+      if (role !== "admin" && role !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const pendingPhotos = await db
+        .select({
+          id: userPhotos.id,
+          userId: userPhotos.userId,
+          url: userPhotos.url,
+          status: userPhotos.status,
+          createdAt: userPhotos.createdAt,
+          userName: users.fullName,
+          userEmail: users.email,
+        })
+        .from(userPhotos)
+        .innerJoin(users, eq(userPhotos.userId, users.id))
+        .where(eq(userPhotos.status, "pending_review"))
+        .orderBy(desc(userPhotos.createdAt));
+
+      res.json({ photos: pendingPhotos });
+    } catch (error) {
+      console.error("Error fetching pending photos:", error);
+      res.status(500).json({ error: "Failed to fetch pending photos" });
+    }
+  });
+
+  app.patch("/api/admin/photos/:photoId/review", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as string;
+      if (role !== "admin" && role !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { photoId } = req.params;
+      const { action, rejectionReason } = req.body;
+
+      if (!["approve", "reject"].includes(action)) {
+        res.status(400).json({ error: "Action must be 'approve' or 'reject'" });
+        return;
+      }
+
+      const newStatus = action === "approve" ? "approved" : "rejected";
+
+      const [updated] = await db.update(userPhotos)
+        .set({
+          status: newStatus,
+          reviewerId: userId,
+          reviewedAt: new Date(),
+          rejectionReason: action === "reject" ? (rejectionReason || "Photo does not meet requirements") : null,
+        })
+        .where(eq(userPhotos.id, photoId))
+        .returning();
+
+      if (!updated) {
+        res.status(404).json({ error: "Photo not found" });
+        return;
+      }
+
+      if (action === "approve") {
+        await db.update(users)
+          .set({ profilePhotoUrl: updated.url })
+          .where(eq(users.id, updated.userId));
+      }
+
+      const notifTitle = action === "approve" ? "Photo Approved" : "Photo Rejected";
+      const notifBody = action === "approve"
+        ? "Your profile photo has been approved."
+        : `Your profile photo was rejected: ${rejectionReason || "Does not meet requirements"}`;
+
+      await db.insert(appNotifications).values({
+        userId: updated.userId,
+        title: notifTitle,
+        body: notifBody,
+        type: "photo_review",
+      });
+
+      sendPushNotifications([updated.userId], notifTitle, notifBody, { type: "photo_review" });
+
+      res.json({ photo: { id: updated.id, status: updated.status } });
+    } catch (error) {
+      console.error("Error reviewing photo:", error);
+      res.status(500).json({ error: "Failed to review photo" });
+    }
+  });
+
+  // ========================================
+  // Notifications API
+  // ========================================
+
   app.get("/api/notifications", async (req: Request, res: Response) => {
     try {
       const userId = req.headers["x-user-id"] as string;

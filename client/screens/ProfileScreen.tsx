@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, Switch, ScrollView, TextInput, Modal } from "react-native";
+import { View, StyleSheet, Pressable, Switch, ScrollView, TextInput, Modal, Image, Platform } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
@@ -55,6 +56,22 @@ export default function ProfileScreen() {
   const [resetResult, setResetResult] = useState<any>(null);
 
   const queryClient = useQueryClient();
+
+  const { data: photoData, refetch: refetchPhoto } = useQuery<any>({
+    queryKey: ["/api/profile-photo"],
+  });
+
+  const uploadPhotoMutation = useMutation({
+    mutationFn: async (photoData: string) => {
+      const res = await apiRequest("POST", "/api/profile-photo", { photoData });
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchPhoto();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+  });
+
   const { data: paymentProfile } = useQuery<any>({
     queryKey: ["/api/payment-profile"],
     enabled: user?.role === "worker",
@@ -154,6 +171,43 @@ export default function ProfileScreen() {
     setShowPaymentModal(true);
   };
 
+  const handlePickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      const mimeType = result.assets[0].mimeType || "image/jpeg";
+      const dataUri = `data:${mimeType};base64,${result.assets[0].base64}`;
+      uploadPhotoMutation.mutate(dataUri);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      const mimeType = result.assets[0].mimeType || "image/jpeg";
+      const dataUri = `data:${mimeType};base64,${result.assets[0].base64}`;
+      uploadPhotoMutation.mutate(dataUri);
+    }
+  };
+
   const handleSavePayment = () => {
     savePaymentMutation.mutate({
       paymentMethod: "both",
@@ -178,7 +232,44 @@ export default function ProfileScreen() {
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >
       <View style={styles.header}>
-        <Avatar name={user?.fullName} role={user?.role} size={80} />
+        <Pressable onPress={handlePickPhoto} testID="button-upload-photo">
+          {photoData?.photo?.url ? (
+            <Image
+              source={{ uri: photoData.photo.url }}
+              style={{ width: 80, height: 80, borderRadius: 40 }}
+            />
+          ) : (
+            <Avatar name={user?.fullName || "User"} size={80} />
+          )}
+          <View style={[styles.photoEditBadge, { backgroundColor: theme.primary }]}>
+            <Feather name="camera" size={14} color="#fff" />
+          </View>
+        </Pressable>
+        {photoData?.photo ? (
+          <View style={[styles.photoStatusBadge, {
+            backgroundColor: photoData.photo.status === "approved" ? "#10b98120" :
+              photoData.photo.status === "rejected" ? "#ef444420" : "#f59e0b20"
+          }]}>
+            <ThemedText style={{
+              fontSize: 11,
+              fontWeight: "600",
+              color: photoData.photo.status === "approved" ? "#10b981" :
+                photoData.photo.status === "rejected" ? "#ef4444" : "#f59e0b"
+            }}>
+              {photoData.photo.status === "approved" ? "Photo Approved" :
+                photoData.photo.status === "rejected" ? "Photo Rejected" : "Photo Under Review"}
+            </ThemedText>
+          </View>
+        ) : (
+          <ThemedText style={{ fontSize: 11, color: theme.warning, marginTop: Spacing.xs }}>
+            Photo required
+          </ThemedText>
+        )}
+        {uploadPhotoMutation.isPending ? (
+          <ThemedText style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
+            Uploading...
+          </ThemedText>
+        ) : null}
         <ThemedText type="h2" style={styles.name}>
           {user?.fullName}
         </ThemedText>
@@ -867,5 +958,21 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.md,
+  },
+  photoEditBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoStatusBadge: {
+    marginTop: Spacing.xs,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
   },
 });

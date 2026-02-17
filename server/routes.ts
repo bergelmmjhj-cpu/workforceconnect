@@ -4650,6 +4650,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================
+  // Automated Shift Reminders (runs every 15 minutes)
+  // ========================================
+
+  async function processShiftReminders() {
+    try {
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+      const upcomingShifts = await db
+        .select({
+          id: shifts.id,
+          title: shifts.title,
+          date: shifts.date,
+          startTime: shifts.startTime,
+          workerUserId: shifts.workerUserId,
+          workplaceName: workplaces.name,
+        })
+        .from(shifts)
+        .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
+        .where(
+          and(
+            or(eq(shifts.date, today), eq(shifts.date, tomorrow)),
+            eq(shifts.status, "scheduled"),
+            sql`${shifts.workerUserId} IS NOT NULL`
+          )
+        );
+
+      for (const shift of upcomingShifts) {
+        if (!shift.workerUserId) continue;
+
+        const isToday = shift.date === today;
+        const reminderType = isToday ? "day_of" : "day_before";
+
+        const existing = await db
+          .select()
+          .from(sentReminders)
+          .where(
+            and(
+              eq(sentReminders.shiftId, shift.id),
+              eq(sentReminders.workerId, shift.workerUserId),
+              eq(sentReminders.reminderType, reminderType)
+            )
+          )
+          .limit(1);
+
+        if (existing.length > 0) continue;
+
+        const title = isToday ? "Shift Today" : "Shift Tomorrow";
+        const body = `${shift.title} at ${shift.workplaceName || "workplace"} - ${shift.startTime}`;
+
+        try {
+          await sendPushNotifications([shift.workerUserId], title, body, {
+            type: "shift_reminder",
+            shiftId: shift.id,
+          });
+
+          await db.insert(sentReminders).values({
+            shiftId: shift.id,
+            workerId: shift.workerUserId,
+            reminderType,
+          });
+
+          await db.insert(appNotifications).values({
+            userId: shift.workerUserId,
+            title,
+            body,
+            type: "shift_reminder",
+            data: JSON.stringify({ shiftId: shift.id }),
+          });
+        } catch (err) {
+          console.error(`Failed to send reminder for shift ${shift.id}:`, err);
+        }
+      }
+    } catch (error) {
+      console.error("Error processing shift reminders:", error);
+    }
+  }
+
+  processShiftReminders();
+  setInterval(processShiftReminders, 15 * 60 * 1000);
+
   const httpServer = createServer(app);
 
   return httpServer;

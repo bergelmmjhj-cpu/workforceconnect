@@ -62,7 +62,7 @@ export default function ShiftOffersScreen() {
 
   const { data: offers = [], isLoading, refetch, isRefetching } = useQuery<ShiftOffer[]>({
     queryKey: ["/api/shift-offers"],
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const respondMutation = useMutation({
@@ -137,7 +137,14 @@ export default function ShiftOffersScreen() {
           <ThemedText type="h4" style={styles.roleText}>
             {item.shiftRoleType || item.shiftTitle}
           </ThemedText>
-          <StatusPill status={getStatusForPill(item.status)} size="sm" />
+          {item.status === "cancelled" ? (
+            <View style={[styles.filledPill, { backgroundColor: theme.backgroundSecondary }]}>
+              <Feather name="user-check" size={12} color={theme.textMuted} />
+              <ThemedText style={{ fontSize: 11, fontWeight: "600", color: theme.textMuted }}>Filled</ThemedText>
+            </View>
+          ) : (
+            <StatusPill status={getStatusForPill(item.status)} size="sm" />
+          )}
         </View>
 
         {item.workplaceName ? (
@@ -429,5 +436,13 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.lg,
     alignItems: "center",
+  },
+  filledPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
 });

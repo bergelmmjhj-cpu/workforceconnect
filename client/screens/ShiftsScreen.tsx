@@ -108,6 +108,7 @@ export default function ShiftsScreen() {
 
   const { data: shiftsData = [], isLoading, refetch, isRefetching } = useQuery<APIShift[]>({
     queryKey: ["/api/shifts"],
+    refetchInterval: 30000,
   });
 
   const filteredShifts =
@@ -177,6 +178,9 @@ export default function ShiftsScreen() {
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
+          if (user?.role === "worker" && item.workerUserId === user.id) {
+            navigation.navigate("ClockInOut", { shiftId: item.id });
+          }
         }}
         style={({ pressed }) => [
           styles.shiftCard,
@@ -219,6 +223,91 @@ export default function ShiftsScreen() {
             </View>
           ) : null}
         </View>
+
+        {user?.role === "worker" ? (
+          <View style={styles.contextSection}>
+            {(() => {
+              const now = new Date();
+              const shiftDateStr = item.date + "T" + item.startTime + ":00";
+              const shiftStart = new Date(shiftDateStr);
+              const endStr = item.endTime ? item.date + "T" + item.endTime + ":00" : null;
+              const shiftEnd = endStr ? new Date(endStr) : null;
+              const diffMs = shiftStart.getTime() - now.getTime();
+              const diffMin = Math.round(diffMs / 60000);
+              
+              if (item.status === "completed") {
+                return (
+                  <View style={[styles.contextBadge, { backgroundColor: "#64748B20" }]}>
+                    <Feather name="check-circle" size={14} color="#64748B" />
+                    <ThemedText style={[styles.contextText, { color: "#64748B" }]}>Completed</ThemedText>
+                  </View>
+                );
+              }
+              if (item.status === "cancelled") {
+                return (
+                  <View style={[styles.contextBadge, { backgroundColor: "#EF444420" }]}>
+                    <Feather name="x-circle" size={14} color="#EF4444" />
+                    <ThemedText style={[styles.contextText, { color: "#EF4444" }]}>Cancelled</ThemedText>
+                  </View>
+                );
+              }
+              if (item.status === "in_progress") {
+                return (
+                  <View style={[styles.contextBadge, { backgroundColor: "#10B98120" }]}>
+                    <Feather name="activity" size={14} color="#10B981" />
+                    <ThemedText style={[styles.contextText, { color: "#10B981" }]}>In Progress</ThemedText>
+                  </View>
+                );
+              }
+              if (diffMin > 60) {
+                const hours = Math.floor(diffMin / 60);
+                const mins = diffMin % 60;
+                return (
+                  <View style={[styles.contextBadge, { backgroundColor: "#3B82F620" }]}>
+                    <Feather name="clock" size={14} color="#3B82F6" />
+                    <ThemedText style={[styles.contextText, { color: "#3B82F6" }]}>
+                      {hours > 0 ? `Starts in ${hours}h ${mins > 0 ? `${mins}m` : ""}` : `Starts in ${mins}m`}
+                    </ThemedText>
+                  </View>
+                );
+              }
+              if (diffMin > 15) {
+                return (
+                  <View style={[styles.contextBadge, { backgroundColor: "#F59E0B20" }]}>
+                    <Feather name="clock" size={14} color="#F59E0B" />
+                    <ThemedText style={[styles.contextText, { color: "#F59E0B" }]}>Starts in {diffMin}m</ThemedText>
+                  </View>
+                );
+              }
+              if (diffMin > -15) {
+                return (
+                  <Pressable
+                    onPress={() => navigation.navigate("ClockInOut", { shiftId: item.id })}
+                    style={[styles.clockInButton, { backgroundColor: "#10B981" }]}
+                    testID={`button-clockin-${item.id}`}
+                  >
+                    <Feather name="log-in" size={16} color="#FFFFFF" />
+                    <ThemedText style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 14 }}>Clock In</ThemedText>
+                  </Pressable>
+                );
+              }
+              if (shiftEnd && now > shiftEnd) {
+                return (
+                  <View style={[styles.contextBadge, { backgroundColor: "#EF444420" }]}>
+                    <Feather name="alert-circle" size={14} color="#EF4444" />
+                    <ThemedText style={[styles.contextText, { color: "#EF4444" }]}>Shift Ended</ThemedText>
+                  </View>
+                );
+              }
+              return (
+                <View style={[styles.contextBadge, { backgroundColor: "#F59E0B20" }]}>
+                  <Feather name="alert-triangle" size={14} color="#F59E0B" />
+                  <ThemedText style={[styles.contextText, { color: "#F59E0B" }]}>Late - Clock In Now</ThemedText>
+                </View>
+              );
+            })()}
+          </View>
+        ) : null}
 
         {(user?.role === "admin" || user?.role === "hr") && item.workerName ? (
           <View style={styles.workerSection}>
@@ -494,5 +583,30 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     alignItems: "center",
     justifyContent: "center",
+  },
+  contextSection: {
+    marginTop: Spacing.md,
+  },
+  contextBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.md,
+    alignSelf: "flex-start",
+  },
+  contextText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  clockInButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.md,
   },
 });

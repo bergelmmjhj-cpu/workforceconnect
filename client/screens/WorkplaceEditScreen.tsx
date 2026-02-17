@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, TextInput, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, TextInput, Modal, Pressable } from "react-native";
 import { useNavigation, NavigationProp, useRoute, RouteProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -57,6 +57,7 @@ export default function WorkplaceEditScreen() {
   const [saving, setSaving] = useState(false);
   const [isAddressSelected, setIsAddressSelected] = useState(false);
   const [addressSearchValue, setAddressSearchValue] = useState("");
+  const [alertModal, setAlertModal] = useState<{title: string; message: string} | null>(null);
 
   const { data: existingWorkplace, isLoading } = useQuery<any>({
     queryKey: ["/api/workplaces", workplaceId],
@@ -121,12 +122,12 @@ export default function WorkplaceEditScreen() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      Alert.alert("Missing Information", "Please enter a workplace name.");
+      setAlertModal({title: "Missing Information", message: "Please enter a workplace name."});
       return;
     }
 
     if (!isAddressSelected || !formData.latitude || !formData.longitude) {
-      Alert.alert("Address Required", "Please select an address from the suggested list to ensure accurate GPS coordinates for TITO validation.");
+      setAlertModal({title: "Address Required", message: "Please select an address from the suggested list to ensure accurate GPS coordinates for TITO validation."});
       return;
     }
 
@@ -153,7 +154,7 @@ export default function WorkplaceEditScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces"] });
       navigation.goBack();
     } catch (error) {
-      Alert.alert("Unable to Save", getErrorMessage(error));
+      setAlertModal({title: "Unable to Save", message: getErrorMessage(error)});
     } finally {
       setSaving(false);
     }
@@ -175,6 +176,19 @@ export default function WorkplaceEditScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Modal visible={alertModal !== null} transparent animationType="fade" onRequestClose={() => setAlertModal(null)}>
+        <Pressable style={{flex:1, backgroundColor:"rgba(0,0,0,0.5)", justifyContent:"center", alignItems:"center", padding:24}} onPress={() => setAlertModal(null)}>
+          <Pressable style={{backgroundColor: theme.backgroundDefault, borderRadius:12, padding:24, width:"100%", maxWidth:340}} onPress={() => {}}>
+            <ThemedText type="h4" style={{marginBottom:12}}>{alertModal?.title}</ThemedText>
+            <ThemedText style={{color: theme.textSecondary, fontSize:14, lineHeight:20, marginBottom:24}}>{alertModal?.message}</ThemedText>
+            <View style={{flexDirection:"row", gap:12}}>
+              <Pressable style={{flex:1, backgroundColor: theme.primary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => setAlertModal(null)}>
+                <ThemedText style={{color:"#FFFFFF", fontWeight:"600", fontSize:15}}>OK</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[

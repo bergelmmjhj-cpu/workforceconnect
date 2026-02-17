@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert, Platform, RefreshControl, TextInput, Modal } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Platform, RefreshControl, TextInput, Modal } from "react-native";
 import Checkbox from "expo-checkbox";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, NavigationProp, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
@@ -141,6 +141,8 @@ export default function WorkplaceDetailScreen() {
   const [deleteSeriesConfirmTarget, setDeleteSeriesConfirmTarget] = useState<{ id: string; title: string } | null>(null);
   const [statusConfirmTarget, setStatusConfirmTarget] = useState<{ assignmentId: string; status: string; message: string } | null>(null);
   const [noEndDate, setNoEndDate] = useState(false);
+  const [showDeleteWorkplace, setShowDeleteWorkplace] = useState(false);
+  const [noWorkersModal, setNoWorkersModal] = useState(false);
 
   const createShiftMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -178,6 +180,17 @@ export default function WorkplaceDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts?workplaceId=" + workplaceId] });
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/my-today"] });
+    },
+  });
+
+  const deleteWorkplaceMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/workplaces/${workplaceId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/workplaces"] });
+      navigation.goBack();
     },
   });
 
@@ -334,9 +347,16 @@ export default function WorkplaceDetailScreen() {
             <View style={[styles.statusBadge, { backgroundColor: workplace.isActive ? "#22c55e" : "#ef4444" }]}>
               <ThemedText style={styles.statusText}>{workplace.isActive ? "Active" : "Inactive"}</ThemedText>
             </View>
-            <Pressable onPress={() => navigation.navigate("WorkplaceEdit", { workplaceId: workplace.id })}>
-              <Feather name="edit-2" size={20} color={theme.primary} />
-            </Pressable>
+            <View style={{ flexDirection: "row", gap: Spacing.md, alignItems: "center" }}>
+              <Pressable onPress={() => navigation.navigate("WorkplaceEdit", { workplaceId: workplace.id })}>
+                <Feather name="edit-2" size={20} color={theme.primary} />
+              </Pressable>
+              {user?.role === "admin" ? (
+                <Pressable onPress={() => setShowDeleteWorkplace(true)} testID="button-delete-workplace">
+                  <Feather name="trash-2" size={20} color="#EF4444" />
+                </Pressable>
+              ) : null}
+            </View>
           </View>
           <ThemedText style={styles.workplaceName}>{workplace.name}</ThemedText>
           <ThemedText style={styles.addressText}>
@@ -445,11 +465,7 @@ export default function WorkplaceDetailScreen() {
           <Pressable 
             onPress={() => {
               if (activeWorkers.length === 0) {
-                if (Platform.OS === "web") {
-                  window.alert("Assign workers to this workplace before creating shifts.");
-                } else {
-                  Alert.alert("No Workers", "Assign workers to this workplace before creating shifts.");
-                }
+                setNoWorkersModal(true);
                 return;
               }
               if (activeWorkers.length === 1) {
@@ -1062,6 +1078,73 @@ export default function WorkplaceDetailScreen() {
                 <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Confirm</ThemedText>
               </Pressable>
             </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={showDeleteWorkplace}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteWorkplace(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}
+          onPress={() => setShowDeleteWorkplace(false)}
+        >
+          <Pressable
+            style={{ backgroundColor: theme.backgroundDefault, borderRadius: 12, padding: 24, width: "100%", maxWidth: 340 }}
+            onPress={() => {}}
+          >
+            <ThemedText type="h4" style={{ marginBottom: 12 }}>Delete Workplace</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+              Are you sure you want to permanently delete "{workplace?.name}"? This will remove all assigned workers, shifts, series, and TITO logs for this workplace. This action cannot be undone.
+            </ThemedText>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable
+                onPress={() => setShowDeleteWorkplace(false)}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: theme.backgroundSecondary }}
+              >
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  deleteWorkplaceMutation.mutate();
+                  setShowDeleteWorkplace(false);
+                }}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: "#EF4444" }}
+                testID="button-confirm-delete-workplace"
+              >
+                <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Delete</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={noWorkersModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNoWorkersModal(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}
+          onPress={() => setNoWorkersModal(false)}
+        >
+          <Pressable
+            style={{ backgroundColor: theme.backgroundDefault, borderRadius: 12, padding: 24, width: "100%", maxWidth: 340 }}
+            onPress={() => {}}
+          >
+            <ThemedText type="h4" style={{ marginBottom: 12 }}>No Workers</ThemedText>
+            <ThemedText style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 24 }}>
+              Assign workers to this workplace before creating shifts.
+            </ThemedText>
+            <Pressable
+              onPress={() => setNoWorkersModal(false)}
+              style={{ paddingVertical: 12, borderRadius: 8, alignItems: "center", backgroundColor: theme.primary }}
+            >
+              <ThemedText style={{ color: "#fff", fontWeight: "600" }}>OK</ThemedText>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>

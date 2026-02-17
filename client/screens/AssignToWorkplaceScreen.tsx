@@ -1,5 +1,5 @@
-import React from "react";
-import { View, StyleSheet, FlatList, Pressable, RefreshControl, Alert } from "react-native";
+import React, { useState } from "react";
+import { View, StyleSheet, FlatList, Pressable, RefreshControl, Modal } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -36,6 +36,8 @@ export default function AssignToWorkplaceScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [alertModal, setAlertModal] = useState<{title: string; message: string; onDismiss?: () => void} | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{title: string; message: string; onConfirm: () => void} | null>(null);
 
   const { data: workplaces = [], isLoading, refetch } = useQuery<Workplace[]>({
     queryKey: ["/api/workplaces"],
@@ -48,23 +50,19 @@ export default function AssignToWorkplaceScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/workplaces"] });
-      Alert.alert("Success", `${workerName} has been assigned to the workplace`);
-      navigation.goBack();
+      setAlertModal({title: "Success", message: `${workerName} has been assigned to the workplace`, onDismiss: () => navigation.goBack()});
     },
     onError: (error: Error) => {
-      Alert.alert("Unable to Assign", getErrorMessage(error));
+      setAlertModal({title: "Unable to Assign", message: getErrorMessage(error)});
     },
   });
 
   const handleAssign = (workplace: Workplace) => {
-    Alert.alert(
-      "Assign Worker",
-      `Assign ${workerName} to ${workplace.name}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Assign", onPress: () => inviteMutation.mutate(workplace.id) },
-      ]
-    );
+    setConfirmModal({
+      title: "Assign Worker",
+      message: `Assign ${workerName} to ${workplace.name}?`,
+      onConfirm: () => inviteMutation.mutate(workplace.id),
+    });
   };
 
   const activeWorkplaces = workplaces.filter(w => w.isActive);
@@ -90,6 +88,35 @@ export default function AssignToWorkplaceScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Modal visible={alertModal !== null} transparent animationType="fade" onRequestClose={() => { alertModal?.onDismiss?.(); setAlertModal(null); }}>
+        <Pressable style={{flex:1, backgroundColor:"rgba(0,0,0,0.5)", justifyContent:"center", alignItems:"center", padding:24}} onPress={() => { alertModal?.onDismiss?.(); setAlertModal(null); }}>
+          <Pressable style={{backgroundColor: theme.backgroundDefault, borderRadius:12, padding:24, width:"100%", maxWidth:340}} onPress={() => {}}>
+            <ThemedText type="h4" style={{marginBottom:12}}>{alertModal?.title}</ThemedText>
+            <ThemedText style={{color: theme.textSecondary, fontSize:14, lineHeight:20, marginBottom:24}}>{alertModal?.message}</ThemedText>
+            <View style={{flexDirection:"row", gap:12}}>
+              <Pressable style={{flex:1, backgroundColor: theme.primary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => { alertModal?.onDismiss?.(); setAlertModal(null); }}>
+                <ThemedText style={{color:"#FFFFFF", fontWeight:"600", fontSize:15}}>OK</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal visible={confirmModal !== null} transparent animationType="fade" onRequestClose={() => setConfirmModal(null)}>
+        <Pressable style={{flex:1, backgroundColor:"rgba(0,0,0,0.5)", justifyContent:"center", alignItems:"center", padding:24}} onPress={() => setConfirmModal(null)}>
+          <Pressable style={{backgroundColor: theme.backgroundDefault, borderRadius:12, padding:24, width:"100%", maxWidth:340}} onPress={() => {}}>
+            <ThemedText type="h4" style={{marginBottom:12}}>{confirmModal?.title}</ThemedText>
+            <ThemedText style={{color: theme.textSecondary, fontSize:14, lineHeight:20, marginBottom:24}}>{confirmModal?.message}</ThemedText>
+            <View style={{flexDirection:"row", gap:12}}>
+              <Pressable style={{flex:1, backgroundColor: theme.backgroundSecondary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => setConfirmModal(null)}>
+                <ThemedText style={{fontWeight:"600", fontSize:15}}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable style={{flex:1, backgroundColor: theme.primary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>
+                <ThemedText style={{color:"#FFFFFF", fontWeight:"600", fontSize:15}}>Assign</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <View style={[styles.headerInfo, { paddingTop: headerHeight + Spacing.md }]}>
         <ThemedText style={styles.headerText}>
           Select a workplace to assign {workerName}:

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, RefreshControl, Alert, Platform } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, RefreshControl, Modal, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useNavigation, NavigationProp, useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,6 +34,7 @@ export default function WorkplacesListScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
+  const [confirmModal, setConfirmModal] = useState<{title: string; message: string; onConfirm: () => void} | null>(null);
 
   const { data: workplaces = [], isLoading, refetch } = useQuery<Workplace[]>({
     queryKey: ["/api/workplaces"],
@@ -61,14 +62,11 @@ export default function WorkplacesListScreen() {
         toggleMutation.mutate(workplace.id);
       }
     } else {
-      Alert.alert(
-        workplace.isActive ? "Deactivate Workplace" : "Activate Workplace",
-        `Are you sure you want to ${workplace.isActive ? "deactivate" : "activate"} ${workplace.name}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Confirm", onPress: () => toggleMutation.mutate(workplace.id) },
-        ]
-      );
+      setConfirmModal({
+        title: workplace.isActive ? "Deactivate Workplace" : "Activate Workplace",
+        message: `Are you sure you want to ${workplace.isActive ? "deactivate" : "activate"} ${workplace.name}?`,
+        onConfirm: () => toggleMutation.mutate(workplace.id),
+      });
     }
   };
 
@@ -107,6 +105,22 @@ export default function WorkplacesListScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Modal visible={confirmModal !== null} transparent animationType="fade" onRequestClose={() => setConfirmModal(null)}>
+        <Pressable style={{flex:1, backgroundColor:"rgba(0,0,0,0.5)", justifyContent:"center", alignItems:"center", padding:24}} onPress={() => setConfirmModal(null)}>
+          <Pressable style={{backgroundColor: theme.backgroundDefault, borderRadius:12, padding:24, width:"100%", maxWidth:340}} onPress={() => {}}>
+            <ThemedText type="h4" style={{marginBottom:12}}>{confirmModal?.title}</ThemedText>
+            <ThemedText style={{color: theme.textSecondary, fontSize:14, lineHeight:20, marginBottom:24}}>{confirmModal?.message}</ThemedText>
+            <View style={{flexDirection:"row", gap:12}}>
+              <Pressable style={{flex:1, backgroundColor: theme.backgroundSecondary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => setConfirmModal(null)}>
+                <ThemedText style={{fontWeight:"600", fontSize:15}}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable style={{flex:1, backgroundColor: theme.primary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => { confirmModal?.onConfirm(); setConfirmModal(null); }}>
+                <ThemedText style={{color:"#FFFFFF", fontWeight:"600", fontSize:15}}>Confirm</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <FlatList
         data={workplaces}
         keyExtractor={(item) => item.id}

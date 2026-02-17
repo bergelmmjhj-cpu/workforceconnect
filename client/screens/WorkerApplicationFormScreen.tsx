@@ -5,7 +5,7 @@ import {
   ScrollView,
   TextInput,
   Pressable,
-  Alert,
+  Modal,
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -65,6 +65,7 @@ export default function WorkerApplicationFormScreen() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["personal"]));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddressSelected, setIsAddressSelected] = useState(false);
+  const [alertModal, setAlertModal] = useState<{title: string; message: string; onDismiss?: () => void} | null>(null);
 
   const [formData, setFormData] = useState<{
     legalFirstName: string;
@@ -196,27 +197,27 @@ export default function WorkerApplicationFormScreen() {
     if (!user) return;
 
     if (!formData.legalFirstName || !formData.legalLastName) {
-      Alert.alert("Required", "Please enter your legal first and last name.");
+      setAlertModal({title: "Required", message: "Please enter your legal first and last name."});
       return;
     }
     if (!formData.mobilePhone) {
-      Alert.alert("Required", "Please enter your mobile phone number.");
+      setAlertModal({title: "Required", message: "Please enter your mobile phone number."});
       return;
     }
     if (!formData.emailAddress) {
-      Alert.alert("Required", "Please enter your email address.");
+      setAlertModal({title: "Required", message: "Please enter your email address."});
       return;
     }
     if (!formData.emergencyContactName || !formData.emergencyContactPhone) {
-      Alert.alert("Required", "Please provide emergency contact information.");
+      setAlertModal({title: "Required", message: "Please provide emergency contact information."});
       return;
     }
     if (!formData.declareTrueComplete || !formData.declareFalseInfoConsequences) {
-      Alert.alert("Required", "Please complete the declarations section.");
+      setAlertModal({title: "Required", message: "Please complete the declarations section."});
       return;
     }
     if (!formData.electronicSignatureFullLegalName) {
-      Alert.alert("Required", "Please provide your electronic signature.");
+      setAlertModal({title: "Required", message: "Please provide your electronic signature."});
       return;
     }
 
@@ -290,11 +291,9 @@ export default function WorkerApplicationFormScreen() {
       await updateOnboardingStatus("APPLICATION_SUBMITTED");
       await refreshOnboardingData();
 
-      Alert.alert("Success", "Your application has been submitted!", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      setAlertModal({title: "Success", message: "Your application has been submitted!", onDismiss: () => navigation.goBack()});
     } catch (error) {
-      Alert.alert("Unable to Submit", getErrorMessage(error));
+      setAlertModal({title: "Unable to Submit", message: getErrorMessage(error)});
     } finally {
       setIsSubmitting(false);
     }
@@ -770,6 +769,19 @@ export default function WorkerApplicationFormScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Modal visible={alertModal !== null} transparent animationType="fade" onRequestClose={() => { alertModal?.onDismiss?.(); setAlertModal(null); }}>
+        <Pressable style={{flex:1, backgroundColor:"rgba(0,0,0,0.5)", justifyContent:"center", alignItems:"center", padding:24}} onPress={() => { alertModal?.onDismiss?.(); setAlertModal(null); }}>
+          <Pressable style={{backgroundColor: theme.backgroundDefault, borderRadius:12, padding:24, width:"100%", maxWidth:340}} onPress={() => {}}>
+            <ThemedText type="h4" style={{marginBottom:12}}>{alertModal?.title}</ThemedText>
+            <ThemedText style={{color: theme.textSecondary, fontSize:14, lineHeight:20, marginBottom:24}}>{alertModal?.message}</ThemedText>
+            <View style={{flexDirection:"row", gap:12}}>
+              <Pressable style={{flex:1, backgroundColor: theme.primary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => { alertModal?.onDismiss?.(); setAlertModal(null); }}>
+                <ThemedText style={{color:"#FFFFFF", fontWeight:"600", fontSize:15}}>OK</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,

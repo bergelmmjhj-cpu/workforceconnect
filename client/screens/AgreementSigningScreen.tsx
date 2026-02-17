@@ -5,7 +5,7 @@ import {
   ScrollView,
   TextInput,
   Pressable,
-  Alert,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -66,6 +66,7 @@ export default function AgreementSigningScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [alertModal, setAlertModal] = useState<{title: string; message: string} | null>(null);
 
   const handleScroll = (event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
@@ -79,26 +80,26 @@ export default function AgreementSigningScreen() {
     if (!user || !agreementTemplate) return;
 
     if (!hasScrolledToEnd) {
-      Alert.alert("Please Read", "Please scroll to the end of the agreement to continue.");
+      setAlertModal({title: "Please Read", message: "Please scroll to the end of the agreement to continue."});
       return;
     }
 
     if (!iAgree) {
-      Alert.alert("Required", "Please check the 'I Agree' box to continue.");
+      setAlertModal({title: "Required", message: "Please check the 'I Agree' box to continue."});
       return;
     }
 
     if (!acceptedFullName.trim()) {
-      Alert.alert("Required", "Please enter your full legal name.");
+      setAlertModal({title: "Required", message: "Please enter your full legal name."});
       return;
     }
 
     const missingInitials = INITIAL_SECTIONS.filter((s) => !initials[s.key].trim());
     if (missingInitials.length > 0) {
-      Alert.alert(
-        "Required",
-        `Please provide your initials for: ${missingInitials.map((s) => s.title).join(", ")}`
-      );
+      setAlertModal({
+        title: "Required",
+        message: `Please provide your initials for: ${missingInitials.map((s) => s.title).join(", ")}`,
+      });
       return;
     }
 
@@ -174,6 +175,19 @@ export default function AgreementSigningScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <Modal visible={alertModal !== null} transparent animationType="fade" onRequestClose={() => setAlertModal(null)}>
+        <Pressable style={{flex:1, backgroundColor:"rgba(0,0,0,0.5)", justifyContent:"center", alignItems:"center", padding:24}} onPress={() => setAlertModal(null)}>
+          <Pressable style={{backgroundColor: theme.backgroundDefault, borderRadius:12, padding:24, width:"100%", maxWidth:340}} onPress={() => {}}>
+            <ThemedText type="h4" style={{marginBottom:12}}>{alertModal?.title}</ThemedText>
+            <ThemedText style={{color: theme.textSecondary, fontSize:14, lineHeight:20, marginBottom:24}}>{alertModal?.message}</ThemedText>
+            <View style={{flexDirection:"row", gap:12}}>
+              <Pressable style={{flex:1, backgroundColor: theme.primary, borderRadius:8, paddingVertical:12, alignItems:"center"}} onPress={() => setAlertModal(null)}>
+                <ThemedText style={{color:"#FFFFFF", fontWeight:"600", fontSize:15}}>OK</ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={[

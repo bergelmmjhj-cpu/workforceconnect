@@ -41,6 +41,8 @@ import {
 import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
+import * as OTPAuth from "otpauth";
+import crypto from "crypto";
 import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not } from "drizzle-orm";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
@@ -745,12 +747,251 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Return user without password
-      const { password: _, ...userWithoutPassword } = user;
-      res.json({ user: userWithoutPassword });
+      if (user.totpEnabled) {
+        res.json({ requires2FA: true, userId: user.id });
+        return;
+      }
+
+      const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+      res.json({ user: userWithoutSensitive });
     } catch (error) {
       console.error("Error logging in:", error);
       res.status(500).json({ error: "Failed to login" });
+    }
+  });
+
+  // ========================================
+  // Two-Factor Authentication (2FA) Endpoints
+  // ========================================
+
+  function generateRecoveryCodes(): string[] {
+    const codes: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      codes.push(crypto.randomBytes(4).toString("hex").toUpperCase());
+    }
+    return codes;
+  }
+
+  app.post("/api/2fa/setup", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      if (user.totpEnabled) {
+        res.status(400).json({ error: "2FA is already enabled" });
+        return;
+      }
+
+      const secret = new OTPAuth.Secret({ size: 20 });
+      const totp = new OTPAuth.TOTP({
+        issuer: "Workforce Connect",
+        label: user.email,
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        secret,
+      });
+
+      await db.update(users)
+        .set({ totpSecret: secret.base32, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+
+      res.json({
+        secret: secret.base32,
+        uri: totp.toString(),
+      });
+    } catch (error) {
+      console.error("Error setting up 2FA:", error);
+      res.status(500).json({ error: "Failed to setup 2FA" });
+    }
+  });
+
+  app.post("/api/2fa/verify-setup", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        res.status(400).json({ error: "Verification code is required" });
+        return;
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user || !user.totpSecret) {
+        res.status(400).json({ error: "2FA setup not initiated" });
+        return;
+      }
+
+      const totp = new OTPAuth.TOTP({
+        issuer: "Workforce Connect",
+        label: user.email,
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(user.totpSecret),
+      });
+
+      const delta = totp.validate({ token: code, window: 1 });
+      if (delta === null) {
+        res.status(400).json({ error: "Invalid verification code" });
+        return;
+      }
+
+      const recoveryCodes = generateRecoveryCodes();
+
+      await db.update(users)
+        .set({
+          totpEnabled: true,
+          recoveryCodes: JSON.stringify(recoveryCodes),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+
+      res.json({
+        enabled: true,
+        recoveryCodes,
+      });
+    } catch (error) {
+      console.error("Error verifying 2FA setup:", error);
+      res.status(500).json({ error: "Failed to verify 2FA setup" });
+    }
+  });
+
+  app.post("/api/2fa/disable", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const { code } = req.body;
+      if (!code) {
+        res.status(400).json({ error: "Verification code is required" });
+        return;
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user || !user.totpEnabled || !user.totpSecret) {
+        res.status(400).json({ error: "2FA is not enabled" });
+        return;
+      }
+
+      const totp = new OTPAuth.TOTP({
+        issuer: "Workforce Connect",
+        label: user.email,
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(user.totpSecret),
+      });
+
+      const delta = totp.validate({ token: code, window: 1 });
+      if (delta === null) {
+        res.status(400).json({ error: "Invalid verification code" });
+        return;
+      }
+
+      await db.update(users)
+        .set({
+          totpEnabled: false,
+          totpSecret: null,
+          recoveryCodes: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+
+      res.json({ disabled: true });
+    } catch (error) {
+      console.error("Error disabling 2FA:", error);
+      res.status(500).json({ error: "Failed to disable 2FA" });
+    }
+  });
+
+  app.post("/api/2fa/verify", async (req: Request, res: Response) => {
+    try {
+      const { userId, code } = req.body;
+      if (!userId || !code) {
+        res.status(400).json({ error: "User ID and code are required" });
+        return;
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user || !user.totpEnabled || !user.totpSecret) {
+        res.status(400).json({ error: "2FA is not enabled for this user" });
+        return;
+      }
+
+      const totp = new OTPAuth.TOTP({
+        issuer: "Workforce Connect",
+        label: user.email,
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        secret: OTPAuth.Secret.fromBase32(user.totpSecret),
+      });
+
+      const delta = totp.validate({ token: code, window: 1 });
+
+      if (delta !== null) {
+        const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+        res.json({ verified: true, user: userWithoutSensitive });
+        return;
+      }
+
+      if (user.recoveryCodes) {
+        const codes: string[] = JSON.parse(user.recoveryCodes);
+        const codeIndex = codes.indexOf(code.toUpperCase());
+        if (codeIndex !== -1) {
+          codes.splice(codeIndex, 1);
+          await db.update(users)
+            .set({ recoveryCodes: JSON.stringify(codes), updatedAt: new Date() })
+            .where(eq(users.id, userId));
+
+          const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+          res.json({ verified: true, user: userWithoutSensitive, remainingRecoveryCodes: codes.length });
+          return;
+        }
+      }
+
+      res.status(400).json({ error: "Invalid verification code" });
+    } catch (error) {
+      console.error("Error verifying 2FA:", error);
+      res.status(500).json({ error: "Failed to verify 2FA" });
+    }
+  });
+
+  app.get("/api/2fa/status", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const [user] = await db.select({ totpEnabled: users.totpEnabled }).from(users).where(eq(users.id, userId));
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      res.json({ enabled: user.totpEnabled || false });
+    } catch (error) {
+      console.error("Error checking 2FA status:", error);
+      res.status(500).json({ error: "Failed to check 2FA status" });
     }
   });
 

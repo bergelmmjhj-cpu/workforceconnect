@@ -67,15 +67,24 @@ INSERT INTO users (id, email, password, role, first_name, last_name)
 VALUES (gen_random_uuid(), 'admin@wfconnect.org', '<bcrypt_hash>', 'admin', 'Admin', 'User');
 ```
 
-## Recent Changes (Feb 16, 2026)
+## Recent Changes (Feb 17, 2026)
 
-- **Cascade Deletion**: DELETE /api/shifts/:id now properly deletes related shift_offers, shift_checkins, and child recurring shifts before deleting the parent. DELETE /api/shift-requests/:id similarly cascades to associated shifts and their dependencies.
-- **Eligible Workers API**: GET /api/shift-requests/:id/eligible-workers now returns both old format (workers, eligibleCount, totalWorkers) and new format (eligibleWorkers, totalEligible, totalActive) for frontend compatibility.
-- **Past Shift Filtering**: GET /api/shifts now excludes past completed/cancelled shifts by default. Use ?includePast=true to see all history.
-- **ShiftsScreen Delete**: Admin/HR users can now delete shifts directly from the Shifts tab with a custom confirmation modal (not Alert.alert).
-- **UUID Type Fixes**: ShiftRequestsScreen and ShiftOffersScreen interfaces now correctly use string types for IDs (matching UUID format from database).
-- **No End Date Toggle**: Recurring shift creation form now includes a "No End Date (ongoing)" checkbox, hiding the end date picker when checked.
-- **Custom Modals**: WorkplaceDetailScreen replaced Alert.alert with custom Modal components for delete and status change confirmations (Alert.alert can fail silently on mobile).
+### Phase 1 Platform Upgrade (11 tasks completed)
+- **Shift Series Model**: shift_series table with on-the-fly occurrence expansion. POST /api/shifts creates series instead of pre-generating rows. Series cards UI in WorkplaceDetailScreen.
+- **Multi-mode Roster View**: RosterScreen with Daily/Weekly/Bi-weekly/Monthly/Semi-monthly tabs, date navigation, unified shift/series display via GET /api/roster.
+- **Push Notifications**: Expo Push API integrated. Client-side token registration via POST /api/push-token. Push notifications sent on shift offers, shift acceptance, and other events.
+- **Automated Reminders**: Server-side scheduler runs every 15 minutes, sends push + in-app notifications for day-before and day-of shift reminders. Uses sent_reminders table to prevent duplicates.
+- **My Today Dashboard**: GET /api/my-today endpoint shows today's shifts, pending offers, unfilled shifts. Role-specific DashboardScreen sections.
+- **Notifications Inbox**: NotificationsScreen with in-app notification center, mark-as-read, mark-all-read.
+- **Profile Photo Requirement**: POST /api/profile-photo upload endpoint, admin review workflow (approve/reject), photo upload UI in ProfileScreen with camera/gallery picker, status badges. profilePhotoUrl column added to users table.
+- **Smart Assign Polish**: Decline confirmation modal (custom Modal, not Alert.alert), 30-second auto-refresh polling for shift offers, cache invalidation for notifications/my-today after accept/decline.
+- **Safe Trial Reset**: POST /api/trial-reset/dry-run and /execute endpoints. Admin Settings danger zone UI in ProfileScreen.
+
+### Previous Changes (Feb 16, 2026)
+- **Cascade Deletion**: DELETE /api/shifts/:id now properly deletes related shift_offers, shift_checkins, and child recurring shifts before deleting the parent.
+- **Eligible Workers API**: GET /api/shift-requests/:id/eligible-workers returns both old and new format for frontend compatibility.
+- **Past Shift Filtering**: GET /api/shifts excludes past completed/cancelled shifts by default. Use ?includePast=true for history.
+- **Custom Modals**: Replaced Alert.alert with custom Modal components throughout (Alert.alert can fail silently on mobile).
 
 ## App Store Links
 

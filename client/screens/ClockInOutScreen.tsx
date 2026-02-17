@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -6,6 +6,8 @@ import {
   Platform,
   Linking,
   ScrollView,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -51,6 +53,7 @@ export default function ClockInOutScreen() {
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showClockOutConfirm, setShowClockOutConfirm] = useState(false);
 
   const isWeb = Platform.OS === "web";
 
@@ -128,6 +131,29 @@ export default function ClockInOutScreen() {
     }
   };
 
+  const isWithinClockInWindow = useMemo(() => {
+    if (!shift?.startTime || !shift?.date) return false;
+    const now = new Date();
+    const [hours, minutes] = shift.startTime.split(":").map(Number);
+    const shiftStart = new Date(shift.date + "T00:00:00");
+    shiftStart.setHours(hours, minutes, 0, 0);
+    const diffMinutes = (shiftStart.getTime() - now.getTime()) / (1000 * 60);
+    return diffMinutes <= 15;
+  }, [shift?.startTime, shift?.date]);
+
+  const clockInTimeMessage = useMemo(() => {
+    if (!shift?.startTime || !shift?.date) return "";
+    const now = new Date();
+    const [hours, minutes] = shift.startTime.split(":").map(Number);
+    const shiftStart = new Date(shift.date + "T00:00:00");
+    shiftStart.setHours(hours, minutes, 0, 0);
+    const diffMinutes = Math.ceil((shiftStart.getTime() - now.getTime()) / (1000 * 60));
+    if (diffMinutes > 15) {
+      return `Clock-in opens ${diffMinutes} min before shift (${shift.startTime})`;
+    }
+    return "";
+  }, [shift?.startTime, shift?.date]);
+
   const handleClockIn = async () => {
     if (!shift || !userLocation || !user || !shift.locationCoordinates) return;
 
@@ -138,6 +164,11 @@ export default function ClockInOutScreen() {
     );
 
     if (!withinRadius) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (!isWithinClockInWindow) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
@@ -166,20 +197,19 @@ export default function ClockInOutScreen() {
     }
   };
 
-  const handleClockOut = async () => {
-    if (!shift || !userLocation || !titoLog || !shift.locationCoordinates) return;
-
-    const withinRadius = isWithinRadius(
-      userLocation,
-      shift.locationCoordinates,
-      shift.geofenceRadius
-    );
-
-    if (!withinRadius) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
+  const handleClockOutPress = () => {
+    if (!shift || !userLocation || !titoLog) return;
+    if (!isWithinGeofence) {
+      setShowClockOutConfirm(true);
+    } else {
+      executeClockOut();
     }
+  };
 
+  const executeClockOut = async () => {
+    if (!shift || !userLocation || !titoLog) return;
+
+    setShowClockOutConfirm(false);
     setIsClockingOut(true);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -205,9 +235,9 @@ export default function ClockInOutScreen() {
       ? distance <= shift.geofenceRadius
       : false;
 
-  const canClockIn = !titoLog && isWithinGeofence && shift?.locationCoordinates;
+  const canClockIn = !titoLog && isWithinGeofence && isWithinClockInWindow && shift?.locationCoordinates;
   const canClockOut =
-    titoLog && !titoLog.timeOut && isWithinGeofence && shift?.locationCoordinates;
+    titoLog && !titoLog.timeOut && userLocation && shift?.locationCoordinates;
   const hasCompletedShift = titoLog?.timeOut;
 
   if (isLoading) {
@@ -385,10 +415,21 @@ export default function ClockInOutScreen() {
               <View style={[styles.warningBanner, { backgroundColor: theme.error + "15" }]}>
                 <Feather name="alert-triangle" size={16} color={theme.error} />
                 <ThemedText style={[styles.warningText, { color: theme.error }]}>
-                  Move {formatDistance(Math.max(0, distance - shift.geofenceRadius))} closer to clock in/out
+                  {titoLog && !titoLog.timeOut
+                    ? `You are outside the geofence. Clock-out will be flagged for admin review.`
+                    : `Move ${formatDistance(Math.max(0, distance - shift.geofenceRadius))} closer to clock in`}
                 </ThemedText>
               </View>
             )}
+
+            {clockInTimeMessage ? (
+              <View style={[styles.warningBanner, { backgroundColor: theme.warning + "15" }]}>
+                <Feather name="clock" size={16} color={theme.warning} />
+                <ThemedText style={[styles.warningText, { color: theme.warning }]}>
+                  {clockInTimeMessage}
+                </ThemedText>
+              </View>
+            ) : null}
 
             <Button
               onPress={refreshLocation}
@@ -464,7 +505,7 @@ export default function ClockInOutScreen() {
                 </Button>
               ) : (
                 <Button
-                  onPress={handleClockOut}
+                  onPress={handleClockOutPress}
                   disabled={!canClockOut || isClockingOut}
                   style={[
                     styles.clockButton,
@@ -511,6 +552,40 @@ export default function ClockInOutScreen() {
           )}
         </>
       )}
+
+      <Modal
+        visible={showClockOutConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowClockOutConfirm(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundRoot }]}>
+            <View style={[styles.modalIconContainer, { backgroundColor: theme.warning + "20" }]}>
+              <Feather name="alert-triangle" size={32} color={theme.warning} />
+            </View>
+            <ThemedText style={styles.modalTitle}>Outside Work Site</ThemedText>
+            <ThemedText style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              You are {distance ? formatDistance(distance) : "unknown distance"} from the work site.
+              Your clock-out will be flagged for admin review.
+            </ThemedText>
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setShowClockOutConfirm(false)}
+                style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}
+              >
+                <ThemedText style={{ fontWeight: "600" }}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={executeClockOut}
+                style={[styles.modalButton, { backgroundColor: theme.warning }]}
+              >
+                <ThemedText style={{ fontWeight: "600", color: "#fff" }}>Clock Out Anyway</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -744,5 +819,48 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     width: "100%",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  modalIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  modalMessage: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+    width: "100%",
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
   },
 });

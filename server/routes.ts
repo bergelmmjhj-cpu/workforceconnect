@@ -2315,36 +2315,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const radius = workplace.geofenceRadiusMeters || 150;
       const isWithinRadius = distance <= radius;
 
-      if (!isWithinRadius) {
-        const [updated] = await db.update(titoLogs)
-          .set({
-            timeOut: new Date(),
-            timeOutGpsLat: gpsLat,
-            timeOutGpsLng: gpsLng,
-            timeOutDistanceMeters: distance,
-            timeOutGpsVerified: false,
-            timeOutGpsFailureReason: `Outside geofence: ${Math.round(distance)}m from workplace (max ${radius}m)`,
-            updatedAt: new Date(),
-          })
-          .where(eq(titoLogs.id, titoLogId))
-          .returning();
-
-        res.status(400).json({ 
-          error: `You are not within the required GPS radius of the workplace. You are ${Math.round(distance)}m away, but must be within ${radius}m.`,
-          distance: Math.round(distance),
-          maxRadius: radius,
-          gpsVerified: false,
-        });
-        return;
-      }
-
       const [updated] = await db.update(titoLogs)
         .set({
           timeOut: new Date(),
           timeOutGpsLat: gpsLat,
           timeOutGpsLng: gpsLng,
           timeOutDistanceMeters: distance,
-          timeOutGpsVerified: true,
+          timeOutGpsVerified: isWithinRadius,
+          timeOutGpsFailureReason: !isWithinRadius ? `Outside geofence: ${Math.round(distance)}m from workplace (max ${radius}m)` : null,
+          status: !isWithinRadius ? "flagged" : undefined,
           updatedAt: new Date(),
         })
         .where(eq(titoLogs.id, titoLogId))
@@ -2352,12 +2331,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: "Successfully clocked out",
+        message: isWithinRadius ? "Successfully clocked out" : "Clocked out (flagged for admin review - outside geofence)",
         titoLogId: updated.id,
         timeIn: updated.timeIn,
         timeOut: updated.timeOut,
         distance: Math.round(distance),
-        gpsVerified: true,
+        gpsVerified: isWithinRadius,
+        flaggedForReview: !isWithinRadius,
       });
     } catch (error) {
       console.error("Error clocking out:", error);

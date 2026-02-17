@@ -2251,6 +2251,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         distance: Math.round(distance),
         gpsVerified: true,
       });
+
+      try {
+        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+        const workerName = worker?.fullName || "Worker";
+        const nowToronto = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
+        const currentHour = nowToronto.getHours();
+        const hrAdmins = await db.select({ id: users.id }).from(users).where(
+          and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
+        );
+        const hrAdminIds = hrAdmins.map(u => u.id);
+
+        let isLate = false;
+        if (shiftId) {
+          const [shiftRow] = await db.select({ startTime: shifts.startTime, date: shifts.date }).from(shifts).where(eq(shifts.id, shiftId));
+          if (shiftRow?.startTime && shiftRow?.date) {
+            const [h, m] = shiftRow.startTime.split(":").map(Number);
+            const shiftStart = new Date(shiftRow.date + "T00:00:00");
+            shiftStart.setHours(h, m, 0, 0);
+            const lateMinutes = Math.round((Date.now() - shiftStart.getTime()) / 60000);
+            if (lateMinutes > 10) {
+              isLate = true;
+              const lateMsg = `${workerName} clocked in ${lateMinutes} min late for shift at ${workplace.name}`;
+              await db.insert(appNotifications).values({
+                userId,
+                type: "late_clock_in",
+                title: "Late Clock-In Recorded",
+                body: `You clocked in ${lateMinutes} minutes after your shift start time at ${workplace.name}.`,
+              });
+              sendPushNotifications([userId], "Late Clock-In", `You clocked in ${lateMinutes} min late at ${workplace.name}.`);
+              for (const uid of hrAdminIds) {
+                await db.insert(appNotifications).values({
+                  userId: uid,
+                  type: "late_clock_in",
+                  title: "Late Clock-In Alert",
+                  body: lateMsg,
+                });
+              }
+              if (hrAdminIds.length > 0) {
+                sendPushNotifications(hrAdminIds, "Late Clock-In Alert", lateMsg);
+              }
+            }
+          }
+        }
+
+        if (currentHour < 5 || currentHour >= 23) {
+          const unusualMsg = `${workerName} clocked in at unusual hours (${nowToronto.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) at ${workplace.name}`;
+          if (!isLate) {
+            await db.insert(appNotifications).values({
+              userId,
+              type: "unusual_hours",
+              title: "Unusual Hours Clock-In",
+              body: `You clocked in outside normal hours at ${workplace.name}.`,
+            });
+            sendPushNotifications([userId], "Unusual Hours", `You clocked in at an unusual time at ${workplace.name}.`);
+          }
+          for (const uid of hrAdminIds) {
+            await db.insert(appNotifications).values({
+              userId: uid,
+              type: "unusual_hours",
+              title: "Unusual Hours Alert",
+              body: unusualMsg,
+            });
+          }
+          if (hrAdminIds.length > 0) {
+            sendPushNotifications(hrAdminIds, "Unusual Hours Alert", unusualMsg);
+          }
+        }
+      } catch (notifErr) {
+        console.error("Late/unusual notification error (non-blocking):", notifErr);
+      }
+
     } catch (error) {
       console.error("Error clocking in:", error);
       res.status(500).json({ error: "Failed to clock in" });
@@ -2339,6 +2410,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         gpsVerified: isWithinRadius,
         flaggedForReview: !isWithinRadius,
       });
+
+      try {
+        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+        const workerName = worker?.fullName || "Worker";
+        const nowToronto = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
+        const currentHour = nowToronto.getHours();
+
+        if (currentHour < 5 || currentHour >= 23) {
+          const hrAdmins = await db.select({ id: users.id }).from(users).where(
+            and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
+          );
+          const hrAdminIds = hrAdmins.map(u => u.id);
+          const unusualMsg = `${workerName} clocked out at unusual hours (${nowToronto.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) at ${workplace.name}`;
+
+          await db.insert(appNotifications).values({
+            userId,
+            type: "unusual_hours",
+            title: "Unusual Hours Clock-Out",
+            body: `You clocked out outside normal hours at ${workplace.name}.`,
+          });
+          sendPushNotifications([userId], "Unusual Hours", `You clocked out at an unusual time at ${workplace.name}.`);
+
+          for (const uid of hrAdminIds) {
+            await db.insert(appNotifications).values({
+              userId: uid,
+              type: "unusual_hours",
+              title: "Unusual Hours Alert",
+              body: unusualMsg,
+            });
+          }
+          if (hrAdminIds.length > 0) {
+            sendPushNotifications(hrAdminIds, "Unusual Hours Alert", unusualMsg);
+          }
+        }
+
+        if (!isWithinRadius) {
+          const hrAdmins2 = await db.select({ id: users.id }).from(users).where(
+            and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
+          );
+          const hrAdminIds2 = hrAdmins2.map(u => u.id);
+          const flaggedMsg = `${workerName} clocked out ${Math.round(distance)}m away from ${workplace.name} (max ${radius}m). Flagged for review.`;
+          for (const uid of hrAdminIds2) {
+            await db.insert(appNotifications).values({
+              userId: uid,
+              type: "flagged_clock_out",
+              title: "Flagged Clock-Out",
+              body: flaggedMsg,
+            });
+          }
+          if (hrAdminIds2.length > 0) {
+            sendPushNotifications(hrAdminIds2, "Flagged Clock-Out", flaggedMsg);
+          }
+        }
+      } catch (notifErr) {
+        console.error("Clock-out notification error (non-blocking):", notifErr);
+      }
+
     } catch (error) {
       console.error("Error clocking out:", error);
       res.status(500).json({ error: "Failed to clock out" });

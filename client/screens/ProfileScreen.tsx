@@ -43,6 +43,7 @@ export default function ProfileScreen() {
   const [businessAddress, setBusinessAddress] = useState(user?.businessAddress || "");
   const [businessPhone, setBusinessPhone] = useState(user?.businessPhone || "");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
   
   const [bankName, setBankName] = useState<string>("");
   const [bankInstitution, setBankInstitution] = useState<string>("");
@@ -294,7 +295,7 @@ export default function ProfileScreen() {
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >
       <View style={styles.header}>
-        <Pressable onPress={handlePickPhoto} testID="button-upload-photo">
+        <Pressable onPress={() => setShowPhotoModal(true)} testID="button-upload-photo">
           {photoData?.photo?.url ? (
             <Image
               source={{ uri: photoData.photo.url }}
@@ -907,6 +908,84 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal
+        visible={showPhotoModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPhotoModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowPhotoModal(false)}
+        >
+          <View style={[styles.bottomSheetContent, { backgroundColor: theme.surface }]}>
+            <View style={[styles.bottomSheetHandle, { backgroundColor: theme.textSecondary }]} />
+            
+            <ThemedText type="h3" style={[styles.modalTitle, { marginTop: Spacing.lg }]}>
+              Select Photo Source
+            </ThemedText>
+
+            <Pressable
+              onPress={async () => {
+                await handleTakePhoto();
+                setShowPhotoModal(false);
+              }}
+              style={({ pressed }) => [
+                styles.photoOptionButton,
+                pressed && { backgroundColor: theme.backgroundSecondary },
+                { borderBottomWidth: 1, borderBottomColor: theme.border },
+              ]}
+            >
+              <View style={styles.photoOptionContent}>
+                <View style={[styles.photoOptionIcon, { backgroundColor: theme.primary + "15" }]}>
+                  <Feather name="camera" size={24} color={theme.primary} />
+                </View>
+                <View>
+                  <ThemedText style={styles.photoOptionTitle}>Take Photo</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+                    Use your camera
+                  </ThemedText>
+                </View>
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={async () => {
+                await handlePickPhoto();
+                setShowPhotoModal(false);
+              }}
+              style={({ pressed }) => [
+                styles.photoOptionButton,
+                pressed && { backgroundColor: theme.backgroundSecondary },
+              ]}
+            >
+              <View style={styles.photoOptionContent}>
+                <View style={[styles.photoOptionIcon, { backgroundColor: theme.primary + "15" }]}>
+                  <Feather name="image" size={24} color={theme.primary} />
+                </View>
+                <View>
+                  <ThemedText style={styles.photoOptionTitle}>Choose from Gallery</ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: theme.textSecondary }}>
+                    Select from your device
+                  </ThemedText>
+                </View>
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setShowPhotoModal(false)}
+              style={[styles.photoOptionButton, { marginTop: Spacing.md }]}
+            >
+              <ThemedText style={{ textAlign: "center", color: theme.primary, fontSize: 16, fontWeight: "600" }}>
+                Cancel
+              </ThemedText>
+            </Pressable>
+
+            <View style={{ height: Spacing.xl }} />
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={show2FAModal}
         transparent
         animationType="fade"
@@ -1274,5 +1353,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: BorderRadius.full,
+  },
+  bottomSheetContent: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    paddingHorizontal: Spacing.lg,
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginTop: Spacing.sm,
+    opacity: 0.4,
+  },
+  photoOptionButton: {
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+  },
+  photoOptionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  photoOptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoOptionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

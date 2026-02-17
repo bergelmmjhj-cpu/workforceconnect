@@ -83,16 +83,31 @@ async function sendPushNotifications(userIds: string[], title: string, body: str
       chunks.push(messages.slice(i, i + 100));
     }
 
+    let pushSucceeded = 0;
+    let pushFailed = 0;
     for (const chunk of chunks) {
-      await fetch("https://exp.host/--/api/v2/push/send", {
-        method: "POST",
-        headers: {
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(chunk),
-      }).catch(err => console.error("Push notification error:", err));
+      try {
+        const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(chunk),
+        });
+        const pushResult = await pushRes.json();
+        if (pushResult?.data) {
+          for (const ticket of pushResult.data) {
+            if (ticket.status === "ok") pushSucceeded++;
+            else pushFailed++;
+          }
+        }
+      } catch (err) {
+        pushFailed += chunk.length;
+        console.error("[PUSH] Notification error:", err);
+      }
     }
+    console.log(`[PUSH] Sent to ${userIds.length} users: ${pushSucceeded} succeeded, ${pushFailed} failed, ${tokens.length} tokens found`);
   } catch (error) {
     console.error("Failed to send push notifications:", error);
   }
@@ -2171,12 +2186,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
       if (!workplace) {
-        res.status(404).json({ error: "Workplace not found" });
+        res.status(404).json({ error: "Workplace not found", errorCode: "WORKPLACE_NOT_FOUND" });
         return;
       }
 
       if (!workplace.isActive) {
-        res.status(400).json({ error: "Workplace is not active" });
+        res.status(400).json({ error: "Workplace is not active", errorCode: "WORKPLACE_INACTIVE" });
         return;
       }
 
@@ -2189,7 +2204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
 
       if (assignment.length === 0) {
-        res.status(403).json({ error: "You are not assigned to this workplace" });
+        res.status(403).json({ error: "You are not assigned to this workplace", errorCode: "NOT_ASSIGNED" });
         return;
       }
 
@@ -2199,7 +2214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (gpsLat === undefined || gpsLng === undefined) {
-        res.status(400).json({ error: "Location permission required for TITO. Please enable GPS." });
+        res.status(400).json({ error: "Location permission required for TITO. Please enable GPS.", errorCode: "NO_GPS" });
         return;
       }
 
@@ -2223,6 +2238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.status(400).json({ 
           error: `You are not within the required GPS radius of the workplace. You are ${Math.round(distance)}m away, but must be within ${radius}m.`,
+          errorCode: "TOO_FAR",
           distance: Math.round(distance),
           maxRadius: radius,
           titoLogId: titoLog.id,
@@ -2272,6 +2288,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const lateMinutes = Math.round((Date.now() - shiftStart.getTime()) / 60000);
             if (lateMinutes > 10) {
               isLate = true;
+              await db.update(titoLogs)
+                .set({ flaggedLate: true, lateMinutes: lateMinutes })
+                .where(eq(titoLogs.id, titoLog.id));
               const lateMsg = `${workerName} clocked in ${lateMinutes} min late for shift at ${workplace.name}`;
               await db.insert(appNotifications).values({
                 userId,
@@ -2291,6 +2310,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (hrAdminIds.length > 0) {
                 sendPushNotifications(hrAdminIds, "Late Clock-In Alert", lateMsg);
               }
+              await db.insert(auditLog).values({
+                userId: userId,
+                action: "LATE_CLOCKIN",
+                entityType: "tito_log",
+                entityId: titoLog.id,
+                details: JSON.stringify({ lateMinutes, shiftId, workplaceId, workerName }),
+              });
             }
           }
         }
@@ -2325,6 +2351,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error clocking in:", error);
       res.status(500).json({ error: "Failed to clock in" });
+    }
+  });
+
+  app.post("/api/tito/:id/late-reason", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const titoLogId = req.params.id;
+      const { lateReason, lateNote } = req.body;
+
+      if (!lateReason) {
+        res.status(400).json({ error: "lateReason is required" });
+        return;
+      }
+
+      const [log] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      if (!log) {
+        res.status(404).json({ error: "TITO log not found" });
+        return;
+      }
+
+      if (log.workerId !== userId) {
+        res.status(403).json({ error: "Not your TITO log" });
+        return;
+      }
+
+      await db.update(titoLogs)
+        .set({ lateReason, lateNote: lateNote || null, updatedAt: new Date() })
+        .where(eq(titoLogs.id, titoLogId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating late reason:", error);
+      res.status(500).json({ error: "Failed to update late reason" });
     }
   });
 
@@ -2706,11 +2765,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!workplaceId || !workerUserId || !title || !date || !startTime) {
         res.status(400).json({ error: "workplaceId, workerUserId, title, date, and startTime are required" });
-        return;
-      }
-
-      if (!isOpenEnded && !endTime) {
-        res.status(400).json({ error: "endTime is required for non-open-ended shifts" });
         return;
       }
 
@@ -4320,8 +4374,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const conflictWorkerIds = new Set<string>();
           for (const es of existingShifts) {
-            if (es.workerUserId && es.startTime && es.endTime) {
-              if (es.startTime < request.endTime && es.endTime > request.startTime) {
+            if (es.workerUserId && es.startTime) {
+              const existingEnd = es.endTime || "23:59";
+              const requestEnd = request.endTime || "23:59";
+              if (es.startTime < requestEnd && existingEnd > request.startTime) {
                 conflictWorkerIds.add(es.workerUserId);
               }
             }
@@ -4330,23 +4386,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eligibleWorkers = eligibleWorkers.filter(w => !conflictWorkerIds.has(w.id));
 
           const offeredWorkerIds: string[] = [];
+          let offerErrors = 0;
+          console.log(`[BROADCAST] Shift ${newShift.id}: ${eligibleWorkers.length} eligible workers found`);
           for (const worker of eligibleWorkers) {
-            await db.insert(shiftOffers).values({
-              shiftId: newShift.id,
-              workerId: worker.id,
-              status: "pending",
-            });
+            try {
+              await db.insert(shiftOffers).values({
+                shiftId: newShift.id,
+                workerId: worker.id,
+                status: "pending",
+              });
 
-            await db.insert(appNotifications).values({
-              userId: worker.id,
-              type: "shift_offer",
-              title: "New Shift Available",
-              body: `A ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date} is available. Tap to accept.`,
-              deepLink: `/shift-offers`,
-            });
+              await db.insert(appNotifications).values({
+                userId: worker.id,
+                type: "shift_offer",
+                title: "New Shift Available",
+                body: `A ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date} is available. Tap to accept.`,
+                deepLink: `/shift-offers`,
+              });
 
-            offeredWorkerIds.push(worker.id);
+              offeredWorkerIds.push(worker.id);
+            } catch (offerErr: any) {
+              offerErrors++;
+              console.error(`[BROADCAST] Failed to create offer for worker ${worker.id} (${worker.fullName}):`, offerErr?.message || offerErr);
+            }
           }
+          console.log(`[BROADCAST] Shift ${newShift.id}: ${offeredWorkerIds.length} offers created, ${offerErrors} errors`);
 
           if (offeredWorkerIds.length > 0) {
             sendPushNotifications(
@@ -4356,6 +4420,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { type: "shift_offer", shiftId: newShift.id }
             );
           }
+
+          await db.insert(auditLog).values({
+            userId: userId,
+            action: "SHIFT_BROADCAST",
+            entityType: "shift",
+            entityId: newShift.id,
+            details: JSON.stringify({
+              requestId,
+              eligibleCount: eligibleWorkers.length,
+              offersCreated: offeredWorkerIds.length,
+              offerErrors,
+              workerIds: offeredWorkerIds,
+            }),
+          });
 
           await db.update(shiftRequests)
             .set({ status: "offered", updatedAt: new Date() })
@@ -4637,6 +4715,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
+          await db.insert(auditLog).values({
+            userId: userId,
+            action: "OFFER_ACCEPTED",
+            entityType: "shift_offer",
+            entityId: offerId,
+            details: JSON.stringify({ shiftId: offer.shiftId, cancelledOffers: cancelledWorkerIds.length }),
+          });
+
           broadcast({ type: "shift_offer_accepted", data: { offerId, shiftId: offer.shiftId } });
 
           res.json({ success: true, status: "accepted" });
@@ -4672,6 +4758,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { type: "offer_declined", shiftId: offer.shiftId }
           );
 
+          await db.insert(auditLog).values({
+            userId: userId,
+            action: "OFFER_DECLINED",
+            entityType: "shift_offer",
+            entityId: offerId,
+            details: JSON.stringify({ shiftId: offer.shiftId }),
+          });
+
           broadcast({ type: "shift_offer_declined", data: { offerId, shiftId: offer.shiftId } });
 
           res.json({ success: true, status: "declined" });
@@ -4679,6 +4773,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("Error responding to shift offer:", error);
         res.status(500).json({ error: "Failed to respond to shift offer" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/admin/debug/broadcast/:shiftId",
+    checkRoles("admin", "hr"),
+    async (req: Request, res: Response) => {
+      try {
+        const shiftId = req.params.shiftId;
+        
+        const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+        if (!shift) {
+          res.status(404).json({ error: "Shift not found" });
+          return;
+        }
+
+        const offers = await db.select().from(shiftOffers).where(eq(shiftOffers.shiftId, shiftId));
+        
+        const workerIds = offers.map(o => o.workerId);
+        let tokensCount = 0;
+        if (workerIds.length > 0) {
+          const tokens = await db.select({ token: pushTokens.token })
+            .from(pushTokens)
+            .where(and(inArray(pushTokens.userId, workerIds), eq(pushTokens.isActive, true)));
+          tokensCount = tokens.length;
+        }
+
+        const auditEntries = await db.select().from(auditLog)
+          .where(and(eq(auditLog.entityType, "shift"), eq(auditLog.entityId, shiftId)))
+          .orderBy(desc(auditLog.createdAt));
+
+        res.json({
+          shiftId,
+          shiftStatus: shift.status,
+          workerUserId: shift.workerUserId,
+          totalOffers: offers.length,
+          offersByStatus: {
+            pending: offers.filter(o => o.status === "pending").length,
+            accepted: offers.filter(o => o.status === "accepted").length,
+            declined: offers.filter(o => o.status === "declined").length,
+            cancelled: offers.filter(o => o.status === "cancelled").length,
+          },
+          pushTokensFound: tokensCount,
+          auditTrail: auditEntries.map(a => ({
+            action: a.action,
+            details: a.details ? JSON.parse(a.details) : null,
+            createdAt: a.createdAt,
+          })),
+        });
+      } catch (error) {
+        console.error("Error in debug broadcast:", error);
+        res.status(500).json({ error: "Failed to fetch broadcast debug info" });
       }
     }
   );
@@ -5331,6 +5478,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error processing shift reminders:", error);
     }
   }
+
+  async function processMissedShiftDetection() {
+    try {
+      const nowToronto = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
+      const todayStr = nowToronto.toISOString().split("T")[0];
+      const currentHour = nowToronto.getHours();
+      const currentMin = nowToronto.getMinutes();
+      const currentTimeMinutes = currentHour * 60 + currentMin;
+
+      const todayShifts = await db.select().from(shifts).where(
+        and(
+          eq(shifts.date, todayStr),
+          eq(shifts.status, "scheduled"),
+          not(isNull(shifts.workerUserId))
+        )
+      );
+
+      for (const shift of todayShifts) {
+        if (!shift.startTime || !shift.workerUserId) continue;
+        const [h, m] = shift.startTime.split(":").map(Number);
+        const shiftStartMinutes = h * 60 + m;
+        const minutesLate = currentTimeMinutes - shiftStartMinutes;
+
+        if (minutesLate < 15 || minutesLate > 120) continue;
+
+        const existingTito = await db.select({ id: titoLogs.id }).from(titoLogs)
+          .where(and(
+            eq(titoLogs.shiftId, shift.id),
+            eq(titoLogs.workerId, shift.workerUserId),
+            not(isNull(titoLogs.timeIn))
+          ))
+          .limit(1);
+
+        if (existingTito.length > 0) continue;
+
+        const alreadyNotified = await db.select({ id: sentReminders.id }).from(sentReminders)
+          .where(and(
+            eq(sentReminders.shiftId, shift.id),
+            eq(sentReminders.workerId, shift.workerUserId),
+            eq(sentReminders.reminderType, minutesLate >= 30 ? "noshow_hr" : "missed_worker")
+          ))
+          .limit(1);
+
+        if (alreadyNotified.length > 0) continue;
+
+        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, shift.workerUserId));
+        const [workplace] = shift.workplaceId ? await db.select({ name: workplaces.name }).from(workplaces).where(eq(workplaces.id, shift.workplaceId)) : [null];
+        const workerName = worker?.fullName || "Worker";
+        const wpName = workplace?.name || "workplace";
+
+        if (minutesLate >= 30) {
+          const hrAdmins = await db.select({ id: users.id }).from(users)
+            .where(and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true)));
+          const hrIds = hrAdmins.map(u => u.id);
+
+          for (const hrId of hrIds) {
+            await db.insert(appNotifications).values({
+              userId: hrId,
+              type: "no_show_risk",
+              title: "Possible No-Show",
+              body: `${workerName} has not clocked in for their ${shift.startTime} shift at ${wpName}. ${minutesLate} minutes overdue.`,
+              deepLink: `/shifts/${shift.id}`,
+            });
+          }
+
+          sendPushNotifications(
+            hrIds,
+            "Possible No-Show",
+            `${workerName} has not clocked in for their shift at ${wpName}. ${minutesLate} min overdue.`,
+            { type: "no_show_risk", shiftId: shift.id }
+          );
+
+          await db.insert(sentReminders).values({
+            shiftId: shift.id,
+            workerId: shift.workerUserId,
+            reminderType: "noshow_hr",
+          }).onConflictDoNothing();
+
+          await db.insert(auditLog).values({
+            userId: shift.workerUserId,
+            action: "NO_SHOW_RISK",
+            entityType: "shift",
+            entityId: shift.id,
+            details: JSON.stringify({ minutesLate, workerName, workplaceName: wpName }),
+          });
+
+          console.log(`[MISSED-SHIFT] No-show alert for ${workerName}, shift ${shift.id}, ${minutesLate} min late`);
+        } else if (minutesLate >= 15) {
+          await db.insert(appNotifications).values({
+            userId: shift.workerUserId,
+            type: "missed_shift_prompt",
+            title: "Shift Started",
+            body: `Your shift at ${wpName} started ${minutesLate} minutes ago. Please clock in or contact HR if you have an issue.`,
+            deepLink: `/clock-in`,
+          });
+
+          sendPushNotifications(
+            [shift.workerUserId],
+            "Shift Started",
+            `Your shift at ${wpName} started ${minutesLate} minutes ago. Please clock in.`,
+            { type: "missed_shift_prompt", shiftId: shift.id }
+          );
+
+          await db.insert(sentReminders).values({
+            shiftId: shift.id,
+            workerId: shift.workerUserId,
+            reminderType: "missed_worker",
+          }).onConflictDoNothing();
+
+          console.log(`[MISSED-SHIFT] Worker prompt for ${workerName}, shift ${shift.id}, ${minutesLate} min late`);
+        }
+      }
+    } catch (error) {
+      console.error("[MISSED-SHIFT] Detection error:", error);
+    }
+  }
+
+  setInterval(processMissedShiftDetection, 5 * 60 * 1000);
+  processMissedShiftDetection();
 
   processShiftReminders();
   setInterval(processShiftReminders, 15 * 60 * 1000);

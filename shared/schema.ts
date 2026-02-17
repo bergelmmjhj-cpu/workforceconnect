@@ -375,6 +375,11 @@ export const titoLogs = pgTable("tito_logs", {
   disputedAt: timestamp("disputed_at"),
   notes: text("notes"),
   
+  lateReason: text("late_reason"),
+  lateNote: text("late_note"),
+  flaggedLate: boolean("flagged_late").default(false),
+  lateMinutes: integer("late_minutes"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

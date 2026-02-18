@@ -1838,13 +1838,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/workplaces/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+  app.get("/api/workplaces/:id", async (req: Request, res: Response) => {
     try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
       const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found" });
         return;
       }
+
+      if (role === "worker" || role === "client") {
+        const [assignment] = await db.select().from(workplaceAssignments)
+          .where(and(
+            eq(workplaceAssignments.workplaceId, req.params.id),
+            eq(workplaceAssignments.workerUserId, userId)
+          ));
+        const [assignedShift] = await db.select({ id: shifts.id }).from(shifts)
+          .where(and(
+            eq(shifts.workplaceId, req.params.id),
+            eq(shifts.workerUserId, userId)
+          )).limit(1);
+        if (!assignment && !assignedShift) {
+          res.json({
+            id: workplace.id,
+            name: workplace.name,
+            latitude: workplace.latitude,
+            longitude: workplace.longitude,
+            geofenceRadiusMeters: workplace.geofenceRadiusMeters,
+          });
+          return;
+        }
+      }
+
       res.json(workplace);
     } catch (error) {
       console.error("Error fetching workplace:", error);
@@ -2702,12 +2733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const includePast = req.query.includePast === "true";
       if (!includePast) {
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
-        conditions.push(
-          or(
-            gte(shifts.date, today),
-            and(not(eq(shifts.status, "completed")), not(eq(shifts.status, "cancelled")))
-          )!
-        );
+        conditions.push(gte(shifts.date, today));
       }
 
       if (role === "worker") {

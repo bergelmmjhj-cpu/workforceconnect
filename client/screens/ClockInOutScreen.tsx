@@ -259,6 +259,20 @@ export default function ClockInOutScreen() {
   const canClockIn =
     !titoLog && isWithinGeofence && isWithinClockInWindow && shift?.latitude != null;
   const hasCompletedShift = titoLog?.timeOut;
+  const canClockOut = titoLog && !titoLog.timeOut;
+
+  const clockInBlockReason = useMemo(() => {
+    if (titoLog || hasCompletedShift) return null;
+    if (!shift?.latitude || !shift?.longitude) return "Workplace GPS not configured. Contact admin.";
+    if (!userLocation) return "Getting your location...";
+    if (!isWithinClockInWindow && clockInTimeMessage) return clockInTimeMessage;
+    if (!isWithinClockInWindow) return "Outside clock-in window";
+    if (!isWithinGeofence && distance !== null) {
+      return `You are ${formatDistance(distance)} away. Move closer to work site.`;
+    }
+    if (!isWithinGeofence) return "Checking distance to work site...";
+    return null;
+  }, [titoLog, hasCompletedShift, shift, userLocation, isWithinClockInWindow, clockInTimeMessage, isWithinGeofence, distance]);
 
   const handleClockIn = async () => {
     if (!shift || !userLocation || !user) return;
@@ -409,21 +423,6 @@ export default function ClockInOutScreen() {
         longitudeDelta: 0.005,
       }
     : null;
-
-  const clockInBlockReason = useMemo(() => {
-    if (titoLog || hasCompletedShift) return null;
-    if (!shift?.latitude || !shift?.longitude) return "Workplace GPS not configured. Contact admin.";
-    if (!userLocation) return "Getting your location...";
-    if (!isWithinClockInWindow && clockInTimeMessage) return clockInTimeMessage;
-    if (!isWithinClockInWindow) return "Outside clock-in window";
-    if (!isWithinGeofence && distance !== null) {
-      return `You are ${formatDistance(distance)} away. Move closer to work site.`;
-    }
-    if (!isWithinGeofence) return "Checking distance to work site...";
-    return null;
-  }, [titoLog, hasCompletedShift, shift, userLocation, isWithinClockInWindow, clockInTimeMessage, isWithinGeofence, distance]);
-
-  const canClockOut = titoLog && !titoLog.timeOut;
 
   const buttonColor = hasCompletedShift
     ? theme.success

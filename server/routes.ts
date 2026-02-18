@@ -2456,35 +2456,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, titoLog.workplaceId!));
-      if (!workplace) {
-        res.status(404).json({ error: "Workplace not found" });
-        return;
+      const [workplace] = titoLog.workplaceId
+        ? await db.select().from(workplaces).where(eq(workplaces.id, titoLog.workplaceId))
+        : [null];
+
+      const hasGps = gpsLat != null && gpsLng != null && (gpsLat !== 0 || gpsLng !== 0);
+      const hasWorkplaceCoords = workplace?.latitude != null && workplace?.longitude != null;
+
+      let distance: number | null = null;
+      let isWithinRadius = false;
+      if (hasGps && hasWorkplaceCoords) {
+        distance = haversineDistance(gpsLat, gpsLng, workplace!.latitude!, workplace!.longitude!);
+        const radius = workplace!.geofenceRadiusMeters || 150;
+        isWithinRadius = distance <= radius;
       }
 
-      if (workplace.latitude === null || workplace.longitude === null) {
-        res.status(400).json({ error: "Workplace coordinates not configured. Contact admin." });
-        return;
-      }
-
-      if (gpsLat === undefined || gpsLng === undefined) {
-        res.status(400).json({ error: "Location permission required for TITO. Please enable GPS." });
-        return;
-      }
-
-      const distance = haversineDistance(gpsLat, gpsLng, workplace.latitude, workplace.longitude);
-      const radius = workplace.geofenceRadiusMeters || 150;
-      const isWithinRadius = distance <= radius;
+      const isFlagged = hasGps && hasWorkplaceCoords && !isWithinRadius;
 
       const [updated] = await db.update(titoLogs)
         .set({
           timeOut: new Date(),
-          timeOutGpsLat: gpsLat,
-          timeOutGpsLng: gpsLng,
+          timeOutGpsLat: hasGps ? gpsLat : null,
+          timeOutGpsLng: hasGps ? gpsLng : null,
           timeOutDistanceMeters: distance,
-          timeOutGpsVerified: isWithinRadius,
-          timeOutGpsFailureReason: !isWithinRadius ? `Outside geofence: ${Math.round(distance)}m from workplace (max ${radius}m)` : null,
-          status: !isWithinRadius ? "flagged" : undefined,
+          timeOutGpsVerified: hasGps ? isWithinRadius : false,
+          timeOutGpsFailureReason: !hasGps
+            ? "GPS unavailable at clock-out"
+            : isFlagged
+            ? `Outside geofence: ${Math.round(distance!)}m from workplace (max ${workplace!.geofenceRadiusMeters || 150}m)`
+            : null,
+          status: isFlagged || !hasGps ? "flagged" : undefined,
           updatedAt: new Date(),
         })
         .where(eq(titoLogs.id, titoLogId))
@@ -2492,13 +2493,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: isWithinRadius ? "Successfully clocked out" : "Clocked out (flagged for admin review - outside geofence)",
+        message: isWithinRadius ? "Successfully clocked out" : "Clocked out (flagged for admin review)",
         titoLogId: updated.id,
         timeIn: updated.timeIn,
         timeOut: updated.timeOut,
-        distance: Math.round(distance),
+        distance: distance != null ? Math.round(distance) : null,
         gpsVerified: isWithinRadius,
-        flaggedForReview: !isWithinRadius,
+        flaggedForReview: isFlagged || !hasGps,
       });
 
       try {
@@ -2507,20 +2508,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const nowToronto = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
         const currentHour = nowToronto.getHours();
 
+        const wpName = workplace?.name || "work site";
+
         if (currentHour < 5 || currentHour >= 23) {
           const hrAdmins = await db.select({ id: users.id }).from(users).where(
             and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
           );
           const hrAdminIds = hrAdmins.map(u => u.id);
-          const unusualMsg = `${workerName} clocked out at unusual hours (${nowToronto.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) at ${workplace.name}`;
+          const unusualMsg = `${workerName} clocked out at unusual hours (${nowToronto.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) at ${wpName}`;
 
           await db.insert(appNotifications).values({
             userId,
             type: "unusual_hours",
             title: "Unusual Hours Clock-Out",
-            body: `You clocked out outside normal hours at ${workplace.name}.`,
+            body: `You clocked out outside normal hours at ${wpName}.`,
           });
-          sendPushNotifications([userId], "Unusual Hours", `You clocked out at an unusual time at ${workplace.name}.`);
+          sendPushNotifications([userId], "Unusual Hours", `You clocked out at an unusual time at ${wpName}.`);
 
           for (const uid of hrAdminIds) {
             await db.insert(appNotifications).values({
@@ -2535,12 +2538,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        if (!isWithinRadius) {
+        if (isFlagged && distance != null) {
           const hrAdmins2 = await db.select({ id: users.id }).from(users).where(
             and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
           );
           const hrAdminIds2 = hrAdmins2.map(u => u.id);
-          const flaggedMsg = `${workerName} clocked out ${Math.round(distance)}m away from ${workplace.name} (max ${radius}m). Flagged for review.`;
+          const flaggedMsg = `${workerName} clocked out ${Math.round(distance)}m away from ${wpName} (max ${workplace?.geofenceRadiusMeters || 150}m). Flagged for review.`;
           for (const uid of hrAdminIds2) {
             await db.insert(appNotifications).values({
               userId: uid,

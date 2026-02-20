@@ -1,0 +1,1 @@
+{"private":true,"dependencies":{"types-registry":"^0.1.756"},"devDependencies":{"@types/archiver":"^7.0.0","@types/express":"^5.0.6","@types/pg":"^8.16.0","@types/react":"^19.2.13","@types/react-dom":"^19.2.3","@types/react-native-web":"^0.19.2","@types/react-test-renderer":"^19.1.0","@types/ws":"^8.18.1"}}

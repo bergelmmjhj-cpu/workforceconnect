@@ -449,17 +449,19 @@ export const timesheetEntries = pgTable("timesheet_entries", {
     .references(() => workplaces.id),
   titoLogId: varchar("tito_log_id")
     .references(() => titoLogs.id),
-  dateLocal: date("date_local").notNull(), // Work date (YYYY-MM-DD)
+  dateLocal: date("date_local").notNull(),
   timeInUtc: timestamp("time_in_utc").notNull(),
   timeOutUtc: timestamp("time_out_utc").notNull(),
   breakMinutes: integer("break_minutes").default(0),
   hours: numeric("hours", { precision: 5, scale: 2 }).notNull(),
-  payRate: numeric("pay_rate", { precision: 10, scale: 2 }).notNull(), // Snapshot rate at time of work
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(), // hours * payRate
+  payRate: numeric("pay_rate", { precision: 10, scale: 2 }).notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueTitoLog: uniqueIndex("unique_timesheet_tito_log").on(table.titoLogId),
+}));
 
 export const insertTimesheetEntrySchema = createInsertSchema(timesheetEntries).omit({
   id: true,
@@ -778,6 +780,9 @@ export const shiftOffers = pgTable("shift_offers", {
   status: text("status").notNull().default("pending"),
   offeredAt: timestamp("offered_at").defaultNow().notNull(),
   respondedAt: timestamp("responded_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: varchar("cancelled_by"),
+  cancelReason: text("cancel_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   uniqueShiftWorker: uniqueIndex("unique_shift_worker_offer").on(table.shiftId, table.workerId),

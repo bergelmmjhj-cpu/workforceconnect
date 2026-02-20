@@ -39,7 +39,7 @@ import {
   userPhotos,
 } from "../shared/schema";
 import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
-import { getPayPeriodsForYear, getPayPeriod } from "../shared/payPeriods2026";
+import { getPayPeriodsForYear, getPayPeriod, getCurrentPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
 import * as OTPAuth from "otpauth";
 import crypto from "crypto";
@@ -2215,6 +2215,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // Idempotency: check for existing open TITO log for this worker/shift/workplace
+      const existingConditions = [
+        eq(titoLogs.workerId, userId),
+        eq(titoLogs.workplaceId, workplaceId),
+        isNull(titoLogs.timeOut),
+      ];
+      if (shiftId) {
+        existingConditions.push(eq(titoLogs.shiftId, shiftId));
+      }
+      const existingLogs = await db.select().from(titoLogs)
+        .where(and(...existingConditions))
+        .limit(1);
+
+      if (existingLogs.length > 0) {
+        const existing = existingLogs[0];
+        console.log(`[TITO] Idempotent clock-in: worker ${userId} already clocked in (titoLogId=${existing.id})`);
+        res.json({
+          success: true,
+          message: "Already clocked in",
+          titoLogId: existing.id,
+          timeIn: existing.timeIn,
+          distance: existing.timeInDistanceMeters ? Math.round(existing.timeInDistanceMeters) : null,
+          gpsVerified: existing.timeInGpsVerified,
+          alreadyClockedIn: true,
+        });
+        return;
+      }
+
       const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found", errorCode: "WORKPLACE_NOT_FOUND" });
@@ -2289,6 +2317,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timeInGpsVerified: true,
         status: "pending",
       }).returning();
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "CLOCK_IN",
+        entityType: "tito_log",
+        entityId: titoLog.id,
+        details: JSON.stringify({ workplaceId, shiftId, distance: Math.round(distance), gpsVerified: true }),
+      });
 
       res.json({
         success: true,
@@ -2451,8 +2487,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // Idempotency: if already clocked out, return existing data
       if (titoLog.timeOut) {
-        res.status(400).json({ error: "Already clocked out" });
+        console.log(`[TITO] Idempotent clock-out: worker ${userId} already clocked out (titoLogId=${titoLog.id})`);
+        const totalMs = new Date(titoLog.timeOut).getTime() - new Date(titoLog.timeIn!).getTime();
+        const totalHours = Math.max(0, parseFloat((totalMs / 3600000).toFixed(2)));
+        res.json({
+          success: true,
+          message: "Already clocked out",
+          titoLogId: titoLog.id,
+          timeIn: titoLog.timeIn,
+          timeOut: titoLog.timeOut,
+          totalHours,
+          gpsVerified: titoLog.timeOutGpsVerified,
+          flaggedForReview: titoLog.status === "flagged",
+          alreadyClockedOut: true,
+        });
+        return;
+      }
+
+      if (!titoLog.timeIn) {
+        res.status(400).json({ error: "Cannot clock out without a clock-in time" });
         return;
       }
 
@@ -2472,10 +2527,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const isFlagged = hasGps && hasWorkplaceCoords && !isWithinRadius;
+      const clockOutTime = new Date();
 
       const [updated] = await db.update(titoLogs)
         .set({
-          timeOut: new Date(),
+          timeOut: clockOutTime,
           timeOutGpsLat: hasGps ? gpsLat : null,
           timeOutGpsLng: hasGps ? gpsLng : null,
           timeOutDistanceMeters: distance,
@@ -2491,15 +2547,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(titoLogs.id, titoLogId))
         .returning();
 
+      // Calculate hours (server time as source of truth)
+      const totalMs = clockOutTime.getTime() - new Date(titoLog.timeIn).getTime();
+      const totalHours = Math.max(0, parseFloat((totalMs / 3600000).toFixed(2)));
+
+      // Auto-create timesheet entry atomically
+      let timesheetEntryCreated = false;
+      try {
+        const clockInDate = new Date(titoLog.timeIn);
+        const dateLocalStr = clockInDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+        const payPeriod = getCurrentPayPeriod(new Date(dateLocalStr + "T12:00:00"));
+
+        if (payPeriod && totalHours > 0) {
+          const [existingTimesheet] = await db.select().from(timesheets)
+            .where(and(
+              eq(timesheets.workerUserId, userId),
+              eq(timesheets.periodYear, payPeriod.year),
+              eq(timesheets.periodNumber, payPeriod.periodNumber),
+            ));
+
+          let timesheetId: string;
+          if (existingTimesheet) {
+            timesheetId = existingTimesheet.id;
+          } else {
+            const [newTimesheet] = await db.insert(timesheets).values({
+              workerUserId: userId,
+              periodYear: payPeriod.year,
+              periodNumber: payPeriod.periodNumber,
+              status: "draft",
+            }).returning();
+            timesheetId = newTimesheet.id;
+          }
+
+          const defaultPayRate = 18.00;
+          const amount = parseFloat((totalHours * defaultPayRate).toFixed(2));
+
+          const existingEntry = await db.select().from(timesheetEntries)
+            .where(eq(timesheetEntries.titoLogId, titoLogId))
+            .limit(1);
+
+          if (existingEntry.length === 0) {
+            await db.insert(timesheetEntries).values({
+              timesheetId,
+              workplaceId: titoLog.workplaceId || null,
+              titoLogId: titoLogId,
+              dateLocal: dateLocalStr,
+              timeInUtc: titoLog.timeIn,
+              timeOutUtc: clockOutTime,
+              hours: totalHours.toString(),
+              payRate: defaultPayRate.toString(),
+              amount: amount.toString(),
+              notes: isFlagged ? "Flagged: clock-out outside geofence" : (!hasGps ? "GPS unavailable at clock-out" : null),
+            });
+            timesheetEntryCreated = true;
+
+            // Recalculate timesheet totals
+            const allEntries = await db.select({
+              hours: timesheetEntries.hours,
+              amount: timesheetEntries.amount,
+            }).from(timesheetEntries).where(eq(timesheetEntries.timesheetId, timesheetId));
+
+            const totalTimesheetHours = allEntries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
+            const totalTimesheetPay = allEntries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+            await db.update(timesheets)
+              .set({
+                totalHours: totalTimesheetHours.toFixed(2),
+                totalPay: totalTimesheetPay.toFixed(2),
+                updatedAt: new Date(),
+              })
+              .where(eq(timesheets.id, timesheetId));
+
+            console.log(`[TIMESHEET] Auto-created entry: worker=${userId}, titoLog=${titoLogId}, hours=${totalHours}, amount=${amount}, period=${payPeriod.year}-${payPeriod.periodNumber}`);
+          }
+        } else {
+          console.warn(`[TIMESHEET] No pay period found for date ${dateLocalStr} or zero hours (${totalHours}h). Skipping auto-timesheet.`);
+        }
+      } catch (tsError) {
+        console.error(`[TIMESHEET] Failed to auto-create timesheet entry for titoLog ${titoLogId}:`, tsError);
+      }
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "CLOCK_OUT",
+        entityType: "tito_log",
+        entityId: titoLogId,
+        details: JSON.stringify({
+          workplaceId: titoLog.workplaceId,
+          shiftId: titoLog.shiftId,
+          timeIn: titoLog.timeIn,
+          timeOut: clockOutTime,
+          totalHours,
+          gpsVerified: isWithinRadius,
+          flagged: isFlagged || !hasGps,
+          timesheetEntryCreated,
+        }),
+      });
+
       res.json({
         success: true,
         message: isWithinRadius ? "Successfully clocked out" : "Clocked out (flagged for admin review)",
         titoLogId: updated.id,
         timeIn: updated.timeIn,
         timeOut: updated.timeOut,
+        totalHours,
         distance: distance != null ? Math.round(distance) : null,
         gpsVerified: isWithinRadius,
         flaggedForReview: isFlagged || !hasGps,
+        timesheetEntryCreated,
       });
 
       try {
@@ -4546,8 +4701,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const statusFilter = req.query.status as string | undefined;
       let results;
       if (role === "worker") {
+        const conditions: any[] = [eq(shiftOffers.workerId, userId)];
+        if (statusFilter && statusFilter !== "all") {
+          conditions.push(eq(shiftOffers.status, statusFilter));
+        }
         results = await db.select({
           id: shiftOffers.id,
           shiftId: shiftOffers.shiftId,
@@ -4555,6 +4715,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: shiftOffers.status,
           offeredAt: shiftOffers.offeredAt,
           respondedAt: shiftOffers.respondedAt,
+          cancelledAt: shiftOffers.cancelledAt,
+          cancelReason: shiftOffers.cancelReason,
           shiftDate: shifts.date,
           shiftStartTime: shifts.startTime,
           shiftEndTime: shifts.endTime,
@@ -4566,12 +4728,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(shiftOffers)
         .innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id))
         .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
-        .where(and(
-          eq(shiftOffers.workerId, userId),
-          eq(shiftOffers.status, "pending")
-        ))
+        .where(and(...conditions))
         .orderBy(desc(shiftOffers.offeredAt));
       } else if (role === "admin" || role === "hr") {
+        const conditions: any[] = [];
+        if (statusFilter && statusFilter !== "all") {
+          conditions.push(eq(shiftOffers.status, statusFilter));
+        }
         results = await db.select({
           id: shiftOffers.id,
           shiftId: shiftOffers.shiftId,
@@ -4579,6 +4742,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: shiftOffers.status,
           offeredAt: shiftOffers.offeredAt,
           respondedAt: shiftOffers.respondedAt,
+          cancelledAt: shiftOffers.cancelledAt,
+          cancelReason: shiftOffers.cancelReason,
           shiftDate: shifts.date,
           shiftStartTime: shifts.startTime,
           shiftEndTime: shifts.endTime,
@@ -4592,13 +4757,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id))
         .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
         .leftJoin(users, eq(shiftOffers.workerId, users.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(shiftOffers.offeredAt));
       } else {
         res.status(403).json({ error: "Access denied" });
         return;
       }
 
-      res.json(results);
+      res.json(results || []);
     } catch (error) {
       console.error("Error fetching shift offers:", error);
       res.status(500).json({ error: "Failed to fetch shift offers" });
@@ -4631,9 +4797,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (offer.status !== "pending") {
-          res.status(400).json({ error: `Offer already ${offer.status}` });
+          res.json({ success: true, message: `Offer already ${offer.status}`, alreadyResponded: true, status: offer.status });
           return;
         }
+
+        await db.insert(auditLog).values({
+          userId,
+          action: `OFFER_${response.toUpperCase()}`,
+          entityType: "shift_offer",
+          entityId: offerId,
+          details: JSON.stringify({ shiftId: offer.shiftId, response }),
+        });
 
         if (response === "accepted") {
           const [shift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
@@ -4671,9 +4845,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const cancelledWorkerIds: string[] = [];
           for (const otherOffer of otherOffers) {
             await db.update(shiftOffers)
-              .set({ status: "cancelled", respondedAt: new Date() })
+              .set({ status: "cancelled", respondedAt: new Date(), cancelledAt: new Date(), cancelledBy: userId, cancelReason: "Shift filled by another worker" })
               .where(eq(shiftOffers.id, otherOffer.id));
             cancelledWorkerIds.push(otherOffer.workerId);
+            await db.insert(auditLog).values({
+              userId,
+              action: "OFFER_CANCELLED_AUTO",
+              entityType: "shift_offer",
+              entityId: otherOffer.id,
+              details: JSON.stringify({ shiftId: offer.shiftId, cancelledWorkerId: otherOffer.workerId, reason: "Shift filled by another worker" }),
+            });
           }
 
           if (shift.requestId) {

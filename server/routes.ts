@@ -2267,6 +2267,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      if (shiftId) {
+        const [shiftRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+        if (!shiftRow) {
+          res.status(404).json({ error: "Shift not found", errorCode: "SHIFT_NOT_FOUND" });
+          return;
+        }
+        const isAssignedWorker = shiftRow.workerUserId === userId;
+        const [acceptedOffer] = isAssignedWorker
+          ? [{ id: "assigned" }]
+          : await db.select({ id: shiftOffers.id }).from(shiftOffers)
+              .where(and(
+                eq(shiftOffers.shiftId, shiftId),
+                eq(shiftOffers.workerId, userId),
+                eq(shiftOffers.status, "accepted")
+              ))
+              .limit(1);
+
+        if (!isAssignedWorker && !acceptedOffer) {
+          res.status(403).json({
+            error: "You must have an accepted shift offer to clock in for this shift",
+            errorCode: "NO_ACCEPTED_OFFER",
+          });
+          return;
+        }
+      } else {
+        const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+        const todayShifts = await db.select({ id: shifts.id }).from(shifts)
+          .where(and(
+            eq(shifts.workplaceId, workplaceId),
+            eq(shifts.date, todayStr),
+            or(
+              eq(shifts.workerUserId, userId),
+              sql`EXISTS (SELECT 1 FROM shift_offers WHERE shift_offers.shift_id = shifts.id AND shift_offers.worker_id = ${userId} AND shift_offers.status = 'accepted')`
+            )
+          ))
+          .limit(1);
+
+        if (todayShifts.length === 0) {
+          res.status(403).json({
+            error: "No shift scheduled for you today at this workplace. Accept a shift offer first.",
+            errorCode: "NO_SHIFT_TODAY",
+          });
+          return;
+        }
+      }
+
       if (workplace.latitude === null || workplace.longitude === null) {
         res.status(400).json({ error: "Workplace coordinates not configured. Contact admin." });
         return;
@@ -5159,6 +5205,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   );
+
+  app.post("/api/shifts/:id/blast", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const shiftId = req.params.id;
+      const userId = req.headers["x-user-id"] as string;
+
+      const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      if (!shift) {
+        res.status(404).json({ error: "Shift not found" });
+        return;
+      }
+
+      const [workplace] = shift.workplaceId
+        ? await db.select().from(workplaces).where(eq(workplaces.id, shift.workplaceId))
+        : [null];
+
+      const allWorkers = await db.select({
+        id: users.id,
+        fullName: users.fullName,
+        workerRoles: users.workerRoles,
+      })
+      .from(users)
+      .where(and(
+        eq(users.role, "worker"),
+        eq(users.isActive, true)
+      ));
+
+      let eligibleWorkers = allWorkers.filter(w => {
+        if (shift.roleType && w.workerRoles) {
+          try {
+            const roles = JSON.parse(w.workerRoles);
+            if (Array.isArray(roles) && roles.length > 0) {
+              return roles.some((r: string) => r.toLowerCase() === shift.roleType!.toLowerCase());
+            }
+          } catch {
+            return true;
+          }
+        }
+        return true;
+      });
+
+      if (shift.workerUserId) {
+        eligibleWorkers = eligibleWorkers.filter(w => w.id !== shift.workerUserId);
+      }
+
+      const existingOffers = await db.select({ workerId: shiftOffers.workerId })
+        .from(shiftOffers)
+        .where(and(
+          eq(shiftOffers.shiftId, shiftId),
+          inArray(shiftOffers.status, ["pending", "accepted"])
+        ));
+      const alreadyOffered = new Set(existingOffers.map(o => o.workerId));
+      eligibleWorkers = eligibleWorkers.filter(w => !alreadyOffered.has(w.id));
+
+      if (shift.date) {
+        const existingShifts = await db.select({
+          workerUserId: shifts.workerUserId,
+          startTime: shifts.startTime,
+          endTime: shifts.endTime,
+        })
+        .from(shifts)
+        .where(and(
+          eq(shifts.date, shift.date),
+          not(isNull(shifts.workerUserId)),
+          ne(shifts.status, "cancelled"),
+          ne(shifts.id, shiftId)
+        ));
+
+        const conflictWorkerIds = new Set<string>();
+        for (const es of existingShifts) {
+          if (es.workerUserId && es.startTime && shift.startTime) {
+            const existingEnd = es.endTime || "23:59";
+            const shiftEnd = shift.endTime || "23:59";
+            if (es.startTime < shiftEnd && existingEnd > shift.startTime) {
+              conflictWorkerIds.add(es.workerUserId);
+            }
+          }
+        }
+        eligibleWorkers = eligibleWorkers.filter(w => !conflictWorkerIds.has(w.id));
+      }
+
+      const offeredWorkerIds: string[] = [];
+      let offerErrors = 0;
+      console.log(`[BLAST] Shift ${shiftId}: ${eligibleWorkers.length} eligible workers found`);
+
+      for (const worker of eligibleWorkers) {
+        try {
+          await db.insert(shiftOffers).values({
+            shiftId,
+            workerId: worker.id,
+            status: "pending",
+          });
+
+          await db.insert(appNotifications).values({
+            userId: worker.id,
+            type: "shift_offer",
+            title: "New Shift Available",
+            body: `A ${shift.roleType || shift.category || ""} shift at ${workplace?.name || shift.title || "a workplace"} on ${shift.date} is available. Tap to accept.`,
+            deepLink: `/shift-offers`,
+          });
+
+          offeredWorkerIds.push(worker.id);
+        } catch (offerErr: any) {
+          offerErrors++;
+          if (offerErr?.message?.includes("unique_shift_worker_offer")) {
+            console.log(`[BLAST] Skipped duplicate offer for worker ${worker.id}`);
+          } else {
+            console.error(`[BLAST] Failed to create offer for worker ${worker.id}:`, offerErr?.message || offerErr);
+          }
+        }
+      }
+
+      if (offeredWorkerIds.length > 0) {
+        sendPushNotifications(
+          offeredWorkerIds,
+          "New Shift Available",
+          `A ${shift.roleType || shift.category || ""} shift at ${workplace?.name || shift.title || "a workplace"} on ${shift.date} is available.`,
+          { type: "shift_offer", shiftId }
+        );
+      }
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "SHIFT_BLAST_ALL",
+        entityType: "shift",
+        entityId: shiftId,
+        details: JSON.stringify({
+          totalEligible: eligibleWorkers.length,
+          offersCreated: offeredWorkerIds.length,
+          offerErrors,
+          alreadyOffered: alreadyOffered.size,
+        }),
+      });
+
+      broadcast({ type: "shift_blast", data: { shiftId, offersCreated: offeredWorkerIds.length } });
+
+      res.json({
+        success: true,
+        offersCreated: offeredWorkerIds.length,
+        totalEligible: eligibleWorkers.length + alreadyOffered.size,
+        alreadyOffered: alreadyOffered.size,
+        errors: offerErrors,
+      });
+    } catch (error) {
+      console.error("Error blasting shift to all workers:", error);
+      res.status(500).json({ error: "Failed to blast shift to workers" });
+    }
+  });
 
   // ========================================
   // In-App Notifications

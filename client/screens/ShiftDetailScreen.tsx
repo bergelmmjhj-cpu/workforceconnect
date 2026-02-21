@@ -22,6 +22,7 @@ import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 import { Shift, TitoLog } from "@/types";
 import { getShift, updateShift, getTitoLogs, createTitoLog } from "@/storage";
 import { formatDate, formatShiftTime, formatCurrency } from "@/utils/format";
+import { apiRequest } from "@/lib/query-client";
 
 export default function ShiftDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -37,6 +38,8 @@ export default function ShiftDetailScreen() {
   const [shift, setShift] = useState<Shift | null>(null);
   const [titoLogs, setTitoLogs] = useState<TitoLog[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isBlasting, setIsBlasting] = useState(false);
+  const [blastResult, setBlastResult] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -111,6 +114,29 @@ export default function ShiftDetailScreen() {
       setIsUpdating(false);
     }
   };
+
+  const handleBlastToAll = async () => {
+    if (!shift) return;
+    setIsBlasting(true);
+    setBlastResult(null);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    try {
+      const res = await apiRequest("POST", `/api/shifts/${shift.id}/blast`);
+      const data = await res.json();
+      if (data.success) {
+        setBlastResult(`Sent to ${data.offersCreated} worker${data.offersCreated !== 1 ? "s" : ""}${data.alreadyOffered > 0 ? ` (${data.alreadyOffered} already offered)` : ""}`);
+      } else {
+        setBlastResult(data.error || "Failed to send");
+      }
+    } catch (error: any) {
+      setBlastResult(error?.data?.error || error?.message || "Failed to blast shift");
+    } finally {
+      setIsBlasting(false);
+    }
+  };
+
+  const isAdmin = user?.role === "admin" || user?.role === "hr";
 
   if (isLoading) {
     return (
@@ -264,6 +290,38 @@ export default function ShiftDetailScreen() {
           ))}
         </View>
       </View>
+
+      {isAdmin && shift.status !== "completed" && shift.status !== "cancelled" ? (
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <ThemedText type="h4" style={styles.sectionTitle}>
+            Broadcast Shift
+          </ThemedText>
+          <ThemedText style={[styles.blastDescription, { color: theme.textSecondary }]}>
+            Send this shift offer to all eligible workers
+          </ThemedText>
+          <Button
+            onPress={handleBlastToAll}
+            disabled={isBlasting}
+            style={[styles.blastButton, { backgroundColor: theme.primary }]}
+          >
+            {isBlasting ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <View style={styles.titoButtonContent}>
+                <Feather name="send" size={18} color="#fff" />
+                <ThemedText style={styles.titoButtonText}>
+                  Blast to All Workers
+                </ThemedText>
+              </View>
+            )}
+          </Button>
+          {blastResult ? (
+            <ThemedText style={[styles.blastResult, { color: theme.success }]}>
+              {blastResult}
+            </ThemedText>
+          ) : null}
+        </View>
+      ) : null}
 
       {isWorker && isAssigned && shift.status !== "completed" ? (
         <View style={styles.titoSection}>
@@ -437,5 +495,19 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,
+  },
+  blastButton: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+  blastDescription: {
+    fontSize: 14,
+    marginBottom: Spacing.md,
+  },
+  blastResult: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginTop: Spacing.md,
+    textAlign: "center",
   },
 });

@@ -2724,13 +2724,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tito/my-logs", async (req: Request, res: Response) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as string;
 
       if (!userId) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
 
-      const logs = await db.select({
+      const isAdmin = role === "admin" || role === "hr" || role === "client";
+
+      const baseSelect = {
         id: titoLogs.id,
         workerId: titoLogs.workerId,
         workplaceId: titoLogs.workplaceId,
@@ -2742,19 +2745,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timeInDistanceMeters: titoLogs.timeInDistanceMeters,
         timeOutDistanceMeters: titoLogs.timeOutDistanceMeters,
         status: titoLogs.status,
+        approvedBy: titoLogs.approvedBy,
+        approvedAt: titoLogs.approvedAt,
+        disputedBy: titoLogs.disputedBy,
+        disputedAt: titoLogs.disputedAt,
+        notes: titoLogs.notes,
+        flaggedLate: titoLogs.flaggedLate,
+        lateMinutes: titoLogs.lateMinutes,
+        lateReason: titoLogs.lateReason,
         createdAt: titoLogs.createdAt,
         workplaceName: workplaces.name,
-      })
-      .from(titoLogs)
-      .leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id))
-      .where(eq(titoLogs.workerId, userId))
-      .orderBy(desc(titoLogs.createdAt))
-      .limit(50);
+        workerName: users.fullName,
+        shiftDate: shifts.date,
+        shiftTitle: shifts.title,
+      };
 
-      res.json(logs);
+      let query;
+      if (isAdmin) {
+        query = db.select(baseSelect)
+          .from(titoLogs)
+          .leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id))
+          .leftJoin(users, eq(titoLogs.workerId, users.id))
+          .leftJoin(shifts, eq(titoLogs.shiftId, shifts.id))
+          .orderBy(desc(titoLogs.createdAt))
+          .limit(100);
+      } else {
+        query = db.select(baseSelect)
+          .from(titoLogs)
+          .leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id))
+          .leftJoin(users, eq(titoLogs.workerId, users.id))
+          .leftJoin(shifts, eq(titoLogs.shiftId, shifts.id))
+          .where(eq(titoLogs.workerId, userId))
+          .orderBy(desc(titoLogs.createdAt))
+          .limit(50);
+      }
+
+      const logs = await query;
+
+      const formattedLogs = logs.map(log => ({
+        id: log.id,
+        shiftId: log.shiftId || "",
+        workerId: log.workerId,
+        workerName: log.workerName || "Unknown Worker",
+        timeIn: log.timeIn ? new Date(log.timeIn).toISOString() : undefined,
+        timeOut: log.timeOut ? new Date(log.timeOut).toISOString() : undefined,
+        timeInLocation: log.workplaceName || undefined,
+        timeOutLocation: log.workplaceName || undefined,
+        timeInDistance: log.timeInDistanceMeters ? Math.round(log.timeInDistanceMeters) : undefined,
+        timeOutDistance: log.timeOutDistanceMeters ? Math.round(log.timeOutDistanceMeters) : undefined,
+        verificationMethod: (log.timeInGpsVerified || log.timeOutGpsVerified) ? "gps" : "manual",
+        approvedBy: log.approvedBy || undefined,
+        approvedAt: log.approvedAt ? new Date(log.approvedAt).toISOString() : undefined,
+        disputedBy: log.disputedBy || undefined,
+        disputedAt: log.disputedAt ? new Date(log.disputedAt).toISOString() : undefined,
+        status: log.status as "pending" | "approved" | "disputed",
+        shiftDate: log.shiftDate || (log.timeIn ? new Date(log.timeIn).toLocaleDateString("en-CA", { timeZone: "America/Toronto" }) : new Date().toLocaleDateString("en-CA")),
+        createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : new Date().toISOString(),
+        notes: log.notes || undefined,
+        flaggedLate: log.flaggedLate || false,
+        lateMinutes: log.lateMinutes || undefined,
+        lateReason: log.lateReason || undefined,
+        totalHours: log.timeIn && log.timeOut
+          ? parseFloat(((new Date(log.timeOut).getTime() - new Date(log.timeIn).getTime()) / 3600000).toFixed(2))
+          : undefined,
+      }));
+
+      res.json(formattedLogs);
     } catch (error) {
       console.error("Error fetching TITO logs:", error);
       res.status(500).json({ error: "Failed to fetch TITO logs" });
+    }
+  });
+
+  app.post("/api/tito/:id/approve", checkRoles("admin", "hr", "client"), async (req: Request, res: Response) => {
+    try {
+      const titoLogId = req.params.id;
+      const userId = req.headers["x-user-id"] as string;
+
+      const [log] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      if (!log) {
+        res.status(404).json({ error: "TITO log not found" });
+        return;
+      }
+
+      await db.update(titoLogs)
+        .set({ status: "approved", approvedBy: userId, approvedAt: new Date(), updatedAt: new Date() })
+        .where(eq(titoLogs.id, titoLogId));
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "TITO_APPROVED",
+        entityType: "tito_log",
+        entityId: titoLogId,
+        details: JSON.stringify({ workerId: log.workerId, previousStatus: log.status }),
+      });
+
+      res.json({ success: true, message: "TITO log approved" });
+    } catch (error) {
+      console.error("Error approving TITO log:", error);
+      res.status(500).json({ error: "Failed to approve TITO log" });
+    }
+  });
+
+  app.post("/api/tito/:id/dispute", checkRoles("admin", "hr", "client"), async (req: Request, res: Response) => {
+    try {
+      const titoLogId = req.params.id;
+      const userId = req.headers["x-user-id"] as string;
+      const { reason } = req.body;
+
+      const [log] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      if (!log) {
+        res.status(404).json({ error: "TITO log not found" });
+        return;
+      }
+
+      await db.update(titoLogs)
+        .set({ status: "disputed", disputedBy: userId, disputedAt: new Date(), notes: reason || null, updatedAt: new Date() })
+        .where(eq(titoLogs.id, titoLogId));
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "TITO_DISPUTED",
+        entityType: "tito_log",
+        entityId: titoLogId,
+        details: JSON.stringify({ workerId: log.workerId, previousStatus: log.status, reason }),
+      });
+
+      res.json({ success: true, message: "TITO log disputed" });
+    } catch (error) {
+      console.error("Error disputing TITO log:", error);
+      res.status(500).json({ error: "Failed to dispute TITO log" });
     }
   });
 

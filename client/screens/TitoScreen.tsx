@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -8,8 +8,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ThemedText";
 import { TitoCard } from "@/components/TitoCard";
@@ -20,7 +20,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { TitoLog, TitoApprovalStatus } from "@/types";
-import { getTitoLogs, updateTitoLog } from "@/storage";
+import { apiRequest, queryClient } from "@/lib/query-client";
+import { Feather } from "@expo/vector-icons";
 
 const filterOptions: { label: string; value: TitoApprovalStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -33,62 +34,52 @@ export default function TitoScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
-  const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [titoLogs, setTitoLogs] = useState<TitoLog[]>([]);
   const [filter, setFilter] = useState<TitoApprovalStatus | "all">("all");
 
-  const loadData = useCallback(async () => {
-    try {
-      const data = await getTitoLogs(user?.id, user?.role);
-      setTitoLogs(data);
-    } catch (error) {
-      console.error("Failed to load TITO logs:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
+  const { data: titoLogs = [], isLoading, isError, refetch, isRefetching } = useQuery<TitoLog[]>({
+    queryKey: ["/api/tito/my-logs"],
+    refetchInterval: 15000,
+  });
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const approveMutation = useMutation({
+    mutationFn: async (titoId: string) => {
+      const res = await apiRequest("POST", `/api/tito/${titoId}/approve`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tito/my-logs"] });
+    },
+  });
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  }, [loadData]);
+  const disputeMutation = useMutation({
+    mutationFn: async (titoId: string) => {
+      const res = await apiRequest("POST", `/api/tito/${titoId}/dispute`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tito/my-logs"] });
+    },
+  });
 
-  const handleApprove = async (tito: TitoLog) => {
+  const handleApprove = useCallback(async (tito: TitoLog) => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await updateTitoLog(tito.id, {
-      status: "approved",
-      approvedBy: user?.id,
-      approvedAt: new Date().toISOString(),
-    });
-    await loadData();
-  };
+    approveMutation.mutate(tito.id);
+  }, [approveMutation]);
 
-  const handleDispute = async (tito: TitoLog) => {
+  const handleDispute = useCallback(async (tito: TitoLog) => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    await updateTitoLog(tito.id, {
-      status: "disputed",
-      disputedBy: user?.id,
-      disputedAt: new Date().toISOString(),
-    });
-    await loadData();
-  };
+    disputeMutation.mutate(tito.id);
+  }, [disputeMutation]);
 
   const filteredLogs =
     filter === "all"
       ? titoLogs
       : titoLogs.filter((t) => t.status === filter);
 
-  const canApprove = user?.role === "hr" || user?.role === "client";
+  const canApprove = user?.role === "hr" || user?.role === "client" || user?.role === "admin";
 
   const renderFilter = () => (
     <View style={styles.filterContainer}>
@@ -160,6 +151,28 @@ export default function TitoScreen() {
     );
   }
 
+  if (isError) {
+    return (
+      <View style={[styles.container, styles.centerContent, { backgroundColor: theme.backgroundRoot, paddingTop }]}>
+        <Feather name="alert-circle" size={48} color={theme.error} />
+        <ThemedText type="h3" style={{ marginTop: Spacing.lg, textAlign: "center" }}>
+          Failed to load time logs
+        </ThemedText>
+        <ThemedText style={{ color: theme.textSecondary, textAlign: "center", marginTop: Spacing.sm }}>
+          Check your connection and try again
+        </ThemedText>
+        <Pressable
+          testID="button-retry-tito"
+          onPress={() => refetch()}
+          style={[styles.retryButton, { backgroundColor: theme.primary }]}
+        >
+          <Feather name="refresh-cw" size={16} color="#FFFFFF" />
+          <ThemedText style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 14 }}>Retry</ThemedText>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <View style={[styles.filterContainer, { top: paddingTop }]}>
@@ -174,13 +187,13 @@ export default function TitoScreen() {
             paddingTop: paddingTop + Spacing["3xl"] + Spacing.md,
             paddingBottom: tabBarHeight + Spacing.xl,
           },
-          filteredLogs.length === 0 && styles.emptyContent,
+          filteredLogs.length === 0 ? styles.emptyContent : undefined,
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
+            refreshing={isRefetching}
+            onRefresh={refetch}
             tintColor={theme.primary}
           />
         }
@@ -202,6 +215,11 @@ export default function TitoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
   },
   filterContainer: {
     position: "absolute",
@@ -232,5 +250,14 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: Spacing.md,
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    marginTop: Spacing.xl,
   },
 });

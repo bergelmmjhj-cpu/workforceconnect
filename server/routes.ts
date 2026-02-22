@@ -243,7 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({
       status: "ok",
-      version: "1.0.0",
+      version: "1.1.0",
       environment: process.env.DEMO_MODE === "false" ? "production" : "demo",
       dbIdentifier: process.env.PGDATABASE || "unknown",
       wsClients: getConnectedClientsCount(),

@@ -137,12 +137,12 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Messages"
-              component={MessagesScreen}
+              name="Tito"
+              component={TitoScreen}
               options={{
-                headerTitle: "Messages",
+                headerTitle: "TITO Logs",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="message-circle" size={size} color={color} />
+                  <Feather name="clock" size={size} color={color} />
                 ),
               }}
             />
@@ -194,13 +194,12 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Communications"
-              component={WorkerCommunicationsScreen}
+              name="Tito"
+              component={TitoScreen}
               options={{
-                title: "Comms",
-                headerTitle: "Worker Communications",
+                headerTitle: "TITO Logs",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="message-circle" size={size} color={color} />
+                  <Feather name="clock" size={size} color={color} />
                 ),
               }}
             />
@@ -252,13 +251,12 @@ export default function MainTabNavigator() {
               }}
             />
             <Tab.Screen
-              name="Communications"
-              component={WorkerCommunicationsScreen}
+              name="Tito"
+              component={TitoScreen}
               options={{
-                title: "Comms",
-                headerTitle: "Worker Communications",
+                headerTitle: "TITO Logs",
                 tabBarIcon: ({ color, size }) => (
-                  <Feather name="message-circle" size={size} color={color} />
+                  <Feather name="clock" size={size} color={color} />
                 ),
               }}
             />

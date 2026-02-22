@@ -180,6 +180,8 @@ export default function ShiftsScreen() {
           Haptics.selectionAsync();
           if (user?.role === "worker" && item.workerUserId === user.id) {
             navigation.navigate("ClockInOut", { shiftId: item.id });
+          } else if (user?.role === "admin" || user?.role === "hr") {
+            navigation.navigate("ShiftDetail", { shiftId: item.id });
           }
         }}
         style={({ pressed }) => [

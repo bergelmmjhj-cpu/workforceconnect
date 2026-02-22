@@ -2,7 +2,7 @@
   "expo": {
     "name": "Workforce Connect",
     "slug": "workforce-connect",
-    "version": "1.1.0",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "workforceconnect",

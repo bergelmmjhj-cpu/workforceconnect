@@ -534,7 +534,7 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.menuItemRight}>
                 <ThemedText style={[styles.menuItemValue, { color: theme.textSecondary }]}>
-                  v1.1.0
+                  v1.0.5
                 </ThemedText>
                 <Feather name="chevron-right" size={20} color={theme.textMuted} />
               </View>

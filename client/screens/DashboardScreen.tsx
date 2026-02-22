@@ -270,6 +270,9 @@ export default function DashboardScreen() {
         <ThemedText style={[styles.roleLabel, { color: theme.textSecondary }]}>
           {user?.role?.charAt(0).toUpperCase() + (user?.role?.slice(1) || "")}
         </ThemedText>
+        <ThemedText style={{ color: theme.primary, fontSize: 11, marginTop: 4, fontWeight: "600" }}>
+          v1.1.0 - Updated Feb 2026
+        </ThemedText>
       </View>
 
       <View style={styles.statsGrid}>

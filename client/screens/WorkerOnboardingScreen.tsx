@@ -2,8 +2,7 @@ import React from "react";
 import { View, StyleSheet, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { rootNavigate } from "@/lib/navigation";
 
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
@@ -13,9 +12,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
 import { Spacing } from "@/constants/theme";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
-
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface OnboardingStep {
   id: string;
@@ -30,8 +26,6 @@ export default function WorkerOnboardingScreen() {
   const { user, logout } = useAuth();
   const { onboardingStatus, isLoading } = useWorkerOnboarding();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<NavigationProp>();
-
   const getSteps = (): OnboardingStep[] => {
     const status = onboardingStatus;
 
@@ -124,7 +118,7 @@ export default function WorkerOnboardingScreen() {
         return (
           <Button
             title="Start Application"
-            onPress={() => navigation.navigate("WorkerApplication" as any)}
+            onPress={() => rootNavigate("WorkerApplication")}
             style={styles.actionButton}
           />
         );
@@ -132,7 +126,7 @@ export default function WorkerOnboardingScreen() {
         return (
           <Button
             title="Sign Agreement"
-            onPress={() => navigation.navigate("SubcontractorNotice" as any)}
+            onPress={() => rootNavigate("SubcontractorNotice")}
             style={styles.actionButton}
           />
         );

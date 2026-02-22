@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
@@ -20,6 +19,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import { rootNavigate } from "@/lib/navigation";
 import { formatDistanceToNow } from "date-fns";
 
 interface Conversation {
@@ -39,7 +39,6 @@ export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop } = useContentPadding();
-  const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -51,7 +50,7 @@ export default function MessagesScreen() {
 
   const handleConversationPress = (conversation: Conversation) => {
     Haptics.selectionAsync();
-    navigation.navigate("CommunicationsChat", {
+    rootNavigate("CommunicationsChat", {
       conversationId: conversation.id,
     });
   };

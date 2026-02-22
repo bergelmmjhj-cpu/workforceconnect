@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable, RefreshControl, TextInput } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useNavigation, NavigationProp, useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useQuery } from "@tanstack/react-query";
@@ -10,8 +10,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import { rootNavigate } from "@/lib/navigation";
 
 type Worker = {
   id: string;
@@ -24,7 +24,6 @@ type Worker = {
 };
 
 export default function WorkerDirectoryScreen() {
-  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
@@ -117,7 +116,7 @@ export default function WorkerDirectoryScreen() {
         {isOnboarded && (
           <Pressable 
             style={[styles.assignButton, { borderColor: theme.primary }]}
-            onPress={() => navigation.navigate("AssignToWorkplace", { workerId: item.id, workerName: item.fullName })}
+            onPress={() => rootNavigate("AssignToWorkplace", { workerId: item.id, workerName: item.fullName })}
           >
             <Feather name="map-pin" size={16} color={theme.primary} />
             <ThemedText style={[styles.assignButtonText, { color: theme.primary }]}>

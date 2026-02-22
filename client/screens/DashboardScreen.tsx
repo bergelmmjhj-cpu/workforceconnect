@@ -2,8 +2,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import { View, StyleSheet, RefreshControl, ScrollView, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 
@@ -18,8 +16,8 @@ import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { getGreeting } from "@/utils/format";
 import { TodoItem, DashboardStats, APIShift } from "@/types";
-import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Card } from "@/components/Card";
+import { rootNavigate } from "@/lib/navigation";
 import {
   getRequests,
   getTitoLogs,
@@ -62,13 +60,10 @@ const CATEGORY_COLORS: Record<string, string> = {
   janitorial: "#10b981",
 };
 
-type DashboardNavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
-  const navigation = useNavigation<DashboardNavigationProp>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -348,9 +343,9 @@ export default function DashboardScreen() {
                   key={shift.id}
                   onPress={() => {
                     if (user?.role === "worker" && shift.workerUserId === user?.id) {
-                      navigation.navigate("ClockInOut", { shiftId: shift.id });
+                      rootNavigate("ClockInOut", { shiftId: shift.id });
                     } else {
-                      navigation.navigate("ShiftDetail", { shiftId: shift.id });
+                      rootNavigate("ShiftDetail", { shiftId: shift.id });
                     }
                   }}
                 >
@@ -417,7 +412,7 @@ export default function DashboardScreen() {
           <View style={styles.quickActionsGrid}>
             <Pressable
               style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
-              onPress={() => navigation.navigate("AdminManage")}
+              onPress={() => rootNavigate("AdminManage")}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: theme.primary + "20" }]}>
                 <Feather name="settings" size={24} color={theme.primary} />
@@ -429,7 +424,7 @@ export default function DashboardScreen() {
             </Pressable>
             <Pressable
               style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
-              onPress={() => navigation.navigate("WorkplacesList")}
+              onPress={() => rootNavigate("WorkplacesList")}
             >
               <View style={[styles.quickActionIcon, { backgroundColor: theme.success + "20" }]}>
                 <Feather name="map-pin" size={24} color={theme.success} />

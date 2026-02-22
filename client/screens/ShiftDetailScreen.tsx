@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
@@ -23,12 +23,12 @@ import { Shift, TitoLog } from "@/types";
 import { getShift, updateShift, getTitoLogs, createTitoLog } from "@/storage";
 import { formatDate, formatShiftTime, formatCurrency } from "@/utils/format";
 import { apiRequest } from "@/lib/query-client";
+import { rootNavigate } from "@/lib/navigation";
 
 export default function ShiftDetailScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const route = useRoute<any>();
-  const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -338,7 +338,7 @@ export default function ShiftDetailScreen() {
                 </ThemedText>
               </View>
               <Button
-                onPress={() => navigation.navigate("ClockInOut", { shiftId: shift.id })}
+                onPress={() => rootNavigate("ClockInOut", { shiftId: shift.id })}
                 style={[styles.titoButton, { backgroundColor: theme.primary }]}
               >
                 <View style={styles.titoButtonContent}>

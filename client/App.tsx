@@ -22,6 +22,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OnboardingProvider } from "@/contexts/OnboardingContext";
 import { WorkerOnboardingProvider } from "@/contexts/WorkerOnboardingContext";
+import { navigationRef } from "@/lib/navigation";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,7 +53,7 @@ export default function App() {
               <SafeAreaProvider>
                 <GestureHandlerRootView style={styles.root}>
                   <KeyboardProvider>
-                    <NavigationContainer>
+                    <NavigationContainer ref={navigationRef}>
                       <RootStackNavigator />
                     </NavigationContainer>
                     <StatusBar style="auto" />

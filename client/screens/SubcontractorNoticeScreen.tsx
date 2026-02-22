@@ -3,8 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { rootNavigate } from "@/lib/navigation";
 
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
@@ -12,9 +11,6 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import type { RootStackParamList } from "@/navigation/RootStackNavigator";
-
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface SectionProps {
   title: string;
@@ -95,8 +91,6 @@ export default function SubcontractorNoticeScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const navigation = useNavigation<NavigationProp>();
-
   const [readTerms, setReadTerms] = useState(false);
   const [agreeToSubcontractor, setAgreeToSubcontractor] = useState(false);
 
@@ -104,7 +98,7 @@ export default function SubcontractorNoticeScreen() {
 
   const handleProceed = () => {
     if (canProceed) {
-      navigation.navigate("AgreementSigning");
+      rootNavigate("AgreementSigning");
     }
   };
 

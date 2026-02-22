@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Platform, RefreshControl, TextInput, Modal } from "react-native";
 import Checkbox from "expo-checkbox";
 import { Feather } from "@expo/vector-icons";
-import { useNavigation, NavigationProp, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
+import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
+import { rootNavigate } from "@/lib/navigation";
 import { APIShift, ShiftStatus, ShiftFrequency, ShiftCategory, ShiftSeries } from "@/types";
 
 type WorkplaceDetailRouteProp = RouteProp<RootStackParamList, "WorkplaceDetail">;
@@ -90,7 +91,6 @@ const formatDisplayTime = (date: Date): string => {
 };
 
 export default function WorkplaceDetailScreen() {
-  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<WorkplaceDetailRouteProp>();
   const { workplaceId } = route.params;
   const insets = useSafeAreaInsets();
@@ -348,7 +348,7 @@ export default function WorkplaceDetailScreen() {
               <ThemedText style={styles.statusText}>{workplace.isActive ? "Active" : "Inactive"}</ThemedText>
             </View>
             <View style={{ flexDirection: "row", gap: Spacing.md, alignItems: "center" }}>
-              <Pressable onPress={() => navigation.navigate("WorkplaceEdit", { workplaceId: workplace.id })}>
+              <Pressable onPress={() => rootNavigate("WorkplaceEdit", { workplaceId: workplace.id })}>
                 <Feather name="edit-2" size={20} color={theme.primary} />
               </Pressable>
               {user?.role === "admin" ? (
@@ -393,7 +393,7 @@ export default function WorkplaceDetailScreen() {
         <View style={styles.sectionHeader}>
           <ThemedText style={styles.sectionTitle}>Assigned Workers ({activeWorkers.length})</ThemedText>
           <Pressable 
-            onPress={() => navigation.navigate("InviteWorker", { workplaceId })}
+            onPress={() => rootNavigate("InviteWorker", { workplaceId })}
             style={styles.addButton}
           >
             <Feather name="user-plus" size={18} color={theme.primary} />
@@ -407,7 +407,7 @@ export default function WorkplaceDetailScreen() {
             <ThemedText style={styles.emptyText}>No workers assigned</ThemedText>
             <Button 
               title="Invite Worker"
-              onPress={() => navigation.navigate("InviteWorker", { workplaceId })}
+              onPress={() => rootNavigate("InviteWorker", { workplaceId })}
               style={styles.emptyButton}
             />
           </Card>
@@ -568,7 +568,7 @@ export default function WorkplaceDetailScreen() {
         <View style={[styles.sectionHeader, { marginTop: Spacing.xl }]}>
           <ThemedText style={styles.sectionTitle}>Shift Series ({seriesList.length})</ThemedText>
           <Pressable
-            onPress={() => navigation.navigate("Roster", { workplaceId, workplaceName: workplace.name })}
+            onPress={() => rootNavigate("Roster", { workplaceId, workplaceName: workplace.name })}
             style={styles.addButton}
           >
             <Feather name="grid" size={18} color={theme.primary} />

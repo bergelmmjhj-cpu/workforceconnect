@@ -9,7 +9,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
@@ -21,6 +20,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import { rootNavigate } from "@/lib/navigation";
 import { WorkerRequest, RequestStatus } from "@/types";
 import { getRequests } from "@/storage";
 
@@ -37,7 +37,6 @@ export default function RequestsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const headerHeight = useHeaderHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
-  const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -74,12 +73,12 @@ export default function RequestsScreen() {
 
   const handleCreateRequest = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate("CreateRequest");
+    rootNavigate("CreateRequest");
   };
 
   const handleRequestPress = (request: WorkerRequest) => {
     Haptics.selectionAsync();
-    navigation.navigate("RequestDetail", { requestId: request.id });
+    rootNavigate("RequestDetail", { requestId: request.id });
   };
 
   const renderFilter = () => (

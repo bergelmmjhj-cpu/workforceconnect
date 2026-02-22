@@ -19,6 +19,7 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { UserRole, ClientType, CLIENT_TYPES } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { apiRequest } from "@/lib/query-client";
+import { rootNavigate } from "@/lib/navigation";
 import QRCode from "react-native-qrcode-svg";
 
 const roleLabels: Record<UserRole, string> = {
@@ -546,7 +547,7 @@ export default function ProfileScreen() {
               styles.menuItem,
               pressed && { backgroundColor: theme.backgroundSecondary },
             ]}
-            onPress={() => navigation.navigate("Diagnostics")}
+            onPress={() => rootNavigate("Diagnostics")}
             testID="button-diagnostics"
           >
             <View style={styles.menuItemContent}>

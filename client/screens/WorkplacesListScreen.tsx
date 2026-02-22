@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { View, StyleSheet, FlatList, Pressable, RefreshControl, Modal, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useNavigation, NavigationProp, useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,8 +10,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Spacing } from "@/constants/theme";
+import { rootNavigate } from "@/lib/navigation";
 import { apiRequest } from "@/lib/query-client";
 
 type Workplace = {
@@ -29,7 +29,6 @@ type Workplace = {
 };
 
 export default function WorkplacesListScreen() {
-  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
@@ -73,7 +72,7 @@ export default function WorkplacesListScreen() {
   const renderWorkplace = ({ item }: { item: Workplace }) => (
     <Card 
       style={styles.workplaceCard}
-      onPress={() => navigation.navigate("WorkplaceDetail", { workplaceId: item.id })}
+      onPress={() => rootNavigate("WorkplaceDetail", { workplaceId: item.id })}
     >
       <View style={styles.workplaceHeader}>
         <View style={[styles.statusDot, { backgroundColor: item.isActive ? "#22c55e" : "#ef4444" }]} />
@@ -140,7 +139,7 @@ export default function WorkplacesListScreen() {
       />
       <Pressable
         style={[styles.fab, { backgroundColor: theme.primary }]}
-        onPress={() => navigation.navigate("WorkplaceEdit", { workplaceId: undefined })}
+        onPress={() => rootNavigate("WorkplaceEdit", { workplaceId: undefined })}
       >
         <Feather name="plus" size={24} color="#fff" />
       </Pressable>

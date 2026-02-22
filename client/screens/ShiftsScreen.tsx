@@ -11,7 +11,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -26,6 +25,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import { rootNavigate } from "@/lib/navigation";
 import { APIShift, ShiftStatus, ShiftFrequency, ShiftCategory } from "@/types";
 
 const categoryColors: Record<ShiftCategory, string> = {
@@ -99,7 +99,6 @@ export default function ShiftsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const headerHeight = useHeaderHeight();
   const { paddingTop } = useContentPadding();
-  const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -179,9 +178,9 @@ export default function ShiftsScreen() {
         onPress={() => {
           Haptics.selectionAsync();
           if (user?.role === "worker" && item.workerUserId === user.id) {
-            navigation.navigate("ClockInOut", { shiftId: item.id });
+            rootNavigate("ClockInOut", { shiftId: item.id });
           } else if (user?.role === "admin" || user?.role === "hr") {
-            navigation.navigate("ShiftDetail", { shiftId: item.id });
+            rootNavigate("ShiftDetail", { shiftId: item.id });
           }
         }}
         style={({ pressed }) => [
@@ -284,7 +283,7 @@ export default function ShiftsScreen() {
               if (diffMin > -15) {
                 return (
                   <Pressable
-                    onPress={() => navigation.navigate("ClockInOut", { shiftId: item.id })}
+                    onPress={() => rootNavigate("ClockInOut", { shiftId: item.id })}
                     style={[styles.clockInButton, { backgroundColor: "#10B981" }]}
                     testID={`button-clockin-${item.id}`}
                   >

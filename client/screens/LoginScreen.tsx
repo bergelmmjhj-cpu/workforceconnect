@@ -21,6 +21,7 @@ import { useAuth, TwoFactorRequiredError } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getLoginErrorMessage } from "@/utils/errorHandler";
+import { rootNavigate } from "@/lib/navigation";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -55,7 +56,7 @@ export default function LoginScreen() {
     } catch (err: unknown) {
       if (err instanceof TwoFactorRequiredError) {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        navigation.navigate("TwoFactorVerify", { userId: err.userId });
+        rootNavigate("TwoFactorVerify", { userId: err.userId });
         return;
       }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

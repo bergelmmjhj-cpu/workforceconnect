@@ -9,7 +9,6 @@ import {
   Modal,
 } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -21,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
+import { rootNavigate } from "@/lib/navigation";
 import { formatRelativeTime } from "@/utils/format";
 
 type Worker = {
@@ -50,7 +50,6 @@ type Conversation = {
 export default function WorkerCommunicationsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop } = useContentPadding();
-  const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -78,20 +77,20 @@ export default function WorkerCommunicationsScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/communications/conversations"] });
       setShowNewMessage(false);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      navigation.navigate("CommunicationsChat", { conversationId: conversation.id });
+      rootNavigate("CommunicationsChat", { conversationId: conversation.id });
     },
   });
 
   const handleConversationPress = (conv: Conversation) => {
     Haptics.selectionAsync();
-    navigation.navigate("CommunicationsChat", { conversationId: conv.id });
+    rootNavigate("CommunicationsChat", { conversationId: conv.id });
   };
 
   const handleStartNewConversation = (worker: Worker) => {
     const existingConvo = conversations?.find((c) => c.workerUserId === worker.id);
     if (existingConvo) {
       setShowNewMessage(false);
-      navigation.navigate("CommunicationsChat", { conversationId: existingConvo.id });
+      rootNavigate("CommunicationsChat", { conversationId: existingConvo.id });
     } else {
       createConversationMutation.mutate(worker.id);
     }

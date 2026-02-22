@@ -3107,14 +3107,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/shifts", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
       const userId = req.headers["x-user-id"] as string;
-      const { workplaceId, workerUserId, title, date, startTime, endTime, notes, frequencyType, category, recurringDays, recurringEndDate } = req.body;
+      const { workplaceId, workerUserId, title, date, startTime, endTime, notes, frequencyType, category, recurringDays, recurringEndDate, blastToAll, workersNeeded } = req.body;
 
       const freq = frequencyType || "one-time";
       const cat = category || "janitorial";
       const isOpenEnded = freq === "open-ended";
 
-      if (!workplaceId || !workerUserId || !title || !date || !startTime) {
-        res.status(400).json({ error: "workplaceId, workerUserId, title, date, and startTime are required" });
+      if (!workplaceId || !title || !date || !startTime) {
+        res.status(400).json({ error: "workplaceId, title, date, and startTime are required" });
+        return;
+      }
+
+      if (!blastToAll && !workerUserId) {
+        res.status(400).json({ error: "workerUserId is required when not blasting to all workers" });
         return;
       }
 
@@ -3129,10 +3134,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
-      if (!worker) {
-        res.status(404).json({ error: "Worker not found" });
-        return;
+      if (!blastToAll) {
+        const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
+        if (!worker) {
+          res.status(404).json({ error: "Worker not found" });
+          return;
+        }
       }
 
       if (freq === "recurring" && recurringDays) {
@@ -3141,7 +3148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const [newSeries] = await db.insert(shiftSeries).values({
           workplaceId,
-          workerUserId,
+          workerUserId: blastToAll ? null : workerUserId,
           title,
           startTime,
           endTime: endTime || null,
@@ -3169,7 +3176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         const [newShift] = await db.insert(shifts).values({
           workplaceId,
-          workerUserId,
+          workerUserId: blastToAll ? null : workerUserId,
           title,
           date,
           startTime,
@@ -3179,10 +3186,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
           frequencyType: freq,
           category: cat,
           createdByUserId: userId,
+          workersNeeded: blastToAll && workersNeeded ? workersNeeded : null,
         }).returning();
 
-        broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workerUserId, workplaceId } });
-        res.status(201).json(newShift);
+        if (blastToAll) {
+          const eligibleWorkers = await db.select({ id: users.id })
+            .from(users)
+            .where(and(eq(users.role, "worker"), eq(users.status, "active")));
+
+          let offersCreated = 0;
+          for (const w of eligibleWorkers) {
+            try {
+              await db.insert(shiftOffers).values({
+                shiftId: newShift.id,
+                workerId: w.id,
+                offeredByUserId: userId,
+                status: "pending",
+              });
+              offersCreated++;
+
+              await db.insert(appNotifications).values({
+                userId: w.id,
+                type: "shift_offer",
+                title: "New Shift Available",
+                body: `A new ${cat} shift "${title}" on ${date} is available. Tap to view and accept.`,
+                deepLink: `/shift-offers`,
+              });
+            } catch (e) {
+              // skip duplicates
+            }
+          }
+
+          sendPushNotifications(
+            eligibleWorkers.map(w => w.id),
+            "New Shift Available",
+            `A new ${cat} shift "${title}" on ${date} is available.`,
+            { type: "shift_offer", shiftId: newShift.id }
+          );
+
+          broadcast({ type: "shift_blast", data: { shiftId: newShift.id, offersCreated } });
+          broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workplaceId, blasted: true } });
+          res.status(201).json({ ...newShift, blasted: true, offersCreated, totalWorkers: eligibleWorkers.length });
+        } else {
+          broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workerUserId, workplaceId } });
+          res.status(201).json(newShift);
+        }
       }
     } catch (error) {
       console.error("Error creating shift:", error);

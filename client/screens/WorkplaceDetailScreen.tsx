@@ -143,6 +143,8 @@ export default function WorkplaceDetailScreen() {
   const [noEndDate, setNoEndDate] = useState(false);
   const [showDeleteWorkplace, setShowDeleteWorkplace] = useState(false);
   const [noWorkersModal, setNoWorkersModal] = useState(false);
+  const [blastToAll, setBlastToAll] = useState(false);
+  const [blastWorkersNeeded, setBlastWorkersNeeded] = useState(1);
 
   const createShiftMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -214,10 +216,12 @@ export default function WorkplaceDetailScreen() {
     setWebStartTimeText("");
     setWebEndTimeText("");
     setWebRecurringEndDateText("");
+    setBlastToAll(false);
+    setBlastWorkersNeeded(1);
   };
 
   const handleCreateShift = () => {
-    if (!shiftTitle || !selectedWorkerId) return;
+    if (!shiftTitle || (!blastToAll && !selectedWorkerId)) return;
 
     const dateStr = Platform.OS === "web" && webDateText ? webDateText : formatDate(shiftDate);
     const startTimeStr = Platform.OS === "web" && webStartTimeText ? webStartTimeText : formatTime(shiftStartTime);
@@ -233,7 +237,7 @@ export default function WorkplaceDetailScreen() {
 
     createShiftMutation.mutate({
       workplaceId,
-      workerUserId: selectedWorkerId,
+      workerUserId: blastToAll ? undefined : selectedWorkerId,
       title: shiftTitle,
       date: dateStr,
       startTime: startTimeStr,
@@ -243,6 +247,8 @@ export default function WorkplaceDetailScreen() {
       category,
       recurringDays: frequencyType === "recurring" ? recurringDays.join(",") : null,
       recurringEndDate: frequencyType === "recurring" && recurringEndDateStr ? recurringEndDateStr : null,
+      blastToAll: blastToAll || undefined,
+      workersNeeded: blastToAll ? blastWorkersNeeded : undefined,
     });
   };
 
@@ -309,7 +315,8 @@ export default function WorkplaceDetailScreen() {
   };
 
   const isCreateDisabled = (): boolean => {
-    if (!shiftTitle || !selectedWorkerId || createShiftMutation.isPending) return true;
+    if (!shiftTitle || createShiftMutation.isPending) return true;
+    if (!blastToAll && !selectedWorkerId) return true;
 
     if (Platform.OS === "web") {
       if (!webDateText || !webStartTimeText) return true;
@@ -717,33 +724,74 @@ export default function WorkplaceDetailScreen() {
                 ))}
               </View>
 
-              <ThemedText style={styles.fieldLabel}>Assign Worker</ThemedText>
-              <View style={styles.workerPicker}>
-                {activeWorkers.map((w) => (
-                  <Pressable
-                    key={w.id}
-                    onPress={() => setSelectedWorkerId(w.workerUserId)}
-                    style={[
-                      styles.workerOption,
-                      {
-                        backgroundColor: selectedWorkerId === w.workerUserId ? theme.primary + "20" : theme.backgroundSecondary,
-                        borderColor: selectedWorkerId === w.workerUserId ? theme.primary : theme.border,
-                      },
-                    ]}
-                    testID={`worker-option-${w.workerUserId}`}
-                  >
-                    {selectedWorkerId === w.workerUserId ? (
-                      <Feather name="check-circle" size={16} color={theme.primary} style={{ marginRight: 6 }} />
-                    ) : (
-                      <Feather name="circle" size={16} color={theme.textMuted} style={{ marginRight: 6 }} />
-                    )}
-                    <ThemedText style={[
-                      styles.workerOptionText,
-                      selectedWorkerId === w.workerUserId ? { color: theme.primary, fontWeight: "600" } : undefined,
-                    ]}>{w.workerName}</ThemedText>
-                  </Pressable>
-                ))}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: blastToAll ? theme.primary + "10" : theme.backgroundSecondary, borderRadius: 10, borderWidth: 1, borderColor: blastToAll ? theme.primary : theme.border }}>
+                <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                  <Feather name="send" size={18} color={blastToAll ? theme.primary : theme.textSecondary} style={{ marginRight: 8 }} />
+                  <View>
+                    <ThemedText style={{ fontSize: 14, fontWeight: "600", color: blastToAll ? theme.primary : theme.text }}>Blast to All Workers</ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: theme.textMuted }}>Send shift offer to all active workers</ThemedText>
+                  </View>
+                </View>
+                <Checkbox
+                  value={blastToAll}
+                  onValueChange={setBlastToAll}
+                  color={blastToAll ? theme.primary : undefined}
+                  testID="checkbox-blast-to-all"
+                />
               </View>
+
+              {blastToAll ? (
+                <View style={{ marginBottom: 12 }}>
+                  <ThemedText style={styles.fieldLabel}>Workers Needed</ThemedText>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <Pressable
+                      onPress={() => setBlastWorkersNeeded(Math.max(1, blastWorkersNeeded - 1))}
+                      style={[styles.counterButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
+                      testID="button-workers-minus"
+                    >
+                      <Feather name="minus" size={18} color={theme.text} />
+                    </Pressable>
+                    <ThemedText style={{ fontSize: 20, fontWeight: "700", minWidth: 32, textAlign: "center" }} testID="text-workers-needed-count">{blastWorkersNeeded}</ThemedText>
+                    <Pressable
+                      onPress={() => setBlastWorkersNeeded(blastWorkersNeeded + 1)}
+                      style={[styles.counterButton, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}
+                      testID="button-workers-plus"
+                    >
+                      <Feather name="plus" size={18} color={theme.text} />
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <View>
+                  <ThemedText style={styles.fieldLabel}>Assign Worker</ThemedText>
+                  <View style={styles.workerPicker}>
+                    {activeWorkers.map((w) => (
+                      <Pressable
+                        key={w.id}
+                        onPress={() => setSelectedWorkerId(w.workerUserId)}
+                        style={[
+                          styles.workerOption,
+                          {
+                            backgroundColor: selectedWorkerId === w.workerUserId ? theme.primary + "20" : theme.backgroundSecondary,
+                            borderColor: selectedWorkerId === w.workerUserId ? theme.primary : theme.border,
+                          },
+                        ]}
+                        testID={`worker-option-${w.workerUserId}`}
+                      >
+                        {selectedWorkerId === w.workerUserId ? (
+                          <Feather name="check-circle" size={16} color={theme.primary} style={{ marginRight: 6 }} />
+                        ) : (
+                          <Feather name="circle" size={16} color={theme.textMuted} style={{ marginRight: 6 }} />
+                        )}
+                        <ThemedText style={[
+                          styles.workerOptionText,
+                          selectedWorkerId === w.workerUserId ? { color: theme.primary, fontWeight: "600" } : undefined,
+                        ]}>{w.workerName}</ThemedText>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
 
               <ThemedText style={styles.fieldLabel}>Date</ThemedText>
               {Platform.OS === "web" ? (
@@ -949,7 +997,7 @@ export default function WorkplaceDetailScreen() {
                 style={{ flex: 1 }}
               />
               <Button
-                title={createShiftMutation.isPending ? "Creating..." : "Create Shift"}
+                title={createShiftMutation.isPending ? "Creating..." : (blastToAll ? "Create & Blast" : "Create Shift")}
                 onPress={handleCreateShift}
                 disabled={isCreateDisabled()}
                 style={{ flex: 1 }}
@@ -1490,5 +1538,13 @@ const styles = StyleSheet.create({
   dayButtonText: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  counterButton: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

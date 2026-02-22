@@ -1,11 +1,11 @@
 {
-  "id": "ecd2183b-98fc-41e3-abcb-14f0f7c05829",
-  "createdAt": "2026-02-22T05:03:08.959Z",
+  "id": "18b2c15f-f8c6-48c4-9708-0a3662dbbdd3",
+  "createdAt": "2026-02-22T22:04:41.939Z",
   "runtimeVersion": "exposdk:54.0.0",
   "launchAsset": {
-    "key": "bundle-1771736588959-build",
+    "key": "bundle-1771797881939-3592",
     "contentType": "application/javascript",
-    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1771736588959-build/_expo/static/js/android/bundle.js"
+    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1771797881939-3592/_expo/static/js/android/bundle.js"
   },
   "assets": [],
   "metadata": {},
@@ -25,7 +25,7 @@
       "ios": {
         "supportsTablet": true,
         "bundleIdentifier": "org.workforceconnect.app",
-        "buildNumber": "15",
+        "buildNumber": "35",
         "infoPlist": {
           "ITSAppUsesNonExemptEncryption": false
         }
@@ -109,6 +109,6 @@
       },
       "mainModuleName": "client/index"
     },
-    "scopeKey": "@anonymous/workforce-connect-af437201-a85c-4a15-8da3-7069f9239cdb"
+    "scopeKey": "@anonymous/workforce-connect-e74abbee-fbff-484e-8220-bd7ca6c56fec"
   }
 }

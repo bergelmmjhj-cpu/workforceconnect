@@ -941,7 +941,7 @@ async function registerRoutes(app2) {
   app2.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
-      version: "1.0.0",
+      version: "1.1.0",
       environment: process.env.DEMO_MODE === "false" ? "production" : "demo",
       dbIdentifier: process.env.PGDATABASE || "unknown",
       wsClients: getConnectedClientsCount(),

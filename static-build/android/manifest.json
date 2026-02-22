@@ -1,0 +1,114 @@
+{
+  "id": "ecd2183b-98fc-41e3-abcb-14f0f7c05829",
+  "createdAt": "2026-02-22T05:03:08.959Z",
+  "runtimeVersion": "exposdk:54.0.0",
+  "launchAsset": {
+    "key": "bundle-1771736588959-build",
+    "contentType": "application/javascript",
+    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1771736588959-build/_expo/static/js/android/bundle.js"
+  },
+  "assets": [],
+  "metadata": {},
+  "extra": {
+    "eas": {
+      "projectId": "c22a2ab9-db91-441e-8069-bfb4a4890f48"
+    },
+    "expoClient": {
+      "name": "Workforce Connect",
+      "slug": "workforce-connect",
+      "version": "1.1.0",
+      "orientation": "portrait",
+      "icon": "./assets/images/icon.png",
+      "scheme": "workforceconnect",
+      "userInterfaceStyle": "automatic",
+      "newArchEnabled": true,
+      "ios": {
+        "supportsTablet": true,
+        "bundleIdentifier": "org.workforceconnect.app",
+        "buildNumber": "15",
+        "infoPlist": {
+          "ITSAppUsesNonExemptEncryption": false
+        }
+      },
+      "android": {
+        "package": "com.workforceconnect.app",
+        "versionCode": 2,
+        "adaptiveIcon": {
+          "backgroundColor": "#1E40AF",
+          "foregroundImage": "./assets/images/icon.png",
+          "foregroundImageUrl": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/assets/./assets/images/icon.png"
+        },
+        "edgeToEdgeEnabled": true,
+        "predictiveBackGestureEnabled": false
+      },
+      "web": {
+        "output": "single",
+        "favicon": "./assets/images/icon.png"
+      },
+      "plugins": [
+        [
+          "expo-splash-screen",
+          {
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 200,
+            "resizeMode": "contain",
+            "backgroundColor": "#1E40AF",
+            "dark": {
+              "backgroundColor": "#0F172A"
+            }
+          }
+        ],
+        "expo-web-browser"
+      ],
+      "experiments": {
+        "reactCompiler": true
+      },
+      "extra": {
+        "eas": {
+          "projectId": "c22a2ab9-db91-441e-8069-bfb4a4890f48"
+        }
+      },
+      "owner": "bergel",
+      "_internal": {
+        "isDebug": false,
+        "projectRoot": "/home/runner/workspace",
+        "dynamicConfigPath": {},
+        "staticConfigPath": "/home/runner/workspace/app.json",
+        "packageJsonPath": "/home/runner/workspace/package.json",
+        "pluginHistory": {
+          "expo-splash-screen": {
+            "name": "expo-splash-screen",
+            "version": "31.0.11"
+          },
+          "expo-web-browser": {
+            "name": "expo-web-browser",
+            "version": "15.0.9"
+          }
+        }
+      },
+      "sdkVersion": "54.0.0",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "androidStatusBar": {
+        "backgroundColor": "#1E40AF"
+      },
+      "iconUrl": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/assets/./assets/images/icon.png",
+      "hostUri": "40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/android"
+    },
+    "expoGo": {
+      "debuggerHost": "40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/android",
+      "developer": {
+        "tool": "expo-cli",
+        "projectRoot": "/home/runner/workspace"
+      },
+      "packagerOpts": {
+        "dev": false
+      },
+      "mainModuleName": "client/index"
+    },
+    "scopeKey": "@anonymous/workforce-connect-af437201-a85c-4a15-8da3-7069f9239cdb"
+  }
+}

@@ -708,6 +708,7 @@ export const shifts = pgTable("shifts", {
   recurringDays: text("recurring_days"),
   recurringEndDate: date("recurring_end_date"),
   parentShiftId: varchar("parent_shift_id"),
+  workersNeeded: integer("workers_needed"),
   createdByUserId: varchar("created_by_user_id")
     .references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),

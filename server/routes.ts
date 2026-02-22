@@ -4982,18 +4982,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return;
           }
 
-          if (shift.workerUserId) {
-            res.status(409).json({ error: "This shift has already been accepted by another worker" });
-            return;
-          }
+          const existingAccepted = await db.select({ count: sql<number>`count(*)::int` })
+            .from(shiftOffers)
+            .where(and(
+              eq(shiftOffers.shiftId, offer.shiftId),
+              eq(shiftOffers.status, "accepted")
+            ));
+          const currentAccepted = existingAccepted[0]?.count || 0;
+          const neededForShift = shift.workersNeeded || 1;
 
-          await db.update(shifts)
-            .set({ workerUserId: userId, updatedAt: new Date() })
-            .where(and(eq(shifts.id, offer.shiftId), isNull(shifts.workerUserId)));
-
-          const [updatedShift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
-          if (!updatedShift || updatedShift.workerUserId !== userId) {
-            res.status(409).json({ error: "This shift has already been accepted by another worker" });
+          if (currentAccepted >= neededForShift) {
+            res.status(409).json({ error: "This shift has already been filled with enough workers" });
             return;
           }
 
@@ -5001,29 +5000,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ status: "accepted", respondedAt: new Date() })
             .where(eq(shiftOffers.id, offerId));
 
-          const otherOffers = await db.select().from(shiftOffers)
-            .where(and(
-              eq(shiftOffers.shiftId, offer.shiftId),
-              ne(shiftOffers.id, offerId),
-              eq(shiftOffers.status, "pending")
-            ));
-
-          const cancelledWorkerIds: string[] = [];
-          for (const otherOffer of otherOffers) {
-            await db.update(shiftOffers)
-              .set({ status: "cancelled", respondedAt: new Date(), cancelledAt: new Date(), cancelledBy: userId, cancelReason: "Shift filled by another worker" })
-              .where(eq(shiftOffers.id, otherOffer.id));
-            cancelledWorkerIds.push(otherOffer.workerId);
-            await db.insert(auditLog).values({
-              userId,
-              action: "OFFER_CANCELLED_AUTO",
-              entityType: "shift_offer",
-              entityId: otherOffer.id,
-              details: JSON.stringify({ shiftId: offer.shiftId, cancelledWorkerId: otherOffer.workerId, reason: "Shift filled by another worker" }),
-            });
+          if (!shift.workerUserId) {
+            await db.update(shifts)
+              .set({ workerUserId: userId, updatedAt: new Date() })
+              .where(eq(shifts.id, offer.shiftId));
           }
 
-          if (shift.requestId) {
+          const acceptedCount = await db.select({ count: sql<number>`count(*)::int` })
+            .from(shiftOffers)
+            .where(and(
+              eq(shiftOffers.shiftId, offer.shiftId),
+              eq(shiftOffers.status, "accepted")
+            ));
+          const totalAccepted = acceptedCount[0]?.count || 0;
+          const neededCount = shift.workersNeeded || 1;
+          const shiftFilled = totalAccepted >= neededCount;
+
+          const cancelledWorkerIds: string[] = [];
+
+          if (shiftFilled) {
+            const otherOffers = await db.select().from(shiftOffers)
+              .where(and(
+                eq(shiftOffers.shiftId, offer.shiftId),
+                ne(shiftOffers.id, offerId),
+                eq(shiftOffers.status, "pending")
+              ));
+
+            for (const otherOffer of otherOffers) {
+              await db.update(shiftOffers)
+                .set({ status: "cancelled", respondedAt: new Date(), cancelledAt: new Date(), cancelledBy: userId, cancelReason: "Shift filled - enough workers accepted" })
+                .where(eq(shiftOffers.id, otherOffer.id));
+              cancelledWorkerIds.push(otherOffer.workerId);
+              await db.insert(auditLog).values({
+                userId,
+                action: "OFFER_CANCELLED_AUTO",
+                entityType: "shift_offer",
+                entityId: otherOffer.id,
+                details: JSON.stringify({ shiftId: offer.shiftId, cancelledWorkerId: otherOffer.workerId, reason: "Shift filled - enough workers accepted" }),
+              });
+            }
+          }
+
+          if (shift.requestId && shiftFilled) {
             await db.update(shiftRequests)
               .set({ status: "filled", updatedAt: new Date() })
               .where(eq(shiftRequests.id, shift.requestId));
@@ -5210,11 +5228,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const shiftId = req.params.id;
       const userId = req.headers["x-user-id"] as string;
+      const { workersNeeded } = req.body || {};
 
       const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
       if (!shift) {
         res.status(404).json({ error: "Shift not found" });
         return;
+      }
+
+      if (workersNeeded && typeof workersNeeded === "number" && workersNeeded > 0) {
+        await db.update(shifts).set({ workersNeeded, updatedAt: new Date() }).where(eq(shifts.id, shiftId));
       }
 
       const [workplace] = shift.workplaceId
@@ -5347,6 +5370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalEligible: eligibleWorkers.length + alreadyOffered.size,
         alreadyOffered: alreadyOffered.size,
         errors: offerErrors,
+        workersNeeded: workersNeeded || null,
       });
     } catch (error) {
       console.error("Error blasting shift to all workers:", error);

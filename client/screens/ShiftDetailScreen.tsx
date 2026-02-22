@@ -5,6 +5,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
+  TextInput,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -40,6 +42,7 @@ export default function ShiftDetailScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isBlasting, setIsBlasting] = useState(false);
   const [blastResult, setBlastResult] = useState<string | null>(null);
+  const [workersNeeded, setWorkersNeeded] = useState("1");
 
   const loadData = useCallback(async () => {
     try {
@@ -122,10 +125,16 @@ export default function ShiftDetailScreen() {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      const res = await apiRequest("POST", `/api/shifts/${shift.id}/blast`);
+      const count = parseInt(workersNeeded, 10);
+      const body: any = {};
+      if (count > 0) {
+        body.workersNeeded = count;
+      }
+      const res = await apiRequest("POST", `/api/shifts/${shift.id}/blast`, body);
       const data = await res.json();
       if (data.success) {
-        setBlastResult(`Sent to ${data.offersCreated} worker${data.offersCreated !== 1 ? "s" : ""}${data.alreadyOffered > 0 ? ` (${data.alreadyOffered} already offered)` : ""}`);
+        const neededInfo = data.workersNeeded ? ` (need ${data.workersNeeded})` : "";
+        setBlastResult(`Sent to ${data.offersCreated} worker${data.offersCreated !== 1 ? "s" : ""}${neededInfo}${data.alreadyOffered > 0 ? ` | ${data.alreadyOffered} already offered` : ""}`);
       } else {
         setBlastResult(data.error || "Failed to send");
       }
@@ -299,6 +308,50 @@ export default function ShiftDetailScreen() {
           <ThemedText style={[styles.blastDescription, { color: theme.textSecondary }]}>
             Send this shift offer to all eligible workers
           </ThemedText>
+
+          <View style={styles.workersNeededRow}>
+            <ThemedText style={[styles.workersNeededLabel, { color: theme.text }]}>
+              Workers Needed
+            </ThemedText>
+            <View style={styles.workersNeededInputContainer}>
+              <Pressable
+                onPress={() => {
+                  const val = Math.max(1, parseInt(workersNeeded, 10) - 1);
+                  setWorkersNeeded(String(val));
+                }}
+                style={[styles.counterButton, { backgroundColor: theme.backgroundSecondary }]}
+                testID="button-decrease-workers"
+              >
+                <Feather name="minus" size={16} color={theme.text} />
+              </Pressable>
+              <TextInput
+                style={[styles.workersNeededInput, { backgroundColor: theme.backgroundSecondary, color: theme.text, borderColor: theme.border }]}
+                value={workersNeeded}
+                onChangeText={(text) => {
+                  const num = text.replace(/[^0-9]/g, "");
+                  setWorkersNeeded(num || "1");
+                }}
+                keyboardType="number-pad"
+                textAlign="center"
+                testID="input-workers-needed"
+              />
+              <Pressable
+                onPress={() => {
+                  const val = parseInt(workersNeeded, 10) + 1;
+                  setWorkersNeeded(String(val));
+                }}
+                style={[styles.counterButton, { backgroundColor: theme.backgroundSecondary }]}
+                testID="button-increase-workers"
+              >
+                <Feather name="plus" size={16} color={theme.text} />
+              </Pressable>
+            </View>
+          </View>
+
+          <ThemedText style={[styles.workersNeededHint, { color: theme.textMuted }]}>
+            Once enough workers accept, remaining offers will auto-close
+          </ThemedText>
+
           <Button
             onPress={handleBlastToAll}
             disabled={isBlasting}
@@ -509,5 +562,39 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: Spacing.md,
     textAlign: "center",
+  },
+  workersNeededRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.sm,
+  },
+  workersNeededLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  workersNeededInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  counterButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  workersNeededInput: {
+    width: 56,
+    height: 36,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  workersNeededHint: {
+    fontSize: 12,
+    marginBottom: Spacing.md,
   },
 });

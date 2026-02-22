@@ -431,6 +431,9 @@ function serveExpoManifest(platform: string, res: Response) {
   res.setHeader("expo-protocol-version", "1");
   res.setHeader("expo-sfv-version", "0");
   res.setHeader("content-type", "application/json");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 
   const manifest = fs.readFileSync(manifestPath, "utf-8");
   res.send(manifest);

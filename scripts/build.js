@@ -85,6 +85,8 @@ function clearMetroCache() {
   const cacheDirs = [
     ...fs.globSync(".metro-cache"),
     ...fs.globSync("node_modules/.cache/metro"),
+    ...fs.globSync("node_modules/.cache"),
+    ...fs.globSync(".expo/web/cache"),
   ];
 
   for (const dir of cacheDirs) {
@@ -453,6 +455,28 @@ function updateBundleUrls(timestamp, baseUrl) {
   console.log("Updated bundle URLs");
 }
 
+function sanitizeBundleApiUrl(timestamp, domain) {
+  const platforms = ["ios", "android"];
+  for (const platform of platforms) {
+    const bundlePath = path.join(
+      "static-build",
+      timestamp,
+      "_expo",
+      "static",
+      "js",
+      platform,
+      "bundle.js",
+    );
+    let bundle = fs.readFileSync(bundlePath, "utf-8");
+    const domainWithPort = `${domain}:5000`;
+    if (bundle.includes(domainWithPort)) {
+      bundle = bundle.split(domainWithPort).join(domain);
+      fs.writeFileSync(bundlePath, bundle);
+      console.log(`Sanitized API URL for ${platform}: removed :5000 port`);
+    }
+  }
+}
+
 function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
   const updateForPlatform = (platform, manifest) => {
     if (!manifest.launchAsset || !manifest.extra) {
@@ -541,6 +565,8 @@ async function main() {
   if (assetCount > 0) {
     updateBundleUrls(timestamp, baseUrl);
   }
+
+  sanitizeBundleApiUrl(timestamp, domain);
 
   console.log("Updating manifests and creating landing page...");
   updateManifests(manifests, timestamp, baseUrl, assetsByHash);

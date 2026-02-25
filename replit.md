@@ -23,7 +23,7 @@ Key features include:
 - **Workplace Management**: Admins manage locations, assign workers, and view TITO logs.
 - **Timesheets & Payroll**: Supports bi-weekly pay periods, with an admin portal for review/approval and CSV export. TITO operations are idempotent, server-side calculations of hours, and comprehensive audit logging.
 - **User Management**: Admins can CRUD users, manage roles, and toggle status.
-- **Shift Request Management**: Full workflow from client/admin creation to worker acceptance/decline (first-accept-wins). Includes smart-assignment and broadcast capabilities. Shift offers maintain a full history with soft-delete for cancellations.
+- **Shift Request Management**: Full workflow from client/admin creation to worker acceptance/decline with fill-to-capacity logic (multiple workers per shift via `workersNeeded`). Includes smart-assignment, broadcast/blast capabilities, and first-available acceptance. Shift offers maintain a full history with soft-delete for cancellations.
 - **Automated Notifications**: Push and in-app notifications for shift offers, reminders, late clock-ins, unusual hours, flagged clock-outs, and new shift requests.
 - **Shift Series Model**: Allows for defining recurring shifts with on-the-fly occurrence expansion.
 - **Multi-mode Roster View**: Provides daily, weekly, bi-weekly, monthly, and semi-monthly views of shifts and series.

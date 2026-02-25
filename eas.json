@@ -1,7 +1,10 @@
 {
   "build": {
     "production": {
-      "distribution": "store"
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "wfconnect.org"
+      }
     }
   }
 }

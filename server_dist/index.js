@@ -600,6 +600,7 @@ var shifts = pgTable("shifts", {
   recurringDays: text("recurring_days"),
   recurringEndDate: date("recurring_end_date"),
   parentShiftId: varchar("parent_shift_id"),
+  workersNeeded: integer("workers_needed"),
   createdByUserId: varchar("created_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull()
@@ -3187,12 +3188,16 @@ async function registerRoutes(app2) {
   app2.post("/api/shifts", checkRoles("admin", "hr"), async (req, res) => {
     try {
       const userId = req.headers["x-user-id"];
-      const { workplaceId, workerUserId, title, date: date2, startTime, endTime, notes, frequencyType, category, recurringDays, recurringEndDate } = req.body;
+      const { workplaceId, workerUserId, title, date: date2, startTime, endTime, notes, frequencyType, category, recurringDays, recurringEndDate, blastToAll, workersNeeded } = req.body;
       const freq = frequencyType || "one-time";
       const cat = category || "janitorial";
       const isOpenEnded = freq === "open-ended";
-      if (!workplaceId || !workerUserId || !title || !date2 || !startTime) {
-        res.status(400).json({ error: "workplaceId, workerUserId, title, date, and startTime are required" });
+      if (!workplaceId || !title || !date2 || !startTime) {
+        res.status(400).json({ error: "workplaceId, title, date, and startTime are required" });
+        return;
+      }
+      if (!blastToAll && !workerUserId) {
+        res.status(400).json({ error: "workerUserId is required when not blasting to all workers" });
         return;
       }
       if (freq === "recurring" && (!recurringDays || recurringDays.length === 0)) {
@@ -3204,17 +3209,19 @@ async function registerRoutes(app2) {
         res.status(404).json({ error: "Workplace not found" });
         return;
       }
-      const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
-      if (!worker) {
-        res.status(404).json({ error: "Worker not found" });
-        return;
+      if (!blastToAll) {
+        const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
+        if (!worker) {
+          res.status(404).json({ error: "Worker not found" });
+          return;
+        }
       }
       if (freq === "recurring" && recurringDays) {
         const days = typeof recurringDays === "string" ? recurringDays.split(",") : recurringDays;
         const endType = recurringEndDate ? "date" : "never";
         const [newSeries] = await db.insert(shiftSeries).values({
           workplaceId,
-          workerUserId,
+          workerUserId: blastToAll ? null : workerUserId,
           title,
           startTime,
           endTime: endTime || null,
@@ -3240,7 +3247,7 @@ async function registerRoutes(app2) {
       } else {
         const [newShift] = await db.insert(shifts).values({
           workplaceId,
-          workerUserId,
+          workerUserId: blastToAll ? null : workerUserId,
           title,
           date: date2,
           startTime,
@@ -3249,10 +3256,44 @@ async function registerRoutes(app2) {
           status: "scheduled",
           frequencyType: freq,
           category: cat,
-          createdByUserId: userId
+          createdByUserId: userId,
+          workersNeeded: blastToAll && workersNeeded ? workersNeeded : null
         }).returning();
-        broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workerUserId, workplaceId } });
-        res.status(201).json(newShift);
+        if (blastToAll) {
+          const eligibleWorkers = await db.select({ id: users.id }).from(users).where(and(eq(users.role, "worker"), eq(users.status, "active")));
+          let offersCreated = 0;
+          for (const w of eligibleWorkers) {
+            try {
+              await db.insert(shiftOffers).values({
+                shiftId: newShift.id,
+                workerId: w.id,
+                offeredByUserId: userId,
+                status: "pending"
+              });
+              offersCreated++;
+              await db.insert(appNotifications).values({
+                userId: w.id,
+                type: "shift_offer",
+                title: "New Shift Available",
+                body: `A new ${cat} shift "${title}" on ${date2} is available. Tap to view and accept.`,
+                deepLink: `/shift-offers`
+              });
+            } catch (e) {
+            }
+          }
+          sendPushNotifications(
+            eligibleWorkers.map((w) => w.id),
+            "New Shift Available",
+            `A new ${cat} shift "${title}" on ${date2} is available.`,
+            { type: "shift_offer", shiftId: newShift.id }
+          );
+          broadcast({ type: "shift_blast", data: { shiftId: newShift.id, offersCreated } });
+          broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workplaceId, blasted: true } });
+          res.status(201).json({ ...newShift, blasted: true, offersCreated, totalWorkers: eligibleWorkers.length });
+        } else {
+          broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workerUserId, workplaceId } });
+          res.status(201).json(newShift);
+        }
       }
     } catch (error) {
       console.error("Error creating shift:", error);
@@ -4672,35 +4713,47 @@ async function registerRoutes(app2) {
             res.status(404).json({ error: "Associated shift not found" });
             return;
           }
-          if (shift.workerUserId) {
-            res.status(409).json({ error: "This shift has already been accepted by another worker" });
-            return;
-          }
-          await db.update(shifts).set({ workerUserId: userId, updatedAt: /* @__PURE__ */ new Date() }).where(and(eq(shifts.id, offer.shiftId), isNull(shifts.workerUserId)));
-          const [updatedShift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
-          if (!updatedShift || updatedShift.workerUserId !== userId) {
-            res.status(409).json({ error: "This shift has already been accepted by another worker" });
+          const existingAccepted = await db.select({ count: sql2`count(*)::int` }).from(shiftOffers).where(and(
+            eq(shiftOffers.shiftId, offer.shiftId),
+            eq(shiftOffers.status, "accepted")
+          ));
+          const currentAccepted = existingAccepted[0]?.count || 0;
+          const neededForShift = shift.workersNeeded || 1;
+          if (currentAccepted >= neededForShift) {
+            res.status(409).json({ error: "This shift has already been filled with enough workers" });
             return;
           }
           await db.update(shiftOffers).set({ status: "accepted", respondedAt: /* @__PURE__ */ new Date() }).where(eq(shiftOffers.id, offerId));
-          const otherOffers = await db.select().from(shiftOffers).where(and(
-            eq(shiftOffers.shiftId, offer.shiftId),
-            ne(shiftOffers.id, offerId),
-            eq(shiftOffers.status, "pending")
-          ));
-          const cancelledWorkerIds = [];
-          for (const otherOffer of otherOffers) {
-            await db.update(shiftOffers).set({ status: "cancelled", respondedAt: /* @__PURE__ */ new Date(), cancelledAt: /* @__PURE__ */ new Date(), cancelledBy: userId, cancelReason: "Shift filled by another worker" }).where(eq(shiftOffers.id, otherOffer.id));
-            cancelledWorkerIds.push(otherOffer.workerId);
-            await db.insert(auditLog).values({
-              userId,
-              action: "OFFER_CANCELLED_AUTO",
-              entityType: "shift_offer",
-              entityId: otherOffer.id,
-              details: JSON.stringify({ shiftId: offer.shiftId, cancelledWorkerId: otherOffer.workerId, reason: "Shift filled by another worker" })
-            });
+          if (!shift.workerUserId) {
+            await db.update(shifts).set({ workerUserId: userId, updatedAt: /* @__PURE__ */ new Date() }).where(eq(shifts.id, offer.shiftId));
           }
-          if (shift.requestId) {
+          const acceptedCount = await db.select({ count: sql2`count(*)::int` }).from(shiftOffers).where(and(
+            eq(shiftOffers.shiftId, offer.shiftId),
+            eq(shiftOffers.status, "accepted")
+          ));
+          const totalAccepted = acceptedCount[0]?.count || 0;
+          const neededCount = shift.workersNeeded || 1;
+          const shiftFilled = totalAccepted >= neededCount;
+          const cancelledWorkerIds = [];
+          if (shiftFilled) {
+            const otherOffers = await db.select().from(shiftOffers).where(and(
+              eq(shiftOffers.shiftId, offer.shiftId),
+              ne(shiftOffers.id, offerId),
+              eq(shiftOffers.status, "pending")
+            ));
+            for (const otherOffer of otherOffers) {
+              await db.update(shiftOffers).set({ status: "cancelled", respondedAt: /* @__PURE__ */ new Date(), cancelledAt: /* @__PURE__ */ new Date(), cancelledBy: userId, cancelReason: "Shift filled - enough workers accepted" }).where(eq(shiftOffers.id, otherOffer.id));
+              cancelledWorkerIds.push(otherOffer.workerId);
+              await db.insert(auditLog).values({
+                userId,
+                action: "OFFER_CANCELLED_AUTO",
+                entityType: "shift_offer",
+                entityId: otherOffer.id,
+                details: JSON.stringify({ shiftId: offer.shiftId, cancelledWorkerId: otherOffer.workerId, reason: "Shift filled - enough workers accepted" })
+              });
+            }
+          }
+          if (shift.requestId && shiftFilled) {
             await db.update(shiftRequests).set({ status: "filled", updatedAt: /* @__PURE__ */ new Date() }).where(eq(shiftRequests.id, shift.requestId));
           }
           const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq(users.role, "admin"), eq(users.role, "hr")));
@@ -4846,10 +4899,14 @@ async function registerRoutes(app2) {
     try {
       const shiftId = req.params.id;
       const userId = req.headers["x-user-id"];
+      const { workersNeeded } = req.body || {};
       const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
       if (!shift) {
         res.status(404).json({ error: "Shift not found" });
         return;
+      }
+      if (workersNeeded && typeof workersNeeded === "number" && workersNeeded > 0) {
+        await db.update(shifts).set({ workersNeeded, updatedAt: /* @__PURE__ */ new Date() }).where(eq(shifts.id, shiftId));
       }
       const [workplace] = shift.workplaceId ? await db.select().from(workplaces).where(eq(workplaces.id, shift.workplaceId)) : [null];
       const allWorkers = await db.select({
@@ -4958,7 +5015,8 @@ async function registerRoutes(app2) {
         offersCreated: offeredWorkerIds.length,
         totalEligible: eligibleWorkers.length + alreadyOffered.size,
         alreadyOffered: alreadyOffered.size,
-        errors: offerErrors
+        errors: offerErrors,
+        workersNeeded: workersNeeded || null
       });
     } catch (error) {
       console.error("Error blasting shift to all workers:", error);

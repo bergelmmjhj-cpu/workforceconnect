@@ -99,7 +99,7 @@ export async function sendShiftOfferSMS(
     `Date: ${shift.date}\n` +
     `Time: ${timeRange}\n` +
     `Location: ${workplaceName}\n\n` +
-    `Reply YES to accept or NO to decline.`;
+    `Reply ACCEPT SHIFT to accept or DECLINE SHIFT to decline.`;
 
   const result = await sendSMS(worker.phone, message);
 

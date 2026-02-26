@@ -66,7 +66,7 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - **Phone Number IDs**: HR Number `PNo1n737XV` (+1 289-670-5697), HR Department `PNCQJAOZa0` (+1 437-476-9566). HR Number is used as the sender.
 - **SMS Logs**: `sms_logs` table tracks all outbound and inbound SMS with direction, status, and linked shift/offer IDs.
 - **Shift Blast SMS**: When shifts are blasted or broadcast, workers with phone numbers receive SMS with shift details and YES/NO reply instructions.
-- **SMS Reply Parsing**: Workers text YES/ACCEPT/Y to accept or NO/DECLINE/N to decline their most recent pending shift offer. Confirmation SMS is sent back.
+- **SMS Reply Parsing**: Workers text ACCEPT SHIFT or ACCEPT to accept, DECLINE SHIFT or DECLINE to decline their most recent pending shift offer. Simple words like YES/NO are ignored to avoid conflicts with regular HR conversations on the same number. Confirmation SMS is sent back.
 - **Phone Field**: `phone` column added to `users` table; populated from `worker_applications` when workers onboard.
 
 ### Environment Variables

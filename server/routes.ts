@@ -6346,16 +6346,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const upperBody = messageBody.toUpperCase().trim();
       let responseAction: "accepted" | "declined" | null = null;
 
-      if (["YES", "ACCEPT", "Y", "YEP", "YEAH", "OK", "SURE", "1"].includes(upperBody)) {
+      if (["ACCEPT SHIFT", "ACCEPT"].includes(upperBody)) {
         responseAction = "accepted";
-      } else if (["NO", "DECLINE", "N", "NOPE", "NAH", "PASS", "2"].includes(upperBody)) {
+      } else if (["DECLINE SHIFT", "DECLINE"].includes(upperBody)) {
         responseAction = "declined";
       }
 
       if (!responseAction) {
         sendConfirmationSMS(
           senderPhone,
-          `Hi ${worker.fullName}! To respond to a shift offer, please reply YES to accept or NO to decline.`,
+          `Hi ${worker.fullName}! To respond to a shift offer, please reply ACCEPT SHIFT to accept or DECLINE SHIFT to decline.`,
           worker.id
         ).catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
         return;

@@ -395,6 +395,31 @@ export const insertTitoLogSchema = createInsertSchema(titoLogs).omit({
 export type TitoLogDB = typeof titoLogs.$inferSelect;
 export type InsertTitoLog = z.infer<typeof insertTitoLogSchema>;
 
+export const titoCorrections = pgTable("tito_corrections", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  titoLogId: varchar("tito_log_id")
+    .notNull()
+    .references(() => titoLogs.id),
+  requesterId: varchar("requester_id")
+    .notNull()
+    .references(() => users.id),
+  approverId: varchar("approver_id")
+    .references(() => users.id),
+  originalTimeIn: timestamp("original_time_in"),
+  originalTimeOut: timestamp("original_time_out"),
+  correctedTimeIn: timestamp("corrected_time_in"),
+  correctedTimeOut: timestamp("corrected_time_out"),
+  reason: text("reason").notNull(),
+  note: text("note"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
+export type TitoCorrectionDB = typeof titoCorrections.$inferSelect;
+
 // ============================================
 // Timesheets & Payroll Schema
 // ============================================

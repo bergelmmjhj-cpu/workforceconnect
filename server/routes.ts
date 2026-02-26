@@ -38,6 +38,7 @@ import {
   auditLog,
   userPhotos,
   smsLogs,
+  titoCorrections,
 } from "../shared/schema";
 import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod, getCurrentPayPeriod } from "../shared/payPeriods2026";
@@ -119,6 +120,27 @@ async function sendPushNotifications(userIds: string[], title: string, body: str
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW = 60000;
 const RATE_LIMIT_MAX = 5;
+
+const titoRateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const TITO_RATE_LIMIT_WINDOW = 60000;
+const TITO_RATE_LIMIT_MAX = 10;
+
+function checkTitoRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const entry = titoRateLimitMap.get(userId);
+  
+  if (!entry || now > entry.resetTime) {
+    titoRateLimitMap.set(userId, { count: 1, resetTime: now + TITO_RATE_LIMIT_WINDOW });
+    return true;
+  }
+  
+  if (entry.count >= TITO_RATE_LIMIT_MAX) {
+    return false;
+  }
+  
+  entry.count++;
+  return true;
+}
 
 function getClientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -2285,6 +2307,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      if (!checkTitoRateLimit(userId)) {
+        res.status(429).json({ error: "Too many requests. Please wait before trying again.", errorCode: "RATE_LIMITED" });
+        return;
+      }
+
       const { workplaceId, gpsLat, gpsLng, shiftId } = req.body;
 
       if (!workplaceId) {
@@ -2292,30 +2319,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Idempotency: check for existing open TITO log for this worker/shift/workplace
-      const existingConditions = [
-        eq(titoLogs.workerId, userId),
-        eq(titoLogs.workplaceId, workplaceId),
-        isNull(titoLogs.timeOut),
-      ];
-      if (shiftId) {
-        existingConditions.push(eq(titoLogs.shiftId, shiftId));
-      }
-      const existingLogs = await db.select().from(titoLogs)
-        .where(and(...existingConditions))
+      // Single Active Session: check for ANY open record across ALL workplaces
+      const anyOpenLogs = await db.select().from(titoLogs)
+        .where(and(
+          eq(titoLogs.workerId, userId),
+          isNull(titoLogs.timeOut),
+          ne(titoLogs.status, "canceled"),
+        ))
         .limit(1);
 
-      if (existingLogs.length > 0) {
-        const existing = existingLogs[0];
-        console.log(`[TITO] Idempotent clock-in: worker ${userId} already clocked in (titoLogId=${existing.id})`);
-        res.json({
-          success: true,
-          message: "Already clocked in",
-          titoLogId: existing.id,
-          timeIn: existing.timeIn,
-          distance: existing.timeInDistanceMeters ? Math.round(existing.timeInDistanceMeters) : null,
-          gpsVerified: existing.timeInGpsVerified,
-          alreadyClockedIn: true,
+      if (anyOpenLogs.length > 0) {
+        const existing = anyOpenLogs[0];
+        // If the open log is for the same workplace (and same shift if provided), return idempotent response
+        if (existing.workplaceId === workplaceId && (!shiftId || existing.shiftId === shiftId)) {
+          console.log(`[TITO] Idempotent clock-in: worker ${userId} already clocked in (titoLogId=${existing.id})`);
+          res.json({
+            success: true,
+            message: "Already clocked in",
+            titoLogId: existing.id,
+            timeIn: existing.timeIn,
+            distance: existing.timeInDistanceMeters ? Math.round(existing.timeInDistanceMeters) : null,
+            gpsVerified: existing.timeInGpsVerified,
+            alreadyClockedIn: true,
+          });
+          return;
+        }
+        // Otherwise, reject - they have an active session at a different workplace
+        console.log(`[TITO] Rejected clock-in: worker ${userId} has active session at workplace ${existing.workplaceId} (titoLogId=${existing.id})`);
+        res.status(409).json({
+          error: "You already have an active clock-in session. Please clock out first.",
+          errorCode: "ACTIVE_SESSION_EXISTS",
+          existingTitoLogId: existing.id,
+          existingWorkplaceId: existing.workplaceId,
         });
         return;
       }
@@ -2344,47 +2379,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      if (shiftId) {
-        const [shiftRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
-        if (!shiftRow) {
-          res.status(404).json({ error: "Shift not found", errorCode: "SHIFT_NOT_FOUND" });
-          return;
-        }
-        const isAssignedWorker = shiftRow.workerUserId === userId;
-        const [acceptedOffer] = isAssignedWorker
-          ? [{ id: "assigned" }]
-          : await db.select({ id: shiftOffers.id }).from(shiftOffers)
-              .where(and(
-                eq(shiftOffers.shiftId, shiftId),
-                eq(shiftOffers.workerId, userId),
-                eq(shiftOffers.status, "accepted")
-              ))
-              .limit(1);
+      if (!shiftId) {
+        res.status(400).json({ error: "shiftId is required. You must clock in against a scheduled shift.", errorCode: "NO_SHIFT_ID" });
+        return;
+      }
 
-        if (!isAssignedWorker && !acceptedOffer) {
-          res.status(403).json({
-            error: "You must have an accepted shift offer to clock in for this shift",
-            errorCode: "NO_ACCEPTED_OFFER",
-          });
-          return;
-        }
-      } else {
-        const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
-        const todayShifts = await db.select({ id: shifts.id }).from(shifts)
-          .where(and(
-            eq(shifts.workplaceId, workplaceId),
-            eq(shifts.date, todayStr),
-            or(
-              eq(shifts.workerUserId, userId),
-              sql`EXISTS (SELECT 1 FROM shift_offers WHERE shift_offers.shift_id = shifts.id AND shift_offers.worker_id = ${userId} AND shift_offers.status = 'accepted')`
-            )
-          ))
-          .limit(1);
+      const [shiftRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      if (!shiftRow) {
+        res.status(404).json({ error: "Shift not found", errorCode: "SHIFT_NOT_FOUND" });
+        return;
+      }
+      const isAssignedWorker = shiftRow.workerUserId === userId;
+      const [acceptedOffer] = isAssignedWorker
+        ? [{ id: "assigned" }]
+        : await db.select({ id: shiftOffers.id }).from(shiftOffers)
+            .where(and(
+              eq(shiftOffers.shiftId, shiftId),
+              eq(shiftOffers.workerId, userId),
+              eq(shiftOffers.status, "accepted")
+            ))
+            .limit(1);
 
-        if (todayShifts.length === 0) {
-          res.status(403).json({
-            error: "No shift scheduled for you today at this workplace. Accept a shift offer first.",
-            errorCode: "NO_SHIFT_TODAY",
+      if (!isAssignedWorker && !acceptedOffer) {
+        res.status(403).json({
+          error: "You must have an accepted shift offer to clock in for this shift",
+          errorCode: "NO_ACCEPTED_OFFER",
+        });
+        return;
+      }
+
+      // Shift-bound clock-in window validation
+      {
+        const now = new Date();
+        const [sH, sM] = shiftRow.startTime.split(":").map(Number);
+        const shiftStart = new Date(shiftRow.date + "T00:00:00");
+        shiftStart.setHours(sH, sM, 0, 0);
+
+        const windowOpen = new Date(shiftStart.getTime() - 15 * 60 * 1000);
+
+        let windowClose: Date;
+        if (shiftRow.endTime) {
+          const [eH, eM] = shiftRow.endTime.split(":").map(Number);
+          const shiftEnd = new Date(shiftRow.date + "T00:00:00");
+          shiftEnd.setHours(eH, eM, 0, 0);
+          if (shiftEnd <= shiftStart) {
+            shiftEnd.setDate(shiftEnd.getDate() + 1);
+          }
+          windowClose = new Date(shiftEnd.getTime() + 30 * 60 * 1000);
+        } else {
+          windowClose = new Date(shiftStart.getTime() + 24 * 60 * 60 * 1000);
+        }
+
+        if (now < windowOpen || now > windowClose) {
+          const fmtTime = (d: Date) => d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Toronto" });
+          res.status(400).json({
+            error: "Clock-in is only allowed during your scheduled shift window.",
+            errorCode: "OUTSIDE_SHIFT_WINDOW",
+            windowOpen: windowOpen.toISOString(),
+            windowClose: windowClose.toISOString(),
+            windowDescription: `Clock-in available ${fmtTime(windowOpen)} - ${fmtTime(windowClose)}`,
           });
           return;
         }
@@ -2408,7 +2461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const [titoLog] = await db.insert(titoLogs).values({
           workerId: userId,
           workplaceId,
-          shiftId: shiftId || null,
+          shiftId: shiftId,
           timeIn: new Date(),
           timeInGpsLat: gpsLat,
           timeInGpsLng: gpsLng,
@@ -2432,7 +2485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [titoLog] = await db.insert(titoLogs).values({
         workerId: userId,
         workplaceId,
-        shiftId: shiftId || null,
+        shiftId: shiftId,
         timeIn: new Date(),
         timeInGpsLat: gpsLat,
         timeInGpsLng: gpsLng,
@@ -2592,6 +2645,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      if (!checkTitoRateLimit(userId)) {
+        res.status(429).json({ error: "Too many requests. Please wait before trying again.", errorCode: "RATE_LIMITED" });
+        return;
+      }
+
       const { titoLogId, gpsLat, gpsLng } = req.body;
 
       if (!titoLogId) {
@@ -2610,9 +2668,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Idempotency: if already clocked out, return existing data
+      // Prevent Double Clock-Out: if already clocked out, return existing data with flag
       if (titoLog.timeOut) {
-        console.log(`[TITO] Idempotent clock-out: worker ${userId} already clocked out (titoLogId=${titoLog.id})`);
+        console.log(`[TITO] Double clock-out prevented: worker ${userId} already clocked out (titoLogId=${titoLog.id})`);
         const totalMs = new Date(titoLog.timeOut).getTime() - new Date(titoLog.timeIn!).getTime();
         const totalHours = Math.max(0, parseFloat((totalMs / 3600000).toFixed(2)));
         res.json({
@@ -2632,6 +2690,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!titoLog.timeIn) {
         res.status(400).json({ error: "Cannot clock out without a clock-in time" });
         return;
+      }
+
+      // Minimum Duration: reject clock-out if < 60 seconds since clock-in
+      const elapsedSeconds = (Date.now() - new Date(titoLog.timeIn).getTime()) / 1000;
+      if (elapsedSeconds < 60) {
+        const remainingSeconds = Math.ceil(60 - elapsedSeconds);
+        res.status(400).json({
+          error: "Minimum shift duration is 1 minute.",
+          errorCode: "MIN_DURATION",
+          remainingSeconds,
+        });
+        return;
+      }
+
+      // Shift-bound clock-out window validation
+      if (titoLog.shiftId) {
+        const [clockOutShift] = await db.select().from(shifts).where(eq(shifts.id, titoLog.shiftId));
+        if (clockOutShift) {
+          const now = new Date();
+          const [sH, sM] = clockOutShift.startTime.split(":").map(Number);
+          const shiftStart = new Date(clockOutShift.date + "T00:00:00");
+          shiftStart.setHours(sH, sM, 0, 0);
+
+          let windowClose: Date;
+          if (clockOutShift.endTime) {
+            const [eH, eM] = clockOutShift.endTime.split(":").map(Number);
+            const shiftEnd = new Date(clockOutShift.date + "T00:00:00");
+            shiftEnd.setHours(eH, eM, 0, 0);
+            if (shiftEnd <= shiftStart) {
+              shiftEnd.setDate(shiftEnd.getDate() + 1);
+            }
+            windowClose = new Date(shiftEnd.getTime() + 30 * 60 * 1000);
+          } else {
+            windowClose = new Date(shiftStart.getTime() + 24 * 60 * 60 * 1000);
+          }
+
+          if (now < shiftStart || now > windowClose) {
+            const fmtTime = (d: Date) => d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Toronto" });
+            res.status(400).json({
+              error: "Clock-out must occur within your scheduled shift window.",
+              errorCode: "OUTSIDE_SHIFT_WINDOW",
+              windowDescription: `Clock-out allowed ${fmtTime(shiftStart)} - ${fmtTime(windowClose)}`,
+            });
+            return;
+          }
+        }
       }
 
       const [workplace] = titoLog.workplaceId
@@ -2905,6 +3009,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const logs = await query;
 
+      const logIds = logs.map(l => l.id);
+      let correctedLogIds = new Set<string>();
+      if (logIds.length > 0) {
+        const corrections = await db.select({ titoLogId: titoCorrections.titoLogId })
+          .from(titoCorrections)
+          .where(and(
+            inArray(titoCorrections.titoLogId, logIds),
+            eq(titoCorrections.status, "approved"),
+          ));
+        correctedLogIds = new Set(corrections.map(c => c.titoLogId));
+      }
+
       const formattedLogs = logs.map(log => ({
         id: log.id,
         shiftId: log.shiftId || "",
@@ -2921,13 +3037,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         approvedAt: log.approvedAt ? new Date(log.approvedAt).toISOString() : undefined,
         disputedBy: log.disputedBy || undefined,
         disputedAt: log.disputedAt ? new Date(log.disputedAt).toISOString() : undefined,
-        status: log.status as "pending" | "approved" | "disputed",
+        status: log.status as "pending" | "approved" | "disputed" | "canceled" | "flagged",
         shiftDate: log.shiftDate || (log.timeIn ? new Date(log.timeIn).toLocaleDateString("en-CA", { timeZone: "America/Toronto" }) : new Date().toLocaleDateString("en-CA")),
         createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : new Date().toISOString(),
         notes: log.notes || undefined,
         flaggedLate: log.flaggedLate || false,
         lateMinutes: log.lateMinutes || undefined,
         lateReason: log.lateReason || undefined,
+        corrected: correctedLogIds.has(log.id),
+        cancelReason: log.status === "canceled" ? (log.notes || "Accidental clock-in") : undefined,
         totalHours: log.timeIn && log.timeOut
           ? parseFloat(((new Date(log.timeOut).getTime() - new Date(log.timeIn).getTime()) / 3600000).toFixed(2))
           : undefined,
@@ -2937,6 +3055,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching TITO logs:", error);
       res.status(500).json({ error: "Failed to fetch TITO logs" });
+    }
+  });
+
+  app.post("/api/tito/email-timesheet", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { to, subject } = req.body;
+
+      if (!to || typeof to !== "string" || !to.includes("@")) {
+        res.status(400).json({ error: "Valid email address is required" });
+        return;
+      }
+
+      const logs = await db.select({
+        id: titoLogs.id,
+        workerId: titoLogs.workerId,
+        workerName: users.fullName,
+        workplaceName: workplaces.name,
+        shiftDate: shifts.date,
+        shiftTitle: shifts.title,
+        timeIn: titoLogs.timeIn,
+        timeOut: titoLogs.timeOut,
+        status: titoLogs.status,
+      })
+      .from(titoLogs)
+      .leftJoin(users, eq(titoLogs.workerId, users.id))
+      .leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id))
+      .leftJoin(shifts, eq(titoLogs.shiftId, shifts.id))
+      .where(ne(titoLogs.status, "canceled"))
+      .orderBy(desc(titoLogs.createdAt))
+      .limit(500);
+
+      const csvLines = [
+        "Worker Name,Workplace,Shift Date,Time In,Time Out,Hours,Status",
+        ...logs.map(log => {
+          const timeIn = log.timeIn ? new Date(log.timeIn) : null;
+          const timeOut = log.timeOut ? new Date(log.timeOut) : null;
+          const hours = timeIn && timeOut
+            ? ((timeOut.getTime() - timeIn.getTime()) / 3600000).toFixed(2)
+            : "";
+          const formatTime = (d: Date | null) => d ? d.toLocaleString("en-CA", { timeZone: "America/Toronto" }) : "";
+          return `"${log.workerName || ""}","${log.workplaceName || ""}","${log.shiftDate || ""}","${formatTime(timeIn)}","${formatTime(timeOut)}",${hours},"${log.status}"`;
+        })
+      ];
+
+      const csvContent = csvLines.join("\n");
+      const now = new Date().toISOString().split("T")[0];
+      const filename = `tito-timesheet-${now}.csv`;
+      const emailSubject = subject || `WFConnect TITO Timesheet - ${now}`;
+      const bodyText = `Please find attached the TITO timesheet report.\n\nThis report includes ${logs.length} time log(s).\n\n- WFConnect`;
+
+      const result = await sendCSVEmail(to, emailSubject, bodyText, csvContent, filename);
+
+      if (result.success) {
+        res.json({ success: true, message: `Timesheet emailed to ${to}` });
+      } else {
+        res.status(500).json({ error: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Error emailing TITO timesheet:", error);
+      res.status(500).json({ error: "Failed to email timesheet" });
     }
   });
 
@@ -2998,6 +3176,207 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error disputing TITO log:", error);
       res.status(500).json({ error: "Failed to dispute TITO log" });
+    }
+  });
+
+  app.post("/api/tito/:id/cancel", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const titoLogId = req.params.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const [log] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      if (!log) {
+        res.status(404).json({ error: "TITO log not found" });
+        return;
+      }
+
+      if (log.workerId !== userId) {
+        res.status(403).json({ error: "You can only cancel your own clock-in" });
+        return;
+      }
+
+      if (log.timeOut) {
+        res.status(400).json({ error: "Cannot cancel a completed clock-in/out record" });
+        return;
+      }
+
+      if (log.status === "canceled") {
+        res.json({ success: true, message: "Already canceled", alreadyCanceled: true });
+        return;
+      }
+
+      const clockInTime = log.timeIn ? new Date(log.timeIn).getTime() : 0;
+      const elapsed = Date.now() - clockInTime;
+      const twoMinutes = 2 * 60 * 1000;
+      if (elapsed > twoMinutes) {
+        res.status(400).json({ error: "Cancel window has expired. You can only cancel within 2 minutes of clocking in." });
+        return;
+      }
+
+      await db.update(titoLogs)
+        .set({ status: "canceled", notes: "Accidental clock-in", updatedAt: new Date() })
+        .where(eq(titoLogs.id, titoLogId));
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "TITO_CANCELED",
+        entityType: "tito_log",
+        entityId: titoLogId,
+        details: JSON.stringify({ reason: "Accidental clock-in", elapsedMs: elapsed }),
+      });
+
+      console.log(`[TITO] Clock-in canceled: worker ${userId}, titoLogId=${titoLogId}, elapsed=${Math.round(elapsed / 1000)}s`);
+      res.json({ success: true, message: "Clock-in canceled" });
+    } catch (error) {
+      console.error("Error canceling TITO log:", error);
+      res.status(500).json({ error: "Failed to cancel clock-in" });
+    }
+  });
+
+  app.post("/api/tito/:id/correction", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const titoLogId = req.params.id;
+      const { reason, note } = req.body;
+
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      if (!reason) {
+        res.status(400).json({ error: "Reason is required for correction requests" });
+        return;
+      }
+
+      const [log] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      if (!log) {
+        res.status(404).json({ error: "TITO log not found" });
+        return;
+      }
+
+      if (log.workerId !== userId) {
+        res.status(403).json({ error: "You can only request corrections for your own records" });
+        return;
+      }
+
+      const existingPending = await db.select().from(titoCorrections)
+        .where(and(
+          eq(titoCorrections.titoLogId, titoLogId),
+          eq(titoCorrections.status, "pending"),
+        ))
+        .limit(1);
+
+      if (existingPending.length > 0) {
+        res.status(400).json({ error: "A correction request is already pending for this record" });
+        return;
+      }
+
+      const [correction] = await db.insert(titoCorrections).values({
+        titoLogId,
+        requesterId: userId,
+        originalTimeIn: log.timeIn,
+        originalTimeOut: log.timeOut,
+        reason,
+        note: note || null,
+        status: "pending",
+      }).returning();
+
+      await db.insert(auditLog).values({
+        userId,
+        action: "TITO_CORRECTION_REQUESTED",
+        entityType: "tito_correction",
+        entityId: correction.id,
+        details: JSON.stringify({ titoLogId, reason, note }),
+      });
+
+      const hrAdmins = await db.select({ id: users.id }).from(users).where(
+        and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
+      );
+      for (const admin of hrAdmins) {
+        await db.insert(appNotifications).values({
+          userId: admin.id,
+          type: "tito_correction",
+          title: "TITO Correction Request",
+          body: `A worker has requested a time correction: ${reason}`,
+        });
+      }
+
+      console.log(`[TITO] Correction requested: worker ${userId}, titoLogId=${titoLogId}, correctionId=${correction.id}`);
+      res.json({ success: true, correctionId: correction.id });
+    } catch (error) {
+      console.error("Error requesting TITO correction:", error);
+      res.status(500).json({ error: "Failed to submit correction request" });
+    }
+  });
+
+  app.post("/api/tito/corrections/:id/review", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const correctionId = req.params.id;
+      const { action, correctedTimeIn, correctedTimeOut } = req.body;
+
+      if (!action || !["approved", "rejected"].includes(action)) {
+        res.status(400).json({ error: "action must be 'approved' or 'rejected'" });
+        return;
+      }
+
+      const [correction] = await db.select().from(titoCorrections).where(eq(titoCorrections.id, correctionId));
+      if (!correction) {
+        res.status(404).json({ error: "Correction request not found" });
+        return;
+      }
+
+      if (correction.status !== "pending") {
+        res.status(400).json({ error: "This correction has already been reviewed" });
+        return;
+      }
+
+      const updateData: any = {
+        status: action,
+        approverId: userId,
+        reviewedAt: new Date(),
+      };
+
+      if (action === "approved") {
+        if (correctedTimeIn) updateData.correctedTimeIn = new Date(correctedTimeIn);
+        if (correctedTimeOut) updateData.correctedTimeOut = new Date(correctedTimeOut);
+
+        const titoUpdate: any = { updatedAt: new Date() };
+        if (correctedTimeIn) titoUpdate.timeIn = new Date(correctedTimeIn);
+        if (correctedTimeOut) titoUpdate.timeOut = new Date(correctedTimeOut);
+
+        await db.update(titoLogs).set(titoUpdate).where(eq(titoLogs.id, correction.titoLogId));
+      }
+
+      await db.update(titoCorrections).set(updateData).where(eq(titoCorrections.id, correctionId));
+
+      await db.insert(auditLog).values({
+        userId,
+        action: action === "approved" ? "TITO_CORRECTION_APPROVED" : "TITO_CORRECTION_REJECTED",
+        entityType: "tito_correction",
+        entityId: correctionId,
+        details: JSON.stringify({ titoLogId: correction.titoLogId, correctedTimeIn, correctedTimeOut }),
+      });
+
+      await db.insert(appNotifications).values({
+        userId: correction.requesterId,
+        type: "tito_correction",
+        title: `Correction ${action === "approved" ? "Approved" : "Rejected"}`,
+        body: action === "approved"
+          ? "Your time correction request has been approved."
+          : "Your time correction request has been rejected.",
+      });
+
+      res.json({ success: true, message: `Correction ${action}` });
+    } catch (error) {
+      console.error("Error reviewing TITO correction:", error);
+      res.status(500).json({ error: "Failed to review correction" });
     }
   });
 

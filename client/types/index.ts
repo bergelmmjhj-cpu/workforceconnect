@@ -354,7 +354,7 @@ export interface ShiftSeries {
   workerName?: string | null;
 }
 
-export type TitoApprovalStatus = "pending" | "approved" | "disputed";
+export type TitoApprovalStatus = "pending" | "approved" | "disputed" | "canceled" | "flagged";
 
 export interface TitoLog {
   id: string;
@@ -377,6 +377,10 @@ export interface TitoLog {
   status: TitoApprovalStatus;
   shiftDate: string;
   createdAt: string;
+  canceledAt?: string;
+  cancelReason?: string;
+  corrected?: boolean;
+  totalHours?: number;
 }
 
 export interface Conversation {

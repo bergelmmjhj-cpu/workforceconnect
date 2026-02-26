@@ -19,7 +19,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { LocationCoordinates } from "@/types";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, queryClient } from "@/lib/query-client";
 import {
   calculateDistance,
   formatDistance,
@@ -100,6 +100,8 @@ export default function ClockInOutScreen() {
   const [selectedLateReason, setSelectedLateReason] = useState<string | null>(null);
   const [lateNote, setLateNote] = useState("");
   const [isSubmittingLateReason, setIsSubmittingLateReason] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const lastActionTimeRef = useRef<number>(0);
 
   useEffect(() => {
     loadData();
@@ -215,31 +217,57 @@ export default function ClockInOutScreen() {
     }
   };
 
-  const isWithinClockInWindow = useMemo(() => {
-    if (!shift?.startTime || !shift?.date) return false;
-    const now = new Date();
-    const [hours, minutes] = shift.startTime.split(":").map(Number);
+  const shiftWindowInfo = useMemo(() => {
+    if (!shift?.startTime || !shift?.date) return { windowOpen: null, windowClose: null };
+    const [sH, sM] = shift.startTime.split(":").map(Number);
     const shiftStart = new Date(shift.date + "T00:00:00");
-    shiftStart.setHours(hours, minutes, 0, 0);
-    const diffMinutes = (shiftStart.getTime() - now.getTime()) / (1000 * 60);
-    return diffMinutes <= 15;
-  }, [shift?.startTime, shift?.date]);
+    shiftStart.setHours(sH, sM, 0, 0);
+    const windowOpen = new Date(shiftStart.getTime() - 15 * 60 * 1000);
+    let windowClose: Date;
+    if (shift.endTime) {
+      const [eH, eM] = shift.endTime.split(":").map(Number);
+      const shiftEnd = new Date(shift.date + "T00:00:00");
+      shiftEnd.setHours(eH, eM, 0, 0);
+      if (shiftEnd <= shiftStart) {
+        shiftEnd.setDate(shiftEnd.getDate() + 1);
+      }
+      windowClose = new Date(shiftEnd.getTime() + 30 * 60 * 1000);
+    } else {
+      windowClose = new Date(shiftStart.getTime() + 24 * 60 * 60 * 1000);
+    }
+    return { windowOpen, windowClose };
+  }, [shift?.startTime, shift?.endTime, shift?.date]);
+
+  const isWithinClockInWindow = useMemo(() => {
+    const { windowOpen, windowClose } = shiftWindowInfo;
+    if (!windowOpen || !windowClose) return false;
+    const now = new Date();
+    return now >= windowOpen && now <= windowClose;
+  }, [shiftWindowInfo]);
+
+  const clockInWindowLabel = useMemo(() => {
+    const { windowOpen, windowClose } = shiftWindowInfo;
+    if (!windowOpen || !windowClose) return "";
+    const fmt = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return `Clock-in available ${fmt(windowOpen)} - ${fmt(windowClose)}`;
+  }, [shiftWindowInfo]);
 
   const clockInTimeMessage = useMemo(() => {
-    if (!shift?.startTime || !shift?.date) return "";
+    const { windowOpen, windowClose } = shiftWindowInfo;
+    if (!windowOpen || !windowClose) return "";
     const now = new Date();
-    const [hours, minutes] = shift.startTime.split(":").map(Number);
-    const shiftStart = new Date(shift.date + "T00:00:00");
-    shiftStart.setHours(hours, minutes, 0, 0);
-    const diffMinutes = Math.ceil((shiftStart.getTime() - now.getTime()) / (1000 * 60));
-    if (diffMinutes > 15) {
+    if (now < windowOpen) {
+      const diffMinutes = Math.ceil((windowOpen.getTime() - now.getTime()) / (1000 * 60));
       const hrs = Math.floor(diffMinutes / 60);
       const mins = diffMinutes % 60;
       const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins} min`;
       return `Clock-in opens in ${timeStr}`;
     }
+    if (now > windowClose) {
+      return "Clock-in window has closed";
+    }
     return "";
-  }, [shift?.startTime, shift?.date]);
+  }, [shiftWindowInfo]);
 
   const isLateForShift = useMemo(() => {
     if (!shift?.startTime || !shift?.date) return false;
@@ -274,8 +302,40 @@ export default function ClockInOutScreen() {
     return null;
   }, [titoLog, hasCompletedShift, shift, userLocation, isWithinClockInWindow, clockInTimeMessage, isWithinGeofence, distance]);
 
+  const canCancelClockIn = useMemo(() => {
+    if (!titoLog || titoLog.timeOut || titoLog.status === "canceled") return false;
+    const clockInTime = titoLog.timeIn ? new Date(titoLog.timeIn).getTime() : 0;
+    const elapsed = Date.now() - clockInTime;
+    return elapsed <= 2 * 60 * 1000;
+  }, [titoLog]);
+
+  const handleCancelClockIn = async () => {
+    if (!titoLog || isCanceling) return;
+    setIsCanceling(true);
+    setErrorMessage(null);
+    try {
+      const res = await apiRequest("POST", `/api/tito/${titoLog.id}/cancel`);
+      const data = await res.json();
+      if (data.success) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setTitoLog(null);
+        queryClient.invalidateQueries({ queryKey: ["/api/tito/my-logs"] });
+      } else {
+        setErrorMessage(data.error || "Failed to cancel");
+      }
+    } catch (error: any) {
+      const msg = error?.data?.error || error?.message || "Failed to cancel clock-in";
+      setErrorMessage(msg);
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
   const handleClockIn = async () => {
     if (!shift || !userLocation || !user) return;
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < 2000) return;
+    lastActionTimeRef.current = now;
     setErrorMessage(null);
     setIsClockingIn(true);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -330,6 +390,9 @@ export default function ClockInOutScreen() {
 
   const executeClockOut = async () => {
     if (!shift || !titoLog) return;
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < 2000) return;
+    lastActionTimeRef.current = now;
     setShowClockOutConfirm(false);
     setErrorMessage(null);
     setIsClockingOut(true);
@@ -568,6 +631,13 @@ export default function ClockInOutScreen() {
               {distance !== null && !isNative ? null : null}
             </View>
 
+            {clockInWindowLabel && !titoLog ? (
+              <View style={[styles.infoBanner, { backgroundColor: theme.primary + "12" }]}>
+                <Feather name="clock" size={14} color={theme.primary} />
+                <ThemedText style={{ color: theme.primary, fontSize: 13, flex: 1, fontWeight: "500" }}>{clockInWindowLabel}</ThemedText>
+              </View>
+            ) : null}
+
             {errorMessage ? (
               <View style={[styles.errorBanner, { backgroundColor: "#ef444415" }]}>
                 <Feather name="alert-circle" size={14} color="#ef4444" />
@@ -616,11 +686,26 @@ export default function ClockInOutScreen() {
             ) : null}
 
             {titoLog && !titoLog.timeOut ? (
-              <View style={[styles.clockedInBanner, { backgroundColor: theme.success + "12" }]}>
-                <Feather name="check-circle" size={14} color={theme.success} />
-                <ThemedText style={{ fontSize: 13, color: theme.success, fontWeight: "500" }}>
-                  Clocked in at {new Date(titoLog.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </ThemedText>
+              <View>
+                <View style={[styles.clockedInBanner, { backgroundColor: theme.success + "12" }]}>
+                  <Feather name="check-circle" size={14} color={theme.success} />
+                  <ThemedText style={{ fontSize: 13, color: theme.success, fontWeight: "500" }}>
+                    Clocked in at {new Date(titoLog.timeIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </ThemedText>
+                </View>
+                {canCancelClockIn ? (
+                  <Pressable
+                    testID="button-cancel-clockin"
+                    onPress={handleCancelClockIn}
+                    disabled={isCanceling}
+                    style={[styles.cancelBtn, { backgroundColor: theme.error + "12" }]}
+                  >
+                    <Feather name="x-circle" size={14} color={theme.error} />
+                    <ThemedText style={{ fontSize: 13, color: theme.error, fontWeight: "600" }}>
+                      {isCanceling ? "Canceling..." : "Cancel Clock-In (Accidental)"}
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
 
@@ -971,6 +1056,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    padding: 10,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+  },
+  cancelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     padding: 10,
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.sm,

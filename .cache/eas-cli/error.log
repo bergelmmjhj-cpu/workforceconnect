@@ -58,3 +58,13 @@
 2026-02-12T03:08:42.620Z     at async AccountLogin.runAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/commands/account/login.js:40:9)
 2026-02-12T03:08:42.620Z     at async AccountLogin.run (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/commandUtils/EasCommand.js:168:16)
 2026-02-12T03:08:42.620Z     at async AccountLogin._run (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/node_modules/@oclif/core/lib/command.js:80:22)
+2026-02-25T21:22:35.482Z ApiV2Error: Your username, email, or password was incorrect.
+2026-02-25T21:22:35.482Z     at ApiV2Client.handleApiErrorAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/api.js:64:23)
+2026-02-25T21:22:35.482Z     at async ApiV2Client.requestAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/api.js:51:13)
+2026-02-25T21:22:35.482Z     at async ApiV2Client.postAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/api.js:20:16)
+2026-02-25T21:22:35.482Z     at async fetchSessionSecretAndUserAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/user/fetchSessionSecretAndUser.js:12:18)
+2026-02-25T21:22:35.482Z     at async SessionManager.loginAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/user/SessionManager.js:154:49)
+2026-02-25T21:22:35.482Z     at async SessionManager.showLoginPromptAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/user/SessionManager.js:130:13)
+2026-02-25T21:22:35.482Z     at async SessionManager.ensureLoggedInAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/user/SessionManager.js:85:13)
+2026-02-25T21:22:35.482Z     at async LoggedInContextField.getValueAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/commandUtils/context/LoggedInContextField.js:10:47)
+2026-02-25T21:22:35.482Z     at async Build.getContextAsync (~/workspace/.config/npm/node_global/lib/node_modules/eas-cli/build/commandUtils/EasCommand.js:139:17)

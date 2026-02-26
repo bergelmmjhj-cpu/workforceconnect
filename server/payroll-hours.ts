@@ -4,6 +4,7 @@ import { titoLogs, users, workplaces, paymentProfiles, exportAuditLogs } from ".
 import { eq, and, gte, lte, sql, inArray } from "drizzle-orm";
 import * as XLSX from "xlsx";
 import * as archiver from "archiver";
+import { sendCSVEmail, sendXLSXEmail } from "./services/email";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -688,6 +689,133 @@ export function registerPayrollHoursRoutes(app: Express): void {
     } catch (error) {
       console.error("Error in export:", error);
       res.status(500).json({ error: "Failed to generate export" });
+    }
+  });
+
+  // Email hours export
+  app.post("/api/admin/hours/email", checkAdminRole(), async (req: Request, res: Response) => {
+    try {
+      const { to, mode, format: fmt, type, hotelId: hId, weekStart, year: yr, period: pd, subject } = req.body;
+      const format = fmt || "csv";
+
+      if (!to || typeof to !== "string" || !to.includes("@")) {
+        res.status(400).json({ error: "Valid email address is required" });
+        return;
+      }
+
+      if (!["csv", "xlsx"].includes(format)) {
+        res.status(400).json({ error: "format must be csv or xlsx" });
+        return;
+      }
+
+      const hotelId = hId || "all";
+      let startDate: string, endDate: string, windowLabel: string, filePrefix: string;
+      let periodYear = 2026, periodNumber = 0;
+
+      if (mode === "weekly") {
+        if (!weekStart) {
+          res.status(400).json({ error: "weekStart required" });
+          return;
+        }
+        const window = getWeeklyWindow(weekStart);
+        startDate = window.start;
+        endDate = window.end;
+        windowLabel = `Week: ${formatDateLabel(startDate)} - ${formatDateLabel(endDate)}`;
+        filePrefix = `WFC_Weekly_${weekStart}`;
+        periodYear = parseInt(weekStart.substring(0, 4));
+      } else if (mode === "cutoff") {
+        const year = parseInt(yr) || 2026;
+        const period = parseInt(pd);
+        const periods = getCutoffPeriods(year);
+        const p = periods.find(pp => pp.period === period);
+        if (!p) {
+          res.status(400).json({ error: `Period ${period} not found` });
+          return;
+        }
+        startDate = p.startDate;
+        endDate = p.endDate;
+        windowLabel = `Period ${period}`;
+        filePrefix = `WFC_Payroll_${year}_Period-${String(period).padStart(2, "0")}`;
+        periodYear = year;
+        periodNumber = period;
+      } else {
+        res.status(400).json({ error: "mode must be weekly or cutoff" });
+        return;
+      }
+
+      const logs = await fetchLogsInRange(startDate, endDate, hotelId);
+      const workerIds = [...new Set(logs.map(l => l.workerId))];
+      const paymentMap = await fetchPaymentProfilesFull(workerIds);
+      const groups = aggregateByHotel(logs, paymentMap);
+      const generatedAt = new Date().toISOString();
+
+      let rows: any[][];
+      let sheetName: string;
+      let typeSuffix: string;
+
+      switch (type) {
+        case "invoiceSummary":
+          rows = generateInvoiceSummaryRows(groups, startDate, endDate, generatedAt);
+          sheetName = "Invoice Summary";
+          typeSuffix = "InvoiceSummary";
+          break;
+        case "invoiceDetailed":
+          rows = generateDetailedRows(groups, windowLabel, startDate, endDate, generatedAt);
+          sheetName = "Invoice Detailed";
+          typeSuffix = "InvoiceDetailed";
+          break;
+        case "payrollTimesheet":
+          rows = generateTimesheetRows(groups, windowLabel, startDate, endDate, generatedAt);
+          sheetName = "Payroll Timesheet";
+          typeSuffix = "Timesheet";
+          break;
+        case "payrollPaymentSummary":
+          rows = generatePaymentSummaryRows(groups, windowLabel, startDate, endDate, generatedAt);
+          sheetName = "Payment Summary";
+          typeSuffix = "PaymentSummary";
+          break;
+        default:
+          res.status(400).json({ error: "type must be invoiceSummary, invoiceDetailed, payrollTimesheet, or payrollPaymentSummary" });
+          return;
+      }
+
+      const hotelName = hotelId === "all" ? "AllHotels" : sanitizeFileName(groups[0]?.workplaceName || "Hotel");
+      const fileName = `${filePrefix}_${hotelName}_${typeSuffix}.${format}`;
+      const buffer = rowsToBuffer(rows, format as "csv" | "xlsx", sheetName);
+
+      const emailSubject = subject || `WFConnect ${sheetName} - ${windowLabel} (${startDate} to ${endDate})`;
+      const bodyText = `Please find attached the ${sheetName} report for ${windowLabel} (${startDate} to ${endDate}).\n\n- WFConnect`;
+
+      let result;
+      if (format === "csv") {
+        result = await sendCSVEmail(to, emailSubject, bodyText, buffer.toString(), fileName);
+      } else {
+        result = await sendXLSXEmail(to, emailSubject, bodyText, buffer as Buffer, fileName);
+      }
+
+      if (result.success) {
+        try {
+          await db.insert(exportAuditLogs).values({
+            adminUserId: (req.headers["x-user-id"] as string) || "unknown",
+            exportType: type,
+            fileFormat: format,
+            periodYear,
+            periodNumber,
+            workplaceId: hotelId === "all" ? null : hotelId,
+            workplaceName: hotelId === "all" ? "All Hotels" : (groups[0]?.workplaceName || null),
+            fileName: `[EMAILED] ${fileName}`,
+          });
+        } catch (auditErr) {
+          console.error("Audit log error (non-blocking):", auditErr);
+        }
+
+        res.json({ success: true, message: `${sheetName} sent to ${to}` });
+      } else {
+        res.status(500).json({ error: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Error emailing hours export:", error);
+      res.status(500).json({ error: "Failed to email hours export" });
     }
   });
 

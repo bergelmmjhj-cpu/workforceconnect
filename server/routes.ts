@@ -46,6 +46,7 @@ import * as OTPAuth from "otpauth";
 import crypto from "crypto";
 import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not, asc } from "drizzle-orm";
 import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, logSMS } from "./services/openphone";
+import { sendCSVEmail } from "./services/email";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -4297,6 +4298,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error exporting payroll batch:", error);
       res.status(500).json({ error: "Failed to export payroll batch" });
+    }
+  });
+
+  // Email payroll batch CSV
+  app.post("/api/payroll/batches/:id/email", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { to, subject } = req.body;
+
+      if (!to || typeof to !== "string" || !to.includes("@")) {
+        res.status(400).json({ error: "Valid email address is required" });
+        return;
+      }
+
+      const [batch] = await db.select().from(payrollBatches).where(eq(payrollBatches.id, id));
+      if (!batch) {
+        res.status(404).json({ error: "Payroll batch not found" });
+        return;
+      }
+
+      const period = getPayPeriod(batch.periodYear, batch.periodNumber);
+      const dateRange = period ? `${period.startDate} to ${period.endDate}` : "Unknown";
+
+      const items = await db.select({
+        workerName: users.fullName,
+        workerEmail: users.email,
+        hours: payrollBatchItems.hours,
+        amount: payrollBatchItems.amount,
+        status: payrollBatchItems.status,
+      })
+      .from(payrollBatchItems)
+      .leftJoin(users, eq(payrollBatchItems.workerUserId, users.id))
+      .where(and(
+        eq(payrollBatchItems.payrollBatchId, id),
+        eq(payrollBatchItems.status, "included")
+      ));
+
+      const csvLines = [
+        "Worker Name,Worker Email,Hours,Amount,Period,Date Range",
+        ...items.map(item =>
+          `"${item.workerName || ""}","${item.workerEmail || ""}",${item.hours},${item.amount},Period ${batch.periodNumber},"${dateRange}"`
+        )
+      ];
+
+      const csvContent = csvLines.join("\n");
+      const filename = `payroll-period-${batch.periodNumber}-${batch.periodYear}.csv`;
+      const emailSubject = subject || `WFConnect Payroll - Period ${batch.periodNumber} (${dateRange})`;
+      const bodyText = `Please find attached the payroll report for Period ${batch.periodNumber} (${dateRange}).\n\nThis report includes ${items.length} worker(s).\n\n- WFConnect`;
+
+      const result = await sendCSVEmail(to, emailSubject, bodyText, csvContent, filename);
+
+      if (result.success) {
+        res.json({ success: true, message: `Payroll CSV sent to ${to}` });
+      } else {
+        res.status(500).json({ error: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Error emailing payroll batch:", error);
+      res.status(500).json({ error: "Failed to email payroll batch" });
     }
   });
 

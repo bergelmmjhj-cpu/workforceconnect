@@ -616,6 +616,7 @@
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                     ${isOpen ? `<button class="btn btn-success" onclick="finalizePayroll()">Finalize Payroll</button>` : ''}
                     ${isFinalized ? `<button class="btn btn-primary" onclick="exportPayroll()">Export CSV</button>` : ''}
+                    ${isFinalized ? `<button class="btn btn-outline" onclick="emailPayroll()">Email CSV</button>` : ''}
                     <button class="btn btn-outline" onclick="loadPayrollBatch()">Refresh</button>
                 </div>
                 
@@ -677,6 +678,29 @@
         function exportPayroll() {
             if (!currentBatch) return;
             window.open(`/api/payroll/batches/${currentBatch.id}/export.csv`, '_blank');
+        }
+
+        async function emailPayroll() {
+            if (!currentBatch) return;
+            const email = prompt('Enter the email address to send the payroll CSV to:');
+            if (!email || !email.includes('@')) return;
+
+            try {
+                const res = await fetch(`/api/payroll/batches/${currentBatch.id}/email`, {
+                    method: 'POST',
+                    headers: API_HEADERS,
+                    body: JSON.stringify({ to: email })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert('Payroll CSV sent to ' + email);
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to send email'));
+                }
+            } catch (err) {
+                alert('Error sending email: ' + err.message);
+            }
         }
         
         async function viewTimesheet(id) {

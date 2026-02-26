@@ -458,6 +458,8 @@
                 <button class="btn btn-outline" onclick="exportFile('weekly','invoiceDetailed','xlsx')">Detailed Backup (XLSX)</button>
                 <button class="btn btn-outline" onclick="exportAllHotels('weekly','invoiceSummary','csv')">All Hotels ZIP (CSV)</button>
                 <button class="btn btn-outline" onclick="exportAllHotels('weekly','invoiceSummary','xlsx')">All Hotels ZIP (XLSX)</button>
+                <button class="btn btn-outline" style="background:#3b82f6;color:#fff;border-color:#3b82f6;" onclick="emailExport('weekly','invoiceSummary','csv')">Email Invoice Summary</button>
+                <button class="btn btn-outline" style="background:#3b82f6;color:#fff;border-color:#3b82f6;" onclick="emailExport('weekly','invoiceDetailed','csv')">Email Detailed Backup</button>
             </div>
         </div>
         <div id="weekly-results"></div>
@@ -497,6 +499,8 @@
                 <button class="btn btn-outline" onclick="exportFile('cutoff','payrollPaymentSummary','xlsx')">Payment Summary (XLSX)</button>
                 <button class="btn btn-outline" onclick="exportAllHotels('cutoff','payrollTimesheet','csv')">All Hotels ZIP (CSV)</button>
                 <button class="btn btn-outline" onclick="exportAllHotels('cutoff','payrollTimesheet','xlsx')">All Hotels ZIP (XLSX)</button>
+                <button class="btn btn-outline" style="background:#3b82f6;color:#fff;border-color:#3b82f6;" onclick="emailExport('cutoff','payrollTimesheet','csv')">Email Timesheet</button>
+                <button class="btn btn-outline" style="background:#3b82f6;color:#fff;border-color:#3b82f6;" onclick="emailExport('cutoff','payrollPaymentSummary','csv')">Email Payment Summary</button>
             </div>
         </div>
         <div id="cutoff-results"></div>
@@ -736,6 +740,39 @@ function exportFile(mode, type, format) {
     const params = getExportParams(mode);
     const url = `/api/admin/hours/export?${params}&type=${type}&format=${format}`;
     window.open(url, '_blank');
+}
+
+async function emailExport(mode, type, format) {
+    const email = prompt('Enter the email address to send the report to:');
+    if (!email || !email.includes('@')) return;
+
+    let body;
+    if (mode === 'weekly') {
+        const weekStart = document.getElementById('weekly-week').value;
+        const hotelId = document.getElementById('weekly-hotel').value;
+        body = { to: email, mode, type, format, weekStart, hotelId };
+    } else {
+        const year = document.getElementById('cutoff-year').value;
+        const period = document.getElementById('cutoff-period').value;
+        const hotelId = document.getElementById('cutoff-hotel').value;
+        body = { to: email, mode, type, format, year, period, hotelId };
+    }
+
+    try {
+        const res = await fetch('/api/admin/hours/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...API_HEADERS },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok) {
+            alert('Report sent to ' + email);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to send email'));
+        }
+    } catch (err) {
+        alert('Error sending email: ' + err.message);
+    }
 }
 
 function exportAllHotels(mode, type, format) {

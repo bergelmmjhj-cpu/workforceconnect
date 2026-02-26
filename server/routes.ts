@@ -37,13 +37,15 @@ import {
   recurrenceExceptions,
   auditLog,
   userPhotos,
+  smsLogs,
 } from "../shared/schema";
 import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod, getCurrentPayPeriod } from "../shared/payPeriods2026";
 import bcrypt from "bcryptjs";
 import * as OTPAuth from "otpauth";
 import crypto from "crypto";
-import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not } from "drizzle-orm";
+import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not, asc } from "drizzle-orm";
+import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, logSMS } from "./services/openphone";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -1409,11 +1411,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (status === "approved" && updatedApplication.email) {
         try {
+          const updateData: any = { 
+            onboardingStatus: "AGREEMENT_PENDING",
+            updatedAt: new Date()
+          };
+          if (updatedApplication.phone) {
+            updateData.phone = updatedApplication.phone;
+          }
           await db.update(users)
-            .set({ 
-              onboardingStatus: "AGREEMENT_PENDING",
-              updatedAt: new Date()
-            })
+            .set(updateData)
             .where(eq(users.email, updatedApplication.email));
         } catch (linkError) {
           console.error("Failed to update user onboarding status on approval:", linkError);
@@ -3190,20 +3196,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }).returning();
 
         if (blastToAll) {
-          const eligibleWorkers = await db.select({ id: users.id })
+          const eligibleWorkers = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone })
             .from(users)
-            .where(and(eq(users.role, "worker"), eq(users.status, "active")));
+            .where(and(eq(users.role, "worker"), eq(users.isActive, true)));
 
           let offersCreated = 0;
+          const offerIds: { workerId: string; offerId: string; phone: string | null }[] = [];
           for (const w of eligibleWorkers) {
             try {
-              await db.insert(shiftOffers).values({
+              const [offer] = await db.insert(shiftOffers).values({
                 shiftId: newShift.id,
                 workerId: w.id,
                 offeredByUserId: userId,
                 status: "pending",
-              });
+              }).returning();
               offersCreated++;
+              offerIds.push({ workerId: w.id, offerId: offer.id, phone: w.phone });
 
               await db.insert(appNotifications).values({
                 userId: w.id,
@@ -3223,6 +3231,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             `A new ${cat} shift "${title}" on ${date} is available.`,
             { type: "shift_offer", shiftId: newShift.id }
           );
+
+          for (const o of offerIds) {
+            const worker = eligibleWorkers.find(w => w.id === o.workerId);
+            if (worker?.phone) {
+              sendShiftOfferSMS(
+                { id: worker.id, fullName: worker.fullName, phone: worker.phone },
+                newShift,
+                o.offerId
+              ).catch(err => console.error(`[OPENPHONE] SMS error for worker ${worker.id}:`, err));
+            }
+          }
 
           broadcast({ type: "shift_blast", data: { shiftId: newShift.id, offersCreated } });
           broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workplaceId, blasted: true } });
@@ -4700,6 +4719,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             { type: "shift_assigned", shiftId: newShift.id }
           );
 
+          db.select({ id: users.id, fullName: users.fullName, phone: users.phone })
+            .from(users)
+            .where(eq(users.id, workerId))
+            .then(([worker]) => {
+              if (worker?.phone) {
+                sendShiftAssignedSMS(
+                  { id: worker.id, fullName: worker.fullName, phone: worker.phone },
+                  newShift
+                ).catch(err => console.error(`[OPENPHONE] Assigned SMS error:`, err));
+              }
+            })
+            .catch(err => console.error(`[OPENPHONE] Worker lookup error:`, err));
+
           await db.insert(appNotifications).values({
             userId: request.clientId,
             type: "request_filled",
@@ -4737,6 +4769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             id: users.id,
             fullName: users.fullName,
             workerRoles: users.workerRoles,
+            phone: users.phone,
           })
           .from(users)
           .where(and(
@@ -4784,15 +4817,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eligibleWorkers = eligibleWorkers.filter(w => !conflictWorkerIds.has(w.id));
 
           const offeredWorkerIds: string[] = [];
+          const broadcastOfferIds: { workerId: string; offerId: string }[] = [];
           let offerErrors = 0;
           console.log(`[BROADCAST] Shift ${newShift.id}: ${eligibleWorkers.length} eligible workers found`);
           for (const worker of eligibleWorkers) {
             try {
-              await db.insert(shiftOffers).values({
+              const [offer] = await db.insert(shiftOffers).values({
                 shiftId: newShift.id,
                 workerId: worker.id,
                 status: "pending",
-              });
+              }).returning();
 
               await db.insert(appNotifications).values({
                 userId: worker.id,
@@ -4803,6 +4837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
 
               offeredWorkerIds.push(worker.id);
+              broadcastOfferIds.push({ workerId: worker.id, offerId: offer.id });
             } catch (offerErr: any) {
               offerErrors++;
               console.error(`[BROADCAST] Failed to create offer for worker ${worker.id} (${worker.fullName}):`, offerErr?.message || offerErr);
@@ -4817,6 +4852,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               `A ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date} is available. Tap to accept.`,
               { type: "shift_offer", shiftId: newShift.id }
             );
+          }
+
+          for (const o of broadcastOfferIds) {
+            const worker = eligibleWorkers.find(w => w.id === o.workerId);
+            if (worker?.phone) {
+              sendShiftOfferSMS(
+                { id: worker.id, fullName: worker.fullName, phone: worker.phone },
+                newShift,
+                o.offerId
+              ).catch(err => console.error(`[OPENPHONE] Broadcast SMS error for worker ${worker.id}:`, err));
+            }
           }
 
           await db.insert(auditLog).values({
@@ -6196,6 +6242,257 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   processShiftReminders();
   setInterval(processShiftReminders, 15 * 60 * 1000);
+
+  // ========================================
+  // OPENPHONE WEBHOOK - Incoming SMS Replies
+  // ========================================
+
+  const KNOWN_OPENPHONE_IDS = new Set(["PNo1n737XV", "PNCQJAOZa0"]);
+
+  app.post("/api/webhooks/openphone", async (req: Request, res: Response) => {
+    try {
+      const payload = req.body;
+      console.log("[OPENPHONE WEBHOOK] Received:", JSON.stringify(payload).substring(0, 500));
+
+      res.status(200).json({ received: true });
+
+      if (!payload?.type || payload.type !== "message.received") {
+        console.log("[OPENPHONE WEBHOOK] Ignoring non-message event:", payload?.type);
+        return;
+      }
+
+      const messageData = payload?.data?.object;
+      if (!messageData) {
+        console.log("[OPENPHONE WEBHOOK] No message data in payload");
+        return;
+      }
+
+      const phoneNumberId = messageData.phoneNumberId;
+      if (phoneNumberId && !KNOWN_OPENPHONE_IDS.has(phoneNumberId)) {
+        console.log(`[OPENPHONE WEBHOOK] Unknown phoneNumberId: ${phoneNumberId}, rejecting`);
+        return;
+      }
+
+      if (messageData.direction === "outgoing") {
+        console.log("[OPENPHONE WEBHOOK] Ignoring outgoing message");
+        return;
+      }
+
+      const senderPhone = messageData.from;
+      const messageBody = (messageData.body || messageData.content || messageData.text || "").trim();
+      const openphoneMessageId = messageData.id;
+
+      if (!senderPhone || !messageBody) {
+        console.log("[OPENPHONE WEBHOOK] Missing sender phone or message body");
+        return;
+      }
+
+      console.log(`[OPENPHONE WEBHOOK] From: ${senderPhone}, Body: "${messageBody}"`);
+
+      const normalizedPhone = senderPhone.replace(/[^\d]/g, "");
+      const phoneVariants = [
+        senderPhone,
+        `+${normalizedPhone}`,
+        `+1${normalizedPhone}`,
+        normalizedPhone,
+        normalizedPhone.startsWith("1") ? normalizedPhone.substring(1) : normalizedPhone,
+      ];
+
+      let worker: any = null;
+      for (const variant of phoneVariants) {
+        const [found] = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone })
+          .from(users)
+          .where(and(eq(users.phone, variant), eq(users.role, "worker")));
+        if (found) {
+          worker = found;
+          break;
+        }
+      }
+
+      if (!worker) {
+        const allWorkers = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone })
+          .from(users)
+          .where(and(
+            eq(users.role, "worker"),
+            eq(users.isActive, true)
+          ));
+
+        worker = allWorkers.find(w => {
+          if (!w.phone) return false;
+          const cleaned = w.phone.replace(/[^\d]/g, "");
+          return phoneVariants.some(v => {
+            const vCleaned = v.replace(/[^\d]/g, "");
+            return cleaned === vCleaned || cleaned.endsWith(vCleaned) || vCleaned.endsWith(cleaned);
+          });
+        });
+      }
+
+      await logSMS({
+        phoneNumber: senderPhone,
+        direction: "inbound",
+        message: messageBody,
+        workerId: worker?.id || null,
+        status: worker ? "received" : "unknown_sender",
+        openphoneMessageId,
+      });
+
+      if (!worker) {
+        console.log(`[OPENPHONE WEBHOOK] Unknown sender: ${senderPhone}`);
+        sendSMS(senderPhone, "Sorry, we couldn't identify your account. Please contact HR directly or use the WFConnect app.")
+          .catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
+        return;
+      }
+
+      const upperBody = messageBody.toUpperCase().trim();
+      let responseAction: "accepted" | "declined" | null = null;
+
+      if (["YES", "ACCEPT", "Y", "YEP", "YEAH", "OK", "SURE", "1"].includes(upperBody)) {
+        responseAction = "accepted";
+      } else if (["NO", "DECLINE", "N", "NOPE", "NAH", "PASS", "2"].includes(upperBody)) {
+        responseAction = "declined";
+      }
+
+      if (!responseAction) {
+        sendConfirmationSMS(
+          senderPhone,
+          `Hi ${worker.fullName}! To respond to a shift offer, please reply YES to accept or NO to decline.`,
+          worker.id
+        ).catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
+        return;
+      }
+
+      const pendingOffers = await db.select({
+        offerId: shiftOffers.id,
+        shiftId: shiftOffers.shiftId,
+        status: shiftOffers.status,
+        shiftTitle: shifts.title,
+        shiftDate: shifts.date,
+        shiftStartTime: shifts.startTime,
+        workersNeeded: shifts.workersNeeded,
+        workplaceId: shifts.workplaceId,
+      })
+        .from(shiftOffers)
+        .innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id))
+        .where(and(
+          eq(shiftOffers.workerId, worker.id),
+          eq(shiftOffers.status, "pending")
+        ))
+        .orderBy(desc(shiftOffers.offeredAt))
+        .limit(1);
+
+      if (pendingOffers.length === 0) {
+        sendConfirmationSMS(
+          senderPhone,
+          `Hi ${worker.fullName}, you don't have any pending shift offers right now. Check the WFConnect app for more details.`,
+          worker.id
+        ).catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
+        return;
+      }
+
+      const offer = pendingOffers[0];
+
+      if (responseAction === "accepted") {
+        const acceptedCount = await db.select({ id: shiftOffers.id })
+          .from(shiftOffers)
+          .where(and(
+            eq(shiftOffers.shiftId, offer.shiftId),
+            eq(shiftOffers.status, "accepted"),
+            ne(shiftOffers.id, offer.offerId)
+          ));
+
+        const needed = offer.workersNeeded || 1;
+        if (acceptedCount.length >= needed) {
+          await db.update(shiftOffers)
+            .set({ status: "cancelled", cancelReason: "Shift filled before SMS reply", cancelledAt: new Date() })
+            .where(eq(shiftOffers.id, offer.offerId));
+
+          sendConfirmationSMS(
+            senderPhone,
+            `Sorry ${worker.fullName}, the shift "${offer.shiftTitle}" on ${offer.shiftDate} has already been filled.`,
+            worker.id
+          ).catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
+          return;
+        }
+
+        await db.update(shiftOffers)
+          .set({ status: "accepted", respondedAt: new Date() })
+          .where(eq(shiftOffers.id, offer.offerId));
+
+        const [currentShift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
+        if (currentShift && !currentShift.workerUserId) {
+          await db.update(shifts)
+            .set({ workerUserId: worker.id, updatedAt: new Date() })
+            .where(eq(shifts.id, offer.shiftId));
+        }
+
+        const newAcceptedCount = acceptedCount.length + 1;
+        if (newAcceptedCount >= needed) {
+          await db.update(shiftOffers)
+            .set({ status: "cancelled", cancelReason: "Shift filled - enough workers accepted", cancelledAt: new Date() })
+            .where(and(
+              eq(shiftOffers.shiftId, offer.shiftId),
+              eq(shiftOffers.status, "pending")
+            ));
+        }
+
+        await db.insert(auditLog).values({
+          userId: worker.id,
+          action: "OFFER_ACCEPTED_VIA_SMS",
+          entityType: "shift_offer",
+          entityId: offer.offerId,
+          details: JSON.stringify({ shiftId: offer.shiftId, method: "sms" }),
+        });
+
+        const adminUsers = await db.select({ id: users.id }).from(users)
+          .where(or(eq(users.role, "admin"), eq(users.role, "hr")));
+
+        for (const admin of adminUsers) {
+          await db.insert(appNotifications).values({
+            userId: admin.id,
+            type: "offer_accepted",
+            title: "Shift Offer Accepted (SMS)",
+            body: `${worker.fullName} accepted the shift "${offer.shiftTitle}" on ${offer.shiftDate} via SMS.`,
+            deepLink: `/shifts/${offer.shiftId}`,
+          });
+        }
+
+        broadcast({ type: "offer_responded", data: { offerId: offer.offerId, status: "accepted", workerId: worker.id, method: "sms" } });
+
+        sendConfirmationSMS(
+          senderPhone,
+          `Confirmed! You've accepted the shift "${offer.shiftTitle}" on ${offer.shiftDate} at ${offer.shiftStartTime}. See the WFConnect app for details.`,
+          worker.id
+        ).catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
+
+      } else {
+        await db.update(shiftOffers)
+          .set({ status: "declined", respondedAt: new Date() })
+          .where(eq(shiftOffers.id, offer.offerId));
+
+        await db.insert(auditLog).values({
+          userId: worker.id,
+          action: "OFFER_DECLINED_VIA_SMS",
+          entityType: "shift_offer",
+          entityId: offer.offerId,
+          details: JSON.stringify({ shiftId: offer.shiftId, method: "sms" }),
+        });
+
+        broadcast({ type: "offer_responded", data: { offerId: offer.offerId, status: "declined", workerId: worker.id, method: "sms" } });
+
+        sendConfirmationSMS(
+          senderPhone,
+          `Got it, ${worker.fullName}. You've declined the shift "${offer.shiftTitle}" on ${offer.shiftDate}.`,
+          worker.id
+        ).catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
+      }
+
+    } catch (error) {
+      console.error("[OPENPHONE WEBHOOK] Error processing webhook:", error);
+      if (!res.headersSent) {
+        res.status(200).json({ received: true });
+      }
+    }
+  });
 
   const httpServer = createServer(app);
 

@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   businessName: text("business_name"), // For clients
   businessAddress: text("business_address"),
   businessPhone: text("business_phone"),
+  phone: text("phone"),
   profilePhotoUrl: text("profile_photo_url"),
   totpSecret: text("totp_secret"),
   totpEnabled: boolean("totp_enabled").default(false),
@@ -37,6 +38,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   businessName: true,
   businessAddress: true,
   businessPhone: true,
+  phone: true,
   isActive: true,
 });
 
@@ -907,3 +909,20 @@ export const insertExportAuditLogSchema = createInsertSchema(exportAuditLogs).om
 
 export type ExportAuditLog = typeof exportAuditLogs.$inferSelect;
 export type InsertExportAuditLog = z.infer<typeof insertExportAuditLogSchema>;
+
+export const smsLogs = pgTable("sms_logs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  phoneNumber: text("phone_number").notNull(),
+  direction: text("direction").notNull(),
+  message: text("message").notNull(),
+  shiftOfferId: varchar("shift_offer_id"),
+  shiftId: varchar("shift_id"),
+  workerId: varchar("worker_id"),
+  status: text("status").notNull().default("sent"),
+  openphoneMessageId: text("openphone_message_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type SmsLog = typeof smsLogs.$inferSelect;

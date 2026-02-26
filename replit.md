@@ -60,6 +60,15 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - **API URL Fallback**: `getApiUrl()` in `client/lib/query-client.ts` falls back to `wfconnect.org` if `EXPO_PUBLIC_DOMAIN` is not set, and strips dev port `:5000`.
 - **Build sanitization**: `scripts/build.js` post-processes bundles to strip `:5000` port from API URLs to prevent dev port leaking into production.
 
+### OpenPhone (Quo) SMS Integration
+- **Service Module**: `server/services/openphone.ts` handles all SMS sending/logging via the OpenPhone API.
+- **Webhook**: `POST /api/webhooks/openphone` receives incoming SMS replies from workers to accept/decline shift offers.
+- **Phone Number IDs**: HR Number `PNo1n737XV` (+1 289-670-5697), HR Department `PNCQJAOZa0` (+1 437-476-9566). HR Number is used as the sender.
+- **SMS Logs**: `sms_logs` table tracks all outbound and inbound SMS with direction, status, and linked shift/offer IDs.
+- **Shift Blast SMS**: When shifts are blasted or broadcast, workers with phone numbers receive SMS with shift details and YES/NO reply instructions.
+- **SMS Reply Parsing**: Workers text YES/ACCEPT/Y to accept or NO/DECLINE/N to decline their most recent pending shift offer. Confirmation SMS is sent back.
+- **Phone Field**: `phone` column added to `users` table; populated from `worker_applications` when workers onboard.
+
 ### Environment Variables
 - `DATABASE_URL`
 - `EXPO_PUBLIC_DOMAIN`
@@ -67,3 +76,4 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - `DEMO_MODE`
 - `GOOGLE_PLACES_API_KEY`
 - `SESSION_SECRET`
+- `OPENPHONE_API_KEY`

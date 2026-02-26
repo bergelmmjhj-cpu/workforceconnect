@@ -53,6 +53,13 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - **ESLint + Prettier**: Code quality and formatting.
 - **esbuild**: Server bundling.
 
+### Deployment & OTA Updates
+- **Static Expo Bundles**: Built via `scripts/build.js`, served from `static-build/` directory. Includes iOS/Android manifests and JS bundles.
+- **OTA Updates**: Configured in `app.json` with `updates.url` pointing to `https://wfconnect.org/manifest`. Native builds check for JS bundle updates on launch.
+- **EAS Build**: `eas.json` includes `EXPO_PUBLIC_DOMAIN=wfconnect.org` for production builds. Android `versionCode` must be incremented for each Play Store submission.
+- **API URL Fallback**: `getApiUrl()` in `client/lib/query-client.ts` falls back to `wfconnect.org` if `EXPO_PUBLIC_DOMAIN` is not set, and strips dev port `:5000`.
+- **Build sanitization**: `scripts/build.js` post-processes bundles to strip `:5000` port from API URLs to prevent dev port leaking into production.
+
 ### Environment Variables
 - `DATABASE_URL`
 - `EXPO_PUBLIC_DOMAIN`

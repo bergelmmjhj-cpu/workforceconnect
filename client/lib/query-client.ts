@@ -54,10 +54,12 @@ export function getApiUrl(): string {
   let host = process.env.EXPO_PUBLIC_DOMAIN;
 
   if (!host) {
-    throw new Error("EXPO_PUBLIC_DOMAIN is not set");
+    host = "wfconnect.org";
   }
 
-  let url = new URL(`https://${host}`);
+  const hostWithoutDevPort = host.replace(/:5000$/, "");
+
+  let url = new URL(`https://${hostWithoutDevPort}`);
 
   return url.href;
 }

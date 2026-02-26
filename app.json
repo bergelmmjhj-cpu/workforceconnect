@@ -9,6 +9,14 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
 
+    "runtimeVersion": "exposdk:54.0.0",
+    "updates": {
+      "url": "https://wfconnect.org/manifest",
+      "enabled": true,
+      "fallbackToCacheTimeout": 5000,
+      "requestHeaders": {}
+    },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "org.workforceconnect.app",
@@ -20,7 +28,7 @@
 
     "android": {
       "package": "com.workforceconnect.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#1E40AF",
         "foregroundImage": "./assets/images/icon.png"

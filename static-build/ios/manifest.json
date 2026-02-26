@@ -1,11 +1,11 @@
 {
-  "id": "e5ddae62-2e78-4b88-9e71-5ba96fba4faf",
-  "createdAt": "2026-02-25T19:55:09.277Z",
+  "id": "0646c47b-fa79-4527-aeda-3ab5925ab6e8",
+  "createdAt": "2026-02-26T01:35:43.242Z",
   "runtimeVersion": "exposdk:54.0.0",
   "launchAsset": {
-    "key": "bundle-1772049309277-4395",
+    "key": "bundle-1772069743242-11697",
     "contentType": "application/javascript",
-    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1772049309277-4395/_expo/static/js/ios/bundle.js"
+    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1772069743242-11697/_expo/static/js/ios/bundle.js"
   },
   "assets": [],
   "metadata": {},
@@ -22,6 +22,13 @@
       "scheme": "workforceconnect",
       "userInterfaceStyle": "automatic",
       "newArchEnabled": true,
+      "runtimeVersion": "exposdk:54.0.0",
+      "updates": {
+        "url": "https://wfconnect.org/manifest",
+        "enabled": true,
+        "fallbackToCacheTimeout": 5000,
+        "requestHeaders": {}
+      },
       "ios": {
         "supportsTablet": true,
         "bundleIdentifier": "org.workforceconnect.app",
@@ -32,7 +39,7 @@
       },
       "android": {
         "package": "com.workforceconnect.app",
-        "versionCode": 2,
+        "versionCode": 4,
         "adaptiveIcon": {
           "backgroundColor": "#1E40AF",
           "foregroundImage": "./assets/images/icon.png",

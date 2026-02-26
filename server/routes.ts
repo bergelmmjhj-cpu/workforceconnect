@@ -1025,6 +1025,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         onboardingStatus: users.onboardingStatus,
         workerRoles: users.workerRoles,
         businessName: users.businessName,
+        phone: users.phone,
         isActive: users.isActive,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
@@ -1039,13 +1040,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/users/:id", checkRoles("admin"), async (req: Request, res: Response) => {
     try {
       const id = req.params.id as string;
-      const { role, isActive, onboardingStatus, workerRoles } = req.body;
+      const { role, isActive, onboardingStatus, workerRoles, phone } = req.body;
 
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (role !== undefined) updateData.role = role;
       if (isActive !== undefined) updateData.isActive = isActive;
       if (onboardingStatus !== undefined) updateData.onboardingStatus = onboardingStatus;
       if (workerRoles !== undefined) updateData.workerRoles = workerRoles;
+      if (phone !== undefined) updateData.phone = phone;
 
       // When activating a worker, auto-advance onboarding to AGREEMENT_PENDING
       if (isActive === true && onboardingStatus === undefined) {
@@ -1072,6 +1074,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  app.patch("/api/users/me/profile", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as string;
+
+      if (!userId || !role) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const { fullName, email, phone, timezone, businessName, businessAddress, businessPhone } = req.body;
+
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+      if (fullName !== undefined && typeof fullName === "string" && fullName.trim().length >= 2) {
+        updateData.fullName = fullName.trim();
+      }
+
+      if (phone !== undefined) {
+        updateData.phone = phone ? phone.trim() : null;
+      }
+
+      if (timezone !== undefined && typeof timezone === "string" && timezone.trim().length > 0) {
+        updateData.timezone = timezone.trim();
+      }
+
+      if (email !== undefined && typeof email === "string") {
+        const trimmedEmail = email.trim().toLowerCase();
+        if (trimmedEmail.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          res.status(400).json({ error: "Invalid email address" });
+          return;
+        }
+        const [existingUser] = await db.select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.email, trimmedEmail), ne(users.id, userId)))
+          .limit(1);
+        if (existingUser) {
+          res.status(409).json({ error: "Email is already in use by another account" });
+          return;
+        }
+        updateData.email = trimmedEmail;
+      }
+
+      if (role === "client") {
+        if (businessName !== undefined) updateData.businessName = businessName ? businessName.trim() : null;
+        if (businessAddress !== undefined) updateData.businessAddress = businessAddress ? businessAddress.trim() : null;
+        if (businessPhone !== undefined) updateData.businessPhone = businessPhone ? businessPhone.trim() : null;
+      }
+
+      const [updatedUser] = await db.update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning();
+
+      if (!updatedUser) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const { password: _, totpSecret: _ts, recoveryCodes: _rc, ...safeUser } = updatedUser;
+      res.json(safeUser);
+      broadcast({ type: "updated", entity: "user", id: userId });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
     }
   });
 
@@ -2940,6 +3010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         onboardingStatus: users.onboardingStatus,
         workerRoles: users.workerRoles,
         isActive: users.isActive,
+        profilePhotoUrl: users.profilePhotoUrl,
         createdAt: users.createdAt,
       }).from(users).where(eq(users.role, "worker")).orderBy(desc(users.createdAt));
       res.json(workers);
@@ -5685,6 +5756,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       sendPushNotifications([updated.userId], notifTitle, notifBody, { type: "photo_review" });
 
+      broadcast({ type: "update", entity: "photo", id: updated.userId });
+
       res.json({ photo: { id: updated.id, status: updated.status } });
     } catch (error) {
       console.error("Error reviewing photo:", error);
@@ -6396,29 +6469,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         openphoneMessageId,
       });
 
+      const upperBody = messageBody.toUpperCase().trim();
+      const isShiftKeyword = ["ACCEPT SHIFT", "ACCEPT", "DECLINE SHIFT", "DECLINE"].includes(upperBody);
+
+      if (!isShiftKeyword) {
+        console.log(`[OPENPHONE WEBHOOK] Non-keyword message from ${senderPhone}: "${messageBody}" - ignoring`);
+        return;
+      }
+
       if (!worker) {
-        console.log(`[OPENPHONE WEBHOOK] Unknown sender: ${senderPhone}`);
+        console.log(`[OPENPHONE WEBHOOK] Unknown sender ${senderPhone} sent shift keyword: "${messageBody}"`);
         sendSMS(senderPhone, "Sorry, we couldn't identify your account. Please contact HR directly or use the WFConnect app.")
           .catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
         return;
       }
 
-      const upperBody = messageBody.toUpperCase().trim();
       let responseAction: "accepted" | "declined" | null = null;
 
       if (["ACCEPT SHIFT", "ACCEPT"].includes(upperBody)) {
         responseAction = "accepted";
       } else if (["DECLINE SHIFT", "DECLINE"].includes(upperBody)) {
         responseAction = "declined";
-      }
-
-      if (!responseAction) {
-        sendConfirmationSMS(
-          senderPhone,
-          `Hi ${worker.fullName}! To respond to a shift offer, please reply ACCEPT SHIFT to accept or DECLINE SHIFT to decline.`,
-          worker.id
-        ).catch(err => console.error("[OPENPHONE] Reply SMS error:", err));
-        return;
       }
 
       const pendingOffers = await db.select({

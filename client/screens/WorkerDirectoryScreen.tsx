@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
+import { Avatar } from "@/components/Avatar";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { rootNavigate } from "@/lib/navigation";
@@ -20,6 +21,7 @@ type Worker = {
   onboardingStatus: string | null;
   workerRoles: string | null;
   isActive: boolean;
+  profilePhotoUrl: string | null;
   createdAt: string;
 };
 
@@ -87,11 +89,7 @@ export default function WorkerDirectoryScreen() {
     return (
       <Card style={styles.workerCard}>
         <View style={styles.workerHeader}>
-          <View style={styles.avatar}>
-            <ThemedText style={styles.avatarText}>
-              {item.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
-            </ThemedText>
-          </View>
+          <Avatar name={item.fullName} role="worker" size={44} imageUrl={item.profilePhotoUrl || undefined} />
           <View style={styles.workerInfo}>
             <ThemedText style={styles.workerName}>{item.fullName}</ThemedText>
             <ThemedText style={styles.workerEmail}>{item.email}</ThemedText>
@@ -202,19 +200,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.md,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#6366f1",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 16,
   },
   workerInfo: {
     flex: 1,

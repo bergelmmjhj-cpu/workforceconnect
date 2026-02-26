@@ -46,7 +46,9 @@ export interface User {
   fullName: string;
   role: UserRole;
   timezone: string;
+  phone?: string;
   avatarUrl?: string;
+  profilePhotoUrl?: string;
   onboardingStatus?: WorkerOnboardingStatus;
   // Client-specific fields
   clientType?: ClientType;

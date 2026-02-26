@@ -36,6 +36,7 @@ interface APIUser {
   onboardingStatus: string | null;
   workerRoles: string | null;
   businessName: string | null;
+  phone: string | null;
   isActive: boolean | null;
   createdAt: string;
   updatedAt: string;
@@ -60,6 +61,7 @@ export default function UserManagementScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editRole, setEditRole] = useState<UserRole>("worker");
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editPhone, setEditPhone] = useState("");
   
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [newUserFullName, setNewUserFullName] = useState("");
@@ -77,8 +79,8 @@ export default function UserManagementScreen() {
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ id, role, isActive }: { id: string; role: UserRole; isActive: boolean }) => {
-      const res = await apiRequest("PATCH", `/api/users/${id}`, { role, isActive });
+    mutationFn: async ({ id, role, isActive, phone }: { id: string; role: UserRole; isActive: boolean; phone: string }) => {
+      const res = await apiRequest("PATCH", `/api/users/${id}`, { role, isActive, phone: phone.trim() || null });
       return res.json();
     },
     onSuccess: () => {
@@ -165,6 +167,7 @@ export default function UserManagementScreen() {
     setSelectedUser(userToEdit);
     setEditRole(userToEdit.role as UserRole);
     setEditIsActive(userToEdit.isActive !== false);
+    setEditPhone(userToEdit.phone || "");
     setEditModalVisible(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -175,6 +178,7 @@ export default function UserManagementScreen() {
         id: selectedUser.id,
         role: editRole,
         isActive: editIsActive,
+        phone: editPhone,
       });
     }
   };
@@ -234,6 +238,11 @@ export default function UserManagementScreen() {
           <ThemedText style={[styles.userEmail, { color: theme.textSecondary }]}>
             {item.email}
           </ThemedText>
+          {item.phone ? (
+            <ThemedText style={[styles.userPhone, { color: theme.textSecondary }]}>
+              {item.phone}
+            </ThemedText>
+          ) : null}
           <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) + "15" }]}>
             <ThemedText style={[styles.roleText, { color: getRoleColor(item.role) }]}>
               {item.role.toUpperCase()}
@@ -407,6 +416,29 @@ export default function UserManagementScreen() {
                   <ThemedText style={[styles.modalUserEmail, { color: theme.textSecondary }]}>
                     {selectedUser.email}
                   </ThemedText>
+                </View>
+
+                <View style={styles.formSection}>
+                  <ThemedText style={[styles.formLabel, { color: theme.textSecondary }]}>
+                    Phone Number
+                  </ThemedText>
+                  <TextInput
+                    testID="input-edit-phone"
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    placeholder="e.g. +1 (416) 555-0123"
+                    placeholderTextColor={theme.textMuted}
+                    keyboardType="phone-pad"
+                    autoComplete="tel"
+                    style={[
+                      styles.phoneInput,
+                      {
+                        backgroundColor: theme.surface,
+                        borderColor: theme.border,
+                        color: theme.text,
+                      },
+                    ]}
+                  />
                 </View>
 
                 <View style={styles.formSection}>
@@ -1044,6 +1076,17 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  userPhone: {
+    fontSize: 13,
+    marginTop: 1,
+  },
+  phoneInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+    fontSize: 16,
   },
   deleteButton: {
     flexDirection: "row",

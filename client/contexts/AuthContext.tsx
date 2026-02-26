@@ -87,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: data.user.fullName,
         role: data.user.role as UserRole,
         timezone: data.user.timezone || "America/Toronto",
+        phone: data.user.phone || undefined,
         onboardingStatus: data.user.onboardingStatus as WorkerOnboardingStatus | undefined,
         workerRoles: data.user.workerRoles ? JSON.parse(data.user.workerRoles) : undefined,
         businessName: data.user.businessName,
@@ -114,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: data.user.fullName,
         role: data.user.role as UserRole,
         timezone: data.user.timezone || "America/Toronto",
+        phone: data.user.phone || undefined,
         onboardingStatus: data.user.onboardingStatus as WorkerOnboardingStatus | undefined,
         workerRoles: data.user.workerRoles ? JSON.parse(data.user.workerRoles) : undefined,
         businessName: data.user.businessName,
@@ -214,9 +216,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = async (updates: Partial<User>) => {
     if (user) {
-      const updatedUser = { ...user, ...updates };
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
-      setUser(updatedUser);
+      const serverFields = ['fullName', 'email', 'phone', 'timezone', 'businessName', 'businessAddress', 'businessPhone'];
+      const hasServerFields = serverFields.some(f => f in updates);
+
+      if (hasServerFields) {
+        try {
+          const serverUpdates: Record<string, any> = {};
+          for (const f of serverFields) {
+            if (f in updates) serverUpdates[f] = (updates as any)[f];
+          }
+          const res = await apiRequest("PATCH", "/api/users/me/profile", serverUpdates);
+          const serverData = await res.json();
+          const updatedUser = {
+            ...user,
+            ...updates,
+            fullName: serverData.fullName || user.fullName,
+            email: serverData.email || user.email,
+            phone: serverData.phone || undefined,
+            timezone: serverData.timezone || user.timezone,
+            businessName: serverData.businessName || undefined,
+            businessAddress: serverData.businessAddress || undefined,
+            businessPhone: serverData.businessPhone || undefined,
+          };
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+          setUser(updatedUser);
+        } catch (error) {
+          console.error("[PROFILE] Failed to update profile on server:", error);
+          throw error;
+        }
+      } else {
+        const updatedUser = { ...user, ...updates };
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+        setUser(updatedUser);
+      }
     }
   };
 

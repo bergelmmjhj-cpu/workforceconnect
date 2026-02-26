@@ -7,8 +7,8 @@ import * as fs from "fs";
 import * as path from "path";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
-import { users, workplaces, workplaceAssignments, timesheets, timesheetEntries } from "../shared/schema";
-import { eq } from "drizzle-orm";
+import { users, workplaces, workplaceAssignments, timesheets, timesheetEntries, workerApplications } from "../shared/schema";
+import { eq, and, isNull } from "drizzle-orm";
 
 const app = express();
 const log = console.log;
@@ -310,6 +310,42 @@ async function seedProductionAdmin() {
     }
   } catch (error) {
     log("Error seeding production admin:", error);
+  }
+}
+
+async function backfillWorkerPhones() {
+  try {
+    const workersWithoutPhone = await db.select({ id: users.id, email: users.email })
+      .from(users)
+      .where(and(eq(users.role, "worker"), isNull(users.phone)));
+
+    if (workersWithoutPhone.length === 0) {
+      return;
+    }
+
+    let backfilled = 0;
+    for (const worker of workersWithoutPhone) {
+      const [app] = await db.select({ phone: workerApplications.phone })
+        .from(workerApplications)
+        .where(and(
+          eq(workerApplications.email, worker.email),
+          eq(workerApplications.status, "approved")
+        ))
+        .limit(1);
+
+      if (app?.phone) {
+        await db.update(users)
+          .set({ phone: app.phone })
+          .where(eq(users.id, worker.id));
+        backfilled++;
+      }
+    }
+
+    if (backfilled > 0) {
+      log(`Backfilled phone numbers for ${backfilled} workers from their applications`);
+    }
+  } catch (error) {
+    log("Error backfilling worker phones:", error);
   }
 }
 
@@ -776,8 +812,8 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
     await seedTimesheets();
   } else {
     log("PRODUCTION MODE - skipping demo data seeding");
-    // Ensure production admin user exists
     await seedProductionAdmin();
+    await backfillWorkerPhones();
   }
 
   setupCors(app);

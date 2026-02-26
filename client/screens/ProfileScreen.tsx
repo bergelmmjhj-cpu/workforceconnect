@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Pressable, Switch, ScrollView, TextInput, Modal, Image, Platform, ActivityIndicator } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -52,6 +52,17 @@ export default function ProfileScreen() {
   const [bankAccount, setBankAccount] = useState<string>("");
   const [etransferEmail, setEtransferEmail] = useState<string>("");
 
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editFullName, setEditFullName] = useState(user?.fullName || "");
+  const [editEmail, setEditEmail] = useState(user?.email || "");
+  const [editPhone, setEditPhone] = useState(user?.phone || "");
+  const [editTimezone, setEditTimezone] = useState(user?.timezone || "America/Toronto");
+  const [editBusinessName, setEditBusinessName] = useState(user?.businessName || "");
+  const [editBusinessAddress, setEditBusinessAddress] = useState(user?.businessAddress || "");
+  const [editBusinessPhone, setEditBusinessPhone] = useState(user?.businessPhone || "");
+  const [editProfileError, setEditProfileError] = useState("");
+  const [editProfileSaving, setEditProfileSaving] = useState(false);
+
   const [showTrialResetModal, setShowTrialResetModal] = useState(false);
   const [trialResetStep, setTrialResetStep] = useState<"preview" | "confirm" | "done">("preview");
   const [dryRunData, setDryRunData] = useState<any>(null);
@@ -70,6 +81,14 @@ export default function ProfileScreen() {
   const { data: photoData, refetch: refetchPhoto } = useQuery<any>({
     queryKey: ["/api/profile-photo"],
   });
+
+  useEffect(() => {
+    if (photoData?.photo?.status === "approved" && photoData?.photo?.url && updateUser) {
+      if (user?.profilePhotoUrl !== photoData.photo.url) {
+        updateUser({ profilePhotoUrl: photoData.photo.url });
+      }
+    }
+  }, [photoData?.photo?.status, photoData?.photo?.url]);
 
   const { data: twoFAStatus, refetch: refetch2FA } = useQuery<{ enabled: boolean }>({
     queryKey: ["/api/2fa/status"],
@@ -270,6 +289,49 @@ export default function ProfileScreen() {
     });
   };
 
+  const handleOpenEditProfile = () => {
+    setEditFullName(user?.fullName || "");
+    setEditEmail(user?.email || "");
+    setEditPhone(user?.phone || "");
+    setEditTimezone(user?.timezone || "America/Toronto");
+    setEditBusinessName(user?.businessName || "");
+    setEditBusinessAddress(user?.businessAddress || "");
+    setEditBusinessPhone(user?.businessPhone || "");
+    setEditProfileError("");
+    setShowEditProfileModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setEditProfileSaving(true);
+    setEditProfileError("");
+    try {
+      const updates: Record<string, string> = {};
+      if (editFullName.trim() !== (user?.fullName || "")) updates.fullName = editFullName.trim();
+      if (editEmail.trim().toLowerCase() !== (user?.email || "").toLowerCase()) updates.email = editEmail.trim();
+      if (editPhone.trim() !== (user?.phone || "")) updates.phone = editPhone.trim();
+      if (editTimezone.trim() !== (user?.timezone || "America/Toronto")) updates.timezone = editTimezone.trim();
+      if (user?.role === "client") {
+        if (editBusinessName.trim() !== (user?.businessName || "")) updates.businessName = editBusinessName.trim();
+        if (editBusinessAddress.trim() !== (user?.businessAddress || "")) updates.businessAddress = editBusinessAddress.trim();
+        if (editBusinessPhone.trim() !== (user?.businessPhone || "")) updates.businessPhone = editBusinessPhone.trim();
+      }
+
+      if (Object.keys(updates).length === 0) {
+        setShowEditProfileModal(false);
+        return;
+      }
+
+      await updateUser(updates);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowEditProfileModal(false);
+    } catch (error: any) {
+      const msg = error?.message || "Failed to save changes";
+      setEditProfileError(msg);
+    } finally {
+      setEditProfileSaving(false);
+    }
+  };
+
   const handleOpen2FA = () => {
     if (twoFAStatus?.enabled) {
       setTwoFAStep("disable");
@@ -297,9 +359,14 @@ export default function ProfileScreen() {
     >
       <View style={styles.header}>
         <Pressable onPress={() => setShowPhotoModal(true)} testID="button-upload-photo">
-          {photoData?.photo?.url ? (
+          {(photoData?.photo?.status === "approved" && photoData?.photo?.url) ? (
             <Image
               source={{ uri: photoData.photo.url }}
+              style={{ width: 80, height: 80, borderRadius: 40 }}
+            />
+          ) : user?.profilePhotoUrl ? (
+            <Image
+              source={{ uri: user.profilePhotoUrl }}
               style={{ width: 80, height: 80, borderRadius: 40 }}
             />
           ) : (
@@ -350,6 +417,33 @@ export default function ProfileScreen() {
             {roleLabels[user?.role || "client"]}
           </ThemedText>
         </View>
+        {user?.phone ? (
+          <ThemedText style={{ fontSize: 13, color: theme.textSecondary, marginTop: Spacing.xs }}>
+            {user.phone}
+          </ThemedText>
+        ) : null}
+        <Pressable
+          onPress={handleOpenEditProfile}
+          style={({ pressed }) => [
+            {
+              marginTop: Spacing.md,
+              paddingHorizontal: Spacing.lg,
+              paddingVertical: Spacing.sm,
+              borderRadius: BorderRadius.full,
+              borderWidth: 1,
+              borderColor: theme.primary,
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}
+          testID="button-edit-profile"
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm }}>
+            <Feather name="edit-2" size={14} color={theme.primary} />
+            <ThemedText style={{ fontSize: 14, fontWeight: "600", color: theme.primary }}>
+              Edit Profile
+            </ThemedText>
+          </View>
+        </Pressable>
       </View>
 
       {user?.role === "client" ? (
@@ -594,6 +688,141 @@ export default function ProfileScreen() {
           Sign Out
         </Button>
       </View>
+
+      <Modal
+        visible={showEditProfileModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEditProfileModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowEditProfileModal(false)}
+        >
+          <Pressable style={[styles.modalContent, { backgroundColor: theme.surface }]} onPress={() => {}}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <ThemedText type="h3" style={styles.modalTitle}>Edit Profile</ThemedText>
+
+              {editProfileError ? (
+                <ThemedText style={{ color: theme.error, fontSize: 13, textAlign: "center", marginBottom: Spacing.md }}>
+                  {editProfileError}
+                </ThemedText>
+              ) : null}
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Full Name</ThemedText>
+                <TextInput
+                  value={editFullName}
+                  onChangeText={setEditFullName}
+                  placeholder="Your full name"
+                  placeholderTextColor={theme.textMuted}
+                  style={[styles.input, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                  testID="input-edit-fullname"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Email</ThemedText>
+                <TextInput
+                  value={editEmail}
+                  onChangeText={setEditEmail}
+                  placeholder="your@email.com"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={[styles.input, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                  testID="input-edit-email"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Phone Number</ThemedText>
+                <TextInput
+                  value={editPhone}
+                  onChangeText={setEditPhone}
+                  placeholder="+1 (555) 123-4567"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="phone-pad"
+                  style={[styles.input, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                  testID="input-edit-phone"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Timezone</ThemedText>
+                <TextInput
+                  value={editTimezone}
+                  onChangeText={setEditTimezone}
+                  placeholder="America/Toronto"
+                  placeholderTextColor={theme.textMuted}
+                  style={[styles.input, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                  testID="input-edit-timezone"
+                />
+              </View>
+
+              {user?.role === "client" ? (
+                <>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Business Name</ThemedText>
+                    <TextInput
+                      value={editBusinessName}
+                      onChangeText={setEditBusinessName}
+                      placeholder="Your business name"
+                      placeholderTextColor={theme.textMuted}
+                      style={[styles.input, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                      testID="input-edit-business-name"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Business Address</ThemedText>
+                    <TextInput
+                      value={editBusinessAddress}
+                      onChangeText={setEditBusinessAddress}
+                      placeholder="123 Main St, City"
+                      placeholderTextColor={theme.textMuted}
+                      style={[styles.input, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                      testID="input-edit-business-address"
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>Business Phone</ThemedText>
+                    <TextInput
+                      value={editBusinessPhone}
+                      onChangeText={setEditBusinessPhone}
+                      placeholder="+1 (555) 123-4567"
+                      placeholderTextColor={theme.textMuted}
+                      keyboardType="phone-pad"
+                      style={[styles.input, { backgroundColor: theme.backgroundTertiary, color: theme.text }]}
+                      testID="input-edit-business-phone"
+                    />
+                  </View>
+                </>
+              ) : null}
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setShowEditProfileModal(false)}
+                  style={[styles.modalButton, { backgroundColor: theme.backgroundTertiary }]}
+                >
+                  <ThemedText style={{ color: theme.textSecondary }}>Cancel</ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={handleSaveProfile}
+                  disabled={editProfileSaving}
+                  style={[styles.modalButton, { backgroundColor: theme.primary, opacity: editProfileSaving ? 0.6 : 1 }]}
+                  testID="button-save-profile"
+                >
+                  {editProfileSaving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <ThemedText style={{ color: "#fff", fontWeight: "600" }}>Save</ThemedText>
+                  )}
+                </Pressable>
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={showClientTypeModal}

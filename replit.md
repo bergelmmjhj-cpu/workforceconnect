@@ -27,7 +27,8 @@ Key features include:
 - **Automated Notifications**: Push and in-app notifications for shift offers, reminders, late clock-ins, unusual hours, flagged clock-outs, and new shift requests.
 - **Shift Series Model**: Allows for defining recurring shifts with on-the-fly occurrence expansion.
 - **Multi-mode Roster View**: Provides daily, weekly, bi-weekly, monthly, and semi-monthly views of shifts and series.
-- **Profile Photo Requirement**: Upload endpoint with admin review workflow.
+- **Profile Photo Requirement**: Upload endpoint with admin review workflow. Photos display across the app (profile, directory, shift cards) via `profilePhotoUrl` on users. WebSocket events invalidate caches on approval.
+- **Profile Editing**: Users can edit their own name, email, phone, timezone via `PATCH /api/users/me/profile`. Clients can also edit business fields. Admins can edit any user's phone number via User Management.
 - **Two-Factor Authentication**: Backend API for setup, verification, disabling, and status checks, supporting TOTP and recovery codes.
 
 ### Data Flow
@@ -66,8 +67,8 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - **Phone Number IDs**: HR Number `PNo1n737XV` (+1 289-670-5697), HR Department `PNCQJAOZa0` (+1 437-476-9566). HR Number is used as the sender.
 - **SMS Logs**: `sms_logs` table tracks all outbound and inbound SMS with direction, status, and linked shift/offer IDs.
 - **Shift Blast SMS**: When shifts are blasted or broadcast, workers with phone numbers receive SMS with shift details and YES/NO reply instructions.
-- **SMS Reply Parsing**: Workers text ACCEPT SHIFT or ACCEPT to accept, DECLINE SHIFT or DECLINE to decline their most recent pending shift offer. Simple words like YES/NO are ignored to avoid conflicts with regular HR conversations on the same number. Confirmation SMS is sent back.
-- **Phone Field**: `phone` column added to `users` table; populated from `worker_applications` when workers onboard.
+- **SMS Reply Parsing**: Workers text ACCEPT SHIFT or ACCEPT to accept, DECLINE SHIFT or DECLINE to decline their most recent pending shift offer. The webhook ONLY auto-replies to these shift keywords — all other messages are silently logged without any auto-reply, allowing normal HR text conversations on the same number.
+- **Phone Field**: `phone` column added to `users` table; populated from `worker_applications` when workers onboard. On startup, a backfill routine copies missing phone numbers from approved applications to existing worker accounts.
 
 ### Environment Variables
 - `DATABASE_URL`

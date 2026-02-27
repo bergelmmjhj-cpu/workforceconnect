@@ -275,7 +275,6 @@ export function TitoLogsList({
                 showActions={canApprove}
                 onApprove={() => handleApprove(titoItem)}
                 onDispute={() => handleDispute(titoItem)}
-                userRole={user?.role}
               />
             </View>
           );

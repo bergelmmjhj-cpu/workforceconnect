@@ -1,10 +1,9 @@
-import React from "react";
-import { View, StyleSheet, Pressable, Linking, Platform } from "react-native";
+import React, { useState } from "react";
+import { View, StyleSheet, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { StatusPill } from "@/components/StatusPill";
 import { Avatar } from "@/components/Avatar";
-import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { BorderRadius, Spacing, Shadows } from "@/constants/theme";
 import { TitoLog } from "@/types";
@@ -16,7 +15,6 @@ interface TitoCardProps {
   onApprove?: () => void;
   onDispute?: () => void;
   showActions?: boolean;
-  userRole?: string;
 }
 
 export function TitoCard({
@@ -25,11 +23,9 @@ export function TitoCard({
   onApprove,
   onDispute,
   showActions = false,
-  userRole,
 }: TitoCardProps) {
   const { theme } = useTheme();
-
-  const isAdminOrHR = userRole === "admin" || userRole === "hr";
+  const [expanded, setExpanded] = useState(false);
 
   const verificationIcons: Record<string, keyof typeof Feather.glyphMap> = {
     gps: "map-pin",
@@ -41,172 +37,109 @@ export function TitoCard({
   const isCanceled = tito.status === "canceled";
   const isAdjusted = tito.corrected === true;
 
-  const handleText = () => {
-    const dateStr = formatDate(tito.shiftDate);
-    const message = `Regarding your TITO log on ${dateStr}, please review.`;
-    const smsUrl = Platform.select({
-      ios: `sms:2896705697&body=${encodeURIComponent(message)}`,
-      default: `sms:2896705697?body=${encodeURIComponent(message)}`,
-    });
-    Linking.openURL(smsUrl);
-  };
-
-  const handleCall = () => {
-    Linking.openURL("tel:2892702031");
-  };
-
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => setExpanded(!expanded)}
       style={({ pressed }) => [
         styles.container,
         {
           backgroundColor: theme.surface,
-          opacity: pressed ? 0.9 : 1,
+          opacity: pressed ? 0.95 : 1,
         },
         isCanceled ? { opacity: 0.6 } : undefined,
       ]}
+      testID={`tito-card-${tito.id}`}
     >
-      <View style={styles.header}>
-        <Avatar name={tito.workerName} role="worker" size={28} />
-        <View style={styles.headerInfo}>
-          <ThemedText type="h4" numberOfLines={1}>
+      <View style={styles.compactRow}>
+        <Avatar name={tito.workerName} role="worker" size={24} />
+        <View style={styles.nameCol}>
+          <ThemedText style={styles.compactName} numberOfLines={1}>
             {tito.workerName}
           </ThemedText>
-          <ThemedText
-            style={[styles.subtitle, { color: theme.textSecondary }]}
-          >
+          <ThemedText style={[styles.compactDate, { color: theme.textMuted }]}>
             {formatDate(tito.shiftDate)}
           </ThemedText>
         </View>
-        <View style={styles.badgeRow}>
+        <View style={styles.timesCompact}>
+          <View style={styles.timeInline}>
+            <Feather name="log-in" size={11} color={theme.success} />
+            <ThemedText style={styles.compactTime}>
+              {tito.timeIn ? formatTime(tito.timeIn) : "--:--"}
+            </ThemedText>
+          </View>
+          <View style={styles.timeInline}>
+            <Feather name="log-out" size={11} color={theme.error} />
+            <ThemedText style={styles.compactTime}>
+              {tito.timeOut ? formatTime(tito.timeOut) : "--:--"}
+            </ThemedText>
+          </View>
+        </View>
+        <Feather
+          name={verificationIcons[tito.verificationMethod] || "check"}
+          size={12}
+          color={theme.textMuted}
+        />
+        <StatusPill status={isCanceled ? "cancelled" : tito.status} size="sm" />
+        <Feather
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={14}
+          color={theme.textMuted}
+        />
+      </View>
+
+      {expanded ? (
+        <View style={[styles.details, { borderTopColor: theme.border }]}>
           {isAdjusted ? (
             <View style={[styles.badge, { backgroundColor: "#F59E0B20" }]}>
               <Feather name="edit-2" size={10} color="#F59E0B" />
               <ThemedText style={[styles.badgeText, { color: "#F59E0B" }]}>Adjusted</ThemedText>
             </View>
           ) : null}
-          <StatusPill status={isCanceled ? "cancelled" : tito.status} size="sm" />
-        </View>
-      </View>
 
-      <View style={styles.times}>
-        <View style={styles.timeBlock}>
-          <ThemedText
-            style={[styles.timeLabel, { color: theme.textMuted }]}
-          >
-            Time In
-          </ThemedText>
-          <View style={styles.timeValue}>
-            <Feather name="log-in" size={14} color={theme.success} />
-            <ThemedText style={styles.timeText}>
-              {tito.timeIn ? formatTime(tito.timeIn) : "--:--"}
-            </ThemedText>
-          </View>
           {tito.timeInLocation ? (
-            <ThemedText
-              style={[styles.location, { color: theme.textMuted }]}
-              numberOfLines={1}
-            >
-              {tito.timeInLocation}
-            </ThemedText>
+            <View style={styles.detailRow}>
+              <ThemedText style={[styles.detailLabel, { color: theme.textMuted }]}>In Location</ThemedText>
+              <ThemedText style={styles.detailValue} numberOfLines={1}>{tito.timeInLocation}</ThemedText>
+            </View>
           ) : null}
-        </View>
 
-        <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-        <View style={styles.timeBlock}>
-          <ThemedText
-            style={[styles.timeLabel, { color: theme.textMuted }]}
-          >
-            Time Out
-          </ThemedText>
-          <View style={styles.timeValue}>
-            <Feather name="log-out" size={14} color={theme.error} />
-            <ThemedText style={styles.timeText}>
-              {tito.timeOut ? formatTime(tito.timeOut) : "--:--"}
-            </ThemedText>
-          </View>
           {tito.timeOutLocation ? (
-            <ThemedText
-              style={[styles.location, { color: theme.textMuted }]}
-              numberOfLines={1}
-            >
-              {tito.timeOutLocation}
-            </ThemedText>
+            <View style={styles.detailRow}>
+              <ThemedText style={[styles.detailLabel, { color: theme.textMuted }]}>Out Location</ThemedText>
+              <ThemedText style={styles.detailValue} numberOfLines={1}>{tito.timeOutLocation}</ThemedText>
+            </View>
           ) : null}
-        </View>
-      </View>
 
-      <View style={styles.verification}>
-        <Feather
-          name={verificationIcons[tito.verificationMethod] || "check"}
-          size={12}
-          color={theme.textMuted}
-        />
-        <ThemedText style={[styles.verificationText, { color: theme.textMuted }]}>
-          Verified via {tito.verificationMethod.replace("_", " ")}
-        </ThemedText>
-      </View>
+          <View style={styles.detailRow}>
+            <ThemedText style={[styles.detailLabel, { color: theme.textMuted }]}>Verification</ThemedText>
+            <ThemedText style={styles.detailValue}>{tito.verificationMethod.replace("_", " ")}</ThemedText>
+          </View>
 
-      {showActions && tito.status === "pending" ? (
-        <View style={styles.actions}>
-          <Pressable
-            onPress={onDispute}
-            style={[
-              styles.actionBtn,
-              { backgroundColor: theme.error + "10" },
-            ]}
-          >
-            <Feather name="x" size={16} color={theme.error} />
-            <ThemedText style={[styles.actionText, { color: theme.error }]}>
-              Dispute
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={onApprove}
-            style={[
-              styles.actionBtn,
-              styles.actionBtnPrimary,
-              { backgroundColor: theme.success },
-            ]}
-          >
-            <Feather name="check" size={16} color="#fff" />
-            <ThemedText style={[styles.actionText, { color: "#fff" }]}>
-              Approve
-            </ThemedText>
-          </Pressable>
-        </View>
-      ) : null}
+          {tito.totalHours != null ? (
+            <View style={styles.detailRow}>
+              <ThemedText style={[styles.detailLabel, { color: theme.textMuted }]}>Total Hours</ThemedText>
+              <ThemedText style={styles.detailValue}>{tito.totalHours.toFixed(2)}</ThemedText>
+            </View>
+          ) : null}
 
-      {isAdminOrHR ? (
-        <View style={styles.commsActions}>
-          <Pressable
-            onPress={handleText}
-            style={[
-              styles.commsBtn,
-              { backgroundColor: theme.primary + "12" },
-            ]}
-            testID={`button-text-${tito.id}`}
-          >
-            <Feather name="message-circle" size={14} color={theme.primary} />
-            <ThemedText style={[styles.commsText, { color: theme.primary }]}>
-              Text
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={handleCall}
-            style={[
-              styles.commsBtn,
-              { backgroundColor: theme.success + "12" },
-            ]}
-            testID={`button-call-${tito.id}`}
-          >
-            <Feather name="phone" size={14} color={theme.success} />
-            <ThemedText style={[styles.commsText, { color: theme.success }]}>
-              Call
-            </ThemedText>
-          </Pressable>
+          {showActions && tito.status === "pending" ? (
+            <View style={styles.actions}>
+              <Pressable
+                onPress={onDispute}
+                style={[styles.actionBtn, { backgroundColor: theme.error + "10" }]}
+              >
+                <Feather name="x" size={14} color={theme.error} />
+                <ThemedText style={[styles.actionText, { color: theme.error }]}>Dispute</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={onApprove}
+                style={[styles.actionBtn, styles.actionBtnPrimary, { backgroundColor: theme.success }]}
+              >
+                <Feather name="check" size={14} color="#fff" />
+                <ThemedText style={[styles.actionText, { color: "#fff" }]}>Approve</ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </Pressable>
@@ -215,27 +148,49 @@ export function TitoCard({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
     ...Shadows.sm,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  badgeRow: {
+  compactRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
+  nameCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  compactName: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  compactDate: {
+    fontSize: 10,
+  },
+  timesCompact: {
+    alignItems: "flex-end",
+    gap: 1,
+  },
+  timeInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  compactTime: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  details: {
+    marginTop: Spacing.xs,
+    paddingTop: Spacing.xs,
+    borderTopWidth: 1,
+    gap: 4,
+  },
   badge: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -245,91 +200,37 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
   },
-  subtitle: {
-    fontSize: 12,
-    marginTop: 1,
-  },
-  times: {
+  detailRow: {
     flexDirection: "row",
-    alignItems: "stretch",
-    gap: Spacing.md,
-    marginBottom: Spacing.xs,
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  timeBlock: {
-    flex: 1,
-  },
-  timeLabel: {
-    fontSize: 10,
+  detailLabel: {
+    fontSize: 11,
     fontWeight: "500",
-    marginBottom: 2,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
-  timeValue: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  timeText: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  location: {
+  detailValue: {
     fontSize: 11,
-    marginTop: 4,
-  },
-  divider: {
-    width: 1,
-    alignSelf: "stretch",
-  },
-  verification: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-  },
-  verificationText: {
-    fontSize: 11,
+    flex: 1,
+    textAlign: "right",
     textTransform: "capitalize",
   },
   actions: {
     flexDirection: "row",
     gap: Spacing.sm,
-    marginTop: Spacing.sm,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.05)",
+    marginTop: 4,
   },
   actionBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
+    gap: 4,
+    paddingVertical: 6,
     borderRadius: BorderRadius.sm,
   },
   actionBtnPrimary: {},
   actionText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  commsActions: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.05)",
-  },
-  commsBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-  },
-  commsText: {
     fontSize: 13,
     fontWeight: "600",
   },

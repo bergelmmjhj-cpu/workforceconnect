@@ -28,7 +28,7 @@ Key features include:
   - Strict shift-bound validation: clock-in only within [shiftStart - 15min, shiftEnd + 30min], clock-out within [shiftStart, shiftEnd + 30min]. `shiftId` required on all clock-ins.
   - Accident recovery: cancel clock-in within 2 minutes, correction requests (`tito_corrections` table) with admin approval workflow, "Adjusted" badge on corrected records.
   - Client-side: 2-second debounce on clock-in/out buttons, cancel button visible for 2 minutes after clock-in, network error handling.
-  - Filter bar: proper `stickyHeaderIndices` (replaced position: absolute hack). Compact TitoCards. Text/Call buttons for admin/HR on each card.
+  - Filter bar: proper `stickyHeaderIndices` (replaced position: absolute hack). Compact collapsible TitoCards (name/date/times/status in one row; details expand on tap).
   - Status values: pending, approved, disputed, canceled, flagged. Canceled records excluded from payroll but visible in admin.
 - **User Management**: Admins can CRUD users, manage roles, and toggle status.
 - **Shift Request Management**: Full workflow from client/admin creation to worker acceptance/decline with fill-to-capacity logic (multiple workers per shift via `workersNeeded`). Includes smart-assignment, broadcast/blast capabilities, and first-available acceptance. Shift offers maintain a full history with soft-delete for cancellations.

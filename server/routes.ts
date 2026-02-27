@@ -2123,7 +2123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       })
       .from(workplaceAssignments)
       .leftJoin(users, eq(workplaceAssignments.workerUserId, users.id))
-      .where(eq(workplaceAssignments.workplaceId, req.params.id))
+      .where(and(eq(workplaceAssignments.workplaceId, req.params.id), eq(workplaceAssignments.status, "active")))
       .orderBy(desc(workplaceAssignments.createdAt));
 
       res.json(assignments);

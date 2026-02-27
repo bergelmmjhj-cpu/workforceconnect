@@ -125,14 +125,14 @@ export function TitoCard({
           {showActions && tito.status === "pending" ? (
             <View style={styles.actions}>
               <Pressable
-                onPress={onDispute}
+                onPress={(e) => { e.stopPropagation(); onDispute?.(); }}
                 style={[styles.actionBtn, { backgroundColor: theme.error + "10" }]}
               >
                 <Feather name="x" size={14} color={theme.error} />
                 <ThemedText style={[styles.actionText, { color: theme.error }]}>Dispute</ThemedText>
               </Pressable>
               <Pressable
-                onPress={onApprove}
+                onPress={(e) => { e.stopPropagation(); onApprove?.(); }}
                 style={[styles.actionBtn, styles.actionBtnPrimary, { backgroundColor: theme.success }]}
               >
                 <Feather name="check" size={14} color="#fff" />

@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   separator: {
-    paddingTop: Spacing.sm,
+    paddingTop: Spacing.xs,
   },
   retryButton: {
     flexDirection: "row",

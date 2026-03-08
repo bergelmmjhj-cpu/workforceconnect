@@ -27,6 +27,7 @@ import ApplicationsAdminScreen from "@/screens/ApplicationsAdminScreen";
 import DiagnosticsScreen from "@/screens/DiagnosticsScreen";
 import RosterScreen from "@/screens/RosterScreen";
 import TwoFactorVerifyScreen from "@/screens/TwoFactorVerifyScreen";
+import ChangePasswordScreen from "@/screens/ChangePasswordScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -60,6 +61,7 @@ export type RootStackParamList = {
   TitoLogsAdmin: undefined;
   ApplicationsAdmin: undefined;
   Diagnostics: undefined;
+  ChangePassword: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -113,6 +115,12 @@ export default function RootStackNavigator() {
             options={{ headerShown: false }}
           />
         </>
+      ) : user?.mustChangePassword ? (
+        <Stack.Screen
+          name="ChangePassword"
+          component={ChangePasswordScreen}
+          options={{ headerShown: false }}
+        />
       ) : requiresOnboarding ? (
         <>
           <Stack.Screen

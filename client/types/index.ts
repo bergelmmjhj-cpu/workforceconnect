@@ -57,6 +57,7 @@ export interface User {
   businessPhone?: string;
   // Worker-specific fields
   workerRoles?: WorkerRole[];
+  mustChangePassword?: boolean;
   createdAt: string;
 }
 

@@ -793,10 +793,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
-      res.json({ user: userWithoutSensitive });
+      res.json({ user: { ...userWithoutSensitive, mustChangePassword: user.mustChangePassword || false } });
     } catch (error) {
       console.error("Error logging in:", error);
       res.status(500).json({ error: "Failed to login" });
+    }
+  });
+
+  app.post("/api/auth/change-password", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        res.status(400).json({ error: "Current password and new password are required" });
+        return;
+      }
+      if (newPassword.length < 8) {
+        res.status(400).json({ error: "New password must be at least 8 characters" });
+        return;
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const validPassword = await bcrypt.compare(currentPassword, user.password);
+      if (!validPassword) {
+        res.status(401).json({ error: "Current password is incorrect" });
+        return;
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await db.update(users)
+        .set({ password: hashedPassword, mustChangePassword: false, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+
+      res.json({ success: true, message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ error: "Failed to change password" });
     }
   });
 
@@ -1036,6 +1078,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User management endpoints (admin only)
+  app.get("/api/users/workers", checkRoles("admin", "hr"), async (_req: Request, res: Response) => {
+    try {
+      const workers = await db.select({
+        id: users.id,
+        fullName: users.fullName,
+      }).from(users).where(and(eq(users.role, "worker"), eq(users.isActive, true))).orderBy(asc(users.fullName));
+      res.json(workers);
+    } catch (error) {
+      console.error("Error fetching workers list:", error);
+      res.status(500).json({ error: "Failed to fetch workers" });
+    }
+  });
+
   app.get("/api/users", checkRoles("admin"), async (_req: Request, res: Response) => {
     try {
       const allUsers = await db.select({
@@ -1504,18 +1559,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (status === "approved" && updatedApplication.email) {
         try {
-          const updateData: any = { 
-            onboardingStatus: "AGREEMENT_PENDING",
-            updatedAt: new Date()
-          };
-          if (updatedApplication.phone) {
-            updateData.phone = updatedApplication.phone;
+          const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, updatedApplication.email.toLowerCase())).limit(1);
+
+          if (existingUser) {
+            const updateData: any = { 
+              onboardingStatus: "AGREEMENT_PENDING",
+              updatedAt: new Date()
+            };
+            if (updatedApplication.phone) {
+              updateData.phone = updatedApplication.phone;
+            }
+            await db.update(users)
+              .set(updateData)
+              .where(eq(users.id, existingUser.id));
+            console.log(`[APPROVAL] Updated existing user ${updatedApplication.email} to AGREEMENT_PENDING`);
+          } else {
+            const firstName = (updatedApplication.fullName || "worker").split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+            const phoneLast4 = (updatedApplication.phone || "0000").replace(/\D/g, "").slice(-4);
+            const tempPassword = `${firstName}${phoneLast4}`;
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+            await db.insert(users).values({
+              id: crypto.randomUUID(),
+              email: updatedApplication.email.toLowerCase(),
+              password: hashedPassword,
+              fullName: updatedApplication.fullName || "Worker",
+              role: "worker",
+              phone: updatedApplication.phone || undefined,
+              isActive: true,
+              onboardingStatus: "AGREEMENT_PENDING",
+              workerRoles: updatedApplication.preferredRoles || undefined,
+              mustChangePassword: true,
+              timezone: "America/Toronto",
+            });
+            console.log(`[APPROVAL] Created user account for ${updatedApplication.email}`);
+
+            if (updatedApplication.phone) {
+              try {
+                const smsMessage = `Welcome to WFConnect! Your application has been approved. Download the app and log in with:\nEmail: ${updatedApplication.email}\nPassword: ${tempPassword}\nPlease change your password after first login.`;
+                await sendSMS(updatedApplication.phone, smsMessage);
+                console.log(`[APPROVAL] Welcome SMS sent to ${updatedApplication.phone}`);
+              } catch (smsError) {
+                console.error("[APPROVAL] Failed to send welcome SMS:", smsError);
+              }
+            }
           }
-          await db.update(users)
-            .set(updateData)
-            .where(eq(users.email, updatedApplication.email));
         } catch (linkError) {
-          console.error("Failed to update user onboarding status on approval:", linkError);
+          console.error("Failed to create/update user on approval:", linkError);
         }
       }
 
@@ -1558,6 +1648,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting application:", error);
       res.status(500).json({ error: "Failed to delete application" });
+    }
+  });
+
+  app.post("/api/admin/send-app-instructions", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      let authenticated = false;
+
+      if (userId && (userRole === "admin" || userRole === "hr")) {
+        authenticated = true;
+      } else if (authHeader && authHeader.startsWith("Basic ")) {
+        const base64Credentials = authHeader.split(" ")[1];
+        const creds = Buffer.from(base64Credentials, "base64").toString("utf-8");
+        const [username, password] = creds.split(":");
+        if (username === "wfconnect" && password === "@2255Dundaswest") {
+          authenticated = true;
+        }
+      }
+
+      if (!authenticated) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const allWorkers = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        phone: users.phone,
+        mustChangePassword: users.mustChangePassword,
+      }).from(users).where(eq(users.role, "worker"));
+
+      const alreadySent = await db.select({ workerId: smsLogs.workerId })
+        .from(smsLogs)
+        .where(and(
+          eq(smsLogs.direction, "outbound"),
+          sql`${smsLogs.message} LIKE '%WFConnect App%Download%'`
+        ));
+      const sentWorkerIds = new Set(alreadySent.map(s => s.workerId));
+
+      let sent = 0;
+      let skipped = 0;
+      let alreadyNotified = 0;
+
+      for (const worker of allWorkers) {
+        if (!worker.phone) {
+          skipped++;
+          continue;
+        }
+        if (sentWorkerIds.has(worker.id)) {
+          alreadyNotified++;
+          continue;
+        }
+
+        let smsMessage: string;
+        if (worker.mustChangePassword) {
+          smsMessage = `WFConnect App is now available! Download from App Store or Google Play. Log in with:\nEmail: ${worker.email}\nYour temporary password was sent when your application was approved. Change your password after first login.`;
+        } else {
+          smsMessage = `WFConnect App is now available! Download from App Store or Google Play. Log in with your email: ${worker.email}`;
+        }
+
+        try {
+          const result = await sendSMS(worker.phone, smsMessage);
+          if (result.success) {
+            await logSMS({
+              phoneNumber: worker.phone,
+              direction: "outbound",
+              message: smsMessage,
+              workerId: worker.id,
+              status: "sent",
+              openphoneMessageId: result.messageId,
+            });
+            sent++;
+          } else {
+            skipped++;
+          }
+        } catch (smsErr) {
+          console.error(`[BULK SMS] Failed for ${worker.email}:`, smsErr);
+          skipped++;
+        }
+      }
+
+      console.log(`[BULK SMS] Sent: ${sent}, Skipped: ${skipped}, Already notified: ${alreadyNotified}`);
+      res.json({ success: true, sent, skipped, alreadyNotified, total: allWorkers.length });
+    } catch (error) {
+      console.error("Error sending bulk app instructions:", error);
+      res.status(500).json({ error: "Failed to send app instructions" });
     }
   });
 
@@ -3060,11 +3239,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tito/email-timesheet", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
-      const { to, subject } = req.body;
+      const { to, subject, period, workplaceId, workerId } = req.body;
 
       if (!to || typeof to !== "string" || !to.includes("@")) {
         res.status(400).json({ error: "Valid email address is required" });
         return;
+      }
+
+      const now = new Date();
+      let startDate: Date;
+      let endDate: Date;
+      let periodLabel: string;
+
+      const selectedPeriod = period || "biweekly";
+
+      if (selectedPeriod === "weekly") {
+        const dayOfWeek = now.getDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() + mondayOffset);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
+        periodLabel = "Weekly";
+      } else if (selectedPeriod === "monthly") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        periodLabel = "Monthly";
+      } else {
+        const currentPayPeriod = getCurrentPayPeriod();
+        if (currentPayPeriod) {
+          startDate = new Date(currentPayPeriod.startDate + "T00:00:00");
+          endDate = new Date(currentPayPeriod.endDate + "T23:59:59.999");
+          periodLabel = `Pay Period ${currentPayPeriod.periodNumber}`;
+        } else {
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 13);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now);
+          endDate.setHours(23, 59, 59, 999);
+          periodLabel = "Biweekly";
+        }
+      }
+
+      const conditions = [
+        ne(titoLogs.status, "canceled"),
+        gte(titoLogs.timeIn, startDate),
+        lte(titoLogs.timeIn, endDate),
+      ];
+
+      if (workplaceId) {
+        conditions.push(eq(titoLogs.workplaceId, workplaceId));
+      }
+      if (workerId) {
+        conditions.push(eq(titoLogs.workerId, workerId));
       }
 
       const logs = await db.select({
@@ -3082,33 +3311,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       .leftJoin(users, eq(titoLogs.workerId, users.id))
       .leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id))
       .leftJoin(shifts, eq(titoLogs.shiftId, shifts.id))
-      .where(ne(titoLogs.status, "canceled"))
-      .orderBy(desc(titoLogs.createdAt))
-      .limit(500);
+      .where(and(...conditions))
+      .orderBy(asc(users.fullName), asc(titoLogs.timeIn))
+      .limit(1000);
+
+      const formatTime = (d: Date | null) => d ? d.toLocaleString("en-CA", { timeZone: "America/Toronto" }) : "";
+      const formatDate = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+
+      const workerTotals: Record<string, { name: string; hours: number }> = {};
+      const csvDataLines = logs.map(log => {
+        const timeIn = log.timeIn ? new Date(log.timeIn) : null;
+        const timeOut = log.timeOut ? new Date(log.timeOut) : null;
+        const hours = timeIn && timeOut
+          ? (timeOut.getTime() - timeIn.getTime()) / 3600000
+          : 0;
+
+        const wName = log.workerName || "Unknown";
+        if (!workerTotals[log.workerId]) {
+          workerTotals[log.workerId] = { name: wName, hours: 0 };
+        }
+        workerTotals[log.workerId].hours += hours;
+
+        return `"${wName}","${log.workplaceName || ""}","${log.shiftDate || ""}","${formatTime(timeIn)}","${formatTime(timeOut)}",${hours.toFixed(2)},"${log.status}"`;
+      });
+
+      const grandTotal = Object.values(workerTotals).reduce((sum, w) => sum + w.hours, 0);
+
+      const summaryLines = [
+        "",
+        "SUMMARY",
+        "Worker,Total Hours",
+        ...Object.values(workerTotals).map(w => `"${w.name}",${w.hours.toFixed(2)}`),
+        `"GRAND TOTAL",${grandTotal.toFixed(2)}`,
+      ];
 
       const csvLines = [
         "Worker Name,Workplace,Shift Date,Time In,Time Out,Hours,Status",
-        ...logs.map(log => {
-          const timeIn = log.timeIn ? new Date(log.timeIn) : null;
-          const timeOut = log.timeOut ? new Date(log.timeOut) : null;
-          const hours = timeIn && timeOut
-            ? ((timeOut.getTime() - timeIn.getTime()) / 3600000).toFixed(2)
-            : "";
-          const formatTime = (d: Date | null) => d ? d.toLocaleString("en-CA", { timeZone: "America/Toronto" }) : "";
-          return `"${log.workerName || ""}","${log.workplaceName || ""}","${log.shiftDate || ""}","${formatTime(timeIn)}","${formatTime(timeOut)}",${hours},"${log.status}"`;
-        })
+        ...csvDataLines,
+        ...summaryLines,
       ];
 
       const csvContent = csvLines.join("\n");
-      const now = new Date().toISOString().split("T")[0];
-      const filename = `tito-timesheet-${now}.csv`;
-      const emailSubject = subject || `WFConnect TITO Timesheet - ${now}`;
-      const bodyText = `Please find attached the TITO timesheet report.\n\nThis report includes ${logs.length} time log(s).\n\n- WFConnect`;
+      const dateRange = `${formatDate(startDate)} to ${formatDate(endDate)}`;
+      const filename = `tito-timesheet-${formatDate(startDate)}-to-${formatDate(endDate)}.csv`;
+      const emailSubject = subject || `WFConnect ${periodLabel} Timesheet - ${dateRange}`;
+      const bodyText = `Please find attached the ${periodLabel} TITO timesheet report.\n\nPeriod: ${dateRange}\nTotal Records: ${logs.length}\nTotal Hours: ${grandTotal.toFixed(2)}\n\n- WFConnect`;
 
       const result = await sendCSVEmail(to, emailSubject, bodyText, csvContent, filename);
 
       if (result.success) {
-        res.json({ success: true, message: `Timesheet emailed to ${to}` });
+        res.json({ success: true, message: `${periodLabel} timesheet emailed to ${to}`, period: dateRange, totalRecords: logs.length, totalHours: grandTotal.toFixed(2) });
       } else {
         res.status(500).json({ error: result.error || "Failed to send email" });
       }

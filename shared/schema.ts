@@ -22,6 +22,7 @@ export const users = pgTable("users", {
   totpSecret: text("totp_secret"),
   totpEnabled: boolean("totp_enabled").default(false),
   recoveryCodes: text("recovery_codes"),
+  mustChangePassword: boolean("must_change_password").default(false),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

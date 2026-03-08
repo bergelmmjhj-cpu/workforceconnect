@@ -38,6 +38,10 @@ Key features include:
 - **Profile Photo Requirement**: Upload endpoint with admin review workflow. Photos display across the app (profile, directory, shift cards) via `profilePhotoUrl` on users. WebSocket events invalidate caches on approval.
 - **Profile Editing**: Users can edit their own name, email, phone, timezone via `PATCH /api/users/me/profile`. Clients can also edit business fields. Admins can edit any user's phone number via User Management.
 - **Two-Factor Authentication**: Backend API for setup, verification, disabling, and status checks, supporting TOTP and recovery codes.
+- **Application-to-Account Bridge**: Approving a worker application auto-creates a user account with temporary password (`firstName + last4Phone`), `mustChangePassword: true`, and sends welcome SMS with login credentials via OpenPhone. A startup backfill routine catches previously approved applications without accounts.
+- **Force Password Change**: `mustChangePassword` boolean on `users` table. Login returns the flag; `ChangePasswordScreen` blocks app access until password is changed via `POST /api/auth/change-password`.
+- **Bulk SMS**: `POST /api/admin/send-app-instructions` sends app download/login SMS to all workers with phone numbers, skipping those already notified. Admin dashboard has a "Send App Instructions" button.
+- **Consolidated Email Timesheet**: `POST /api/tito/email-timesheet` accepts `period` (weekly/biweekly/monthly), `workplaceId`, `workerId` filters. CSV includes per-worker totals and grand total. Mobile modal has period chips, workplace/worker selectors.
 
 ### Data Flow
 

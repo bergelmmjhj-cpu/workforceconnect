@@ -735,6 +735,11 @@
           </div>
         </div>
 
+        <div style="margin-bottom: 16px; text-align: right;">
+          <button id="bulkSmsBtn" onclick="sendBulkAppInstructions()" style="padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">Send App Instructions to All Workers</button>
+          <span id="bulkSmsResult" style="margin-left: 12px; font-size: 13px;"></span>
+        </div>
+
         <div class="table-card">
           <div class="table-header">
             <h2 class="table-title">Applications</h2>
@@ -1237,6 +1242,41 @@
         btn.textContent = 'Delete';
         btn.disabled = false;
       });
+
+      function sendBulkAppInstructions() {
+        var btn = document.getElementById('bulkSmsBtn');
+        var result = document.getElementById('bulkSmsResult');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        result.textContent = '';
+        result.style.color = '#666';
+
+        fetch('/api/admin/send-app-instructions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Basic ' + authCredentials
+          }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            result.style.color = '#16a34a';
+            result.textContent = 'Sent: ' + data.sent + ', Skipped: ' + data.skipped + ', Already notified: ' + data.alreadyNotified;
+          } else {
+            result.style.color = '#dc2626';
+            result.textContent = data.error || 'Failed';
+          }
+          btn.textContent = 'Send App Instructions to All Workers';
+          btn.disabled = false;
+        })
+        .catch(function(err) {
+          result.style.color = '#dc2626';
+          result.textContent = 'Error: ' + err.message;
+          btn.textContent = 'Send App Instructions to All Workers';
+          btn.disabled = false;
+        });
+      }
     </script>
   </body>
 </html>

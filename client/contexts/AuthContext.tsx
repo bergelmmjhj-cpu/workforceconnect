@@ -93,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         businessName: data.user.businessName,
         businessAddress: data.user.businessAddress,
         businessPhone: data.user.businessPhone,
+        mustChangePassword: data.user.mustChangePassword || false,
         createdAt: data.user.createdAt,
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loginUser));

@@ -313,6 +313,52 @@ async function seedProductionAdmin() {
   }
 }
 
+async function backfillApprovedApplicationAccounts() {
+  try {
+    const approvedApps = await db.select({
+      id: workerApplications.id,
+      email: workerApplications.email,
+      fullName: workerApplications.fullName,
+      phone: workerApplications.phone,
+      preferredRoles: workerApplications.preferredRoles,
+    }).from(workerApplications).where(eq(workerApplications.status, "approved"));
+
+    let created = 0;
+    for (const app of approvedApps) {
+      if (!app.email) continue;
+      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, app.email.toLowerCase())).limit(1);
+      if (existing) continue;
+
+      const crypto = await import("crypto");
+      const firstName = (app.fullName || "worker").split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+      const phoneLast4 = (app.phone || "0000").replace(/\D/g, "").slice(-4);
+      const tempPassword = `${firstName}${phoneLast4}`;
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+      await db.insert(users).values({
+        id: crypto.randomUUID(),
+        email: app.email.toLowerCase(),
+        password: hashedPassword,
+        fullName: app.fullName || "Worker",
+        role: "worker",
+        phone: app.phone || undefined,
+        isActive: true,
+        onboardingStatus: "AGREEMENT_PENDING",
+        workerRoles: app.preferredRoles || undefined,
+        mustChangePassword: true,
+        timezone: "America/Toronto",
+      });
+      created++;
+    }
+
+    if (created > 0) {
+      log(`Backfilled ${created} user accounts from approved applications`);
+    }
+  } catch (error) {
+    log("Error backfilling approved application accounts:", error);
+  }
+}
+
 async function backfillWorkerPhones() {
   try {
     const workersWithoutPhone = await db.select({ id: users.id, email: users.email })
@@ -814,6 +860,7 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
     log("PRODUCTION MODE - skipping demo data seeding");
     await seedProductionAdmin();
     await backfillWorkerPhones();
+    await backfillApprovedApplicationAccounts();
   }
 
   setupCors(app);

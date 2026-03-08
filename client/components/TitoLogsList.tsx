@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  ScrollView,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -24,6 +25,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { TitoLog, TitoApprovalStatus } from "@/types";
 import { apiRequest, queryClient } from "@/lib/query-client";
+
+type TimesheetPeriod = "weekly" | "biweekly" | "monthly";
 
 const filterOptions: { label: string; value: TitoApprovalStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -52,22 +55,42 @@ export function TitoLogsList({
   const [emailAddress, setEmailAddress] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailResult, setEmailResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [emailPeriod, setEmailPeriod] = useState<TimesheetPeriod>("biweekly");
+  const [emailWorkplaceId, setEmailWorkplaceId] = useState<string>("");
+  const [emailWorkerId, setEmailWorkerId] = useState<string>("");
 
   const isAdminOrHR = user?.role === "admin" || user?.role === "hr";
+
+  const { data: workplacesData = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/workplaces"],
+    enabled: isAdminOrHR,
+  });
+
+  const { data: workersData = [] } = useQuery<{ id: string; fullName: string }[]>({
+    queryKey: ["/api/users/workers"],
+    enabled: isAdminOrHR,
+  });
 
   const handleEmailTimesheet = useCallback(async () => {
     if (!emailAddress || !emailAddress.includes("@")) return;
     setEmailSending(true);
     setEmailResult(null);
     try {
-      await apiRequest("POST", "/api/tito/email-timesheet", { to: emailAddress.trim() });
+      const payload: any = { to: emailAddress.trim(), period: emailPeriod };
+      if (emailWorkplaceId) payload.workplaceId = emailWorkplaceId;
+      if (emailWorkerId) payload.workerId = emailWorkerId;
+      const res = await apiRequest("POST", "/api/tito/email-timesheet", payload);
+      const data = await res.json();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setEmailResult({ success: true, message: "Timesheet emailed to payroll" });
+      const msg = data.totalHours
+        ? `Sent ${data.totalRecords} records (${data.totalHours}h) for ${data.period}`
+        : "Timesheet emailed to payroll";
+      setEmailResult({ success: true, message: msg });
       setTimeout(() => {
         setEmailModalVisible(false);
         setEmailAddress("");
         setEmailResult(null);
-      }, 2000);
+      }, 3000);
     } catch (error: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       let msg = "Failed to send email";
@@ -82,7 +105,7 @@ export function TitoLogsList({
     } finally {
       setEmailSending(false);
     }
-  }, [emailAddress]);
+  }, [emailAddress, emailPeriod, emailWorkplaceId, emailWorkerId]);
 
   const { data: titoLogs = [], isLoading, isError, refetch, isRefetching } = useQuery<TitoLog[]>({
     queryKey: ["/api/tito/my-logs"],
@@ -309,91 +332,172 @@ export function TitoLogsList({
               style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}
               onPress={() => {}}
             >
-              <ThemedText type="h3" style={{ marginBottom: Spacing.lg }}>
-                {"Email Timesheet"}
-              </ThemedText>
-              <ThemedText style={{ color: theme.textSecondary, marginBottom: Spacing.lg, fontSize: 14 }}>
-                {"Enter the email address to send the TITO timesheet CSV report."}
-              </ThemedText>
-              <TextInput
-                testID="input-email-timesheet"
-                style={[
-                  styles.emailInput,
-                  {
-                    backgroundColor: theme.inputBackground,
-                    color: theme.text,
-                    borderColor: theme.border,
-                  },
-                ]}
-                placeholder="payroll@company.com"
-                placeholderTextColor={theme.textMuted}
-                value={emailAddress}
-                onChangeText={setEmailAddress}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!emailSending}
-              />
-              {emailResult ? (
-                <View
-                  style={[
-                    styles.emailResultBanner,
-                    { backgroundColor: emailResult.success ? theme.success + "20" : theme.error + "20" },
-                  ]}
-                >
-                  <Feather
-                    name={emailResult.success ? "check-circle" : "alert-circle"}
-                    size={16}
-                    color={emailResult.success ? theme.success : theme.error}
-                  />
-                  <ThemedText
-                    style={{
-                      color: emailResult.success ? theme.success : theme.error,
-                      fontSize: 14,
-                      flex: 1,
-                    }}
-                  >
-                    {emailResult.message}
-                  </ThemedText>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <ThemedText type="h3" style={{ marginBottom: Spacing.lg }}>
+                  {"Email Timesheet"}
+                </ThemedText>
+
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 13, marginBottom: Spacing.sm, fontWeight: "600" }}>
+                  {"Period"}
+                </ThemedText>
+                <View style={styles.periodChips}>
+                  {([
+                    { label: "Weekly", value: "weekly" as TimesheetPeriod },
+                    { label: "Biweekly", value: "biweekly" as TimesheetPeriod },
+                    { label: "Monthly", value: "monthly" as TimesheetPeriod },
+                  ]).map((p) => (
+                    <Pressable
+                      key={p.value}
+                      onPress={() => { setEmailPeriod(p.value); Haptics.selectionAsync(); }}
+                      style={[
+                        styles.periodChip,
+                        { backgroundColor: emailPeriod === p.value ? theme.primary : theme.backgroundSecondary },
+                      ]}
+                    >
+                      <ThemedText style={{ color: emailPeriod === p.value ? "#fff" : theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
+                        {p.label}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
                 </View>
-              ) : null}
-              <View style={styles.modalActions}>
-                <Pressable
-                  testID="button-cancel-email"
-                  onPress={() => {
-                    setEmailModalVisible(false);
-                    setEmailResult(null);
-                  }}
-                  style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}
-                  disabled={emailSending}
-                >
-                  <ThemedText style={{ color: theme.textSecondary, fontWeight: "600", fontSize: 14 }}>
-                    {"Cancel"}
-                  </ThemedText>
-                </Pressable>
-                <Pressable
-                  testID="button-send-email"
-                  onPress={handleEmailTimesheet}
+
+                {workplacesData.length > 0 ? (
+                  <>
+                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13, marginBottom: Spacing.sm, fontWeight: "600", marginTop: Spacing.md }}>
+                      {"Workplace (optional)"}
+                    </ThemedText>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.sm }}>
+                      <Pressable
+                        onPress={() => { setEmailWorkplaceId(""); Haptics.selectionAsync(); }}
+                        style={[styles.selectChip, { backgroundColor: !emailWorkplaceId ? theme.primary : theme.backgroundSecondary }]}
+                      >
+                        <ThemedText style={{ color: !emailWorkplaceId ? "#fff" : theme.textSecondary, fontSize: 12 }}>All</ThemedText>
+                      </Pressable>
+                      {workplacesData.map((wp) => (
+                        <Pressable
+                          key={wp.id}
+                          onPress={() => { setEmailWorkplaceId(wp.id); Haptics.selectionAsync(); }}
+                          style={[styles.selectChip, { backgroundColor: emailWorkplaceId === wp.id ? theme.primary : theme.backgroundSecondary }]}
+                        >
+                          <ThemedText style={{ color: emailWorkplaceId === wp.id ? "#fff" : theme.textSecondary, fontSize: 12 }} numberOfLines={1}>
+                            {wp.name}
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </>
+                ) : null}
+
+                {workersData.length > 0 ? (
+                  <>
+                    <ThemedText style={{ color: theme.textSecondary, fontSize: 13, marginBottom: Spacing.sm, fontWeight: "600", marginTop: Spacing.md }}>
+                      {"Worker (optional)"}
+                    </ThemedText>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.md }}>
+                      <Pressable
+                        onPress={() => { setEmailWorkerId(""); Haptics.selectionAsync(); }}
+                        style={[styles.selectChip, { backgroundColor: !emailWorkerId ? theme.primary : theme.backgroundSecondary }]}
+                      >
+                        <ThemedText style={{ color: !emailWorkerId ? "#fff" : theme.textSecondary, fontSize: 12 }}>All</ThemedText>
+                      </Pressable>
+                      {workersData.map((w) => (
+                        <Pressable
+                          key={w.id}
+                          onPress={() => { setEmailWorkerId(w.id); Haptics.selectionAsync(); }}
+                          style={[styles.selectChip, { backgroundColor: emailWorkerId === w.id ? theme.primary : theme.backgroundSecondary }]}
+                        >
+                          <ThemedText style={{ color: emailWorkerId === w.id ? "#fff" : theme.textSecondary, fontSize: 12 }} numberOfLines={1}>
+                            {w.fullName}
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </>
+                ) : null}
+
+                <ThemedText style={{ color: theme.textSecondary, fontSize: 13, marginBottom: Spacing.sm, fontWeight: "600", marginTop: Spacing.sm }}>
+                  {"Send to"}
+                </ThemedText>
+                <TextInput
+                  testID="input-email-timesheet"
                   style={[
-                    styles.modalButton,
-                    styles.modalButtonPrimary,
+                    styles.emailInput,
                     {
-                      backgroundColor: theme.primary,
-                      opacity: emailSending || !emailAddress.includes("@") ? 0.6 : 1,
+                      backgroundColor: theme.inputBackground,
+                      color: theme.text,
+                      borderColor: theme.border,
                     },
                   ]}
-                  disabled={emailSending || !emailAddress.includes("@")}
-                >
-                  {emailSending ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Feather name="send" size={16} color="#FFFFFF" />
-                  )}
-                  <ThemedText style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 14 }}>
-                    {emailSending ? "Sending..." : "Send"}
-                  </ThemedText>
-                </Pressable>
-              </View>
+                  placeholder="payroll@company.com"
+                  placeholderTextColor={theme.textMuted}
+                  value={emailAddress}
+                  onChangeText={setEmailAddress}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!emailSending}
+                />
+                {emailResult ? (
+                  <View
+                    style={[
+                      styles.emailResultBanner,
+                      { backgroundColor: emailResult.success ? theme.success + "20" : theme.error + "20" },
+                    ]}
+                  >
+                    <Feather
+                      name={emailResult.success ? "check-circle" : "alert-circle"}
+                      size={16}
+                      color={emailResult.success ? theme.success : theme.error}
+                    />
+                    <ThemedText
+                      style={{
+                        color: emailResult.success ? theme.success : theme.error,
+                        fontSize: 14,
+                        flex: 1,
+                      }}
+                    >
+                      {emailResult.message}
+                    </ThemedText>
+                  </View>
+                ) : null}
+                <View style={styles.modalActions}>
+                  <Pressable
+                    testID="button-cancel-email"
+                    onPress={() => {
+                      setEmailModalVisible(false);
+                      setEmailResult(null);
+                    }}
+                    style={[styles.modalButton, { backgroundColor: theme.backgroundSecondary }]}
+                    disabled={emailSending}
+                  >
+                    <ThemedText style={{ color: theme.textSecondary, fontWeight: "600", fontSize: 14 }}>
+                      {"Cancel"}
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    testID="button-send-email"
+                    onPress={handleEmailTimesheet}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonPrimary,
+                      {
+                        backgroundColor: theme.primary,
+                        opacity: emailSending || !emailAddress.includes("@") ? 0.6 : 1,
+                      },
+                    ]}
+                    disabled={emailSending || !emailAddress.includes("@")}
+                  >
+                    {emailSending ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Feather name="send" size={16} color="#FFFFFF" />
+                    )}
+                    <ThemedText style={{ color: "#FFFFFF", fontWeight: "600", fontSize: 14 }}>
+                      {emailSending ? "Sending..." : "Send"}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </ScrollView>
             </Pressable>
           </KeyboardAvoidingView>
         </Pressable>
@@ -475,6 +579,7 @@ const styles = StyleSheet.create({
   modalContent: {
     width: "85%",
     maxWidth: 400,
+    maxHeight: "80%",
     borderRadius: BorderRadius.xl,
     padding: Spacing.xl,
   },
@@ -508,4 +613,21 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
   },
   modalButtonPrimary: {},
+  periodChips: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  periodChip: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    alignItems: "center",
+  },
+  selectChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    marginRight: Spacing.sm,
+  },
 });

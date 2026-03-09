@@ -1,6 +1,5 @@
 import { Platform } from "react-native";
 import { NativeStackNavigationOptions } from "@react-navigation/native-stack";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 
 import { useTheme } from "@/hooks/useTheme";
 
@@ -16,6 +15,12 @@ export function useScreenOptions({
   const isWeb = Platform.OS === "web";
   const useTransparent = transparent && !isWeb;
 
+  let liquidGlassActive = false;
+  if (Platform.OS === "ios") {
+    const { isLiquidGlassAvailable } = require("expo-glass-effect");
+    liquidGlassActive = isLiquidGlassAvailable();
+  }
+
   return {
     headerTitleAlign: "center",
     headerTransparent: useTransparent,
@@ -26,7 +31,7 @@ export function useScreenOptions({
     },
     gestureEnabled: true,
     gestureDirection: "horizontal",
-    fullScreenGestureEnabled: isLiquidGlassAvailable() ? false : true,
+    fullScreenGestureEnabled: !liquidGlassActive,
     contentStyle: {
       backgroundColor: theme.backgroundRoot,
     },

@@ -789,14 +789,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!user) {
         const fullName = name || email.split("@")[0];
-        const [newUser] = await db.insert(users).values({
+        await db.insert(users).values({
           email: email.toLowerCase(),
           fullName,
           role: "worker",
           isActive: false,
           googleId,
           onboardingStatus: "NOT_APPLIED",
-        } as any).returning();
+        }).returning();
         res.json({ registered: true, message: "Your account has been created and is pending admin approval. You will be notified when your account is activated." });
         return;
       }

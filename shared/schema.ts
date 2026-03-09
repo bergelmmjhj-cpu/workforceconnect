@@ -25,6 +25,8 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").default(false),
   isActive: boolean("is_active").default(true),
   googleId: text("google_id"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

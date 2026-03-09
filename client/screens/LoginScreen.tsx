@@ -19,7 +19,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
-import { useAuth, TwoFactorRequiredError } from "@/contexts/AuthContext";
+import { useAuth, TwoFactorRequiredError, PendingAccountError } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getLoginErrorMessage } from "@/utils/errorHandler";
@@ -140,6 +140,11 @@ export default function LoginScreen() {
         rootNavigate("TwoFactorVerify", { userId: err.userId });
         return;
       }
+      if (err instanceof PendingAccountError) {
+        setInfoMessage(err.message);
+        setError("");
+        return;
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(getLoginErrorMessage(err));
     } finally {
@@ -231,6 +236,15 @@ export default function LoginScreen() {
             "Sign In"
           )}
         </Button>
+
+        <Pressable
+          onPress={() => navigation.navigate("ForgotPassword")}
+          style={styles.forgotPasswordLink}
+        >
+          <ThemedText style={[styles.forgotPasswordText, { color: theme.primary }]}>
+            Forgot password?
+          </ThemedText>
+        </Pressable>
 
         {GOOGLE_CLIENT_ID ? (
           <>
@@ -327,6 +341,15 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     marginTop: Spacing.sm,
+  },
+  forgotPasswordLink: {
+    alignSelf: "center",
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  forgotPasswordText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   dividerRow: {
     flexDirection: "row",

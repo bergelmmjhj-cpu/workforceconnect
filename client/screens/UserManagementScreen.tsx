@@ -74,13 +74,21 @@ export default function UserManagementScreen() {
   const [userToDelete, setUserToDelete] = useState<APIUser | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [inviteFullName, setInviteFullName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"hr" | "client">("hr");
+  const [inviteBusinessName, setInviteBusinessName] = useState("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+
   const { data: users = [], isLoading, refetch, isRefetching } = useQuery<APIUser[]>({
     queryKey: ["/api/users"],
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ id, role, isActive, phone }: { id: string; role: UserRole; isActive: boolean; phone: string }) => {
-      const res = await apiRequest("PATCH", `/api/users/${id}`, { role, isActive, phone: phone.trim() || null });
+    mutationFn: async ({ id, role, isActive, phone }: { id: string; role: UserRole; isActive: boolean; phone?: string }) => {
+      const res = await apiRequest("PATCH", `/api/users/${id}`, { role, isActive, phone: phone?.trim() || null });
       return res.json();
     },
     onSuccess: () => {
@@ -124,6 +132,43 @@ export default function UserManagementScreen() {
       setCreateError(error.message);
     },
   });
+
+  const inviteUserMutation = useMutation({
+    mutationFn: async (data: { fullName: string; email: string; role: "hr" | "client"; businessName?: string }) => {
+      const res = await apiRequest("POST", "/api/admin/invite-user", data);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to invite user");
+      return json;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setInviteSuccess(`Invite sent to ${data.email}. Credentials emailed.`);
+      setInviteFullName("");
+      setInviteEmail("");
+      setInviteRole("hr");
+      setInviteBusinessName("");
+      setInviteError(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (error: Error) => {
+      setInviteError(error.message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
+
+  const handleInviteUser = () => {
+    setInviteError(null);
+    setInviteSuccess(null);
+    if (!inviteFullName.trim()) { setInviteError("Full name is required"); return; }
+    if (!inviteEmail.trim()) { setInviteError("Email is required"); return; }
+    if (inviteRole === "client" && !inviteBusinessName.trim()) { setInviteError("Business name is required for clients"); return; }
+    inviteUserMutation.mutate({
+      fullName: inviteFullName.trim(),
+      email: inviteEmail.trim(),
+      role: inviteRole,
+      businessName: inviteRole === "client" ? inviteBusinessName.trim() : undefined,
+    });
+  };
 
   const resetCreateForm = () => {
     setNewUserFullName("");
@@ -786,19 +831,123 @@ export default function UserManagementScreen() {
         </ThemedView>
       </Modal>
 
-      {/* FAB Button */}
-      <Pressable
-        onPress={handleOpenCreateModal}
-        style={[
-          styles.fab,
-          {
-            backgroundColor: theme.primary,
-            bottom: tabBarHeight + Spacing.lg,
-          },
-        ]}
+      {/* FAB Buttons */}
+      <View style={[styles.fabRow, { bottom: tabBarHeight + Spacing.lg }]}>
+        <Pressable
+          onPress={() => {
+            setInviteFullName(""); setInviteEmail(""); setInviteRole("hr");
+            setInviteBusinessName(""); setInviteError(null); setInviteSuccess(null);
+            setInviteModalVisible(true);
+          }}
+          style={[styles.fabSecondary, { backgroundColor: theme.surface, borderColor: theme.primary }]}
+        >
+          <Feather name="mail" size={18} color={theme.primary} />
+          <ThemedText style={[styles.fabSecondaryText, { color: theme.primary }]}>Invite HR/Client</ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={handleOpenCreateModal}
+          style={[styles.fab, { backgroundColor: theme.primary }]}
+        >
+          <Feather name="plus" size={24} color="#fff" />
+        </Pressable>
+      </View>
+
+      {/* Invite HR/Client Modal */}
+      <Modal
+        visible={inviteModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setInviteModalVisible(false)}
       >
-        <Feather name="plus" size={24} color="#fff" />
-      </Pressable>
+        <ThemedView style={[styles.modalContainer, { paddingTop: Spacing["2xl"] }]}>
+          <View style={styles.modalHeader}>
+            <ThemedText type="h2">Invite HR / Client</ThemedText>
+            <Pressable onPress={() => setInviteModalVisible(false)}>
+              <Feather name="x" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+          <ScrollView style={styles.modalContent}>
+            {inviteError ? (
+              <View style={[styles.modalError, { backgroundColor: theme.error + "15" }]}>
+                <Feather name="alert-circle" size={14} color={theme.error} />
+                <ThemedText style={[styles.modalErrorText, { color: theme.error }]}>{inviteError}</ThemedText>
+              </View>
+            ) : null}
+            {inviteSuccess ? (
+              <View style={[styles.modalError, { backgroundColor: theme.primary + "15" }]}>
+                <Feather name="check-circle" size={14} color={theme.primary} />
+                <ThemedText style={[styles.modalErrorText, { color: theme.primary }]}>{inviteSuccess}</ThemedText>
+              </View>
+            ) : null}
+
+            <ThemedText style={styles.inputLabel}>Full Name</ThemedText>
+            <TextInput
+              style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+              value={inviteFullName}
+              onChangeText={setInviteFullName}
+              placeholder="Full name"
+              placeholderTextColor={theme.textMuted}
+              autoCapitalize="words"
+            />
+
+            <ThemedText style={styles.inputLabel}>Email</ThemedText>
+            <TextInput
+              style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+              value={inviteEmail}
+              onChangeText={setInviteEmail}
+              placeholder="email@example.com"
+              placeholderTextColor={theme.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
+            <ThemedText style={styles.inputLabel}>Role</ThemedText>
+            <View style={styles.roleToggleRow}>
+              {(["hr", "client"] as const).map((r) => (
+                <Pressable
+                  key={r}
+                  onPress={() => setInviteRole(r)}
+                  style={[
+                    styles.roleChipModal,
+                    { borderColor: theme.border, backgroundColor: inviteRole === r ? theme.primary : theme.surface },
+                  ]}
+                >
+                  <ThemedText style={[styles.roleChipTextModal, { color: inviteRole === r ? "#fff" : theme.text }]}>
+                    {r === "hr" ? "HR" : "Client"}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+
+            {inviteRole === "client" ? (
+              <>
+                <ThemedText style={styles.inputLabel}>Business Name</ThemedText>
+                <TextInput
+                  style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+                  value={inviteBusinessName}
+                  onChangeText={setInviteBusinessName}
+                  placeholder="Company name"
+                  placeholderTextColor={theme.textMuted}
+                  autoCapitalize="words"
+                />
+              </>
+            ) : null}
+
+            <ThemedText style={[styles.inputLabel, { color: theme.textMuted, fontSize: 12 }]}>
+              A temporary password will be generated and emailed to the user. They will be prompted to change it on first login.
+            </ThemedText>
+
+            <View style={styles.modalActions}>
+              <Button
+                onPress={handleInviteUser}
+                disabled={inviteUserMutation.isPending}
+              >
+                {inviteUserMutation.isPending ? "Sending..." : "Send Invite"}
+              </Button>
+            </View>
+          </ScrollView>
+        </ThemedView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -983,9 +1132,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     fontSize: 16,
   },
-  fab: {
+  fabRow: {
     position: "absolute",
     right: Spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  fabSecondary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  fabSecondaryText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  fab: {
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -996,6 +1168,40 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  roleToggleRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  roleChipModal: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    alignItems: "center",
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  roleChipTextModal: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  modalError: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.lg,
+  },
+  modalErrorText: {
+    fontSize: 13,
+    flex: 1,
   },
   errorBanner: {
     flexDirection: "row",

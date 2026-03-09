@@ -70,6 +70,12 @@ export default function AdminManageScreen() {
       description: "Sync data from Weekdays CRM",
       onPress: () => rootNavigate("CrmSync"),
     },
+    {
+      icon: "user-check",
+      title: "User Management",
+      description: "Create, edit, approve, and invite HR/Client users",
+      onPress: () => rootNavigate("UserManagement"),
+    },
   ];
 
   const isWeb = Platform.OS === "web";

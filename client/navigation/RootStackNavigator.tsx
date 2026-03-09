@@ -29,6 +29,9 @@ import DiagnosticsScreen from "@/screens/DiagnosticsScreen";
 import RosterScreen from "@/screens/RosterScreen";
 import TwoFactorVerifyScreen from "@/screens/TwoFactorVerifyScreen";
 import ChangePasswordScreen from "@/screens/ChangePasswordScreen";
+import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
+import ResetPasswordScreen from "@/screens/ResetPasswordScreen";
+import UserManagementScreen from "@/screens/UserManagementScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -64,6 +67,9 @@ export type RootStackParamList = {
   CrmSync: undefined;
   Diagnostics: undefined;
   ChangePassword: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { token: string };
+  UserManagement: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -114,6 +120,16 @@ export default function RootStackNavigator() {
           <Stack.Screen
             name="TwoFactorVerify"
             component={TwoFactorVerifyScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ForgotPassword"
+            component={ForgotPasswordScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ResetPassword"
+            component={ResetPasswordScreen}
             options={{ headerShown: false }}
           />
         </>
@@ -277,6 +293,13 @@ export default function RootStackNavigator() {
             component={DiagnosticsScreen}
             options={{
               headerTitle: "Diagnostics",
+            }}
+          />
+          <Stack.Screen
+            name="UserManagement"
+            component={UserManagementScreen}
+            options={{
+              headerTitle: "User Management",
             }}
           />
         </>

@@ -37,8 +37,10 @@ export default function SignUpScreen() {
   const { register, loginWithGoogleData } = useAuth();
   const navigation = useNavigation<NavigationProp>();
 
+  const [selectedRole, setSelectedRole] = useState<"worker" | "client">("worker");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -143,10 +145,21 @@ export default function SignUpScreen() {
       return;
     }
 
+    if (selectedRole === "client" && !businessName.trim()) {
+      setError("Please enter your business name");
+      return;
+    }
+
     setIsLoading(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await register(email.trim(), password, fullName.trim(), "worker");
+      await register(
+        email.trim(),
+        password,
+        fullName.trim(),
+        selectedRole,
+        selectedRole === "client" ? businessName.trim() : undefined
+      );
       setInfoMessage("Account created! An admin will review and activate your account. You'll receive access once approved.");
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: unknown) {
@@ -178,8 +191,33 @@ export default function SignUpScreen() {
           Create Account
         </ThemedText>
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Join Workforce Connect as a worker
+          {selectedRole === "client" ? "Join Workforce Connect as a client" : "Join Workforce Connect as a worker"}
         </ThemedText>
+      </View>
+
+      <View style={[styles.roleToggle, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <Pressable
+          onPress={() => { setSelectedRole("worker"); setBusinessName(""); }}
+          style={[
+            styles.roleChip,
+            selectedRole === "worker" && { backgroundColor: theme.primary },
+          ]}
+        >
+          <ThemedText style={[styles.roleChipText, selectedRole === "worker" && { color: "#fff" }]}>
+            Worker
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => setSelectedRole("client")}
+          style={[
+            styles.roleChip,
+            selectedRole === "client" && { backgroundColor: theme.primary },
+          ]}
+        >
+          <ThemedText style={[styles.roleChipText, selectedRole === "client" && { color: "#fff" }]}>
+            Client
+          </ThemedText>
+        </Pressable>
       </View>
 
       {error ? (
@@ -245,6 +283,16 @@ export default function SignUpScreen() {
           autoCapitalize="words"
           autoComplete="name"
         />
+
+        {selectedRole === "client" ? (
+          <Input
+            label="Business Name"
+            value={businessName}
+            onChangeText={setBusinessName}
+            placeholder="Your company or business name"
+            autoCapitalize="words"
+          />
+        ) : null}
 
         <Input
           label="Email"
@@ -335,6 +383,23 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: "center",
     fontSize: 15,
+  },
+  roleToggle: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    overflow: "hidden",
+    marginBottom: Spacing.lg,
+  },
+  roleChip: {
+    flex: 1,
+    paddingVertical: Spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roleChipText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   messageBanner: {
     flexDirection: "row",

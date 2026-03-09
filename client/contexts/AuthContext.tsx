@@ -13,6 +13,13 @@ export class TwoFactorRequiredError extends Error {
   }
 }
 
+export class PendingAccountError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PendingAccountError";
+  }
+}
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -20,7 +27,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogleData: (userData: any) => Promise<void>;
   complete2FALogin: (userId: string, code: string) => Promise<{ remainingRecoveryCodes?: number }>;
-  register: (email: string, password: string, fullName: string, role: UserRole) => Promise<void>;
+  register: (email: string, password: string, fullName: string, role: UserRole, businessName?: string) => Promise<void>;
   logout: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
   updateOnboardingStatus: (status: WorkerOnboardingStatus) => Promise<void>;
@@ -79,6 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (data.requires2FA) {
       throw new TwoFactorRequiredError(data.userId);
+    }
+
+    if (data.pending) {
+      throw new PendingAccountError(data.message || "Your account is pending admin approval.");
     }
     
     if (data.user) {
@@ -155,9 +166,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     throw new Error(data.error || "Invalid verification code");
   };
 
-  const register = async (email: string, password: string, fullName: string, role: UserRole) => {
+  const register = async (email: string, password: string, fullName: string, role: UserRole, businessName?: string) => {
     try {
-      const response = await apiRequest("POST", "/api/auth/register", { email, password, fullName, role });
+      const payload: Record<string, string> = { email, password, fullName, role };
+      if (businessName) payload.businessName = businessName;
+      const response = await apiRequest("POST", "/api/auth/register", payload);
       const data = await response.json();
       if (data.user) {
         const newUser: User = {

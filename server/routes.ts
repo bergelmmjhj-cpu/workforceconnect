@@ -47,7 +47,7 @@ import * as OTPAuth from "otpauth";
 import crypto from "crypto";
 import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not, asc } from "drizzle-orm";
 import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, logSMS } from "./services/openphone";
-import { sendCSVEmail } from "./services/email";
+import { sendCSVEmail, sendEmail } from "./services/email";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -682,14 +682,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user - self-registered users are always workers, require admin approval
+      // Self-registered users can be worker or client; both require admin approval
+      const { role, businessName } = req.body;
+      const allowedRole: "worker" | "client" = role === "client" ? "client" : "worker";
+
       const [newUser] = await db.insert(users).values({
         email: email.toLowerCase(),
         password: hashedPassword,
         fullName,
-        role: "worker",
+        role: allowedRole,
         isActive: false,
-        onboardingStatus: "NOT_APPLIED",
+        businessName: allowedRole === "client" ? (businessName?.trim() || null) : null,
+        onboardingStatus: allowedRole === "worker" ? "NOT_APPLIED" : null,
       }).returning();
 
       // Return user without password
@@ -849,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if user is active (requires admin approval)
       if (!user.isActive) {
-        res.status(401).json({ error: "Your account is pending approval. An admin will review and activate your account shortly." });
+        res.json({ pending: true, message: "Your account is pending admin approval. An admin will review and activate your account shortly." });
         return;
       }
 
@@ -1192,11 +1196,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (workerRoles !== undefined) updateData.workerRoles = workerRoles;
       if (phone !== undefined) updateData.phone = phone;
 
-      // When activating a worker, auto-advance onboarding to AGREEMENT_PENDING
-      if (isActive === true && onboardingStatus === undefined) {
-        const [existingUser] = await db.select().from(users).where(eq(users.id, id));
-        if (existingUser && existingUser.role === "worker" && 
-            (existingUser.onboardingStatus === "APPLICATION_SUBMITTED" || existingUser.onboardingStatus === "NOT_APPLIED")) {
+      // Fetch existing user when activating — needed for onboarding advance + approval email
+      let existingUserBeforeUpdate: any = null;
+      if (isActive === true) {
+        const [fetched] = await db.select().from(users).where(eq(users.id, id));
+        existingUserBeforeUpdate = fetched || null;
+        if (existingUserBeforeUpdate && existingUserBeforeUpdate.role === "worker" && onboardingStatus === undefined &&
+            (existingUserBeforeUpdate.onboardingStatus === "APPLICATION_SUBMITTED" || existingUserBeforeUpdate.onboardingStatus === "NOT_APPLIED")) {
           updateData.onboardingStatus = "AGREEMENT_PENDING";
         }
       }
@@ -1209,6 +1215,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!updatedUser) {
         res.status(404).json({ error: "User not found" });
         return;
+      }
+
+      // Send approval email if account was just activated from inactive state
+      if (isActive === true && existingUserBeforeUpdate?.isActive === false && updatedUser.email) {
+        sendEmail({
+          to: updatedUser.email,
+          subject: "Your Workforce Connect account has been approved",
+          text: `Hi ${updatedUser.fullName},\n\nGreat news! Your Workforce Connect account has been approved and is now active.\n\nSign in at: https://app.wfconnect.org\n\nWelcome to the team!\n\nThe WFConnect Team`,
+          html: `<p>Hi ${updatedUser.fullName},</p><p>Great news! Your <strong>Workforce Connect</strong> account has been approved and is now active.</p><p><a href="https://app.wfconnect.org" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Sign In Now</a></p><p>Welcome to the team!</p><p>The WFConnect Team</p>`,
+        }).catch(err => console.error("[EMAIL] Approval email error:", err));
       }
 
       const { password: _, ...userWithoutPassword } = updatedUser;
@@ -1440,6 +1456,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true,
         onboardingStatus: role === "worker" ? "NOT_APPLIED" : null,
       }).returning();
+
+      // Send welcome email (non-blocking)
+      if (newUser.email) {
+        sendEmail({
+          to: newUser.email,
+          subject: "Welcome to Workforce Connect",
+          text: `Hi ${newUser.fullName},\n\nAn admin has created a Workforce Connect account for you as a ${role}.\n\nSign in at: https://app.wfconnect.org\n\nPlease use the password provided to you by your admin. You can change it after logging in.\n\nThe WFConnect Team`,
+          html: `<p>Hi ${newUser.fullName},</p><p>An admin has created a <strong>Workforce Connect</strong> account for you as a <strong>${role}</strong>.</p><p><a href="https://app.wfconnect.org" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Sign In Now</a></p><p>Please use the password provided to you by your admin. You can change it after logging in.</p><p>The WFConnect Team</p>`,
+        }).catch(err => console.error("[EMAIL] Welcome email error:", err));
+      }
 
       const { password: _, ...userWithoutPassword } = newUser;
       res.status(201).json(userWithoutPassword);
@@ -7451,6 +7477,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!res.headersSent) {
         res.status(200).json({ received: true });
       }
+    }
+  });
+
+  // ========================================
+  // Password Reset Endpoints (T004)
+  // ========================================
+
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        res.status(400).json({ error: "Email is required" });
+        return;
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+
+      // Send reset email only if user exists and is active (never reveal whether email exists)
+      if (user && user.isActive) {
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        await db.update(users)
+          .set({ passwordResetToken: resetToken, passwordResetExpiry: resetExpiry, updatedAt: new Date() })
+          .where(eq(users.id, user.id));
+
+        const resetLink = `https://app.wfconnect.org?reset=${resetToken}`;
+        sendEmail({
+          to: user.email,
+          subject: "Reset your Workforce Connect password",
+          text: `Hi ${user.fullName},\n\nYou requested a password reset. Click the link below to set a new password (expires in 1 hour):\n\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.\n\nThe WFConnect Team`,
+          html: `<p>Hi ${user.fullName},</p><p>You requested a password reset. Click the button below to set a new password (expires in 1 hour):</p><p><a href="${resetLink}" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Reset Password</a></p><p>If you didn't request this, you can safely ignore this email.</p><p>The WFConnect Team</p>`,
+        }).catch(err => console.error("[EMAIL] Password reset email error:", err));
+      }
+
+      // Always return success to prevent email enumeration
+      res.json({ success: true, message: "If that email is registered and active, a reset link has been sent." });
+    } catch (error) {
+      console.error("Error in forgot-password:", error);
+      res.status(500).json({ error: "Failed to process request" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        res.status(400).json({ error: "Token and new password are required" });
+        return;
+      }
+      if (newPassword.length < 8) {
+        res.status(400).json({ error: "Password must be at least 8 characters" });
+        return;
+      }
+
+      const [user] = await db.select().from(users).where(
+        and(
+          eq(users.passwordResetToken, token),
+          gte(users.passwordResetExpiry, new Date())
+        )
+      );
+
+      if (!user) {
+        res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+        return;
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await db.update(users)
+        .set({
+          password: hashedPassword,
+          passwordResetToken: null,
+          passwordResetExpiry: null,
+          mustChangePassword: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      res.json({ success: true, message: "Password reset successfully. You can now sign in." });
+    } catch (error) {
+      console.error("Error in reset-password:", error);
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
+  // ========================================
+  // Admin Invite HR/Client (T006)
+  // ========================================
+
+  app.post("/api/admin/invite-user", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { email, fullName, role, businessName } = req.body;
+
+      if (!email || !fullName || !role) {
+        res.status(400).json({ error: "Email, full name, and role are required" });
+        return;
+      }
+      if (!["hr", "client"].includes(role)) {
+        res.status(400).json({ error: "Invite flow is for HR and Client roles only" });
+        return;
+      }
+
+      const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+      if (existingUser.length > 0) {
+        res.status(409).json({ error: "A user with this email already exists" });
+        return;
+      }
+
+      // Generate temp password: firstName + 4 random digits
+      const firstName = fullName.trim().split(" ")[0];
+      const tempPassword = `${firstName}${Math.floor(1000 + Math.random() * 9000)}`;
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+      const [newUser] = await db.insert(users).values({
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        fullName: fullName.trim(),
+        role,
+        isActive: true,
+        mustChangePassword: true,
+        businessName: role === "client" ? (businessName?.trim() || null) : null,
+        onboardingStatus: null,
+      }).returning();
+
+      // Send welcome email with credentials (non-blocking)
+      const appUrl = "https://app.wfconnect.org";
+      sendEmail({
+        to: newUser.email,
+        subject: "Welcome to Workforce Connect — Your account is ready",
+        text: `Hi ${newUser.fullName},\n\nAn admin has created a Workforce Connect account for you.\n\nYour login details:\nEmail: ${newUser.email}\nTemporary Password: ${tempPassword}\n\nSign in at: ${appUrl}\n\nYou will be prompted to change your password on first login.\n\nThe WFConnect Team`,
+        html: `<p>Hi ${newUser.fullName},</p><p>An admin has created a <strong>Workforce Connect</strong> account for you.</p><table style="border-collapse:collapse;margin:16px 0"><tr><td style="padding:4px 16px 4px 0;color:#666">Email:</td><td style="padding:4px 0"><strong>${newUser.email}</strong></td></tr><tr><td style="padding:4px 16px 4px 0;color:#666">Temporary Password:</td><td style="padding:4px 0"><strong>${tempPassword}</strong></td></tr></table><p><a href="${appUrl}" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Sign In Now</a></p><p>You will be prompted to change your password on first login.</p><p>The WFConnect Team</p>`,
+      }).catch(err => console.error("[EMAIL] Invite email error:", err));
+
+      broadcast({ type: "created", entity: "user" });
+      const { password: _, ...userWithoutPassword } = newUser;
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error inviting user:", error);
+      res.status(500).json({ error: "Failed to invite user" });
     }
   });
 

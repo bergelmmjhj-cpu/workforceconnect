@@ -36,7 +36,7 @@ export default function RequestsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const headerHeight = useHeaderHeight();
-  const { paddingTop, paddingBottom } = useContentPadding();
+  const { paddingTop } = useContentPadding();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -162,7 +162,7 @@ export default function RequestsScreen() {
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingTop: paddingTop + Spacing["3xl"],
+            paddingTop: paddingTop + Spacing.xl,
             paddingBottom: tabBarHeight + Spacing.xl,
           },
           filteredRequests.length === 0 && styles.emptyContent,
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   separator: {
-    height: Spacing.md,
+    height: Spacing.sm,
   },
   fab: {
     position: "absolute",

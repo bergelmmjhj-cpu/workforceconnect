@@ -633,10 +633,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
   },
   greeting: {
-    marginBottom: Spacing["2xl"],
+    marginBottom: Spacing.lg,
   },
   webGreeting: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   roleLabel: {
     fontSize: 14,
@@ -644,8 +644,8 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: "row",
-    gap: Spacing.md,
-    marginBottom: Spacing["2xl"],
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
   webStatsGrid: {
     flexDirection: "row",
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   quickActionsSection: {
-    marginBottom: Spacing["2xl"],
+    marginBottom: Spacing.lg,
   },
   sectionTitle: {
     marginBottom: Spacing.md,
@@ -677,12 +677,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   quickActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   quickActionTitle: {
     fontSize: 14,
@@ -695,7 +695,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   myTodaySection: {
-    marginBottom: Spacing["2xl"],
+    marginBottom: Spacing.lg,
   },
   subSectionLabel: {
     fontSize: 11,

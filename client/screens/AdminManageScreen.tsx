@@ -1,7 +1,6 @@
 import React from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -24,7 +23,7 @@ function AdminMenuItem({ icon, title, description, onPress }: AdminMenuItemProps
   return (
     <Card style={styles.menuCard} onPress={onPress}>
       <View style={[styles.iconContainer, { backgroundColor: theme.primary + "20" }]}>
-        <Feather name={icon} size={24} color={theme.primary} />
+        <Feather name={icon} size={20} color={theme.primary} />
       </View>
       <View style={styles.menuTextContainer}>
         <ThemedText style={styles.menuTitle}>{title}</ThemedText>
@@ -36,9 +35,7 @@ function AdminMenuItem({ icon, title, description, onPress }: AdminMenuItemProps
 }
 
 export default function AdminManageScreen() {
-  const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const { theme } = useTheme();
 
   const menuItems: AdminMenuItemProps[] = [
     {
@@ -73,13 +70,16 @@ export default function AdminManageScreen() {
     },
   ];
 
+  const isWeb = Platform.OS === "web";
+  const topPadding = isWeb ? Spacing.md : headerHeight + Spacing.md;
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.contentContainer,
-          { paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing.xl },
+          { paddingTop: topPadding, paddingBottom: insets.bottom + Spacing.lg },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -111,30 +111,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
   },
   headerSection: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
-    marginBottom: Spacing.xs,
+    marginBottom: 2,
   },
   sectionSubtitle: {
-    fontSize: 15,
+    fontSize: 13,
     opacity: 0.6,
   },
   menuList: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   menuCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     marginRight: Spacing.md,
@@ -143,12 +143,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "600",
-    marginBottom: 2,
+    marginBottom: 1,
   },
   menuDescription: {
-    fontSize: 13,
+    fontSize: 12,
     opacity: 0.6,
   },
 });

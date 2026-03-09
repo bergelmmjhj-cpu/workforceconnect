@@ -38,7 +38,7 @@ export function StatCard({
       ]}
     >
       <View style={[styles.iconContainer, { backgroundColor: iconColor + "15" }]}>
-        <Feather name={icon} size={20} color={iconColor} />
+        <Feather name={icon} size={16} color={iconColor} />
       </View>
       <ThemedText style={[styles.title, { color: theme.textSecondary }]}>
         {title}
@@ -94,23 +94,23 @@ export function StatCard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     borderRadius: BorderRadius.lg,
-    minHeight: 120,
+    minHeight: 88,
     ...Shadows.sm,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.md,
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   title: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
-    marginBottom: Spacing.xs,
+    marginBottom: 2,
   },
   valueRow: {
     flexDirection: "row",

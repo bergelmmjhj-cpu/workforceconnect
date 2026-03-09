@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -92,6 +93,7 @@ export default function CrmSyncScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const isWeb = Platform.OS === "web";
   const queryClient = useQueryClient();
   const [lastResult, setLastResult] = useState<{
     workplaces?: SyncResult;
@@ -222,8 +224,8 @@ export default function CrmSyncScreen() {
         contentContainerStyle={[
           styles.contentContainer,
           {
-            paddingTop: headerHeight + Spacing.md,
-            paddingBottom: insets.bottom + Spacing.xl,
+            paddingTop: isWeb ? Spacing.md : headerHeight + Spacing.md,
+            paddingBottom: insets.bottom + Spacing.lg,
           },
         ]}
         showsVerticalScrollIndicator={false}

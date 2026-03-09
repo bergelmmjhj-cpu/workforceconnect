@@ -306,7 +306,7 @@ export default function ShiftRequestsScreen() {
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingTop: paddingTop + Spacing["3xl"],
+            paddingTop: paddingTop + Spacing.xl,
             paddingBottom: paddingBottom,
           },
           filteredRequests.length === 0 ? styles.emptyContent : undefined,
@@ -531,15 +531,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   separator: {
-    height: Spacing.md,
+    height: Spacing.sm,
   },
   requestCard: {
     borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     borderWidth: 1,
   },
   cardHeader: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   titleRow: {
     flexDirection: "row",
@@ -582,8 +582,8 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   expandedSection: {
-    marginTop: Spacing.lg,
-    paddingTop: Spacing.lg,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
     borderTopWidth: 1,
   },
   offerCounters: {

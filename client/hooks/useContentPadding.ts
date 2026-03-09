@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -10,15 +10,15 @@ interface ContentPadding {
 }
 
 export function useContentPadding(): ContentPadding {
-  const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const { width } = useWindowDimensions();
 
   const isWeb = Platform.OS === "web";
+  const isWideWeb = isWeb && width > 768;
 
-  // Native devices need more top padding to account for transparent headers
-  const paddingTop = isWeb ? Spacing.lg : headerHeight + Spacing.xl;
-  const paddingBottom = tabBarHeight + Spacing.xl;
+  const paddingTop = isWeb ? Spacing.md : headerHeight + Spacing.xl;
+  const paddingBottom = isWideWeb ? Spacing.lg : tabBarHeight + Spacing.xl;
 
   return { paddingTop, paddingBottom };
 }
@@ -29,8 +29,7 @@ export function useStackContentPadding(): ContentPadding {
 
   const isWeb = Platform.OS === "web";
 
-  // Native devices need more top padding to account for transparent headers
-  const paddingTop = isWeb ? Spacing.lg : headerHeight + Spacing.xl;
+  const paddingTop = isWeb ? Spacing.md : headerHeight + Spacing.xl;
   const paddingBottom = insets.bottom + Spacing.xl;
 
   return { paddingTop, paddingBottom };

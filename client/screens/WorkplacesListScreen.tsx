@@ -126,7 +126,7 @@ export default function WorkplacesListScreen() {
         renderItem={renderWorkplace}
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + 80 },
+          { paddingTop: Platform.OS === "web" ? Spacing.md : headerHeight + Spacing.md, paddingBottom: insets.bottom + 80 },
         ]}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         ListEmptyComponent={

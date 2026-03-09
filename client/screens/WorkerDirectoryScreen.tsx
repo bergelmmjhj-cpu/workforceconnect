@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, StyleSheet, FlatList, Pressable, RefreshControl, TextInput } from "react-native";
+import { View, StyleSheet, FlatList, Pressable, RefreshControl, TextInput, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -128,7 +128,7 @@ export default function WorkerDirectoryScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={[styles.searchContainer, { paddingTop: headerHeight + Spacing.sm }]}>
+      <View style={[styles.searchContainer, { paddingTop: Platform.OS === "web" ? Spacing.sm : headerHeight + Spacing.sm }]}>
         <View style={[styles.searchBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
           <Feather name="search" size={18} color={theme.textSecondary} />
           <TextInput

@@ -18,6 +18,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query-client";
 
 import RootStackNavigator from "@/navigation/RootStackNavigator";
+import WebSidebarLayout from "@/components/WebSidebarLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OnboardingProvider } from "@/contexts/OnboardingContext";
@@ -54,7 +55,9 @@ export default function App() {
                 <GestureHandlerRootView style={styles.root}>
                   <KeyboardProvider>
                     <NavigationContainer ref={navigationRef}>
-                      <RootStackNavigator />
+                      <WebSidebarLayout>
+                        <RootStackNavigator />
+                      </WebSidebarLayout>
                     </NavigationContainer>
                     <StatusBar style="auto" />
                   </KeyboardProvider>

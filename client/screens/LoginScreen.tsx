@@ -82,6 +82,13 @@ export default function LoginScreen() {
         return;
       }
 
+      if (data.pending) {
+        setInfoMessage(data.message || "Your account is pending admin approval. You will be notified once access is granted.");
+        setError("");
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return;
+      }
+
       if (data.requires2FA) {
         rootNavigate("TwoFactorVerify", { userId: data.userId });
         return;
@@ -192,6 +199,7 @@ export default function LoginScreen() {
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
+          autoComplete="email"
         />
 
         <View style={styles.passwordContainer}>
@@ -202,6 +210,7 @@ export default function LoginScreen() {
             placeholder="Enter your password"
             secureTextEntry={!showPassword}
             containerStyle={styles.passwordInput}
+            autoComplete="current-password"
           />
           <Pressable
             onPress={() => setShowPassword(!showPassword)}

@@ -83,6 +83,13 @@ export default function SignUpScreen() {
         return;
       }
 
+      if (data.pending) {
+        setInfoMessage(data.message || "Your account is pending admin approval. You will be notified once access is granted.");
+        setError("");
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return;
+      }
+
       if (data.user) {
         if (loginWithGoogleData) {
           await loginWithGoogleData(data.user);
@@ -236,6 +243,7 @@ export default function SignUpScreen() {
           onChangeText={setFullName}
           placeholder="Enter your full name"
           autoCapitalize="words"
+          autoComplete="name"
         />
 
         <Input
@@ -246,6 +254,7 @@ export default function SignUpScreen() {
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
+          autoComplete="email"
         />
 
         <View style={styles.passwordContainer}>
@@ -256,6 +265,7 @@ export default function SignUpScreen() {
             placeholder="Create a password"
             secureTextEntry={!showPassword}
             containerStyle={styles.passwordInput}
+            autoComplete="new-password"
           />
           <Pressable
             onPress={() => setShowPassword(!showPassword)}
@@ -275,6 +285,7 @@ export default function SignUpScreen() {
           onChangeText={setConfirmPassword}
           placeholder="Confirm your password"
           secureTextEntry={!showPassword}
+          autoComplete="new-password"
         />
 
         <Button onPress={handleSignUp} disabled={isLoading || isGoogleLoading} style={styles.signUpButton}>

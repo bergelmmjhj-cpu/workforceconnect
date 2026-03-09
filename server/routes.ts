@@ -802,7 +802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!user.isActive) {
-        res.status(401).json({ error: "Your account is pending approval. An admin will review and activate your account shortly." });
+        res.json({ pending: true, message: "Your account is pending admin approval. An admin will review and activate your account. You will be notified once access is granted." });
         return;
       }
 

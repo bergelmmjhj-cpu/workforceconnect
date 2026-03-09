@@ -66,6 +66,18 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           Please reload the app to continue.
         </ThemedText>
 
+        <Text
+          style={[
+            styles.errorText,
+            { color: theme.text, fontFamily: Fonts?.mono || "monospace" },
+          ]}
+          selectable
+        >
+          {error.message}
+          {"\n"}
+          {error.stack}
+        </Text>
+
         <Pressable
           onPress={handleRestart}
           style={({ pressed }) => [

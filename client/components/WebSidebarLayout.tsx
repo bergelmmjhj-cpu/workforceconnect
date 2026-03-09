@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -7,7 +7,7 @@ import {
   Platform,
   useWindowDimensions,
 } from "react-native";
-import { useNavigationState, useNavigation, CommonActions } from "@react-navigation/native";
+import { CommonActions } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -15,6 +15,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
 import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
+import { navigationRef } from "@/lib/navigation";
 import { Spacing, BorderRadius } from "@/constants/theme";
 
 export const SIDEBAR_WIDTH = 220;
@@ -97,20 +98,31 @@ export default function WebSidebarLayout({ children }: { children: React.ReactNo
 function Sidebar() {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const navigation = useNavigation();
   const role = user?.role || "client";
   const tabs = TAB_ROUTES_BY_ROLE[role] || TAB_ROUTES_BY_ROLE.client;
 
-  const navState = useNavigationState((state) => state);
+  const [navState, setNavState] = useState<any>(() =>
+    navigationRef.isReady() ? navigationRef.getState() : null
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigationRef.addListener("state", (e: any) => {
+      setNavState(e.data.state);
+    });
+    return unsubscribe;
+  }, []);
+
   const activeTab = getActiveTabFromNavState(navState);
 
   const handleTabPress = (tabName: string) => {
-    navigation.dispatch(
-      CommonActions.navigate({
-        name: "Main",
-        params: { screen: tabName },
-      })
-    );
+    if (navigationRef.isReady()) {
+      navigationRef.dispatch(
+        CommonActions.navigate({
+          name: "Main",
+          params: { screen: tabName },
+        })
+      );
+    }
   };
 
   return (

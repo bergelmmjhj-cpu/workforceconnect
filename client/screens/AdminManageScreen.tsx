@@ -2,6 +2,7 @@ import React from "react";
 import { View, StyleSheet, ScrollView, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -36,6 +37,7 @@ function AdminMenuItem({ icon, title, description, onPress }: AdminMenuItemProps
 
 export default function AdminManageScreen() {
   const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets();
 
   const menuItems: AdminMenuItemProps[] = [
     {

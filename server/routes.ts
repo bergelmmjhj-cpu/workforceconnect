@@ -757,6 +757,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/auth/google", async (req: Request, res: Response) => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        res.status(400).json({ error: "ID token required" });
+        return;
+      }
+
+      const tokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
+      const tokenRes = await fetch(tokenInfoUrl);
+      const tokenData = await tokenRes.json();
+
+      if (!tokenRes.ok || tokenData.error) {
+        res.status(401).json({ error: "Invalid Google token" });
+        return;
+      }
+
+      const { sub: googleId, email, name } = tokenData;
+
+      if (!email) {
+        res.status(401).json({ error: "Could not retrieve email from Google account" });
+        return;
+      }
+
+      let [user] = await db.select().from(users).where(eq(users.googleId, googleId));
+      if (!user) {
+        const [byEmail] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+        user = byEmail;
+      }
+
+      if (!user) {
+        res.status(404).json({ error: "No account found for this Google account. Please contact your administrator." });
+        return;
+      }
+
+      if (!user.isActive) {
+        res.status(401).json({ error: "Your account is pending approval. An admin will review and activate your account shortly." });
+        return;
+      }
+
+      if (!user.googleId) {
+        await db.update(users).set({ googleId }).where(eq(users.id, user.id));
+      }
+
+      if (user.totpEnabled) {
+        res.json({ requires2FA: true, userId: user.id });
+        return;
+      }
+
+      const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+      res.json({ user: { ...userWithoutSensitive, mustChangePassword: user.mustChangePassword || false } });
+    } catch (error) {
+      console.error("Error with Google auth:", error);
+      res.status(500).json({ error: "Failed to authenticate with Google" });
+    }
+  });
+
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const result = loginUserSchema.safeParse(req.body);

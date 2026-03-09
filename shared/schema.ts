@@ -24,6 +24,7 @@ export const users = pgTable("users", {
   recoveryCodes: text("recovery_codes"),
   mustChangePassword: boolean("must_change_password").default(false),
   isActive: boolean("is_active").default(true),
+  googleId: text("google_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

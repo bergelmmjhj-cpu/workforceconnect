@@ -18,6 +18,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogleData: (userData: any) => Promise<void>;
   complete2FALogin: (userId: string, code: string) => Promise<{ remainingRecoveryCodes?: number }>;
   register: (email: string, password: string, fullName: string, role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
@@ -103,6 +104,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     throw new Error(data.error || "Invalid email or password");
+  };
+
+  const loginWithGoogleData = async (userData: any) => {
+    const loginUser: User = {
+      id: userData.id,
+      email: userData.email,
+      fullName: userData.fullName,
+      role: userData.role as UserRole,
+      timezone: userData.timezone || "America/Toronto",
+      phone: userData.phone || undefined,
+      onboardingStatus: userData.onboardingStatus as WorkerOnboardingStatus | undefined,
+      workerRoles: userData.workerRoles ? JSON.parse(userData.workerRoles) : undefined,
+      businessName: userData.businessName,
+      businessAddress: userData.businessAddress,
+      businessPhone: userData.businessPhone,
+      mustChangePassword: userData.mustChangePassword || false,
+      createdAt: userData.createdAt,
+    };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loginUser));
+    setUser(loginUser);
+    connectWebSocket();
   };
 
   const complete2FALogin = async (userId: string, code: string) => {
@@ -264,6 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        loginWithGoogleData,
         complete2FALogin,
         register,
         logout,

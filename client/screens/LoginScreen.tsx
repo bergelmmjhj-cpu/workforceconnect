@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -22,20 +24,80 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getLoginErrorMessage } from "@/utils/errorHandler";
 import { rootNavigate } from "@/lib/navigation";
+import { apiRequest } from "@/lib/query-client";
+
+WebBrowser.maybeCompleteAuthSession();
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { login } = useAuth();
+  const { login, loginWithGoogleData } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const [error, setError] = useState("");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_CLIENT_ID,
+    responseType: "id_token",
+  });
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      const idToken = (response.params as any).id_token;
+      if (idToken) {
+        handleGoogleToken(idToken);
+      } else {
+        setError("Google sign-in failed. Please try again.");
+        setIsGoogleLoading(false);
+      }
+    } else if (response?.type === "error") {
+      setError("Google sign-in was cancelled or failed.");
+      setIsGoogleLoading(false);
+    } else if (response?.type === "dismiss") {
+      setIsGoogleLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleToken = async (idToken: string) => {
+    setIsGoogleLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/auth/google", { idToken });
+      const data = await res.json();
+
+      if (data.requires2FA) {
+        rootNavigate("TwoFactorVerify", { userId: data.userId });
+        return;
+      }
+
+      if (data.user) {
+        if (loginWithGoogleData) {
+          await loginWithGoogleData(data.user);
+        }
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setError(data.error || "Google sign-in failed. Please try again.");
+      }
+    } catch (err: unknown) {
+      setError("Google sign-in failed. Please try again.");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError("");
+    setIsGoogleLoading(true);
+    await promptAsync();
+  };
 
   const handleLogin = async () => {
     if (!email.trim()) {
@@ -132,13 +194,49 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
-        <Button onPress={handleLogin} disabled={isLoading} style={styles.loginButton}>
+        <Button onPress={handleLogin} disabled={isLoading || isGoogleLoading} style={styles.loginButton}>
           {isLoading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             "Sign In"
           )}
         </Button>
+
+        {GOOGLE_CLIENT_ID ? (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+              <ThemedText style={[styles.dividerText, { color: theme.textMuted }]}>or</ThemedText>
+              <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+            </View>
+
+            <Pressable
+              onPress={handleGoogleSignIn}
+              disabled={isLoading || isGoogleLoading || !request}
+              style={({ pressed }) => [
+                styles.googleButton,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                  opacity: (isLoading || isGoogleLoading || !request) ? 0.6 : pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              {isGoogleLoading ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <>
+                  <View style={[styles.googleIconBox, { backgroundColor: "#4285F4" }]}>
+                    <ThemedText style={styles.googleIconText}>G</ThemedText>
+                  </View>
+                  <ThemedText style={[styles.googleButtonText, { color: theme.text }]}>
+                    Sign in with Google
+                  </ThemedText>
+                </>
+              )}
+            </Pressable>
+          </>
+        ) : null}
       </View>
 
       <View style={styles.footer}>
@@ -199,6 +297,45 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     marginTop: Spacing.sm,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: Spacing.lg,
+    gap: Spacing.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 13,
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    minHeight: 48,
+  },
+  googleIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleIconText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  googleButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
   footer: {
     alignItems: "center",

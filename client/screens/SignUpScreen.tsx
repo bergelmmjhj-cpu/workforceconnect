@@ -1,14 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
   Image,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -20,16 +21,20 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius } from "@/constants/theme";
-import { UserRole } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getErrorMessage } from "@/utils/errorHandler";
+import { apiRequest } from "@/lib/query-client";
+
+WebBrowser.maybeCompleteAuthSession();
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { register } = useAuth();
+  const { register, loginWithGoogleData } = useAuth();
   const navigation = useNavigation<NavigationProp>();
 
   const [fullName, setFullName] = useState("");
@@ -37,19 +42,74 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<UserRole>("worker");
   const [error, setError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
 
-  const roles: { role: UserRole; label: string; icon: keyof typeof Feather.glyphMap }[] = [
-    { role: "worker", label: "Worker", icon: "user" },
-    { role: "client", label: "Client", icon: "briefcase" },
-    { role: "hr", label: "HR", icon: "users" },
-    { role: "admin", label: "Admin", icon: "settings" },
-  ];
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_CLIENT_ID,
+    responseType: "id_token",
+    prompt: "select_account",
+  } as any);
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      const idToken = (response.params as any).id_token;
+      if (idToken) {
+        handleGoogleToken(idToken);
+      } else {
+        setError("Google sign-up failed. Please try again.");
+        setIsGoogleLoading(false);
+      }
+    } else if (response?.type === "error") {
+      setError("Google sign-up was cancelled or failed.");
+      setIsGoogleLoading(false);
+    } else if (response?.type === "dismiss") {
+      setIsGoogleLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleToken = async (idToken: string) => {
+    setIsGoogleLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/auth/google", { idToken });
+      const data = await res.json();
+
+      if (data.registered) {
+        setInfoMessage("Account created! An admin will review and activate your account. You'll receive access once approved.");
+        setError("");
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return;
+      }
+
+      if (data.user) {
+        if (loginWithGoogleData) {
+          await loginWithGoogleData(data.user);
+        }
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setError(data.error || "Google sign-up failed. Please try again.");
+        setInfoMessage("");
+      }
+    } catch (err: unknown) {
+      setError("Google sign-up failed. Please try again.");
+      setInfoMessage("");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    setError("");
+    setInfoMessage("");
+    setIsGoogleLoading(true);
+    await promptAsync();
+  };
 
   const handleSignUp = async () => {
     setError("");
+    setInfoMessage("");
 
     if (!fullName.trim()) {
       setError("Please enter your full name");
@@ -79,7 +139,8 @@ export default function SignUpScreen() {
     setIsLoading(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await register(email.trim(), password, fullName.trim(), selectedRole);
+      await register(email.trim(), password, fullName.trim(), "worker");
+      setInfoMessage("Account created! An admin will review and activate your account. You'll receive access once approved.");
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: unknown) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -87,11 +148,6 @@ export default function SignUpScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleRoleSelect = (role: UserRole) => {
-    setSelectedRole(role);
-    Haptics.selectionAsync();
   };
 
   return (
@@ -115,71 +171,62 @@ export default function SignUpScreen() {
           Create Account
         </ThemedText>
         <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Join Workforce Connect
+          Join Workforce Connect as a worker
         </ThemedText>
-      </View>
-
-      <View style={styles.roleSelector}>
-        <ThemedText style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-          I am a
-        </ThemedText>
-        <View style={styles.roleGrid}>
-          {roles.map(({ role, label, icon }) => (
-            <Pressable
-              key={role}
-              onPress={() => handleRoleSelect(role)}
-              style={[
-                styles.roleCard,
-                {
-                  backgroundColor:
-                    selectedRole === role
-                      ? theme.primary + "15"
-                      : theme.surface,
-                  borderColor:
-                    selectedRole === role ? theme.primary : theme.border,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.roleIcon,
-                  {
-                    backgroundColor:
-                      selectedRole === role
-                        ? theme.primary
-                        : theme.backgroundSecondary,
-                  },
-                ]}
-              >
-                <Feather
-                  name={icon}
-                  size={18}
-                  color={selectedRole === role ? "#fff" : theme.textSecondary}
-                />
-              </View>
-              <ThemedText
-                style={[
-                  styles.roleLabel,
-                  {
-                    color: selectedRole === role ? theme.primary : theme.text,
-                    fontWeight: selectedRole === role ? "600" : "400",
-                  },
-                ]}
-              >
-                {label}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
       </View>
 
       {error ? (
-        <View style={[styles.errorContainer, { backgroundColor: theme.error + "15" }]}>
+        <View style={[styles.messageBanner, { backgroundColor: theme.error + "15" }]}>
           <Feather name="alert-circle" size={16} color={theme.error} />
-          <ThemedText style={[styles.errorText, { color: theme.error }]}>
+          <ThemedText style={[styles.messageText, { color: theme.error }]}>
             {error}
           </ThemedText>
         </View>
+      ) : null}
+
+      {infoMessage ? (
+        <View style={[styles.messageBanner, { backgroundColor: theme.primary + "15" }]}>
+          <Feather name="check-circle" size={16} color={theme.primary} />
+          <ThemedText style={[styles.messageText, { color: theme.primary }]}>
+            {infoMessage}
+          </ThemedText>
+        </View>
+      ) : null}
+
+      {GOOGLE_CLIENT_ID ? (
+        <>
+          <Pressable
+            onPress={handleGoogleSignUp}
+            disabled={isLoading || isGoogleLoading || !request}
+            style={({ pressed }) => [
+              styles.googleButton,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+                opacity: (isLoading || isGoogleLoading || !request) ? 0.6 : pressed ? 0.8 : 1,
+              },
+            ]}
+          >
+            {isGoogleLoading ? (
+              <ActivityIndicator size="small" color={theme.text} />
+            ) : (
+              <>
+                <View style={[styles.googleIconBox, { backgroundColor: "#4285F4" }]}>
+                  <ThemedText style={styles.googleIconText}>G</ThemedText>
+                </View>
+                <ThemedText style={[styles.googleButtonText, { color: theme.text }]}>
+                  Sign up with Google
+                </ThemedText>
+              </>
+            )}
+          </Pressable>
+
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+            <ThemedText style={[styles.dividerText, { color: theme.textMuted }]}>or</ThemedText>
+            <View style={[styles.dividerLine, { backgroundColor: theme.border }]} />
+          </View>
+        </>
       ) : null}
 
       <View style={styles.form}>
@@ -230,7 +277,7 @@ export default function SignUpScreen() {
           secureTextEntry={!showPassword}
         />
 
-        <Button onPress={handleSignUp} disabled={isLoading} style={styles.signUpButton}>
+        <Button onPress={handleSignUp} disabled={isLoading || isGoogleLoading} style={styles.signUpButton}>
           {isLoading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
@@ -263,7 +310,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: "center",
-    marginBottom: Spacing["2xl"],
+    marginBottom: Spacing.xl,
   },
   logo: {
     width: 60,
@@ -278,41 +325,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 15,
   },
-  roleSelector: {
-    marginBottom: Spacing.xl,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    marginBottom: Spacing.md,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  roleGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.sm,
-  },
-  roleCard: {
-    flex: 1,
-    minWidth: "22%",
-    alignItems: "center",
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1.5,
-  },
-  roleIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: BorderRadius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.xs,
-  },
-  roleLabel: {
-    fontSize: 12,
-  },
-  errorContainer: {
+  messageBanner: {
     flexDirection: "row",
     alignItems: "center",
     padding: Spacing.md,
@@ -320,9 +333,49 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     gap: Spacing.sm,
   },
-  errorText: {
+  messageText: {
     fontSize: 14,
     flex: 1,
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    minHeight: 48,
+    marginBottom: Spacing.sm,
+  },
+  googleIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleIconText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  googleButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: Spacing.lg,
+    gap: Spacing.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    fontSize: 13,
   },
   form: {
     marginBottom: Spacing.xl,

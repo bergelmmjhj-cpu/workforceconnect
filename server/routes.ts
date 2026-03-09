@@ -670,7 +670,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { email, password, fullName, role } = result.data;
+      const { email, password, fullName } = result.data;
 
       // Check if user already exists
       const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
@@ -682,14 +682,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user - new users require admin approval (isActive: false)
+      // Create user - self-registered users are always workers, require admin approval
       const [newUser] = await db.insert(users).values({
         email: email.toLowerCase(),
         password: hashedPassword,
         fullName,
-        role,
+        role: "worker",
         isActive: false,
-        onboardingStatus: role === "worker" ? "NOT_APPLIED" : null,
+        onboardingStatus: "NOT_APPLIED",
       }).returning();
 
       // Return user without password

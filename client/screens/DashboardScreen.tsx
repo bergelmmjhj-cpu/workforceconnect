@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, StyleSheet, RefreshControl, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, RefreshControl, ScrollView, Pressable, Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
@@ -66,6 +66,10 @@ export default function DashboardScreen() {
   const { paddingTop, paddingBottom } = useContentPadding();
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { width } = useWindowDimensions();
+
+  const isWeb = Platform.OS === "web";
+  const isWideWeb = isWeb && width > 768;
 
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -248,6 +252,7 @@ export default function DashboardScreen() {
           paddingTop,
           paddingBottom,
         },
+        isWideWeb ? styles.webContent : null,
       ]}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
       refreshControl={
@@ -258,7 +263,7 @@ export default function DashboardScreen() {
         />
       }
     >
-      <View style={styles.greeting}>
+      <View style={[styles.greeting, isWideWeb ? styles.webGreeting : null]}>
         <ThemedText type="h1">
           {getGreeting()}, {user?.fullName?.split(" ")[0]}
         </ThemedText>
@@ -270,177 +275,346 @@ export default function DashboardScreen() {
         </ThemedText>
       </View>
 
-      <View style={styles.statsGrid}>
+      <View style={[styles.statsGrid, isWideWeb ? styles.webStatsGrid : null]}>
         {isLoading ? (
           <>
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
+            <View style={isWideWeb ? styles.webStatCardWrapper : { flex: 1 }}>
+              <StatCardSkeleton />
+            </View>
+            <View style={isWideWeb ? styles.webStatCardWrapper : { flex: 1 }}>
+              <StatCardSkeleton />
+            </View>
+            <View style={isWideWeb ? styles.webStatCardWrapper : { flex: 1 }}>
+              <StatCardSkeleton />
+            </View>
           </>
         ) : (
           getStatsForRole().map((stat, index) => (
-            <StatCard
-              key={index}
-              title={stat.title}
-              value={stat.value}
-              icon={stat.icon}
-              color={stat.color}
-            />
+            <View key={index} style={isWideWeb ? styles.webStatCardWrapper : { flex: 1 }}>
+              <StatCard
+                title={stat.title}
+                value={stat.value}
+                icon={stat.icon}
+                color={stat.color}
+              />
+            </View>
           ))
         )}
       </View>
 
-      {myToday ? (
-        <View style={styles.myTodaySection}>
-          <ThemedText type="h4" style={styles.sectionTitle}>
-            My Today
-          </ThemedText>
-
-          {(user?.role === "admin" || user?.role === "hr") && myToday.unfilledTodayCount > 0 ? (
-            <Card style={{ ...styles.alertCard, borderLeftColor: "#f59e0b" }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Feather name="alert-triangle" size={16} color="#f59e0b" />
-                <ThemedText style={{ fontSize: 13, fontWeight: "600" }}>
-                  {myToday.unfilledTodayCount} unfilled shift{myToday.unfilledTodayCount !== 1 ? "s" : ""} today
+      {isWideWeb ? (
+        <View style={styles.webTwoColumnRow}>
+          <View style={styles.webMainColumn}>
+            {myToday ? (
+              <View style={styles.webSection}>
+                <ThemedText type="h4" style={styles.sectionTitle}>
+                  My Today
                 </ThemedText>
-              </View>
-            </Card>
-          ) : null}
 
-          {user?.role === "worker" && myToday.pendingOffers.length > 0 ? (
-            <View style={{ marginBottom: Spacing.md }}>
-              <ThemedText style={[styles.subSectionLabel, { color: theme.warning }]}>
-                PENDING OFFERS ({myToday.pendingOffers.length})
-              </ThemedText>
-              {myToday.pendingOffers.map((offer) => (
-                <Card key={offer.id} style={styles.todayShiftCard}>
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{offer.shiftTitle}</ThemedText>
-                      <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
-                        {offer.shiftDate} {offer.shiftStartTime}{offer.shiftEndTime ? ` - ${offer.shiftEndTime}` : ""}
+                {(user?.role === "admin" || user?.role === "hr") && myToday.unfilledTodayCount > 0 ? (
+                  <Card style={{ ...styles.alertCard, borderLeftColor: "#f59e0b" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Feather name="alert-triangle" size={16} color="#f59e0b" />
+                      <ThemedText style={{ fontSize: 13, fontWeight: "600" }}>
+                        {myToday.unfilledTodayCount} unfilled shift{myToday.unfilledTodayCount !== 1 ? "s" : ""} today
                       </ThemedText>
-                      {offer.workplaceName ? (
-                        <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{offer.workplaceName}</ThemedText>
-                      ) : null}
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: "#f59e0b20" }]}>
-                      <ThemedText style={{ fontSize: 10, fontWeight: "600", color: "#f59e0b" }}>Pending</ThemedText>
-                    </View>
-                  </View>
-                </Card>
-              ))}
-            </View>
-          ) : null}
-
-          {myToday.todayShifts.length > 0 ? (
-            <View>
-              <ThemedText style={[styles.subSectionLabel, { color: theme.primary }]}>
-                TODAY'S SHIFTS ({myToday.todayShifts.length})
-              </ThemedText>
-              {myToday.todayShifts.map((shift) => (
-                <Pressable
-                  key={shift.id}
-                  onPress={() => {
-                    if (user?.role === "worker" && shift.workerUserId === user?.id) {
-                      rootNavigate("ClockInOut", { shiftId: shift.id });
-                    } else {
-                      rootNavigate("ShiftDetail", { shiftId: shift.id });
-                    }
-                  }}
-                >
-                  <Card style={styles.todayShiftCard}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <View style={{ flex: 1 }}>
-                        <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{shift.title}</ThemedText>
-                        <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
-                          {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : " (Open)"}
-                        </ThemedText>
-                        {shift.workplaceName ? (
-                          <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workplaceName}</ThemedText>
-                        ) : null}
-                        {shift.workerName ? (
-                          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 }}>
-                            <Feather name="user" size={11} color={theme.textSecondary} />
-                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workerName}</ThemedText>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={{ flexDirection: "row", gap: 6 }}>
-                        {shift.category ? (
-                          <View style={[styles.statusBadge, { backgroundColor: (CATEGORY_COLORS[shift.category] || "#6b7280") + "20" }]}>
-                            <ThemedText style={{ fontSize: 10, fontWeight: "600", color: CATEGORY_COLORS[shift.category] || "#6b7280" }}>
-                              {shift.category.charAt(0).toUpperCase() + shift.category.slice(1)}
-                            </ThemedText>
-                          </View>
-                        ) : null}
-                        <View style={[styles.statusBadge, {
-                          backgroundColor: shift.status === "completed" ? "#10b98120" :
-                            shift.status === "in_progress" ? "#3b82f620" :
-                            shift.status === "cancelled" ? "#ef444420" : theme.primary + "15"
-                        }]}>
-                          <ThemedText style={{ fontSize: 10, fontWeight: "600", color:
-                            shift.status === "completed" ? "#10b981" :
-                            shift.status === "in_progress" ? "#3b82f6" :
-                            shift.status === "cancelled" ? "#ef4444" : theme.primary
-                          }}>
-                            {shift.status.charAt(0).toUpperCase() + shift.status.slice(1).replace("_", " ")}
-                          </ThemedText>
-                        </View>
-                      </View>
                     </View>
                   </Card>
-                </Pressable>
-              ))}
-            </View>
-          ) : (
-            <Card style={styles.emptyTodayCard}>
-              <Feather name="sun" size={24} color={theme.textSecondary} />
-              <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, fontSize: 13 }}>
-                {user?.role === "worker" ? "No shifts scheduled for today" : "No shifts today"}
-              </ThemedText>
-            </Card>
-          )}
-        </View>
-      ) : null}
+                ) : null}
 
-      {user?.role === "admin" && (
-        <View style={styles.quickActionsSection}>
-          <ThemedText type="h4" style={styles.sectionTitle}>
-            Quick Actions
-          </ThemedText>
-          <View style={styles.quickActionsGrid}>
-            <Pressable
-              style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
-              onPress={() => rootNavigate("AdminManage")}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: theme.primary + "20" }]}>
-                <Feather name="settings" size={24} color={theme.primary} />
+                {user?.role === "worker" && myToday.pendingOffers.length > 0 ? (
+                  <View style={{ marginBottom: Spacing.md }}>
+                    <ThemedText style={[styles.subSectionLabel, { color: theme.warning }]}>
+                      PENDING OFFERS ({myToday.pendingOffers.length})
+                    </ThemedText>
+                    {myToday.pendingOffers.map((offer) => (
+                      <Card key={offer.id} style={styles.todayShiftCard}>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                          <View style={{ flex: 1 }}>
+                            <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{offer.shiftTitle}</ThemedText>
+                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                              {offer.shiftDate} {offer.shiftStartTime}{offer.shiftEndTime ? ` - ${offer.shiftEndTime}` : ""}
+                            </ThemedText>
+                            {offer.workplaceName ? (
+                              <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{offer.workplaceName}</ThemedText>
+                            ) : null}
+                          </View>
+                          <View style={[styles.statusBadge, { backgroundColor: "#f59e0b20" }]}>
+                            <ThemedText style={{ fontSize: 10, fontWeight: "600", color: "#f59e0b" }}>Pending</ThemedText>
+                          </View>
+                        </View>
+                      </Card>
+                    ))}
+                  </View>
+                ) : null}
+
+                {myToday.todayShifts.length > 0 ? (
+                  <View>
+                    <ThemedText style={[styles.subSectionLabel, { color: theme.primary }]}>
+                      TODAY'S SHIFTS ({myToday.todayShifts.length})
+                    </ThemedText>
+                    {myToday.todayShifts.map((shift) => (
+                      <Pressable
+                        key={shift.id}
+                        onPress={() => {
+                          if (user?.role === "worker" && shift.workerUserId === user?.id) {
+                            rootNavigate("ClockInOut", { shiftId: shift.id });
+                          } else {
+                            rootNavigate("ShiftDetail", { shiftId: shift.id });
+                          }
+                        }}
+                      >
+                        <Card style={styles.todayShiftCard}>
+                          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <View style={{ flex: 1 }}>
+                              <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{shift.title}</ThemedText>
+                              <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                                {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : " (Open)"}
+                              </ThemedText>
+                              {shift.workplaceName ? (
+                                <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workplaceName}</ThemedText>
+                              ) : null}
+                              {shift.workerName ? (
+                                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 }}>
+                                  <Feather name="user" size={11} color={theme.textSecondary} />
+                                  <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workerName}</ThemedText>
+                                </View>
+                              ) : null}
+                            </View>
+                            <View style={{ flexDirection: "row", gap: 6 }}>
+                              {shift.category ? (
+                                <View style={[styles.statusBadge, { backgroundColor: (CATEGORY_COLORS[shift.category] || "#6b7280") + "20" }]}>
+                                  <ThemedText style={{ fontSize: 10, fontWeight: "600", color: CATEGORY_COLORS[shift.category] || "#6b7280" }}>
+                                    {shift.category.charAt(0).toUpperCase() + shift.category.slice(1)}
+                                  </ThemedText>
+                                </View>
+                              ) : null}
+                              <View style={[styles.statusBadge, {
+                                backgroundColor: shift.status === "completed" ? "#10b98120" :
+                                  shift.status === "in_progress" ? "#3b82f620" :
+                                  shift.status === "cancelled" ? "#ef444420" : theme.primary + "15"
+                              }]}>
+                                <ThemedText style={{ fontSize: 10, fontWeight: "600", color:
+                                  shift.status === "completed" ? "#10b981" :
+                                  shift.status === "in_progress" ? "#3b82f6" :
+                                  shift.status === "cancelled" ? "#ef4444" : theme.primary
+                                }}>
+                                  {shift.status.charAt(0).toUpperCase() + shift.status.slice(1).replace("_", " ")}
+                                </ThemedText>
+                              </View>
+                            </View>
+                          </View>
+                        </Card>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : (
+                  <Card style={styles.emptyTodayCard}>
+                    <Feather name="sun" size={24} color={theme.textSecondary} />
+                    <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, fontSize: 13 }}>
+                      {user?.role === "worker" ? "No shifts scheduled for today" : "No shifts today"}
+                    </ThemedText>
+                  </Card>
+                )}
               </View>
-              <ThemedText style={styles.quickActionTitle}>Management Hub</ThemedText>
-              <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
-                Workplaces, Workers, Assignments
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
-              onPress={() => rootNavigate("WorkplacesList")}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: theme.success + "20" }]}>
-                <Feather name="map-pin" size={24} color={theme.success} />
+            ) : null}
+
+            {user?.role === "admin" && (
+              <View style={styles.webSection}>
+                <ThemedText type="h4" style={styles.sectionTitle}>
+                  Quick Actions
+                </ThemedText>
+                <View style={styles.webQuickActionsGrid}>
+                  <Pressable
+                    style={[styles.webQuickActionCard, { backgroundColor: theme.backgroundSecondary }]}
+                    onPress={() => rootNavigate("AdminManage")}
+                  >
+                    <View style={[styles.quickActionIcon, { backgroundColor: theme.primary + "20" }]}>
+                      <Feather name="settings" size={24} color={theme.primary} />
+                    </View>
+                    <ThemedText style={styles.quickActionTitle}>Management Hub</ThemedText>
+                    <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
+                      Workplaces, Workers, Assignments
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.webQuickActionCard, { backgroundColor: theme.backgroundSecondary }]}
+                    onPress={() => rootNavigate("WorkplacesList")}
+                  >
+                    <View style={[styles.quickActionIcon, { backgroundColor: theme.success + "20" }]}>
+                      <Feather name="map-pin" size={24} color={theme.success} />
+                    </View>
+                    <ThemedText style={styles.quickActionTitle}>Workplaces</ThemedText>
+                    <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
+                      Manage work sites
+                    </ThemedText>
+                  </Pressable>
+                </View>
               </View>
-              <ThemedText style={styles.quickActionTitle}>Workplaces</ThemedText>
-              <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
-                Manage work sites
-              </ThemedText>
-            </Pressable>
+            )}
+          </View>
+
+          <View style={styles.webSideColumn}>
+            <View style={styles.webSection}>
+              <TodoWidget items={todos} onItemPress={() => {}} />
+            </View>
           </View>
         </View>
-      )}
+      ) : (
+        <>
+          {myToday ? (
+            <View style={styles.myTodaySection}>
+              <ThemedText type="h4" style={styles.sectionTitle}>
+                My Today
+              </ThemedText>
 
-      <View style={styles.todoSection}>
-        <TodoWidget items={todos} onItemPress={() => {}} />
-      </View>
+              {(user?.role === "admin" || user?.role === "hr") && myToday.unfilledTodayCount > 0 ? (
+                <Card style={{ ...styles.alertCard, borderLeftColor: "#f59e0b" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Feather name="alert-triangle" size={16} color="#f59e0b" />
+                    <ThemedText style={{ fontSize: 13, fontWeight: "600" }}>
+                      {myToday.unfilledTodayCount} unfilled shift{myToday.unfilledTodayCount !== 1 ? "s" : ""} today
+                    </ThemedText>
+                  </View>
+                </Card>
+              ) : null}
+
+              {user?.role === "worker" && myToday.pendingOffers.length > 0 ? (
+                <View style={{ marginBottom: Spacing.md }}>
+                  <ThemedText style={[styles.subSectionLabel, { color: theme.warning }]}>
+                    PENDING OFFERS ({myToday.pendingOffers.length})
+                  </ThemedText>
+                  {myToday.pendingOffers.map((offer) => (
+                    <Card key={offer.id} style={styles.todayShiftCard}>
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{offer.shiftTitle}</ThemedText>
+                          <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                            {offer.shiftDate} {offer.shiftStartTime}{offer.shiftEndTime ? ` - ${offer.shiftEndTime}` : ""}
+                          </ThemedText>
+                          {offer.workplaceName ? (
+                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{offer.workplaceName}</ThemedText>
+                          ) : null}
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: "#f59e0b20" }]}>
+                          <ThemedText style={{ fontSize: 10, fontWeight: "600", color: "#f59e0b" }}>Pending</ThemedText>
+                        </View>
+                      </View>
+                    </Card>
+                  ))}
+                </View>
+              ) : null}
+
+              {myToday.todayShifts.length > 0 ? (
+                <View>
+                  <ThemedText style={[styles.subSectionLabel, { color: theme.primary }]}>
+                    TODAY'S SHIFTS ({myToday.todayShifts.length})
+                  </ThemedText>
+                  {myToday.todayShifts.map((shift) => (
+                    <Pressable
+                      key={shift.id}
+                      onPress={() => {
+                        if (user?.role === "worker" && shift.workerUserId === user?.id) {
+                          rootNavigate("ClockInOut", { shiftId: shift.id });
+                        } else {
+                          rootNavigate("ShiftDetail", { shiftId: shift.id });
+                        }
+                      }}
+                    >
+                      <Card style={styles.todayShiftCard}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <View style={{ flex: 1 }}>
+                            <ThemedText style={{ fontSize: 14, fontWeight: "600" }}>{shift.title}</ThemedText>
+                            <ThemedText style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                              {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : " (Open)"}
+                            </ThemedText>
+                            {shift.workplaceName ? (
+                              <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workplaceName}</ThemedText>
+                            ) : null}
+                            {shift.workerName ? (
+                              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 }}>
+                                <Feather name="user" size={11} color={theme.textSecondary} />
+                                <ThemedText style={{ fontSize: 12, color: theme.textSecondary }}>{shift.workerName}</ThemedText>
+                              </View>
+                            ) : null}
+                          </View>
+                          <View style={{ flexDirection: "row", gap: 6 }}>
+                            {shift.category ? (
+                              <View style={[styles.statusBadge, { backgroundColor: (CATEGORY_COLORS[shift.category] || "#6b7280") + "20" }]}>
+                                <ThemedText style={{ fontSize: 10, fontWeight: "600", color: CATEGORY_COLORS[shift.category] || "#6b7280" }}>
+                                  {shift.category.charAt(0).toUpperCase() + shift.category.slice(1)}
+                                </ThemedText>
+                              </View>
+                            ) : null}
+                            <View style={[styles.statusBadge, {
+                              backgroundColor: shift.status === "completed" ? "#10b98120" :
+                                shift.status === "in_progress" ? "#3b82f620" :
+                                shift.status === "cancelled" ? "#ef444420" : theme.primary + "15"
+                            }]}>
+                              <ThemedText style={{ fontSize: 10, fontWeight: "600", color:
+                                shift.status === "completed" ? "#10b981" :
+                                shift.status === "in_progress" ? "#3b82f6" :
+                                shift.status === "cancelled" ? "#ef4444" : theme.primary
+                              }}>
+                                {shift.status.charAt(0).toUpperCase() + shift.status.slice(1).replace("_", " ")}
+                              </ThemedText>
+                            </View>
+                          </View>
+                        </View>
+                      </Card>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : (
+                <Card style={styles.emptyTodayCard}>
+                  <Feather name="sun" size={24} color={theme.textSecondary} />
+                  <ThemedText style={{ color: theme.textSecondary, marginTop: Spacing.xs, fontSize: 13 }}>
+                    {user?.role === "worker" ? "No shifts scheduled for today" : "No shifts today"}
+                  </ThemedText>
+                </Card>
+              )}
+            </View>
+          ) : null}
+
+          {user?.role === "admin" && (
+            <View style={styles.quickActionsSection}>
+              <ThemedText type="h4" style={styles.sectionTitle}>
+                Quick Actions
+              </ThemedText>
+              <View style={styles.quickActionsGrid}>
+                <Pressable
+                  style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
+                  onPress={() => rootNavigate("AdminManage")}
+                >
+                  <View style={[styles.quickActionIcon, { backgroundColor: theme.primary + "20" }]}>
+                    <Feather name="settings" size={24} color={theme.primary} />
+                  </View>
+                  <ThemedText style={styles.quickActionTitle}>Management Hub</ThemedText>
+                  <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
+                    Workplaces, Workers, Assignments
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  style={[styles.quickActionCard, { backgroundColor: theme.backgroundSecondary }]}
+                  onPress={() => rootNavigate("WorkplacesList")}
+                >
+                  <View style={[styles.quickActionIcon, { backgroundColor: theme.success + "20" }]}>
+                    <Feather name="map-pin" size={24} color={theme.success} />
+                  </View>
+                  <ThemedText style={styles.quickActionTitle}>Workplaces</ThemedText>
+                  <ThemedText style={[styles.quickActionDesc, { color: theme.textSecondary }]}>
+                    Manage work sites
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.todoSection}>
+            <TodoWidget items={todos} onItemPress={() => {}} />
+          </View>
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -452,8 +626,17 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.lg,
   },
+  webContent: {
+    maxWidth: 1200,
+    alignSelf: "center",
+    width: "100%",
+    paddingHorizontal: Spacing.xl,
+  },
   greeting: {
     marginBottom: Spacing["2xl"],
+  },
+  webGreeting: {
+    marginBottom: Spacing.lg,
   },
   roleLabel: {
     fontSize: 14,
@@ -463,6 +646,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: Spacing.md,
     marginBottom: Spacing["2xl"],
+  },
+  webStatsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  webStatCardWrapper: {
+    minWidth: 200,
+    flex: 1,
   },
   todoSection: {
     marginBottom: Spacing.lg,
@@ -530,5 +723,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: Spacing.xl,
+  },
+  webTwoColumnRow: {
+    flexDirection: "row",
+    gap: Spacing.xl,
+  },
+  webMainColumn: {
+    flex: 2,
+  },
+  webSideColumn: {
+    flex: 1,
+    minWidth: 280,
+  },
+  webSection: {
+    marginBottom: Spacing.lg,
+  },
+  webQuickActionsGrid: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    flexWrap: "wrap",
+  },
+  webQuickActionCard: {
+    minWidth: 180,
+    maxWidth: 220,
+    padding: Spacing.md,
+    borderRadius: 12,
+    alignItems: "center",
   },
 });

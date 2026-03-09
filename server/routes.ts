@@ -1740,6 +1740,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================
+  // CRM Sync Endpoints
+  // ============================================
+
+  app.get("/api/admin/sync/status", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { getSyncStatus } = await import("./services/crm-sync");
+      const status = await getSyncStatus();
+      res.json(status);
+    } catch (error: any) {
+      console.error("Error getting sync status:", error);
+      res.status(500).json({ error: "Failed to get sync status" });
+    }
+  });
+
+  app.get("/api/admin/sync/logs", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { getSyncLogs } = await import("./services/crm-sync");
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = await getSyncLogs(limit);
+      res.json(logs);
+    } catch (error: any) {
+      console.error("Error getting sync logs:", error);
+      res.status(500).json({ error: "Failed to get sync logs" });
+    }
+  });
+
+  app.post("/api/admin/sync/workplaces", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { syncWorkplaces, isSyncRunning } = await import("./services/crm-sync");
+      if (isSyncRunning()) {
+        res.status(409).json({ error: "A sync is already running" });
+        return;
+      }
+
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncWorkplaces(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error: any) {
+      console.error("Error syncing workplaces:", error);
+      res.status(500).json({ error: error.message || "Failed to sync workplaces" });
+    }
+  });
+
+  app.post("/api/admin/sync/shifts", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { syncConfirmedShifts, isSyncRunning } = await import("./services/crm-sync");
+      if (isSyncRunning()) {
+        res.status(409).json({ error: "A sync is already running" });
+        return;
+      }
+
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncConfirmedShifts(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error: any) {
+      console.error("Error syncing shifts:", error);
+      res.status(500).json({ error: error.message || "Failed to sync shifts" });
+    }
+  });
+
+  app.post("/api/admin/sync/hotel-requests", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { syncHotelRequests, isSyncRunning } = await import("./services/crm-sync");
+      if (isSyncRunning()) {
+        res.status(409).json({ error: "A sync is already running" });
+        return;
+      }
+
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncHotelRequests(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error: any) {
+      console.error("Error syncing hotel requests:", error);
+      res.status(500).json({ error: error.message || "Failed to sync hotel requests" });
+    }
+  });
+
+  app.post("/api/admin/sync/all", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { syncAll } = await import("./services/crm-sync");
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncAll(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error: any) {
+      console.error("Error running full sync:", error);
+      res.status(500).json({ error: error.message || "Failed to run full sync" });
+    }
+  });
+
   // Download subcontractor agreement PDF for an application
   app.get("/api/admin/applications/:id/agreement-pdf", async (req: Request, res: Response) => {
     try {

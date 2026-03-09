@@ -82,6 +82,19 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - **SMS Reply Parsing**: Workers text ACCEPT SHIFT or ACCEPT to accept, DECLINE SHIFT or DECLINE to decline their most recent pending shift offer. The webhook ONLY auto-replies to these shift keywords — all other messages are silently logged without any auto-reply, allowing normal HR text conversations on the same number.
 - **Phone Field**: `phone` column added to `users` table; populated from `worker_applications` when workers onboard. On startup, a backfill routine copies missing phone numbers from approved applications to existing worker accounts.
 
+### Weekdays CRM Integration
+- **Service Module**: `server/services/weekdays-crm.ts` — typed REST client for all CRM API calls with retry logic (3 attempts, exponential backoff).
+- **Sync Service**: `server/services/crm-sync.ts` — pull-only sync engine with sync lock, dry-run mode, and audit logging.
+- **CRM API**: `https://weekdays.wfconnect.org`, Bearer token auth via `WEEKDAYS_API_KEY`, team ID via `WEEKDAYS_TEAM_ID`.
+- **Endpoints synced**: Workplaces, Confirmed Shifts, Hotel Requests.
+- **Workplace sync**: Deduplicates by name+address, links via `crmExternalId`, deactivates stale CRM workplaces.
+- **Shift sync**: Matches workers by phone number (quoContactPhoneSnapshot → user.phone), converts UTC → local timezone based on province, creates missing workplaces as needed.
+- **Hotel request sync**: Maps to shift_requests, cancels deleted CRM requests, uses admin user as clientId.
+- **Auto-sync**: On startup (full sync), then every 15 minutes (shifts + hotel requests only). Non-blocking on failure.
+- **Admin UI**: `CrmSyncScreen.tsx` — connection status, sync controls (Sync All, Preview/Dry Run, per-category sync), sync history log.
+- **Schema additions**: `crmExternalId`/`crmSource` on workplaces, `crmShiftId`/`crmSource` on shifts, `crmRequestId`/`crmSource` on shift_requests, `crm_sync_logs` table.
+- **Admin API endpoints**: `POST /api/admin/sync/workplaces|shifts|hotel-requests|all` (with `?dryRun=true`), `GET /api/admin/sync/status`, `GET /api/admin/sync/logs`.
+
 ### Environment Variables
 - `DATABASE_URL`
 - `EXPO_PUBLIC_DOMAIN`
@@ -90,3 +103,5 @@ Client requests, managed by TanStack Query, are processed by the Express server 
 - `GOOGLE_PLACES_API_KEY`
 - `SESSION_SECRET`
 - `OPENPHONE_API_KEY`
+- `WEEKDAYS_API_KEY`
+- `WEEKDAYS_TEAM_ID`

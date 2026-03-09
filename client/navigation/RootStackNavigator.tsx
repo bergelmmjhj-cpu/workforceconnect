@@ -24,6 +24,7 @@ import InviteWorkerScreen from "@/screens/InviteWorkerScreen";
 import AssignToWorkplaceScreen from "@/screens/AssignToWorkplaceScreen";
 import TitoLogsAdminScreen from "@/screens/TitoLogsAdminScreen";
 import ApplicationsAdminScreen from "@/screens/ApplicationsAdminScreen";
+import CrmSyncScreen from "@/screens/CrmSyncScreen";
 import DiagnosticsScreen from "@/screens/DiagnosticsScreen";
 import RosterScreen from "@/screens/RosterScreen";
 import TwoFactorVerifyScreen from "@/screens/TwoFactorVerifyScreen";
@@ -60,6 +61,7 @@ export type RootStackParamList = {
   AssignToWorkplace: { workerId: string; workerName: string };
   TitoLogsAdmin: undefined;
   ApplicationsAdmin: undefined;
+  CrmSync: undefined;
   Diagnostics: undefined;
   ChangePassword: undefined;
 };
@@ -261,6 +263,13 @@ export default function RootStackNavigator() {
             component={ApplicationsAdminScreen}
             options={{
               headerTitle: "Applications",
+            }}
+          />
+          <Stack.Screen
+            name="CrmSync"
+            component={CrmSyncScreen}
+            options={{
+              headerTitle: "CRM Sync",
             }}
           />
           <Stack.Screen

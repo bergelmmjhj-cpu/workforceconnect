@@ -289,6 +289,8 @@ export const workplaces = pgTable("workplaces", {
   longitude: doublePrecision("longitude"),
   geofenceRadiusMeters: integer("geofence_radius_meters").default(150),
   isActive: boolean("is_active").default(true),
+  crmExternalId: text("crm_external_id"),
+  crmSource: boolean("crm_source").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -737,6 +739,8 @@ export const shifts = pgTable("shifts", {
   recurringEndDate: date("recurring_end_date"),
   parentShiftId: varchar("parent_shift_id"),
   workersNeeded: integer("workers_needed"),
+  crmShiftId: text("crm_shift_id"),
+  crmSource: boolean("crm_source").default(false),
   createdByUserId: varchar("created_by_user_id")
     .references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -776,6 +780,8 @@ export const shiftRequests = pgTable("shift_requests", {
   requestedWorkerId: varchar("requested_worker_id")
     .references(() => users.id),
   status: text("status").notNull().default("draft"),
+  crmRequestId: text("crm_request_id"),
+  crmSource: boolean("crm_source").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -952,3 +958,21 @@ export const smsLogs = pgTable("sms_logs", {
 });
 
 export type SmsLog = typeof smsLogs.$inferSelect;
+
+export const crmSyncLogs = pgTable("crm_sync_logs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  syncType: text("sync_type").notNull(),
+  status: text("status").notNull().default("running"),
+  createdCount: integer("created_count").default(0),
+  updatedCount: integer("updated_count").default(0),
+  skippedCount: integer("skipped_count").default(0),
+  errorCount: integer("error_count").default(0),
+  errorMessages: text("error_messages"),
+  dryRun: boolean("dry_run").default(false),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type CrmSyncLog = typeof crmSyncLogs.$inferSelect;

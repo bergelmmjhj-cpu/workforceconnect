@@ -884,6 +884,42 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
     },
     () => {
       log(`express server serving on port ${port}`);
+
+      // CRM startup check and auto-sync (non-blocking, runs after server is listening)
+      (async () => {
+        try {
+          const crmClient = await import("./services/weekdays-crm");
+          if (!crmClient.isConfigured()) {
+            log("[CRM] Not configured - skipping sync setup");
+            return;
+          }
+          const connResult = await crmClient.testConnection();
+          if (!connResult.connected) {
+            log("[CRM] Connection test failed:", connResult.error);
+            return;
+          }
+          log("[CRM] Connected to Weekdays CRM successfully");
+          const crmSync = await import("./services/crm-sync");
+          try {
+            await crmSync.syncAll(false);
+            log("[CRM] Initial sync completed");
+          } catch (syncErr: any) {
+            log("[CRM] Initial sync failed:", syncErr.message);
+          }
+          setInterval(async () => {
+            try {
+              if (crmSync.isSyncRunning()) return;
+              await crmSync.syncConfirmedShifts(false);
+              await crmSync.syncHotelRequests(false);
+            } catch (err: any) {
+              log("[CRM] Auto-sync failed:", err.message);
+            }
+          }, 15 * 60 * 1000);
+          log("[CRM] Auto-sync scheduled every 15 minutes");
+        } catch (crmErr: any) {
+          log("[CRM] Startup check failed (non-blocking):", crmErr.message);
+        }
+      })();
     },
   );
 })();

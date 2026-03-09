@@ -65,6 +65,12 @@ export default function AdminManageScreen() {
       description: "Review worker applications",
       onPress: () => rootNavigate("ApplicationsAdmin"),
     },
+    {
+      icon: "refresh-cw",
+      title: "CRM Sync",
+      description: "Sync data from Weekdays CRM",
+      onPress: () => rootNavigate("CrmSync"),
+    },
   ];
 
   return (

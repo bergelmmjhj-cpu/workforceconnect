@@ -1,11 +1,11 @@
 {
-  "id": "dd5a8071-7c83-47de-89c5-69052fdaa96e",
-  "createdAt": "2026-03-09T13:59:41.212Z",
+  "id": "c43a15e0-6def-4e80-9e56-a973e4787b9f",
+  "createdAt": "2026-03-09T16:43:57.286Z",
   "runtimeVersion": "exposdk:54.0.0",
   "launchAsset": {
-    "key": "bundle-1773064781212-6579",
+    "key": "bundle-1773074637286-14133",
     "contentType": "application/javascript",
-    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1773064781212-6579/_expo/static/js/ios/bundle.js"
+    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1773074637286-14133/_expo/static/js/ios/bundle.js"
   },
   "assets": [],
   "metadata": {},
@@ -43,7 +43,7 @@
         "adaptiveIcon": {
           "backgroundColor": "#1E40AF",
           "foregroundImage": "./assets/images/icon.png",
-          "foregroundImageUrl": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/assets/./assets/images/icon.png"
+          "foregroundImageUrl": "http://127.0.0.1:8081/assets/./assets/images/icon.png"
         },
         "edgeToEdgeEnabled": true,
         "predictiveBackGestureEnabled": false
@@ -102,7 +102,7 @@
       "androidStatusBar": {
         "backgroundColor": "#1E40AF"
       },
-      "iconUrl": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/assets/./assets/images/icon.png",
+      "iconUrl": "http://127.0.0.1:8081/assets/./assets/images/icon.png",
       "hostUri": "40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/ios"
     },
     "expoGo": {

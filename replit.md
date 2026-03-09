@@ -22,7 +22,7 @@ The backend is an Express.js application built with TypeScript, exposing RESTful
 
 Key features include:
 - **Internal Messaging System**: Real-time polling for HR/Admin to worker communication.
-- **Workplace Management**: Admins manage locations, assign workers, and view TITO logs.
+- **Workplace Management**: Admins manage locations, assign workers, and view TITO logs. Workplace detail screens filter assignments to active/invited status only (inactive assignments excluded from worker count and list).
 - **Timesheets & Payroll**: Supports bi-weekly pay periods, with an admin portal for review/approval and CSV export. TITO operations are idempotent, server-side calculations of hours, and comprehensive audit logging. Mobile "Email Timesheet" button for admin/HR to send CSV via SendGrid.
 - **TITO System (Stabilized)**:
   - Consolidated screens: `TitoLogsList.tsx` shared component used by both Tito tab and Management > TITO Logs (removed dead placeholder).
@@ -30,7 +30,7 @@ Key features include:
   - Strict shift-bound validation: clock-in only within [shiftStart - 15min, shiftEnd + 30min], clock-out within [shiftStart, shiftEnd + 30min]. `shiftId` required on all clock-ins.
   - Accident recovery: cancel clock-in within 2 minutes, correction requests (`tito_corrections` table) with admin approval workflow, "Adjusted" badge on corrected records.
   - Client-side: 2-second debounce on clock-in/out buttons, cancel button visible for 2 minutes after clock-in, network error handling.
-  - Filter bar: proper `stickyHeaderIndices` (replaced position: absolute hack). Compact collapsible TitoCards (name/date/times/status in one row; details expand on tap).
+  - Filter bar: proper `stickyHeaderIndices` (replaced position: absolute hack). Compact collapsible TitoCards (name/date/times/status in one row; details expand on tap). No phone/call/SMS action buttons on TitoCards — only Approve/Dispute for pending items.
   - Status values: pending, approved, disputed, canceled, flagged. Canceled records excluded from payroll but visible in admin.
 - **User Management**: Admins can CRUD users, manage roles, and toggle status.
 - **Shift Request Management**: Full workflow from client/admin creation to worker acceptance/decline with fill-to-capacity logic (multiple workers per shift via `workersNeeded`). Includes smart-assignment, broadcast/blast capabilities, and first-available acceptance. Shift offers maintain a full history with soft-delete for cancellations.

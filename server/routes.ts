@@ -788,7 +788,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!user) {
-        res.status(404).json({ error: "No account found for this Google account. Please contact your administrator." });
+        const fullName = name || email.split("@")[0];
+        const [newUser] = await db.insert(users).values({
+          email: email.toLowerCase(),
+          fullName,
+          role: "worker",
+          isActive: false,
+          googleId,
+          onboardingStatus: "NOT_APPLIED",
+        } as any).returning();
+        res.json({ registered: true, message: "Your account has been created and is pending admin approval. You will be notified when your account is activated." });
         return;
       }
 

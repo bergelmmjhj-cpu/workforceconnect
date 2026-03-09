@@ -38,6 +38,7 @@ export default function LoginScreen() {
   const { login, loginWithGoogleData } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const [error, setError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,7 +49,8 @@ export default function LoginScreen() {
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: GOOGLE_CLIENT_ID,
     responseType: "id_token",
-  });
+    prompt: "select_account",
+  } as any);
 
   useEffect(() => {
     if (response?.type === "success") {
@@ -73,6 +75,13 @@ export default function LoginScreen() {
       const res = await apiRequest("POST", "/api/auth/google", { idToken });
       const data = await res.json();
 
+      if (data.registered) {
+        setInfoMessage("Account created! An admin will review and activate your account. You'll receive access once approved.");
+        setError("");
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return;
+      }
+
       if (data.requires2FA) {
         rootNavigate("TwoFactorVerify", { userId: data.userId });
         return;
@@ -85,9 +94,11 @@ export default function LoginScreen() {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
         setError(data.error || "Google sign-in failed. Please try again.");
+        setInfoMessage("");
       }
     } catch (err: unknown) {
       setError("Google sign-in failed. Please try again.");
+      setInfoMessage("");
     } finally {
       setIsGoogleLoading(false);
     }
@@ -95,6 +106,7 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     setError("");
+    setInfoMessage("");
     setIsGoogleLoading(true);
     await promptAsync();
   };
@@ -158,6 +170,15 @@ export default function LoginScreen() {
           <Feather name="alert-circle" size={16} color={theme.error} />
           <ThemedText style={[styles.errorText, { color: theme.error }]}>
             {error}
+          </ThemedText>
+        </View>
+      ) : null}
+
+      {infoMessage ? (
+        <View style={[styles.errorContainer, { backgroundColor: theme.primary + "15" }]}>
+          <Feather name="check-circle" size={16} color={theme.primary} />
+          <ThemedText style={[styles.errorText, { color: theme.primary }]}>
+            {infoMessage}
           </ThemedText>
         </View>
       ) : null}

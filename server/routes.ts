@@ -3999,8 +3999,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .leftJoin(users, eq(shifts.workerUserId, users.id))
         .where(
           role === "worker"
-            ? and(eq(shifts.date, today), eq(shifts.workerUserId, userId))
-            : eq(shifts.date, today)
+            ? and(eq(shifts.date, today), eq(shifts.workerUserId, userId), ne(shifts.status, "cancelled"))
+            : and(eq(shifts.date, today), ne(shifts.status, "cancelled"))
         )
         .orderBy(shifts.startTime);
 

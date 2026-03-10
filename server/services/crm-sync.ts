@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { workplaces, shifts, shiftRequests, crmSyncLogs, users } from "../../shared/schema";
-import { eq, and, sql, isNull } from "drizzle-orm";
+import { eq, and, sql, isNull, ne, notInArray } from "drizzle-orm";
 import * as crmClient from "./weekdays-crm";
 
 let syncRunning = false;
@@ -289,6 +289,9 @@ export async function syncConfirmedShifts(dryRun = false, _skipLock = false): Pr
         const existing = shiftByCrmId.get(crmShift.id);
         if (existing) {
           if (!dryRun) {
+            // Always use the freshly resolved workerUserId from CRM phone matching.
+            // If the CRM no longer has a phone snapshot (or it no longer matches a user),
+            // we clear the assignment rather than keeping a stale one.
             await db.update(shifts)
               .set({
                 title: crmShift.request.hotelName,
@@ -298,7 +301,7 @@ export async function syncConfirmedShifts(dryRun = false, _skipLock = false): Pr
                 roleType: crmShift.request.roleNeeded,
                 status: mappedStatus,
                 workplaceId: workplace.id,
-                workerUserId: workerUserId || existing.workerUserId,
+                workerUserId: workerUserId,
                 category: "hotel",
                 updatedAt: new Date(),
               })
@@ -327,6 +330,37 @@ export async function syncConfirmedShifts(dryRun = false, _skipLock = false): Pr
         result.errors++;
         result.errorMessages.push(`Shift "${crmShift.request?.hotelName || crmShift.id}": ${err.message}`);
       }
+    }
+
+    // Cancel any CRM-sourced shifts that are no longer in the CRM feed
+    try {
+      const activeCrmShiftIds = crmShifts.map(s => s.id);
+      const staleShifts = await db.select({ id: shifts.id, title: shifts.title })
+        .from(shifts)
+        .where(
+          and(
+            eq(shifts.crmSource, true),
+            ne(shifts.status, "cancelled"),
+            ne(shifts.status, "completed"),
+            // crmShiftId must be set (non-null) and not in the active set
+            sql`${shifts.crmShiftId} IS NOT NULL`,
+            activeCrmShiftIds.length > 0
+              ? notInArray(shifts.crmShiftId, activeCrmShiftIds)
+              : sql`true`
+          )
+        );
+
+      for (const stale of staleShifts) {
+        if (!dryRun) {
+          await db.update(shifts)
+            .set({ status: "cancelled", updatedAt: new Date() })
+            .where(eq(shifts.id, stale.id));
+        }
+        result.updated++;
+        console.log(`[CRM Sync] Cancelled stale shift: "${stale.title}" (id=${stale.id})${dryRun ? " (dry run)" : ""}`);
+      }
+    } catch (err: any) {
+      result.errorMessages.push(`Stale shift cleanup: ${err.message}`);
     }
 
     await completeSyncLog(logId, "completed", result);

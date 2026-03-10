@@ -1386,7 +1386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db.execute(sql`DELETE FROM app_notifications WHERE user_id = ${id}`);
       await db.execute(sql`DELETE FROM sent_reminders WHERE worker_id = ${id}`);
       await db.execute(sql`DELETE FROM shift_checkins WHERE worker_id = ${id}`);
-      await db.execute(sql`DELETE FROM shift_offers WHERE worker_user_id = ${id}`);
+      await db.execute(sql`DELETE FROM shift_offers WHERE worker_id = ${id}`);
       await db.execute(sql`DELETE FROM payroll_batch_items WHERE worker_user_id = ${id}`);
       await db.execute(sql`DELETE FROM timesheet_entries WHERE timesheet_id IN (SELECT id FROM timesheets WHERE worker_user_id = ${id})`);
       await db.execute(sql`UPDATE timesheets SET approved_by_user_id = NULL WHERE approved_by_user_id = ${id}`);
@@ -7670,7 +7670,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
       if (existingUser.length > 0) {
-        res.status(409).json({ error: "A user with this email already exists" });
+        const existing = existingUser[0];
+        const roleLabel = existing.role.charAt(0).toUpperCase() + existing.role.slice(1);
+        const statusLabel = existing.isActive ? "active" : "inactive";
+        const hint = existing.isActive
+          ? `You can manage their account in User Management.`
+          : `You can reactivate their account in User Management.`;
+        res.status(409).json({
+          error: `An ${statusLabel} ${roleLabel} account already exists with this email. ${hint}`,
+        });
         return;
       }
 

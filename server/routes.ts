@@ -39,6 +39,7 @@ import {
   userPhotos,
   smsLogs,
   titoCorrections,
+  aiActionLogs,
 } from "../shared/schema";
 import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod, getCurrentPayPeriod } from "../shared/payPeriods2026";
@@ -1961,6 +1962,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error running full sync:", error);
       res.status(500).json({ error: error.message || "Failed to run full sync" });
+    }
+  });
+
+  // AI Operations Assistant routes
+  app.get("/api/admin/ai-assistant/status", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { getStatus } = await import("./services/ai-assistant/index");
+      res.json(getStatus());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to get AI assistant status" });
+    }
+  });
+
+  app.get("/api/admin/ai-assistant/logs", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const logs = await db
+        .select()
+        .from(aiActionLogs)
+        .orderBy(desc(aiActionLogs.createdAt))
+        .limit(limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to get AI assistant logs" });
+    }
+  });
+
+  app.post("/api/admin/ai-assistant/trigger", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || userRole !== "admin") {
+        res.status(403).json({ error: "Admin access required" });
+        return;
+      }
+      const { triggerManualCycle } = await import("./services/ai-assistant/index");
+      await triggerManualCycle();
+      res.json({ success: true, message: "Monitor cycle completed" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to trigger monitor cycle" });
+    }
+  });
+
+  app.post("/api/admin/ai-assistant/pause", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || userRole !== "admin") {
+        res.status(403).json({ error: "Admin access required" });
+        return;
+      }
+      const aiModule = await import("./services/ai-assistant/index");
+      const loggerModule = await import("./services/ai-assistant/logger");
+      aiModule.pause();
+      await loggerModule.logAction({ monitorType: "system", signalSummary: "Assistant paused by admin", actionTaken: "paused", alertSentTo: userId });
+      res.json({ success: true, message: "Assistant paused" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to pause assistant" });
+    }
+  });
+
+  app.post("/api/admin/ai-assistant/resume", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || userRole !== "admin") {
+        res.status(403).json({ error: "Admin access required" });
+        return;
+      }
+      const aiModule = await import("./services/ai-assistant/index");
+      const loggerModule = await import("./services/ai-assistant/logger");
+      aiModule.resume();
+      await loggerModule.logAction({ monitorType: "system", signalSummary: "Assistant resumed by admin", actionTaken: "resumed", alertSentTo: userId });
+      res.json({ success: true, message: "Assistant resumed" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to resume assistant" });
     }
   });
 

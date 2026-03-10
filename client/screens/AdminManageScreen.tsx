@@ -71,6 +71,12 @@ export default function AdminManageScreen() {
       onPress: () => rootNavigate("CrmSync"),
     },
     {
+      icon: "cpu",
+      title: "AI Operations Assistant",
+      description: "Automated monitoring for leads, shifts, and accounts",
+      onPress: () => rootNavigate("AiAssistant"),
+    },
+    {
       icon: "user-check",
       title: "User Management",
       description: "Create, edit, approve, and invite HR/Client users",

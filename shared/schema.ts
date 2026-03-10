@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, doublePrecision, uniqueIndex, date, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, doublePrecision, uniqueIndex, index, date, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -979,3 +979,34 @@ export const crmSyncLogs = pgTable("crm_sync_logs", {
 });
 
 export type CrmSyncLog = typeof crmSyncLogs.$inferSelect;
+
+export const aiActionLogs = pgTable("ai_action_logs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  monitorType: text("monitor_type").notNull(),
+  signalId: text("signal_id"),
+  signalSummary: text("signal_summary").notNull(),
+  actionTaken: text("action_taken").notNull(),
+  alertSentTo: text("alert_sent_to"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  createdAtIdx: index("ai_action_logs_created_at_idx").on(table.createdAt),
+  monitorTypeIdx: index("ai_action_logs_monitor_type_idx").on(table.monitorType),
+}));
+
+export type AiActionLog = typeof aiActionLogs.$inferSelect;
+
+export const aiAlertState = pgTable("ai_alert_state", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  alertType: text("alert_type").notNull(),
+  alertedAt: timestamp("alerted_at").defaultNow().notNull(),
+  alertCount: integer("alert_count").notNull().default(1),
+}, (table) => ({
+  dedupeIdx: uniqueIndex("ai_alert_state_dedupe_idx").on(table.entityType, table.entityId, table.alertType),
+}));

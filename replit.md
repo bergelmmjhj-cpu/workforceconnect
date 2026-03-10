@@ -45,6 +45,7 @@ Key features include:
 - **Force Password Change**: `mustChangePassword` boolean on `users` table. Login returns the flag; `ChangePasswordScreen` blocks app access until password is changed via `POST /api/auth/change-password`.
 - **Bulk SMS**: `POST /api/admin/send-app-instructions` sends app download/login SMS to all workers with phone numbers, skipping those already notified. Admin dashboard has a "Send App Instructions" button.
 - **Consolidated Email Timesheet**: `POST /api/tito/email-timesheet` accepts `period` (weekly/biweekly/monthly), `workplaceId`, `workerId` filters. CSV includes per-worker totals and grand total. Mobile modal has period chips, workplace/worker selectors.
+- **AI Operations Assistant**: Embedded background monitor in the Express server that runs every 5 minutes. Monitors 5 signal types: (1) new contact form leads (immediate email to admin), (2) shift requests unacknowledged 30 min (reminder), (3) shift requests unacknowledged 4h (escalation), (4) scheduled shifts with no worker within 4 hours (urgent), (5) daily 9 AM pending accounts digest. Uses `ai_action_logs` table for audit trail and `ai_alert_state` table for deduplication. Activation timestamp prevents alerting on historical data. Admin screen `AiAssistantScreen.tsx` accessible via Management Hub with status, controls (run/pause/resume), rules legend, and scrollable action log. API routes: `GET /api/admin/ai-assistant/status`, `GET /api/admin/ai-assistant/logs`, `POST /api/admin/ai-assistant/trigger|pause|resume`.
 
 ### Data Flow
 

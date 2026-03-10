@@ -920,6 +920,16 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
           log("[CRM] Startup check failed (non-blocking):", crmErr.message);
         }
       })();
+
+      // AI Operations Assistant startup (non-blocking)
+      (async () => {
+        try {
+          const aiAssistant = await import("./services/ai-assistant/index");
+          await aiAssistant.startAssistant();
+        } catch (aiErr: any) {
+          log("[AI] Startup failed (non-blocking):", aiErr.message);
+        }
+      })();
     },
   );
 })();

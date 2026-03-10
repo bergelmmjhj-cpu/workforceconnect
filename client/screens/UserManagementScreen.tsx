@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
@@ -52,7 +52,6 @@ const ROLES: { value: UserRole; label: string }[] = [
 export default function UserManagementScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -832,7 +831,7 @@ export default function UserManagementScreen() {
       </Modal>
 
       {/* FAB Buttons */}
-      <View style={[styles.fabRow, { bottom: tabBarHeight + Spacing.lg }]}>
+      <View style={[styles.fabRow, { bottom: insets.bottom + Spacing.lg }]}>
         <Pressable
           onPress={() => {
             setInviteFullName(""); setInviteEmail(""); setInviteRole("hr");

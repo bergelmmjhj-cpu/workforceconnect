@@ -28,7 +28,7 @@
 
     "android": {
       "package": "com.workforceconnect.app",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "backgroundColor": "#1E40AF",
         "foregroundImage": "./assets/images/icon.png"

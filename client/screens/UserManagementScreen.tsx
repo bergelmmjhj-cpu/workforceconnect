@@ -160,7 +160,7 @@ export default function UserManagementScreen() {
 
   const handleInviteUser = () => {
     setInviteError(null);
-    setInviteSuccess(null);
+    setInviteCredentials(null);
     if (!inviteFullName.trim()) { setInviteError("Full name is required"); return; }
     if (!inviteEmail.trim()) { setInviteError("Email is required"); return; }
     if (inviteRole === "client" && !inviteBusinessName.trim()) { setInviteError("Business name is required for clients"); return; }

@@ -22,7 +22,8 @@ import { StatusPill } from "@/components/StatusPill";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { apiRequest, queryClient } from "@/lib/query-client";
 
 type ShiftRequestStatus = "submitted" | "offered" | "filled" | "cancelled";
@@ -96,6 +97,7 @@ function formatTime(timeStr: string): string {
 
 export default function ShiftRequestsScreen() {
   const insets = useSafeAreaInsets();
+  const isWideWeb = useIsWideWeb();
   const headerHeight = useHeaderHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
   const { theme, isDark } = useTheme();
@@ -310,6 +312,7 @@ export default function ShiftRequestsScreen() {
             paddingBottom: paddingBottom,
           },
           filteredRequests.length === 0 ? styles.emptyContent : undefined,
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         refreshControl={

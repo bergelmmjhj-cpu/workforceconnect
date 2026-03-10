@@ -22,7 +22,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { ListSkeleton } from "@/components/LoadingSkeleton";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { TitoLog, TitoApprovalStatus } from "@/types";
 import { apiRequest, queryClient } from "@/lib/query-client";
 
@@ -48,6 +49,7 @@ export function TitoLogsList({
   bottomInset,
 }: TitoLogsListProps) {
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const { user } = useAuth();
 
   const [filter, setFilter] = useState<TitoApprovalStatus | "all">("all");
@@ -256,6 +258,7 @@ export function TitoLogsList({
             paddingBottom: paddingBottom,
           },
           filteredLogs.length === 0 ? styles.emptyContent : undefined,
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         scrollIndicatorInsets={{ bottom: bottomInset }}
         refreshControl={

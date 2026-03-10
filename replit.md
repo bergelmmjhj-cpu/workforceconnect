@@ -16,6 +16,8 @@ The frontend is a React Native (Expo) application for iOS, Android, and Web, uti
 
 **Web Sidebar Layout**: On wide web screens (>768px), a persistent 220px sidebar (`WebSidebarLayout.tsx`) wraps the entire navigation tree in `App.tsx`, providing role-based navigation that persists across both tab and stack screens. The bottom tab bar is hidden on wide web via `display: "none"`. The sidebar is gated behind authentication, onboarding completion, and password change status. `useIsWideWeb()` and `useContentPadding()` hooks handle responsive padding differences between mobile and web.
 
+**Responsive Content Width**: `client/constants/theme.ts` exports a `Layout` constant with max-width values used across all major screens: `formMaxWidth: 480` (auth/form screens), `contentMaxWidth: 700` (settings/profile), `listMaxWidth: 900` (management and list screens), `wideMaxWidth: 1200` (dashboard). All screens apply `isWideWeb && { maxWidth: Layout.XXX, alignSelf: 'center', width: '100%' }` to their `contentContainerStyle` to prevent content stretching on desktop. Mobile layout is unaffected.
+
 ### Backend
 
 The backend is an Express.js application built with TypeScript, exposing RESTful API endpoints prefixed with `/api`. It uses PostgreSQL with Drizzle ORM for type-safe database interactions. The backend also serves a marketing landing page with SEO optimization and a public contractor payment guide. Authentication uses bcrypt for password hashing and supports role-based access (admin, hr, client, worker).

@@ -20,7 +20,8 @@ import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getErrorMessage } from "@/utils/errorHandler";
 import { apiRequest } from "@/lib/query-client";
@@ -34,6 +35,7 @@ const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 export default function SignUpScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const { register, loginWithGoogleData } = useAuth();
   const navigation = useNavigation<NavigationProp>();
 
@@ -179,6 +181,7 @@ export default function SignUpScreen() {
           paddingTop: insets.top + Spacing["2xl"],
           paddingBottom: insets.bottom + Spacing["2xl"],
         },
+        isWideWeb && { maxWidth: Layout.formMaxWidth, alignSelf: 'center', width: '100%' },
       ]}
     >
       <View style={styles.header}>

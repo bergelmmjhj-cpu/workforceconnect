@@ -24,7 +24,8 @@ import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { UserRole } from "@/types";
 
@@ -54,6 +55,7 @@ export default function UserManagementScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -343,6 +345,7 @@ export default function UserManagementScreen() {
             paddingTop: headerHeight + Spacing.md,
             paddingBottom: insets.bottom + Spacing.xl,
           },
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         refreshControl={
           <RefreshControl

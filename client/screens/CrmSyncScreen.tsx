@@ -17,7 +17,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
+import { Spacing, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { apiRequest } from "@/lib/query-client";
 
 type SyncResult = {
@@ -94,6 +95,7 @@ export default function CrmSyncScreen() {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const isWeb = Platform.OS === "web";
+  const isWideWeb = useIsWideWeb();
   const queryClient = useQueryClient();
   const [lastResult, setLastResult] = useState<{
     workplaces?: SyncResult;
@@ -227,6 +229,7 @@ export default function CrmSyncScreen() {
             paddingTop: isWeb ? Spacing.md : headerHeight + Spacing.md,
             paddingBottom: insets.bottom + Spacing.lg,
           },
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={

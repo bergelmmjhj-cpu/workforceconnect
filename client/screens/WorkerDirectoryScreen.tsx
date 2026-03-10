@@ -11,7 +11,8 @@ import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { Avatar } from "@/components/Avatar";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { rootNavigate } from "@/lib/navigation";
 
 type Worker = {
@@ -29,6 +30,7 @@ export default function WorkerDirectoryScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: workers = [], isLoading, refetch } = useQuery<Worker[]>({
@@ -153,6 +155,7 @@ export default function WorkerDirectoryScreen() {
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: insets.bottom + Spacing.xl },
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         ListEmptyComponent={

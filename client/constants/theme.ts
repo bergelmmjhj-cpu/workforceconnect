@@ -188,6 +188,13 @@ export const Shadows = {
   },
 };
 
+export const Layout = {
+  formMaxWidth: 480,
+  contentMaxWidth: 700,
+  listMaxWidth: 900,
+  wideMaxWidth: 1200,
+};
+
 export const Fonts = Platform.select({
   ios: {
     sans: "Inter_400Regular",

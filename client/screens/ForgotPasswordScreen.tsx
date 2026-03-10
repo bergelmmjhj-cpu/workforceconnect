@@ -11,7 +11,8 @@ import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { apiRequest } from "@/lib/query-client";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -19,6 +20,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const navigation = useNavigation<NavigationProp>();
 
   const [email, setEmail] = useState("");
@@ -50,6 +52,7 @@ export default function ForgotPasswordScreen() {
       contentContainerStyle={[
         styles.content,
         { paddingTop: insets.top + Spacing["4xl"], paddingBottom: insets.bottom + Spacing["2xl"] },
+        isWideWeb && { maxWidth: Layout.formMaxWidth, alignSelf: 'center', width: '100%' },
       ]}
     >
       <View style={styles.header}>

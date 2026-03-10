@@ -20,7 +20,8 @@ import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth, TwoFactorRequiredError, PendingAccountError } from "@/contexts/AuthContext";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getLoginErrorMessage } from "@/utils/errorHandler";
 import { rootNavigate } from "@/lib/navigation";
@@ -35,6 +36,7 @@ const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const { login, loginWithGoogleData } = useAuth();
   const navigation = useNavigation<NavigationProp>();
   const [error, setError] = useState("");
@@ -161,6 +163,7 @@ export default function LoginScreen() {
           paddingTop: insets.top + Spacing["4xl"],
           paddingBottom: insets.bottom + Spacing["2xl"],
         },
+        isWideWeb && { maxWidth: Layout.formMaxWidth, alignSelf: 'center', width: '100%' },
       ]}
     >
       <View style={styles.header}>

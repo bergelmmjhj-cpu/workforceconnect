@@ -17,7 +17,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
 import { apiRequest, queryClient } from "@/lib/query-client";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 
 interface Notification {
   id: number;
@@ -67,6 +68,7 @@ function formatRelativeTime(dateStr: string): string {
 
 export default function NotificationsScreen() {
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const { user } = useAuth();
   const { paddingTop, paddingBottom } = useContentPadding();
 
@@ -225,6 +227,7 @@ export default function NotificationsScreen() {
           styles.listContent,
           { paddingTop, paddingBottom },
           notifications.length === 0 ? styles.emptyContent : undefined,
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         refreshControl={
           <RefreshControl

@@ -8,7 +8,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
+import { Spacing, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { rootNavigate } from "@/lib/navigation";
 
 type AdminMenuItemProps = {
@@ -20,6 +21,7 @@ type AdminMenuItemProps = {
 
 function AdminMenuItem({ icon, title, description, onPress }: AdminMenuItemProps) {
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
 
   return (
     <Card style={styles.menuCard} onPress={onPress}>
@@ -38,6 +40,7 @@ function AdminMenuItem({ icon, title, description, onPress }: AdminMenuItemProps
 export default function AdminManageScreen() {
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
+  const isWideWeb = useIsWideWeb();
 
   const menuItems: AdminMenuItemProps[] = [
     {
@@ -94,6 +97,7 @@ export default function AdminManageScreen() {
         contentContainerStyle={[
           styles.contentContainer,
           { paddingTop: topPadding, paddingBottom: insets.bottom + Spacing.lg },
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         showsVerticalScrollIndicator={false}
       >

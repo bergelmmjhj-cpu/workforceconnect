@@ -15,7 +15,8 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { UserRole, ClientType, CLIENT_TYPES } from "@/types";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { apiRequest } from "@/lib/query-client";
@@ -31,6 +32,7 @@ const roleLabels: Record<UserRole, string> = {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const isWideWeb = useIsWideWeb();
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop, paddingBottom } = useContentPadding();
   const { theme } = useTheme();
@@ -354,6 +356,7 @@ export default function ProfileScreen() {
           paddingTop: paddingTop,
           paddingBottom: tabBarHeight + Spacing.xl,
         },
+        isWideWeb && { maxWidth: Layout.contentMaxWidth, alignSelf: 'center', width: '100%' },
       ]}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >

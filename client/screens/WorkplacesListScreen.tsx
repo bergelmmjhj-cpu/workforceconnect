@@ -10,7 +10,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
+import { Spacing, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { rootNavigate } from "@/lib/navigation";
 import { apiRequest } from "@/lib/query-client";
 
@@ -32,6 +33,7 @@ export default function WorkplacesListScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const queryClient = useQueryClient();
   const [confirmModal, setConfirmModal] = useState<{title: string; message: string; onConfirm: () => void} | null>(null);
 
@@ -127,6 +129,7 @@ export default function WorkplacesListScreen() {
         contentContainerStyle={[
           styles.listContent,
           { paddingTop: Platform.OS === "web" ? Spacing.md : headerHeight + Spacing.md, paddingBottom: insets.bottom + 80 },
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         ListEmptyComponent={

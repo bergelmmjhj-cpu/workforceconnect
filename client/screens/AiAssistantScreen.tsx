@@ -17,7 +17,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing } from "@/constants/theme";
+import { Spacing, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { apiRequest } from "@/lib/query-client";
 
 type AssistantStatus = {
@@ -82,6 +83,7 @@ export default function AiAssistantScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const isWideWeb = useIsWideWeb();
   const queryClient = useQueryClient();
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
 
@@ -142,6 +144,7 @@ export default function AiAssistantScreen() {
         contentContainerStyle={[
           styles.contentContainer,
           { paddingTop: topPadding, paddingBottom: insets.bottom + Spacing.lg },
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={

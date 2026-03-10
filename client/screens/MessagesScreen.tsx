@@ -18,7 +18,8 @@ import { ConversationSkeleton } from "@/components/LoadingSkeleton";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useContentPadding } from "@/hooks/useContentPadding";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { rootNavigate } from "@/lib/navigation";
 import { formatDistanceToNow } from "date-fns";
 
@@ -40,6 +41,7 @@ export default function MessagesScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { paddingTop } = useContentPadding();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const { user } = useAuth();
 
   const { data: conversations = [], isLoading, refetch, isRefetching } = useQuery<Conversation[]>({
@@ -165,6 +167,7 @@ export default function MessagesScreen() {
             paddingBottom: tabBarHeight + Spacing.xl,
           },
           conversations.length === 0 ? styles.emptyContent : undefined,
+          isWideWeb && { maxWidth: Layout.listMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         refreshControl={

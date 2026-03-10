@@ -11,7 +11,8 @@ import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { apiRequest } from "@/lib/query-client";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -20,6 +21,7 @@ type RoutePropType = RouteProp<RootStackParamList, "ResetPassword">;
 export default function ResetPasswordScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RoutePropType>();
 
@@ -73,6 +75,7 @@ export default function ResetPasswordScreen() {
       contentContainerStyle={[
         styles.content,
         { paddingTop: insets.top + Spacing["4xl"], paddingBottom: insets.bottom + Spacing["2xl"] },
+        isWideWeb && { maxWidth: Layout.formMaxWidth, alignSelf: 'center', width: '100%' },
       ]}
     >
       <View style={styles.header}>

@@ -15,12 +15,14 @@ import { ThemedText } from "@/components/ThemedText";
 import { Input } from "@/components/Input";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Layout } from "@/constants/theme";
+import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { apiRequest } from "@/lib/query-client";
 
 export default function ChangePasswordScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const isWideWeb = useIsWideWeb();
   const { user, updateUser } = useAuth();
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -91,6 +93,7 @@ export default function ChangePasswordScreen() {
             paddingTop: insets.top + Spacing.xxl,
             paddingBottom: insets.bottom + Spacing.xl,
           },
+          isWideWeb && { maxWidth: Layout.formMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
       >
         <View style={styles.iconContainer}>

@@ -7122,11 +7122,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Automated Shift Reminders (runs every 15 minutes)
   // ========================================
 
+  // Phone number that receives a CC copy of every shift reminder sent
+  const REMINDER_CC_PHONE = "+14372188887";
+
+  function getShiftTimezone(province: string | null | undefined): string {
+    const p = (province || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (p.includes("british columbia") || p.includes(" bc")) return "America/Vancouver";
+    if (p.includes("alberta") || p.includes(" ab")) return "America/Edmonton";
+    if (p.includes("saskatchewan") || p.includes(" sk")) return "America/Regina";
+    if (p.includes("manitoba") || p.includes(" mb")) return "America/Winnipeg";
+    if (p.includes("newfoundland") || p.includes(" nl")) return "America/St_Johns";
+    if (p.includes("nova scotia") || p.includes("new brunswick") || p.includes("prince edward")
+      || p.includes(" ns") || p.includes(" nb") || p.includes(" pe")) return "America/Halifax";
+    return "America/Toronto";
+  }
+
+  function getTimezoneAbbr(timezone: string): string {
+    const map: Record<string, string> = {
+      "America/Vancouver": "PT",
+      "America/Edmonton": "MT",
+      "America/Regina": "CT",
+      "America/Winnipeg": "CT",
+      "America/Toronto": "ET",
+      "America/Halifax": "AT",
+      "America/St_Johns": "NT",
+    };
+    return map[timezone] || "ET";
+  }
+
+  function getLocalNow(timezone: string): { dateStr: string; hours: number; minutes: number } {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-CA", { timeZone: timezone });
+    const timeParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(now);
+    const hours = parseInt(timeParts.find(p => p.type === "hour")?.value || "0", 10);
+    const minutes = parseInt(timeParts.find(p => p.type === "minute")?.value || "0", 10);
+    return { dateStr, hours, minutes };
+  }
+
   async function processShiftReminders() {
     try {
-      const now = new Date();
-      const today = now.toISOString().split("T")[0];
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      // Use Toronto as the wide query window to catch all shifts within the next 2 days
+      const torontoNow = getLocalNow("America/Toronto");
+      const tomorrowToronto = new Date();
+      tomorrowToronto.setDate(tomorrowToronto.getDate() + 1);
+      const tomorrowTorontoStr = tomorrowToronto.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
 
       const upcomingShifts = await db
         .select({
@@ -7136,22 +7180,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
           startTime: shifts.startTime,
           workerUserId: shifts.workerUserId,
           workplaceName: workplaces.name,
+          workplaceProvince: workplaces.province,
+          workerName: users.fullName,
         })
         .from(shifts)
         .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
+        .leftJoin(users, eq(shifts.workerUserId, users.id))
         .where(
           and(
-            or(eq(shifts.date, today), eq(shifts.date, tomorrow)),
+            or(eq(shifts.date, torontoNow.dateStr), eq(shifts.date, tomorrowTorontoStr)),
             eq(shifts.status, "scheduled"),
             sql`${shifts.workerUserId} IS NOT NULL`
           )
         );
 
       for (const shift of upcomingShifts) {
-        if (!shift.workerUserId) continue;
+        if (!shift.workerUserId || !shift.startTime) continue;
 
-        const isToday = shift.date === today;
+        const tz = getShiftTimezone(shift.workplaceProvince);
+        const local = getLocalNow(tz);
+        const tzAbbr = getTimezoneAbbr(tz);
+
+        // Compute tomorrow's date in the shift's local timezone
+        const tomorrowLocal = new Date();
+        tomorrowLocal.setDate(tomorrowLocal.getDate() + 1);
+        const tomorrowLocalStr = tomorrowLocal.toLocaleDateString("en-CA", { timeZone: tz });
+
+        const isToday = shift.date === local.dateStr;
+        const isTomorrow = shift.date === tomorrowLocalStr;
+        if (!isToday && !isTomorrow) continue;
+
         const reminderType = isToday ? "day_of" : "day_before";
+
+        // Timing gate — prevent sending at/after shift start or at wrong time of day
+        const [sh, sm] = shift.startTime.split(":").map(Number);
+        const shiftMinutes = sh * 60 + (sm || 0);
+        const nowMinutes = local.hours * 60 + local.minutes;
+
+        if (isToday) {
+          // Send only if shift starts between 15 min and 4 hours from now (local time)
+          const minutesUntilShift = shiftMinutes - nowMinutes;
+          if (minutesUntilShift < 15 || minutesUntilShift > 240) continue;
+        } else {
+          // Day-before: only send between 18:00–21:00 in the workplace's local timezone
+          if (local.hours < 18 || local.hours >= 21) continue;
+        }
 
         const existing = await db
           .select()
@@ -7168,7 +7241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (existing.length > 0) continue;
 
         const title = isToday ? "Shift Today" : "Shift Tomorrow";
-        const body = `${shift.title} at ${shift.workplaceName || "workplace"} - ${shift.startTime}`;
+        const body = `${shift.title} at ${shift.workplaceName || "workplace"} - ${shift.startTime} (${tzAbbr})`;
 
         try {
           await sendPushNotifications([shift.workerUserId], title, body, {
@@ -7189,6 +7262,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: "shift_reminder",
             data: JSON.stringify({ shiftId: shift.id }),
           });
+
+          // Send CC copy to supervisor number
+          const workerDisplay = shift.workerName || "Worker";
+          const ccMessage =
+            `Shift Reminder Sent\n` +
+            `Worker: ${workerDisplay}\n` +
+            `Shift: ${shift.title}\n` +
+            `Location: ${shift.workplaceName || "workplace"}\n` +
+            `Date: ${shift.date}\n` +
+            `Time: ${shift.startTime} (${tzAbbr})`;
+
+          try {
+            const ccResult = await sendSMS(REMINDER_CC_PHONE, ccMessage);
+            await logSMS({
+              phoneNumber: REMINDER_CC_PHONE,
+              direction: "outbound",
+              message: ccMessage,
+              shiftId: shift.id,
+              status: ccResult.success ? "sent" : "failed",
+            });
+            console.log(`[Reminder] CC sent to ${REMINDER_CC_PHONE} for ${workerDisplay} — ${shift.title} on ${shift.date}`);
+          } catch (smsErr) {
+            console.error(`[Reminder] CC SMS failed for shift ${shift.id}:`, smsErr);
+          }
+
         } catch (err) {
           console.error(`Failed to send reminder for shift ${shift.id}:`, err);
         }

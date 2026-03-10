@@ -10,6 +10,7 @@ import {
   ScrollView,
   TextInput,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 
@@ -79,7 +80,8 @@ export default function UserManagementScreen() {
   const [inviteRole, setInviteRole] = useState<"hr" | "client">("hr");
   const [inviteBusinessName, setInviteBusinessName] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [inviteCredentials, setInviteCredentials] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<"email" | "password" | null>(null);
 
   const { data: users = [], isLoading, refetch, isRefetching } = useQuery<APIUser[]>({
     queryKey: ["/api/users"],
@@ -141,12 +143,13 @@ export default function UserManagementScreen() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      setInviteSuccess(`Invite sent to ${data.email}. Credentials emailed.`);
+      setInviteCredentials({ email: data.email, tempPassword: data.tempPassword });
       setInviteFullName("");
       setInviteEmail("");
       setInviteRole("hr");
       setInviteBusinessName("");
       setInviteError(null);
+      setCopiedField(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: Error) => {
@@ -835,12 +838,12 @@ export default function UserManagementScreen() {
         <Pressable
           onPress={() => {
             setInviteFullName(""); setInviteEmail(""); setInviteRole("hr");
-            setInviteBusinessName(""); setInviteError(null); setInviteSuccess(null);
+            setInviteBusinessName(""); setInviteError(null); setInviteCredentials(null); setCopiedField(null);
             setInviteModalVisible(true);
           }}
           style={[styles.fabSecondary, { backgroundColor: theme.surface, borderColor: theme.primary }]}
         >
-          <Feather name="mail" size={18} color={theme.primary} />
+          <Feather name="user-plus" size={18} color={theme.primary} />
           <ThemedText style={[styles.fabSecondaryText, { color: theme.primary }]}>Invite HR/Client</ThemedText>
         </Pressable>
         <Pressable
@@ -856,95 +859,169 @@ export default function UserManagementScreen() {
         visible={inviteModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setInviteModalVisible(false)}
+        onRequestClose={() => {
+          if (!inviteCredentials) setInviteModalVisible(false);
+        }}
       >
         <ThemedView style={[styles.modalContainer, { paddingTop: Spacing["2xl"] }]}>
           <View style={styles.modalHeader}>
-            <ThemedText type="h2">Invite HR / Client</ThemedText>
-            <Pressable onPress={() => setInviteModalVisible(false)}>
-              <Feather name="x" size={24} color={theme.text} />
-            </Pressable>
-          </View>
-          <ScrollView style={styles.modalContent}>
-            {inviteError ? (
-              <View style={[styles.modalError, { backgroundColor: theme.error + "15" }]}>
-                <Feather name="alert-circle" size={14} color={theme.error} />
-                <ThemedText style={[styles.modalErrorText, { color: theme.error }]}>{inviteError}</ThemedText>
-              </View>
-            ) : null}
-            {inviteSuccess ? (
-              <View style={[styles.modalError, { backgroundColor: theme.primary + "15" }]}>
-                <Feather name="check-circle" size={14} color={theme.primary} />
-                <ThemedText style={[styles.modalErrorText, { color: theme.primary }]}>{inviteSuccess}</ThemedText>
-              </View>
-            ) : null}
-
-            <ThemedText style={styles.inputLabel}>Full Name</ThemedText>
-            <TextInput
-              style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
-              value={inviteFullName}
-              onChangeText={setInviteFullName}
-              placeholder="Full name"
-              placeholderTextColor={theme.textMuted}
-              autoCapitalize="words"
-            />
-
-            <ThemedText style={styles.inputLabel}>Email</ThemedText>
-            <TextInput
-              style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
-              value={inviteEmail}
-              onChangeText={setInviteEmail}
-              placeholder="email@example.com"
-              placeholderTextColor={theme.textMuted}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-
-            <ThemedText style={styles.inputLabel}>Role</ThemedText>
-            <View style={styles.roleToggleRow}>
-              {(["hr", "client"] as const).map((r) => (
-                <Pressable
-                  key={r}
-                  onPress={() => setInviteRole(r)}
-                  style={[
-                    styles.roleChipModal,
-                    { borderColor: theme.border, backgroundColor: inviteRole === r ? theme.primary : theme.surface },
-                  ]}
-                >
-                  <ThemedText style={[styles.roleChipTextModal, { color: inviteRole === r ? "#fff" : theme.text }]}>
-                    {r === "hr" ? "HR" : "Client"}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-
-            {inviteRole === "client" ? (
-              <>
-                <ThemedText style={styles.inputLabel}>Business Name</ThemedText>
-                <TextInput
-                  style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
-                  value={inviteBusinessName}
-                  onChangeText={setInviteBusinessName}
-                  placeholder="Company name"
-                  placeholderTextColor={theme.textMuted}
-                  autoCapitalize="words"
-                />
-              </>
-            ) : null}
-
-            <ThemedText style={[styles.inputLabel, { color: theme.textMuted, fontSize: 12 }]}>
-              A temporary password will be generated and emailed to the user. They will be prompted to change it on first login.
+            <ThemedText type="h2">
+              {inviteCredentials ? "Account Created" : "Invite HR / Client"}
             </ThemedText>
+            {inviteCredentials ? null : (
+              <Pressable onPress={() => setInviteModalVisible(false)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            )}
+          </View>
 
-            <View style={styles.modalActions}>
-              <Button
-                onPress={handleInviteUser}
-                disabled={inviteUserMutation.isPending}
-              >
-                {inviteUserMutation.isPending ? "Sending..." : "Send Invite"}
-              </Button>
-            </View>
-          </ScrollView>
+          {inviteCredentials ? (
+            <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: Spacing["2xl"] }}>
+              <View style={[styles.credentialSuccessBanner, { backgroundColor: theme.success + "15" }]}>
+                <Feather name="check-circle" size={20} color={theme.success} />
+                <ThemedText style={[styles.credentialSuccessText, { color: theme.success }]}>
+                  Account is ready. Share these login details with the user.
+                </ThemedText>
+              </View>
+
+              <ThemedText style={[styles.credentialNote, { color: theme.textSecondary }]}>
+                The user will be asked to change their password on first login.
+              </ThemedText>
+
+              <View style={[styles.credentialCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={styles.credentialRow}>
+                  <View style={styles.credentialLabelCol}>
+                    <Feather name="mail" size={16} color={theme.textMuted} />
+                    <ThemedText style={[styles.credentialLabel, { color: theme.textSecondary }]}>Email</ThemedText>
+                  </View>
+                  <ThemedText style={[styles.credentialValue, { color: theme.text }]} numberOfLines={1} selectable>
+                    {inviteCredentials.email}
+                  </ThemedText>
+                  <Pressable
+                    onPress={async () => {
+                      await Clipboard.setStringAsync(inviteCredentials.email);
+                      setCopiedField("email");
+                      setTimeout(() => setCopiedField(null), 2000);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.copyButton, { backgroundColor: copiedField === "email" ? theme.success + "20" : theme.backgroundSecondary }]}
+                  >
+                    <Feather name={copiedField === "email" ? "check" : "copy"} size={16} color={copiedField === "email" ? theme.success : theme.primary} />
+                  </Pressable>
+                </View>
+
+                <View style={[styles.credentialDivider, { backgroundColor: theme.border }]} />
+
+                <View style={styles.credentialRow}>
+                  <View style={styles.credentialLabelCol}>
+                    <Feather name="lock" size={16} color={theme.textMuted} />
+                    <ThemedText style={[styles.credentialLabel, { color: theme.textSecondary }]}>Password</ThemedText>
+                  </View>
+                  <ThemedText style={[styles.credentialValue, { color: theme.text }]} selectable>
+                    {inviteCredentials.tempPassword}
+                  </ThemedText>
+                  <Pressable
+                    onPress={async () => {
+                      await Clipboard.setStringAsync(inviteCredentials.tempPassword);
+                      setCopiedField("password");
+                      setTimeout(() => setCopiedField(null), 2000);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                    style={[styles.copyButton, { backgroundColor: copiedField === "password" ? theme.success + "20" : theme.backgroundSecondary }]}
+                  >
+                    <Feather name={copiedField === "password" ? "check" : "copy"} size={16} color={copiedField === "password" ? theme.success : theme.primary} />
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.modalActions}>
+                <Button
+                  onPress={() => {
+                    setInviteCredentials(null);
+                    setCopiedField(null);
+                    setInviteModalVisible(false);
+                  }}
+                >
+                  Done
+                </Button>
+              </View>
+            </ScrollView>
+          ) : (
+            <ScrollView style={styles.modalContent}>
+              {inviteError ? (
+                <View style={[styles.modalError, { backgroundColor: theme.error + "15" }]}>
+                  <Feather name="alert-circle" size={14} color={theme.error} />
+                  <ThemedText style={[styles.modalErrorText, { color: theme.error }]}>{inviteError}</ThemedText>
+                </View>
+              ) : null}
+
+              <ThemedText style={styles.inputLabel}>Full Name</ThemedText>
+              <TextInput
+                style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+                value={inviteFullName}
+                onChangeText={setInviteFullName}
+                placeholder="Full name"
+                placeholderTextColor={theme.textMuted}
+                autoCapitalize="words"
+              />
+
+              <ThemedText style={styles.inputLabel}>Email</ThemedText>
+              <TextInput
+                style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+                value={inviteEmail}
+                onChangeText={setInviteEmail}
+                placeholder="email@example.com"
+                placeholderTextColor={theme.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <ThemedText style={styles.inputLabel}>Role</ThemedText>
+              <View style={styles.roleToggleRow}>
+                {(["hr", "client"] as const).map((r) => (
+                  <Pressable
+                    key={r}
+                    onPress={() => setInviteRole(r)}
+                    style={[
+                      styles.roleChipModal,
+                      { borderColor: theme.border, backgroundColor: inviteRole === r ? theme.primary : theme.surface },
+                    ]}
+                  >
+                    <ThemedText style={[styles.roleChipTextModal, { color: inviteRole === r ? "#fff" : theme.text }]}>
+                      {r === "hr" ? "HR" : "Client"}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+
+              {inviteRole === "client" ? (
+                <>
+                  <ThemedText style={styles.inputLabel}>Business Name</ThemedText>
+                  <TextInput
+                    style={[styles.textInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.surface }]}
+                    value={inviteBusinessName}
+                    onChangeText={setInviteBusinessName}
+                    placeholder="Company name"
+                    placeholderTextColor={theme.textMuted}
+                    autoCapitalize="words"
+                  />
+                </>
+              ) : null}
+
+              <ThemedText style={[styles.inputLabel, { color: theme.textMuted, fontSize: 12 }]}>
+                A temporary password will be generated. You will be shown the credentials to share with the user.
+              </ThemedText>
+
+              <View style={styles.modalActions}>
+                <Button
+                  onPress={handleInviteUser}
+                  disabled={inviteUserMutation.isPending}
+                >
+                  {inviteUserMutation.isPending ? "Creating..." : "Create Account"}
+                </Button>
+              </View>
+            </ScrollView>
+          )}
         </ThemedView>
       </Modal>
     </ThemedView>
@@ -1361,5 +1438,61 @@ const styles = StyleSheet.create({
   confirmDeleteText: {
     fontWeight: "700",
     fontSize: 15,
+  },
+  credentialSuccessBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.md,
+  },
+  credentialSuccessText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  credentialNote: {
+    fontSize: 13,
+    marginBottom: Spacing.lg,
+    lineHeight: 18,
+  },
+  credentialCard: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    overflow: "hidden",
+    marginBottom: Spacing.xl,
+  },
+  credentialRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  credentialLabelCol: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    width: 80,
+  },
+  credentialLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  credentialValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  copyButton: {
+    width: 34,
+    height: 34,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  credentialDivider: {
+    height: 1,
+    marginHorizontal: Spacing.md,
   },
 });

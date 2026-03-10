@@ -7698,18 +7698,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         onboardingStatus: null,
       }).returning();
 
-      // Send welcome email with credentials (non-blocking)
-      const appUrl = "https://app.wfconnect.org";
-      sendEmail({
-        to: newUser.email,
-        subject: "Welcome to Workforce Connect — Your account is ready",
-        text: `Hi ${newUser.fullName},\n\nAn admin has created a Workforce Connect account for you.\n\nYour login details:\nEmail: ${newUser.email}\nTemporary Password: ${tempPassword}\n\nSign in at: ${appUrl}\n\nYou will be prompted to change your password on first login.\n\nThe WFConnect Team`,
-        html: `<p>Hi ${newUser.fullName},</p><p>An admin has created a <strong>Workforce Connect</strong> account for you.</p><table style="border-collapse:collapse;margin:16px 0"><tr><td style="padding:4px 16px 4px 0;color:#666">Email:</td><td style="padding:4px 0"><strong>${newUser.email}</strong></td></tr><tr><td style="padding:4px 16px 4px 0;color:#666">Temporary Password:</td><td style="padding:4px 0"><strong>${tempPassword}</strong></td></tr></table><p><a href="${appUrl}" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Sign In Now</a></p><p>You will be prompted to change your password on first login.</p><p>The WFConnect Team</p>`,
-      }).catch(err => console.error("[EMAIL] Invite email error:", err));
-
       broadcast({ type: "created", entity: "user" });
       const { password: _, ...userWithoutPassword } = newUser;
-      res.status(201).json(userWithoutPassword);
+      res.status(201).json({ ...userWithoutPassword, tempPassword });
     } catch (error) {
       console.error("Error inviting user:", error);
       res.status(500).json({ error: "Failed to invite user" });

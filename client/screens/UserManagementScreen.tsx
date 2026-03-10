@@ -153,6 +153,15 @@ export default function UserManagementScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: Error) => {
+      const match = error.message.match(/^\d+: (\{.*\})$/s);
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[1]);
+          setInviteError(parsed.error || error.message);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        } catch {}
+      }
       setInviteError(error.message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     },

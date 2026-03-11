@@ -74,6 +74,18 @@ export default function AdminManageScreen() {
       onPress: () => rootNavigate("CrmSync"),
     },
     {
+      icon: "zap",
+      title: "Clawd AI",
+      description: "Multi-agent business intelligence and operations assistant",
+      onPress: () => rootNavigate("ClawdWorkspace"),
+    },
+    {
+      icon: "calendar",
+      title: "Appointments",
+      description: "Track director appointments from lead generation",
+      onPress: () => rootNavigate("Appointments"),
+    },
+    {
       icon: "cpu",
       title: "AI Operations Assistant",
       description: "Automated monitoring for leads, shifts, and accounts",

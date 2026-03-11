@@ -33,6 +33,8 @@ import ChangePasswordScreen from "@/screens/ChangePasswordScreen";
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "@/screens/ResetPasswordScreen";
 import UserManagementScreen from "@/screens/UserManagementScreen";
+import ClawdWorkspaceScreen from "@/screens/ClawdWorkspaceScreen";
+import AppointmentsScreen from "@/screens/AppointmentsScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -72,6 +74,8 @@ export type RootStackParamList = {
   ForgotPassword: undefined;
   ResetPassword: { token: string };
   UserManagement: undefined;
+  ClawdWorkspace: undefined;
+  Appointments: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -309,6 +313,20 @@ export default function RootStackNavigator() {
             component={UserManagementScreen}
             options={{
               headerTitle: "User Management",
+            }}
+          />
+          <Stack.Screen
+            name="ClawdWorkspace"
+            component={ClawdWorkspaceScreen}
+            options={{
+              headerTitle: "Clawd AI",
+            }}
+          />
+          <Stack.Screen
+            name="Appointments"
+            component={AppointmentsScreen}
+            options={{
+              headerTitle: "Appointments",
             }}
           />
         </>

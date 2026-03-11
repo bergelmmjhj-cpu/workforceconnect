@@ -1,6 +1,6 @@
 import { db } from "../../db";
-import { contactLeads, shiftRequests, shifts, users, aiActionLogs, aiAlertState } from "../../../shared/schema";
-import { eq, and, lt, gte, isNull, sql, lte, count } from "drizzle-orm";
+import { contactLeads, shiftRequests, shifts, users, aiActionLogs, aiAlertState, titoLogs, workplaces } from "../../../shared/schema";
+import { eq, and, lt, gte, isNull, sql, lte, count, isNotNull, inArray } from "drizzle-orm";
 import { logAction } from "./logger";
 import {
   sendContactLeadAlert,
@@ -8,6 +8,9 @@ import {
   sendUnfilledShiftAlert,
   sendPendingAccountsDigest,
 } from "./alerts";
+import { sendSMS, logSMS } from "../openphone";
+
+const GM_PHONE = "+14166028038";
 
 let activationTimestamp: Date | null = null;
 
@@ -66,6 +69,15 @@ async function markAlerted(entityType: string, entityId: string, alertType: stri
     });
 }
 
+async function sendGMSms(message: string): Promise<void> {
+  try {
+    await sendSMS(GM_PHONE, message);
+    await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message, status: "sent" });
+  } catch (e: any) {
+    console.error("[AI] GM SMS failed:", e?.message);
+  }
+}
+
 async function checkContactLeads(activationTs: Date): Promise<void> {
   try {
     const leads = await db
@@ -99,6 +111,10 @@ async function checkContactLeads(activationTs: Date): Promise<void> {
           alertSentTo: "admin@wfconnect.org",
         });
         console.log(`[AI] Contact lead alert sent for ${lead.email}`);
+
+        const contactInfo = lead.phone || lead.email;
+        const smsMsg = `New Lead: ${lead.name}${lead.company ? ` from ${lead.company}` : ""}. ${contactInfo}`;
+        await sendGMSms(smsMsg);
       } else {
         await logAction({
           monitorType: "contact_lead",
@@ -139,6 +155,7 @@ async function checkShiftRequests(activationTs: Date): Promise<void> {
 
     for (const req of openRequests) {
       const isEscalated = req.createdAt < fourHoursAgo;
+      const dateStr = String(req.date);
 
       if (isEscalated) {
         const alreadyEscalated = await isAlreadyAlerted("shift_request", req.id, "unacknowledged_4h");
@@ -147,7 +164,7 @@ async function checkShiftRequests(activationTs: Date): Promise<void> {
             {
               id: req.id,
               roleType: req.roleType,
-              date: req.date instanceof Date ? req.date.toISOString().split("T")[0] : String(req.date),
+              date: dateStr,
               startTime: req.startTime,
               endTime: req.endTime,
               notes: req.notes,
@@ -166,6 +183,8 @@ async function checkShiftRequests(activationTs: Date): Promise<void> {
               alertSentTo: "admin@wfconnect.org",
             });
             console.log(`[AI] Escalation alert sent for shift request ${req.id}`);
+
+            await sendGMSms(`URGENT: Shift request for ${req.roleType} on ${dateStr} open 4+ hours`);
           } else {
             await logAction({
               monitorType: "shift_request",
@@ -186,7 +205,7 @@ async function checkShiftRequests(activationTs: Date): Promise<void> {
         {
           id: req.id,
           roleType: req.roleType,
-          date: req.date instanceof Date ? req.date.toISOString().split("T")[0] : String(req.date),
+          date: dateStr,
           startTime: req.startTime,
           endTime: req.endTime,
           notes: req.notes,
@@ -205,6 +224,8 @@ async function checkShiftRequests(activationTs: Date): Promise<void> {
           alertSentTo: "admin@wfconnect.org",
         });
         console.log(`[AI] 30-min alert sent for shift request ${req.id}`);
+
+        await sendGMSms(`Alert: Shift request for ${req.roleType} on ${dateStr} open 30+ min`);
       } else {
         await logAction({
           monitorType: "shift_request",
@@ -252,10 +273,12 @@ async function checkUnfilledShifts(): Promise<void> {
       const alreadyAlerted = await isAlreadyAlerted("shift", shift.id, "unfilled_4h");
       if (alreadyAlerted) continue;
 
+      const dateStr = String(shift.date);
+
       const result = await sendUnfilledShiftAlert({
         id: shift.id,
         title: (shift as any).title ?? null,
-        date: shift.date instanceof Date ? shift.date.toISOString().split("T")[0] : String(shift.date),
+        date: dateStr,
         startTime: shift.startTime,
         endTime: (shift as any).endTime ?? null,
       });
@@ -270,6 +293,8 @@ async function checkUnfilledShifts(): Promise<void> {
           alertSentTo: "admin@wfconnect.org",
         });
         console.log(`[AI] Unfilled shift alert sent for shift ${shift.id}`);
+
+        await sendGMSms(`URGENT: Unfilled shift on ${dateStr} at ${shift.startTime}`);
       } else {
         await logAction({
           monitorType: "unfilled_shift",
@@ -358,6 +383,203 @@ async function checkPendingAccountsDigest(): Promise<void> {
   }
 }
 
+function getTorontoHour(): { hour: number; dayOfWeek: number; dateStr: string } {
+  const now = new Date();
+  const torontoStr = now.toLocaleString("en-US", { timeZone: "America/Toronto" });
+  const torontoDate = new Date(torontoStr);
+  const dateOnly = now.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+  return {
+    hour: torontoDate.getHours(),
+    dayOfWeek: torontoDate.getDay(),
+    dateStr: dateOnly,
+  };
+}
+
+function getISOWeek(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
+async function checkDailyDeploymentReport(): Promise<void> {
+  try {
+    const { hour, dateStr } = getTorontoHour();
+    if (hour < 20 || hour >= 21) return;
+
+    const alreadySent = await isAlreadyAlerted("gm_report", dateStr, "daily");
+    if (alreadySent) return;
+
+    const todayShifts = await db
+      .select({
+        id: shifts.id,
+        workplaceId: shifts.workplaceId,
+        workerUserId: shifts.workerUserId,
+      })
+      .from(shifts)
+      .where(
+        and(
+          sql`${shifts.date}::text = ${dateStr}`,
+          inArray(shifts.status, ["completed", "in_progress"]),
+          isNotNull(shifts.workerUserId)
+        )
+      );
+
+    const todayStart = new Date(dateStr + "T00:00:00");
+    const todayEnd = new Date(dateStr + "T23:59:59");
+
+    const titoResults = await db
+      .select({ id: titoLogs.id })
+      .from(titoLogs)
+      .where(
+        and(
+          gte(titoLogs.timeIn, todayStart),
+          lte(titoLogs.timeIn, todayEnd)
+        )
+      );
+
+    const deploymentCount = titoResults.length;
+    const shiftCount = todayShifts.length;
+
+    const workplaceIds = [...new Set(todayShifts.map(s => s.workplaceId).filter(Boolean))];
+    let workplaceBreakdown = "";
+    if (workplaceIds.length > 0) {
+      const wpNames = await db
+        .select({ id: workplaces.id, name: workplaces.name })
+        .from(workplaces)
+        .where(inArray(workplaces.id, workplaceIds));
+
+      const wpMap = new Map(wpNames.map(w => [w.id, w.name]));
+      const wpCounts: Record<string, number> = {};
+      for (const s of todayShifts) {
+        const name = wpMap.get(s.workplaceId) || "Unknown";
+        wpCounts[name] = (wpCounts[name] || 0) + 1;
+      }
+      const sorted = Object.entries(wpCounts).sort((a, b) => b[1] - a[1]);
+      workplaceBreakdown = "\n" + sorted.map(([name, cnt]) => `${name}: ${cnt}`).join(", ");
+    }
+
+    const smsMsg = `WFConnect Daily Report - ${dateStr}\nWorkers Deployed: ${deploymentCount}\nShifts Today: ${shiftCount}${workplaceBreakdown}`;
+
+    await sendSMS(GM_PHONE, smsMsg);
+    await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: smsMsg, status: "sent" });
+
+    await markAlerted("gm_report", dateStr, "daily");
+    await logAction({
+      monitorType: "gm_daily_report",
+      signalSummary: `Daily report sent: ${deploymentCount} deployed, ${shiftCount} shifts`,
+      actionTaken: "alert_sent",
+      alertSentTo: GM_PHONE,
+    });
+    console.log(`[AI] Daily deployment report sent for ${dateStr}`);
+  } catch (err: any) {
+    console.error("[AI] checkDailyDeploymentReport error:", err?.message);
+    await logAction({
+      monitorType: "gm_daily_report",
+      signalSummary: "Daily report check failed",
+      actionTaken: "error",
+      errorMessage: err?.message,
+    });
+  }
+}
+
+async function checkWeeklyReport(): Promise<void> {
+  try {
+    const { hour, dayOfWeek, dateStr } = getTorontoHour();
+    if (dayOfWeek !== 1 || hour < 8 || hour >= 9) return;
+
+    const weekId = `week-${getISOWeek(dateStr)}`;
+    const alreadySent = await isAlreadyAlerted("gm_report", weekId, "weekly");
+    if (alreadySent) return;
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
+
+    const weekShifts = await db
+      .select({
+        id: shifts.id,
+        workplaceId: shifts.workplaceId,
+        workerUserId: shifts.workerUserId,
+        status: shifts.status,
+      })
+      .from(shifts)
+      .where(
+        and(
+          sql`${shifts.date}::text >= ${sevenDaysAgoStr}`,
+          sql`${shifts.date}::text <= ${dateStr}`,
+          inArray(shifts.status, ["completed", "in_progress"])
+        )
+      );
+
+    const completedShifts = weekShifts.filter(s => s.status === "completed").length;
+    const uniqueWorkers = new Set(weekShifts.map(s => s.workerUserId).filter(Boolean)).size;
+
+    const weekTitoLogs = await db
+      .select({
+        timeIn: titoLogs.timeIn,
+        timeOut: titoLogs.timeOut,
+      })
+      .from(titoLogs)
+      .where(
+        and(
+          gte(titoLogs.timeIn, sevenDaysAgo),
+          isNotNull(titoLogs.timeOut)
+        )
+      );
+
+    let totalHours = 0;
+    for (const log of weekTitoLogs) {
+      if (log.timeIn && log.timeOut) {
+        const diffMs = new Date(log.timeOut).getTime() - new Date(log.timeIn).getTime();
+        totalHours += diffMs / (1000 * 60 * 60);
+      }
+    }
+
+    const wpCounts: Record<string, number> = {};
+    const wpIds = [...new Set(weekShifts.map(s => s.workplaceId).filter(Boolean))];
+    let topSitesStr = "N/A";
+    if (wpIds.length > 0) {
+      const wpNames = await db
+        .select({ id: workplaces.id, name: workplaces.name })
+        .from(workplaces)
+        .where(inArray(workplaces.id, wpIds));
+
+      const wpMap = new Map(wpNames.map(w => [w.id, w.name]));
+      for (const s of weekShifts) {
+        const name = wpMap.get(s.workplaceId) || "Unknown";
+        wpCounts[name] = (wpCounts[name] || 0) + 1;
+      }
+      const sorted = Object.entries(wpCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      topSitesStr = sorted.map(([name, cnt]) => `${name} (${cnt})`).join(", ");
+    }
+
+    const weekOfDate = sevenDaysAgoStr;
+    const smsMsg = `WFConnect Weekly Report - Week of ${weekOfDate}\nTotal Deployments: ${weekShifts.length}\nTotal Workers: ${uniqueWorkers}\nEst. Hours: ${Math.round(totalHours)}\nTop Sites: ${topSitesStr}`;
+
+    await sendSMS(GM_PHONE, smsMsg);
+    await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: smsMsg, status: "sent" });
+
+    await markAlerted("gm_report", weekId, "weekly");
+    await logAction({
+      monitorType: "gm_weekly_report",
+      signalSummary: `Weekly report sent: ${weekShifts.length} deployments, ${uniqueWorkers} workers, ${Math.round(totalHours)}h`,
+      actionTaken: "alert_sent",
+      alertSentTo: GM_PHONE,
+    });
+    console.log(`[AI] Weekly report sent for ${weekId}`);
+  } catch (err: any) {
+    console.error("[AI] checkWeeklyReport error:", err?.message);
+    await logAction({
+      monitorType: "gm_weekly_report",
+      signalSummary: "Weekly report check failed",
+      actionTaken: "error",
+      errorMessage: err?.message,
+    });
+  }
+}
+
 export async function runMonitorCycle(): Promise<void> {
   const activationTs = await getOrSetActivationTimestamp();
 
@@ -371,4 +593,7 @@ export async function runMonitorCycle(): Promise<void> {
   if (now.getHours() === 9) {
     await checkPendingAccountsDigest();
   }
+
+  await checkDailyDeploymentReport();
+  await checkWeeklyReport();
 }

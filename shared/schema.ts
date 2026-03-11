@@ -1010,3 +1010,82 @@ export const aiAlertState = pgTable("ai_alert_state", {
 }, (table) => ({
   dedupeIdx: uniqueIndex("ai_alert_state_dedupe_idx").on(table.entityType, table.entityId, table.alertType),
 }));
+
+// ============================================
+// Clawd AI Multi-Agent System
+// ============================================
+
+export const clawdChatMessages = pgTable("clawd_chat_messages", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
+  role: text("role").notNull(), // "user" | "assistant" | "system"
+  content: text("content").notNull(),
+  metadata: text("metadata"), // JSON: which assistants invoked, scores, etc.
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ClawdChatMessage = typeof clawdChatMessages.$inferSelect;
+
+export const clawdAssistantRuns = pgTable("clawd_assistant_runs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  chatMessageId: varchar("chat_message_id"),
+  assistantType: text("assistant_type").notNull(), // "executive"|"staffing"|"attendance"|"recruitment"|"payroll"|"client_risk"|"communication"
+  inputContext: text("input_context"), // JSON: what data was fed in
+  outputFindings: text("output_findings"), // JSON: structured AssistantOutput
+  durationMs: integer("duration_ms"),
+  userId: varchar("user_id")
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  createdAtIdx: index("clawd_runs_created_at_idx").on(table.createdAt),
+  assistantTypeIdx: index("clawd_runs_assistant_type_idx").on(table.assistantType),
+}));
+
+export type ClawdAssistantRun = typeof clawdAssistantRuns.$inferSelect;
+
+// ============================================
+// Appointments Schema (Director appointment tracking)
+// ============================================
+
+export const appointments = pgTable("appointments", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  companyName: text("company_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  appointmentDate: timestamp("appointment_date").notNull(),
+  location: text("location"),
+  address: text("address"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  leadSource: text("lead_source").notNull().default("other"), // cold_call, lead_generation, referral, website, crm_sync, other
+  status: text("status").notNull().default("scheduled"), // scheduled, completed, cancelled, rescheduled, no_show
+  assignedUserId: varchar("assigned_user_id")
+    .references(() => users.id),
+  notes: text("notes"),
+  outcome: text("outcome"),
+  crmAppointmentId: text("crm_appointment_id"),
+  crmSource: text("crm_source"),
+  createdBy: varchar("created_by")
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertAppointmentSchema = createInsertSchema(appointments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Appointment = typeof appointments.$inferSelect;
+export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;

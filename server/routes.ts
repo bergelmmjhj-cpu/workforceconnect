@@ -7,6 +7,8 @@ import {
   users, 
   registerUserSchema, 
   loginUserSchema, 
+  appointments,
+  insertAppointmentSchema,
   conversations as conversationsTable, 
   messages as messagesTable, 
   messageLogs as messageLogsTable,
@@ -49,6 +51,8 @@ import crypto from "crypto";
 import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not, asc } from "drizzle-orm";
 import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, logSMS } from "./services/openphone";
 import { sendCSVEmail, sendEmail } from "./services/email";
+import { orchestrate, generateBriefing } from "./services/clawd";
+import { clawdChatMessages, clawdAssistantRuns } from "../shared/schema";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -2050,6 +2054,314 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, message: "Assistant resumed" });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to resume assistant" });
+    }
+  });
+
+  // ========================================
+  // Clawd AI API Endpoints
+  // ========================================
+
+  app.post("/api/clawd/chat", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      const { message } = req.body;
+      if (!message || typeof message !== "string" || message.trim().length === 0) {
+        res.status(400).json({ error: "message is required" });
+        return;
+      }
+
+      const history = await db.select()
+        .from(clawdChatMessages)
+        .where(eq(clawdChatMessages.userId, userId))
+        .orderBy(asc(clawdChatMessages.createdAt));
+
+      const conversationHistory = history.map(h => ({ role: h.role, content: h.content }));
+
+      const result = await orchestrate({
+        userMessage: message.trim(),
+        conversationHistory,
+        userId,
+      });
+
+      await db.insert(clawdChatMessages).values({
+        userId,
+        role: "user",
+        content: message.trim(),
+      });
+
+      await db.insert(clawdChatMessages).values({
+        userId,
+        role: "assistant",
+        content: result.response,
+        metadata: JSON.stringify({
+          assistantsInvoked: result.assistantsInvoked,
+          overallSeverity: result.overallSeverity,
+          metadata: result.metadata,
+        }),
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[CLAWD] Chat error:", error);
+      res.status(500).json({ error: error.message || "Failed to process chat message" });
+    }
+  });
+
+  app.get("/api/clawd/history", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const messages = await db.select()
+        .from(clawdChatMessages)
+        .where(eq(clawdChatMessages.userId, userId))
+        .orderBy(asc(clawdChatMessages.createdAt));
+
+      res.json(messages);
+    } catch (error: any) {
+      console.error("[CLAWD] History error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch chat history" });
+    }
+  });
+
+  app.delete("/api/clawd/history", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      await db.delete(clawdChatMessages)
+        .where(eq(clawdChatMessages.userId, userId));
+
+      res.json({ success: true, message: "Chat history cleared" });
+    } catch (error: any) {
+      console.error("[CLAWD] Delete history error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete chat history" });
+    }
+  });
+
+  app.get("/api/clawd/briefing", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const briefing = await generateBriefing(userId);
+      res.json(briefing);
+    } catch (error: any) {
+      console.error("[CLAWD] Briefing error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate briefing" });
+    }
+  });
+
+  app.get("/api/clawd/runs", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const assistantType = req.query.assistantType as string | undefined;
+
+      const conditions = [];
+      if (assistantType) {
+        conditions.push(eq(clawdAssistantRuns.assistantType, assistantType));
+      }
+
+      const runs = await db.select()
+        .from(clawdAssistantRuns)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(clawdAssistantRuns.createdAt))
+        .limit(50);
+
+      res.json(runs);
+    } catch (error: any) {
+      console.error("[CLAWD] Runs error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch assistant runs" });
+    }
+  });
+
+  // ========================================
+  // Appointments API
+  // ========================================
+
+  app.get("/api/appointments/upcoming", checkRoles("admin", "hr"), async (_req: Request, res: Response) => {
+    try {
+      const now = new Date();
+      const results = await db.select({
+        id: appointments.id,
+        title: appointments.title,
+        companyName: appointments.companyName,
+        contactName: appointments.contactName,
+        contactPhone: appointments.contactPhone,
+        contactEmail: appointments.contactEmail,
+        appointmentDate: appointments.appointmentDate,
+        location: appointments.location,
+        address: appointments.address,
+        latitude: appointments.latitude,
+        longitude: appointments.longitude,
+        leadSource: appointments.leadSource,
+        status: appointments.status,
+        assignedUserId: appointments.assignedUserId,
+        notes: appointments.notes,
+        outcome: appointments.outcome,
+        crmAppointmentId: appointments.crmAppointmentId,
+        crmSource: appointments.crmSource,
+        createdBy: appointments.createdBy,
+        createdAt: appointments.createdAt,
+        updatedAt: appointments.updatedAt,
+        assignedUserName: users.fullName,
+      })
+        .from(appointments)
+        .leftJoin(users, eq(appointments.assignedUserId, users.id))
+        .where(and(
+          eq(appointments.status, "scheduled"),
+          gte(appointments.appointmentDate, now)
+        ))
+        .orderBy(asc(appointments.appointmentDate))
+        .limit(20);
+
+      res.json(results);
+    } catch (error: any) {
+      console.error("[APPOINTMENTS] Error fetching upcoming:", error);
+      res.status(500).json({ error: "Failed to fetch upcoming appointments" });
+    }
+  });
+
+  app.get("/api/appointments", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { status, assignedUserId, startDate, endDate, leadSource } = req.query;
+
+      const conditions: any[] = [];
+      if (status) {
+        conditions.push(eq(appointments.status, status as string));
+      }
+      if (assignedUserId) {
+        conditions.push(eq(appointments.assignedUserId, assignedUserId as string));
+      }
+      if (startDate) {
+        conditions.push(gte(appointments.appointmentDate, new Date(startDate as string)));
+      }
+      if (endDate) {
+        conditions.push(lte(appointments.appointmentDate, new Date(endDate as string)));
+      }
+      if (leadSource) {
+        conditions.push(eq(appointments.leadSource, leadSource as string));
+      }
+
+      const results = await db.select({
+        id: appointments.id,
+        title: appointments.title,
+        companyName: appointments.companyName,
+        contactName: appointments.contactName,
+        contactPhone: appointments.contactPhone,
+        contactEmail: appointments.contactEmail,
+        appointmentDate: appointments.appointmentDate,
+        location: appointments.location,
+        address: appointments.address,
+        latitude: appointments.latitude,
+        longitude: appointments.longitude,
+        leadSource: appointments.leadSource,
+        status: appointments.status,
+        assignedUserId: appointments.assignedUserId,
+        notes: appointments.notes,
+        outcome: appointments.outcome,
+        crmAppointmentId: appointments.crmAppointmentId,
+        crmSource: appointments.crmSource,
+        createdBy: appointments.createdBy,
+        createdAt: appointments.createdAt,
+        updatedAt: appointments.updatedAt,
+        assignedUserName: users.fullName,
+      })
+        .from(appointments)
+        .leftJoin(users, eq(appointments.assignedUserId, users.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(appointments.appointmentDate));
+
+      res.json(results);
+    } catch (error: any) {
+      console.error("[APPOINTMENTS] Error fetching:", error);
+      res.status(500).json({ error: "Failed to fetch appointments" });
+    }
+  });
+
+  app.post("/api/appointments", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const body = { ...req.body, createdBy: userId };
+      if (typeof body.appointmentDate === "string") {
+        body.appointmentDate = new Date(body.appointmentDate);
+      }
+      const parsed = insertAppointmentSchema.safeParse(body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
+        return;
+      }
+
+      const [created] = await db.insert(appointments).values(parsed.data).returning();
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error("[APPOINTMENTS] Error creating:", error);
+      res.status(500).json({ error: "Failed to create appointment" });
+    }
+  });
+
+  app.patch("/api/appointments/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const [existing] = await db.select({ id: appointments.id }).from(appointments).where(eq(appointments.id, id));
+      if (!existing) {
+        res.status(404).json({ error: "Appointment not found" });
+        return;
+      }
+
+      const updateData = { ...req.body, updatedAt: new Date() };
+      if (typeof updateData.appointmentDate === "string") {
+        updateData.appointmentDate = new Date(updateData.appointmentDate);
+      }
+      const [updated] = await db.update(appointments)
+        .set(updateData)
+        .where(eq(appointments.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("[APPOINTMENTS] Error updating:", error);
+      res.status(500).json({ error: "Failed to update appointment" });
+    }
+  });
+
+  app.delete("/api/appointments/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const [existing] = await db.select({ id: appointments.id }).from(appointments).where(eq(appointments.id, id));
+      if (!existing) {
+        res.status(404).json({ error: "Appointment not found" });
+        return;
+      }
+
+      const [cancelled] = await db.update(appointments)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(eq(appointments.id, id))
+        .returning();
+
+      res.json(cancelled);
+    } catch (error: any) {
+      console.error("[APPOINTMENTS] Error deleting:", error);
+      res.status(500).json({ error: "Failed to delete appointment" });
     }
   });
 

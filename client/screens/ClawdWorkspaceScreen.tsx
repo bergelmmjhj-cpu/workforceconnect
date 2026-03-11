@@ -143,7 +143,6 @@ export default function ClawdWorkspaceScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clawd/history"] });
-      setInputText("");
       setIsSending(false);
     },
     onError: () => {
@@ -161,13 +160,13 @@ export default function ClawdWorkspaceScreen() {
   const handleSend = useCallback((text?: string) => {
     const msg = (text || inputText).trim();
     if (!msg || isSending) return;
+    setInputText("");
     sendMutation.mutate(msg);
   }, [inputText, isSending, sendMutation]);
 
   const handleInsightTap = useCallback((query: string) => {
     setActiveTab("chat");
-    setInputText(query);
-    setTimeout(() => sendMutation.mutate(query), 300);
+    sendMutation.mutate(query);
   }, [sendMutation]);
 
   const renderMessage = useCallback(({ item }: { item: ClawdMessage }) => {

@@ -1,5 +1,5 @@
 import { getClientRiskMetrics } from "../analytics/client-risk";
-import { runAssistant } from "../base-assistant";
+import { runAssistant, getCachedAnalytics, setCachedAnalytics } from "../base-assistant";
 import type { AssistantOutput } from "../types";
 
 const CLIENT_RISK_SYSTEM_PROMPT = `You are Clawd, an AI client and site risk analyst for a workforce management platform.
@@ -25,12 +25,16 @@ export async function analyzeClientRisk(
   userId?: string,
   chatMessageId?: string
 ): Promise<AssistantOutput> {
-  const metrics = await getClientRiskMetrics();
+  let metrics = getCachedAnalytics("client_risk");
+  if (!metrics) {
+    metrics = await getClientRiskMetrics() as unknown as Record<string, unknown>;
+    setCachedAnalytics("client_risk", metrics);
+  }
 
   return runAssistant(
     "client_risk",
     CLIENT_RISK_SYSTEM_PROMPT,
-    metrics as unknown as Record<string, unknown>,
+    metrics,
     userQuestion,
     userId,
     chatMessageId

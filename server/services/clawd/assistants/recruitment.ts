@@ -1,5 +1,5 @@
 import { getRecruitmentMetrics } from "../analytics/recruitment";
-import { runAssistant } from "../base-assistant";
+import { runAssistant, getCachedAnalytics, setCachedAnalytics } from "../base-assistant";
 import type { AssistantOutput } from "../types";
 
 const RECRUITMENT_SYSTEM_PROMPT = `You are an expert recruitment pipeline analyst for a staffing agency. Your role is to analyze recruitment data and provide actionable insights.
@@ -23,12 +23,16 @@ export async function analyzeRecruitment(
   userId?: string,
   chatMessageId?: string
 ): Promise<AssistantOutput> {
-  const metrics = await getRecruitmentMetrics();
+  let metrics = getCachedAnalytics("recruitment");
+  if (!metrics) {
+    metrics = await getRecruitmentMetrics() as unknown as Record<string, unknown>;
+    setCachedAnalytics("recruitment", metrics);
+  }
 
   return runAssistant(
     "recruitment",
     RECRUITMENT_SYSTEM_PROMPT,
-    metrics as unknown as Record<string, unknown>,
+    metrics,
     userQuestion,
     userId,
     chatMessageId

@@ -1,5 +1,5 @@
 import { getAttendanceMetrics } from "../analytics/attendance";
-import { runAssistant } from "../base-assistant";
+import { runAssistant, getCachedAnalytics, setCachedAnalytics } from "../base-assistant";
 import type { AssistantOutput } from "../types";
 
 const ATTENDANCE_SYSTEM_PROMPT = `You are an expert Attendance & Reliability Analyst for a staffing agency. Your role is to analyze worker attendance patterns and reliability data to identify risks and recommend interventions.
@@ -25,12 +25,16 @@ export async function analyzeAttendance(
   userId?: string,
   chatMessageId?: string
 ): Promise<AssistantOutput> {
-  const metrics = await getAttendanceMetrics();
+  let metrics = getCachedAnalytics("attendance");
+  if (!metrics) {
+    metrics = await getAttendanceMetrics() as unknown as Record<string, unknown>;
+    setCachedAnalytics("attendance", metrics);
+  }
 
   return runAssistant(
     "attendance",
     ATTENDANCE_SYSTEM_PROMPT,
-    metrics as unknown as Record<string, unknown>,
+    metrics,
     userQuestion,
     userId,
     chatMessageId

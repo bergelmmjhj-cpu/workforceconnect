@@ -1,5 +1,5 @@
 import { getPayrollMetrics } from "../analytics/payroll";
-import { runAssistant } from "../base-assistant";
+import { runAssistant, getCachedAnalytics, setCachedAnalytics } from "../base-assistant";
 import type { AssistantOutput } from "../types";
 
 const PAYROLL_SYSTEM_PROMPT = `You are Clawd, an AI payroll and hours integrity analyst for a workforce management platform.
@@ -25,12 +25,16 @@ export async function analyzePayroll(
   userId?: string,
   chatMessageId?: string
 ): Promise<AssistantOutput> {
-  const metrics = await getPayrollMetrics();
+  let metrics = getCachedAnalytics("payroll");
+  if (!metrics) {
+    metrics = await getPayrollMetrics() as unknown as Record<string, unknown>;
+    setCachedAnalytics("payroll", metrics);
+  }
 
   return runAssistant(
     "payroll",
     PAYROLL_SYSTEM_PROMPT,
-    metrics as unknown as Record<string, unknown>,
+    metrics,
     userQuestion,
     userId,
     chatMessageId

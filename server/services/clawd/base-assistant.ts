@@ -3,6 +3,22 @@ import type { AssistantOutput, AssistantType } from "./types";
 import { db } from "../../db";
 import { clawdAssistantRuns } from "@shared/schema";
 
+const analyticsCache = new Map<string, { data: Record<string, unknown>; timestamp: number }>();
+const CACHE_TTL_MS = 3 * 60 * 1000;
+
+export function getCachedAnalytics(key: string): Record<string, unknown> | null {
+  const entry = analyticsCache.get(key);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
+    return entry.data;
+  }
+  analyticsCache.delete(key);
+  return null;
+}
+
+export function setCachedAnalytics(key: string, data: Record<string, unknown>): void {
+  analyticsCache.set(key, { data, timestamp: Date.now() });
+}
+
 const STRUCTURED_OUTPUT_INSTRUCTION = `
 You MUST respond with valid JSON matching this exact structure:
 {

@@ -1,5 +1,5 @@
 import { getStaffingMetrics } from "../analytics/staffing";
-import { runAssistant } from "../base-assistant";
+import { runAssistant, getCachedAnalytics, setCachedAnalytics } from "../base-assistant";
 import type { AssistantOutput } from "../types";
 
 const STAFFING_SYSTEM_PROMPT = `You are the Staffing Intelligence Assistant for WFConnect, a workforce management platform.
@@ -27,12 +27,16 @@ export async function analyzeStaffing(
   userId?: string,
   chatMessageId?: string
 ): Promise<AssistantOutput> {
-  const metrics = await getStaffingMetrics();
+  let metrics = getCachedAnalytics("staffing");
+  if (!metrics) {
+    metrics = await getStaffingMetrics() as unknown as Record<string, unknown>;
+    setCachedAnalytics("staffing", metrics);
+  }
 
   return runAssistant(
     "staffing",
     STAFFING_SYSTEM_PROMPT,
-    metrics as unknown as Record<string, unknown>,
+    metrics,
     userQuestion,
     userId,
     chatMessageId

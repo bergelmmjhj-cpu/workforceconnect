@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
+import crypto from "node:crypto";
 import { broadcast, getConnectedClientsCount } from "./websocket";
 import { db } from "./db";
 import { 
@@ -177,8 +178,17 @@ function checkRateLimit(ip: string): boolean {
 
 function checkRoles(...allowedRoles: UserRole[]) {
   return (req: Request, res: Response, next: () => void) => {
-    const role = req.headers["x-user-role"] as UserRole;
-    const userId = req.headers["x-user-id"] as string;
+    let role = req.headers["x-user-role"] as UserRole;
+    let userId = req.headers["x-user-id"] as string;
+    if (!role || !userId) {
+      const session = parseSessionCookie(req);
+      if (session) {
+        role = session.role as UserRole;
+        userId = session.userId;
+        req.headers["x-user-role"] = role;
+        req.headers["x-user-id"] = userId;
+      }
+    }
     if (!role || !allowedRoles.includes(role)) {
       console.log(`[AUTH REJECTED] ${req.method} ${req.path} - role="${role || 'MISSING'}" userId="${userId || 'MISSING'}" allowed=[${allowedRoles.join(",")}]`);
       res.status(403).json({ error: "Forbidden: Insufficient permissions" });
@@ -270,6 +280,47 @@ function expandSeriesOccurrences(series: any, exceptions: any[], rangeStart: str
   }
 
   return occurrences;
+}
+
+const SESSION_SECRET = process.env.SESSION_SECRET || "wfc-default-secret";
+
+function createSessionToken(userId: string, role: string): string {
+  const payload = JSON.stringify({ userId, role, iat: Date.now() });
+  const encoded = Buffer.from(payload).toString("base64url");
+  const sig = crypto.createHmac("sha256", SESSION_SECRET).update(encoded).digest("base64url");
+  return `${encoded}.${sig}`;
+}
+
+function verifySessionToken(token: string): { userId: string; role: string } | null {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [encoded, sig] = parts;
+  const expectedSig = crypto.createHmac("sha256", SESSION_SECRET).update(encoded).digest("base64url");
+  if (sig !== expectedSig) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString());
+    if (!payload.userId || !payload.role) return null;
+    return { userId: payload.userId, role: payload.role };
+  } catch {
+    return null;
+  }
+}
+
+function parseSessionCookie(req: Request): { userId: string; role: string } | null {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(/(?:^|;\s*)wfc_session=([^;]+)/);
+  if (!match) return null;
+  return verifySessionToken(decodeURIComponent(match[1]));
+}
+
+function setSessionCookie(res: Response, userId: string, role: string): void {
+  const token = createSessionToken(userId, role);
+  res.setHeader("Set-Cookie", `wfc_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+}
+
+function clearSessionCookie(res: Response): void {
+  res.setHeader("Set-Cookie", "wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -871,11 +922,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+      setSessionCookie(res, user.id, user.role);
       res.json({ user: { ...userWithoutSensitive, mustChangePassword: user.mustChangePassword || false } });
     } catch (error) {
       console.error("Error logging in:", error);
       res.status(500).json({ error: "Failed to login" });
     }
+  });
+
+  app.get("/api/auth/me", async (req: Request, res: Response) => {
+    try {
+      const session = parseSessionCookie(req);
+      if (!session) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      const [user] = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        isActive: users.isActive,
+      }).from(users).where(eq(users.id, session.userId));
+      if (!user || !user.isActive) {
+        clearSessionCookie(res);
+        res.status(401).json({ error: "Invalid or inactive user" });
+        return;
+      }
+      if (user.role !== session.role) {
+        clearSessionCookie(res);
+        res.status(401).json({ error: "Session invalid" });
+        return;
+      }
+      res.json({ user });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to verify session" });
+    }
+  });
+
+  app.post("/api/auth/logout", (_req: Request, res: Response) => {
+    clearSessionCookie(res);
+    res.json({ success: true });
   });
 
   app.get("/api/auth/verify", async (req: Request, res: Response) => {

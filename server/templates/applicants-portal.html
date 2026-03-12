@@ -264,37 +264,30 @@ let applicants = [];
 let searchTimer = null;
 
 function getHeaders() {
-  if (!currentUser) return {};
-  return { 'x-user-id': currentUser.id, 'x-user-role': currentUser.role, 'Content-Type': 'application/json' };
+  return { 'Content-Type': 'application/json' };
 }
 
-// Check stored auth — verify with server on every load
+function apiFetch(url, opts = {}) {
+  return fetch(url, { ...opts, credentials: 'include' });
+}
+
 (async function init() {
-  const stored = localStorage.getItem('wfc_portal_user');
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      if (parsed && parsed.id && (parsed.role === 'admin' || parsed.role === 'hr')) {
-        const resp = await fetch('/api/auth/verify', {
-          headers: { 'x-user-id': parsed.id, 'x-user-role': parsed.role }
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          currentUser = { ...parsed, ...data.user };
-          localStorage.setItem('wfc_portal_user', JSON.stringify(currentUser));
-          showDashboard();
-          return;
-        }
+  try {
+    const resp = await apiFetch('/api/auth/me');
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.user && (data.user.role === 'admin' || data.user.role === 'hr')) {
+        currentUser = data.user;
+        showDashboard();
+        return;
       }
-    } catch {}
-  }
-  localStorage.removeItem('wfc_portal_user');
+    }
+  } catch {}
   showLogin();
 })();
 
 function showLogin() {
   currentUser = null;
-  localStorage.removeItem('wfc_portal_user');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('dashboard').classList.remove('show');
 }
@@ -302,7 +295,7 @@ function showLogin() {
 function showDashboard() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('dashboard').classList.add('show');
-  document.getElementById('user-display').textContent = currentUser.firstName + ' ' + currentUser.lastName + ' (' + currentUser.role + ')';
+  document.getElementById('user-display').textContent = esc(currentUser.fullName || currentUser.email) + ' (' + esc(currentUser.role) + ')';
   loadApplicants();
 }
 
@@ -319,7 +312,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   errEl.classList.remove('show');
 
   try {
-    const resp = await fetch('/api/auth/login', {
+    const resp = await apiFetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -335,7 +328,6 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
 
     currentUser = data.user;
-    localStorage.setItem('wfc_portal_user', JSON.stringify(currentUser));
     showDashboard();
   } catch (err) {
     errEl.textContent = err.message;
@@ -346,7 +338,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   }
 });
 
-function logout() {
+async function logout() {
+  try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch {}
   showLogin();
 }
 
@@ -363,7 +356,7 @@ async function loadApplicants() {
     if (status !== 'all') params.set('status', status);
     params.set('limit', '200');
 
-    const resp = await fetch('/api/applicants?' + params.toString(), { headers: getHeaders() });
+    const resp = await apiFetch('/api/applicants?' + params.toString(), { headers: getHeaders() });
     if (resp.status === 403 || resp.status === 401) { showLogin(); return; }
     if (!resp.ok) throw new Error('Failed to fetch');
 
@@ -434,7 +427,7 @@ async function openDetail(id) {
   document.getElementById('detail-body').innerHTML = '<div class="loading">Loading details...</div>';
 
   try {
-    const resp = await fetch('/api/applicants/' + id, { headers: getHeaders() });
+    const resp = await apiFetch('/api/applicants/' + id, { headers: getHeaders() });
     if (!resp.ok) throw new Error('Failed');
     const data = await resp.json();
     renderDetail(data);
@@ -509,7 +502,7 @@ function closeDetail(event) {
 function downloadDoc(id, type) {
   const url = '/api/applicants/' + id + '/download/' + type;
   const headers = getHeaders();
-  fetch(url, { headers })
+  apiFetch(url, { headers })
     .then(resp => {
       if (!resp.ok) throw new Error('Download failed');
       return resp.blob();
@@ -528,7 +521,7 @@ function downloadDoc(id, type) {
 // Update status
 async function updateStatus(id, newStatus) {
   try {
-    const resp = await fetch('/api/applicants/' + id + '/status', {
+    const resp = await apiFetch('/api/applicants/' + id + '/status', {
       method: 'PATCH',
       headers: getHeaders(),
       body: JSON.stringify({ status: newStatus }),

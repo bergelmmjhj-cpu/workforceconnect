@@ -271,6 +271,7 @@
 let currentUser = null;
 let applicants = [];
 let searchTimer = null;
+let pending2FAUserId = null;
 
 function getHeaders() {
   return { 'Content-Type': 'application/json' };
@@ -312,8 +313,6 @@ function showDashboard() {
   document.getElementById('user-display').textContent = esc(currentUser.fullName || currentUser.email) + ' (' + esc(currentUser.role) + ')';
   loadApplicants();
 }
-
-let pending2FAUserId = null;
 
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();

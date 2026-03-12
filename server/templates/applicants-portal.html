@@ -268,18 +268,27 @@ function getHeaders() {
   return { 'x-user-id': currentUser.id, 'x-user-role': currentUser.role, 'Content-Type': 'application/json' };
 }
 
-// Check stored auth
-(function init() {
+// Check stored auth — verify with server on every load
+(async function init() {
   const stored = localStorage.getItem('wfc_portal_user');
   if (stored) {
     try {
-      currentUser = JSON.parse(stored);
-      if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'hr')) {
-        showDashboard();
-        return;
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.id && (parsed.role === 'admin' || parsed.role === 'hr')) {
+        const resp = await fetch('/api/auth/verify', {
+          headers: { 'x-user-id': parsed.id, 'x-user-role': parsed.role }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          currentUser = { ...parsed, ...data.user };
+          localStorage.setItem('wfc_portal_user', JSON.stringify(currentUser));
+          showDashboard();
+          return;
+        }
       }
     } catch {}
   }
+  localStorage.removeItem('wfc_portal_user');
   showLogin();
 })();
 

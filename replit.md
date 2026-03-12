@@ -45,6 +45,8 @@ Key features include:
 - **Toronto Timezone Utility**: `server/utils/time.ts` provides `nowToronto()`, `toToronto()`, `formatToronto()` using `date-fns-tz`.
 - **AI Follow-Up SMS Service**: `server/services/aiFollowupService.ts` logs AI-sent SMS messages and sends human-like follow-ups after 2 hours if no reply. Cancelled automatically when recipient responds. Scheduler runs every 15 minutes.
 - **Applicant Portal**: Public form at `apply.wfconnect.org` and `/apply`. Applicants submit name, Canadian address (Google Places autocomplete), phone, position, job source, photo, and resume. Files stored as base64. Admin screen shows all applicants with status management (new/reviewing/interviewed/hired/rejected) and one-click download for photo and resume.
+- **Applicants Admin Web Portal**: Standalone HTML page at `apply.wfconnect.org/applicants` (route: `/applicants`). Password-protected login for admin/HR. Features: stats dashboard, searchable/filterable table, slide-in detail panel, status management, document downloads. Auth verified server-side via `GET /api/auth/verify` on every page load. XSS-protected with `esc()`/`escAttr()` escaping. Served on apply subdomain, localhost, and Replit dev domains.
+- **Auth Verification Endpoint**: `GET /api/auth/verify` validates user ID and role from headers against the database, checking that the user exists and is active. Used by the applicants web portal for server-side auth validation on page load.
 - **System Settings UI**: Admin screen to configure app-wide settings (Discord webhook URL) stored in `app_config` DB table with test button and setup instructions.
 
 ## External Dependencies

@@ -613,7 +613,10 @@ function configureExpoAndLanding(app: express.Application) {
   }
 
   if (applicantsPortalTemplate) {
-    app.get("/applicants", (_req: Request, res: Response) => {
+    app.get("/applicants", (req: Request, res: Response, next: NextFunction) => {
+      if (!isApplySubdomain(req) && req.hostname !== "localhost" && !req.hostname?.includes("replit")) {
+        return next();
+      }
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache");
       return res.status(200).send(applicantsPortalTemplate);

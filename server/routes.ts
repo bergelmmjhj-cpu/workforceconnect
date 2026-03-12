@@ -878,6 +878,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/auth/verify", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      const [user] = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        isActive: users.isActive,
+      }).from(users).where(eq(users.id, userId));
+      if (!user || !user.isActive) {
+        res.status(401).json({ error: "Invalid or inactive user" });
+        return;
+      }
+      if (user.role !== userRole) {
+        res.status(401).json({ error: "Role mismatch" });
+        return;
+      }
+      res.json({ user });
+    } catch (error) {
+      res.status(500).json({ error: "Verification failed" });
+    }
+  });
+
   app.post("/api/auth/change-password", async (req: Request, res: Response) => {
     try {
       const userId = req.headers["x-user-id"] as string;

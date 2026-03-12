@@ -54,11 +54,21 @@ export interface OrchestrationRequest {
   userId: string;
 }
 
+export interface ToolCallLog {
+  toolName: string;
+  input: Record<string, unknown>;
+  result: unknown;
+  success: boolean;
+  error?: string;
+}
+
 export interface OrchestrationResponse {
   response: string;
   assistantsInvoked: AssistantType[];
   assistantOutputs: AssistantOutput[];
   overallSeverity: number;
+  isActionMode?: boolean;
+  toolCalls?: ToolCallLog[];
   metadata: {
     totalDurationMs: number;
     model: string;

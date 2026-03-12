@@ -957,10 +957,36 @@ export const smsLogs = pgTable("sms_logs", {
   workerId: varchar("worker_id"),
   status: text("status").notNull().default("sent"),
   openphoneMessageId: text("openphone_message_id"),
+  classification: text("classification"), // sick_call, client_request, shift_response, general
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export type SmsLog = typeof smsLogs.$inferSelect;
+
+// ============================================
+// Discord Alerts Schema (Two-way Discord integration)
+// ============================================
+
+export const discordAlerts = pgTable("discord_alerts", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  alertId: text("alert_id").notNull().unique(), // WFC-XXXX tracking ID
+  type: text("type").notNull().default("general"), // sick_call, client_request, urgent_shift, auto_coverage, general
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  sourcePhone: text("source_phone"),
+  sourceWorkerId: varchar("source_worker_id"),
+  status: text("status").notNull().default("pending"), // pending, acknowledged, resolved
+  acknowledgedBy: text("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  responseNote: text("response_note"),
+  discordMessageId: text("discord_message_id"),
+  actionsTaken: text("actions_taken"), // JSON log of auto-actions taken
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DiscordAlert = typeof discordAlerts.$inferSelect;
 
 export const crmSyncLogs = pgTable("crm_sync_logs", {
   id: varchar("id")

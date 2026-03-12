@@ -9,6 +9,8 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
+  Clipboard,
+  Alert,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Feather } from "@expo/vector-icons";
@@ -25,6 +27,22 @@ import { Spacing, Layout, BorderRadius } from "@/constants/theme";
 import { useIsWideWeb } from "@/components/WebSidebarLayout";
 import { apiRequest } from "@/lib/query-client";
 
+type ToolCall = {
+  toolName: string;
+  input: Record<string, unknown>;
+  result: unknown;
+  success: boolean;
+  error?: string;
+};
+
+type MessageMetadata = {
+  assistantsInvoked?: string[];
+  overallSeverity?: number;
+  isActionMode?: boolean;
+  toolCalls?: ToolCall[];
+  metadata?: { totalDurationMs?: number; model?: string };
+};
+
 type ClawdMessage = {
   id: string;
   userId: string;
@@ -34,10 +52,28 @@ type ClawdMessage = {
   createdAt: string;
 };
 
+type DiscordAlert = {
+  id: string;
+  alertId: string;
+  type: string;
+  title: string;
+  message: string;
+  sourcePhone: string | null;
+  sourceWorkerId: string | null;
+  status: string;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  responseNote: string | null;
+  actionsTaken: string | null;
+  createdAt: string;
+};
+
 type OrchestrationResponse = {
   response: string;
   assistantsInvoked: string[];
   overallSeverity: number;
+  isActionMode?: boolean;
+  toolCalls?: ToolCall[];
   metadata: { totalDurationMs: number; model: string };
 };
 
@@ -64,9 +100,9 @@ const TABS: { key: TabKey; label: string; icon: React.ComponentProps<typeof Feat
 const QUICK_PROMPTS = [
   "What should I worry about today?",
   "Executive summary",
-  "Worker reliability risks",
-  "Unfilled shifts",
-  "Pipeline status",
+  "Read recent incoming SMS",
+  "Check Discord alerts",
+  "Find available workers",
 ];
 
 const ASSISTANT_TYPES = ["all", "staffing", "attendance", "recruitment", "payroll", "client_risk"];
@@ -78,6 +114,30 @@ const INSIGHT_CARDS = [
   { type: "payroll", label: "Payroll", icon: "dollar-sign" as const, query: "Payroll Intelligence: Give me current payroll analysis" },
   { type: "client_risk", label: "Client Risk", icon: "alert-triangle" as const, query: "Client Risk Intelligence: Give me current client risk analysis" },
 ];
+
+const TOOL_ICONS: Record<string, React.ComponentProps<typeof Feather>["name"]> = {
+  send_sms: "message-circle",
+  notify_gm_lilee: "phone",
+  send_discord_notification: "bell",
+  send_worker_internal_message: "mail",
+  assign_worker_to_shift: "user-check",
+  blast_shift_to_workers: "radio",
+  create_shift_request: "plus-circle",
+  generate_replit_prompt: "code",
+  find_available_workers: "users",
+  lookup_workers: "search",
+  lookup_shifts: "calendar",
+  lookup_workplaces: "map-pin",
+  lookup_shift_requests: "clipboard",
+  read_recent_sms: "message-square",
+  check_discord_alerts: "bell",
+};
+
+const ACTION_TOOL_NAMES = new Set([
+  "send_sms", "notify_gm_lilee", "send_discord_notification",
+  "send_worker_internal_message", "assign_worker_to_shift",
+  "blast_shift_to_workers", "create_shift_request", "generate_replit_prompt",
+]);
 
 function formatTimeAgo(dateString: string | null | undefined): string {
   if (!dateString) return "Never";
@@ -98,6 +158,38 @@ function getSeverityColor(severity: number): string {
   return "#22C55E";
 }
 
+function getAlertTypeColor(type: string): string {
+  switch (type) {
+    case "sick_call": return "#EF4444";
+    case "client_request": return "#3B82F6";
+    case "urgent_shift": return "#F59E0B";
+    case "auto_coverage": return "#22C55E";
+    default: return "#8B5CF6";
+  }
+}
+
+function getStatusColor(status: string): string {
+  switch (status) {
+    case "pending": return "#F59E0B";
+    case "acknowledged": return "#22C55E";
+    case "resolved": return "#6B7280";
+    default: return "#6B7280";
+  }
+}
+
+function parseMetadata(raw: string | null): MessageMetadata | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function copyToClipboard(text: string) {
+  if (Platform.OS === "web") {
+    navigator.clipboard?.writeText(text).catch(() => {});
+  } else {
+    Clipboard.setString(text);
+  }
+}
+
 export default function ClawdWorkspaceScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -110,6 +202,8 @@ export default function ClawdWorkspaceScreen() {
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [alertFilter, setAlertFilter] = useState("all");
+  const [alertsTab, setAlertsTab] = useState<"runs" | "discord">("discord");
+  const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   const isWeb = Platform.OS === "web";
@@ -135,6 +229,12 @@ export default function ClawdWorkspaceScreen() {
     enabled: activeTab === "alerts",
   });
 
+  const { data: discordAlertsList = [], isLoading: discordAlertsLoading, refetch: refetchDiscordAlerts } = useQuery<DiscordAlert[]>({
+    queryKey: ["/api/discord-alerts"],
+    enabled: activeTab === "alerts",
+    refetchInterval: 15000,
+  });
+
   const sendMutation = useMutation({
     mutationFn: async (message: string) => {
       setIsSending(true);
@@ -157,6 +257,16 @@ export default function ClawdWorkspaceScreen() {
     },
   });
 
+  const ackMutation = useMutation({
+    mutationFn: async ({ alertId, responseNote }: { alertId: string; responseNote?: string }) => {
+      const res = await apiRequest("POST", `/api/discord-alerts/${alertId}/acknowledge`, { responseNote });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/discord-alerts"] });
+    },
+  });
+
   const handleSend = useCallback((text?: string) => {
     const msg = (text || inputText).trim();
     if (!msg || isSending) return;
@@ -169,33 +279,133 @@ export default function ClawdWorkspaceScreen() {
     sendMutation.mutate(query);
   }, [sendMutation]);
 
+  const handleAcknowledge = useCallback((alertId: string) => {
+    Alert.alert(
+      "Acknowledge Alert",
+      "Mark this alert as acknowledged?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Acknowledge", onPress: () => ackMutation.mutate({ alertId }) },
+      ]
+    );
+  }, [ackMutation]);
+
+  const renderToolCallBadges = useCallback((toolCalls: ToolCall[]) => {
+    const actionCalls = toolCalls.filter((tc) => ACTION_TOOL_NAMES.has(tc.toolName));
+    if (actionCalls.length === 0) return null;
+
+    const replitPromptCall = actionCalls.find((tc) => tc.toolName === "generate_replit_prompt");
+    const promptResult = replitPromptCall?.result as { prompt?: string; isReplitAiPrompt?: boolean } | undefined;
+
+    return (
+      <View style={styles.toolBadgesContainer}>
+        {actionCalls.map((tc, i) => {
+          const icon = TOOL_ICONS[tc.toolName] || "zap";
+          const isReplitPrompt = tc.toolName === "generate_replit_prompt";
+
+          let label = tc.toolName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+          if (tc.toolName === "send_sms") {
+            const phone = tc.input.phoneNumber as string;
+            label = `SMS → ${phone || "worker"}`;
+          } else if (tc.toolName === "notify_gm_lilee") {
+            label = "GM Lilee Notified";
+          } else if (tc.toolName === "send_discord_notification") {
+            const alertResult = tc.result as { alertId?: string } | undefined;
+            label = `Discord ${alertResult?.alertId || ""}`;
+          }
+
+          return (
+            <View key={i}>
+              <Pressable
+                style={[
+                  styles.toolBadge,
+                  {
+                    backgroundColor: tc.success
+                      ? isReplitPrompt ? theme.primary + "20" : "#22C55E20"
+                      : "#EF444420",
+                    borderColor: tc.success
+                      ? isReplitPrompt ? theme.primary + "50" : "#22C55E50"
+                      : "#EF444450",
+                  },
+                ]}
+                onPress={isReplitPrompt && promptResult?.prompt ? () => setExpandedPrompt(expandedPrompt === `${i}` ? null : `${i}`) : undefined}
+              >
+                <Feather
+                  name={tc.success ? icon : "alert-circle"}
+                  size={11}
+                  color={tc.success ? (isReplitPrompt ? theme.primary : "#22C55E") : "#EF4444"}
+                />
+                <ThemedText style={[styles.toolBadgeText, { color: tc.success ? (isReplitPrompt ? theme.primary : "#22C55E") : "#EF4444" }]}>
+                  {label}
+                </ThemedText>
+                {isReplitPrompt && promptResult?.prompt ? (
+                  <Feather name={expandedPrompt === `${i}` ? "chevron-up" : "chevron-down"} size={10} color={theme.primary} />
+                ) : null}
+              </Pressable>
+              {isReplitPrompt && promptResult?.prompt && expandedPrompt === `${i}` ? (
+                <View style={[styles.promptBox, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
+                  <ThemedText style={[styles.promptText, { color: theme.text }]} selectable>
+                    {promptResult.prompt}
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => {
+                      copyToClipboard(promptResult.prompt!);
+                      Alert.alert("Copied!", "The Replit AI prompt has been copied to your clipboard.");
+                    }}
+                    style={[styles.copyBtn, { backgroundColor: theme.primary }]}
+                  >
+                    <Feather name="copy" size={12} color="#fff" />
+                    <ThemedText style={styles.copyBtnText}>Copy Prompt</ThemedText>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }, [theme, expandedPrompt]);
+
   const renderMessage = useCallback(({ item }: { item: ClawdMessage }) => {
     const isUser = item.role === "user";
+    const meta = isUser ? null : parseMetadata(item.metadata);
+    const toolCalls = meta?.toolCalls || [];
+    const isActionMode = meta?.isActionMode || false;
+
     return (
       <View style={[styles.msgRow, isUser ? styles.msgRight : styles.msgLeft]}>
         {!isUser ? (
-          <View style={[styles.msgAvatar, { backgroundColor: theme.primary + "20" }]}>
-            <Feather name="zap" size={14} color={theme.primary} />
+          <View style={[styles.msgAvatar, { backgroundColor: isActionMode ? "#22C55E20" : theme.primary + "20" }]}>
+            <Feather name={isActionMode ? "zap" : "zap"} size={14} color={isActionMode ? "#22C55E" : theme.primary} />
           </View>
         ) : null}
-        <View style={[styles.msgBubble, isUser ? { backgroundColor: theme.primary } : { backgroundColor: theme.surface }]}>
-          <ThemedText style={[styles.msgText, { color: isUser ? "#fff" : theme.text }]}>
-            {item.content}
-          </ThemedText>
-          <ThemedText style={[styles.msgTime, { color: isUser ? "rgba(255,255,255,0.6)" : theme.textMuted }]}>
-            {formatTimeAgo(item.createdAt)}
-          </ThemedText>
+        <View style={styles.msgContent}>
+          <View style={[styles.msgBubble, isUser ? { backgroundColor: theme.primary } : { backgroundColor: theme.surface }]}>
+            {isActionMode && !isUser ? (
+              <View style={styles.actionModeBadge}>
+                <Feather name="zap" size={10} color="#22C55E" />
+                <ThemedText style={styles.actionModeBadgeText}>Action Mode</ThemedText>
+              </View>
+            ) : null}
+            <ThemedText style={[styles.msgText, { color: isUser ? "#fff" : theme.text }]}>
+              {item.content}
+            </ThemedText>
+            <ThemedText style={[styles.msgTime, { color: isUser ? "rgba(255,255,255,0.6)" : theme.textMuted }]}>
+              {formatTimeAgo(item.createdAt)}
+            </ThemedText>
+          </View>
+          {toolCalls.length > 0 ? renderToolCallBadges(toolCalls) : null}
         </View>
       </View>
     );
-  }, [theme]);
+  }, [theme, renderToolCallBadges]);
 
   const ChatEmptyState = () => (
     <View style={styles.emptyChat}>
       <Feather name="zap" size={48} color={theme.primary} />
       <ThemedText style={[styles.emptyChatTitle, { color: theme.text }]}>Clawd AI Workspace</ThemedText>
       <ThemedText style={[styles.emptyChatSub, { color: theme.textSecondary }]}>
-        Ask me anything about your workforce operations.
+        Ask me anything, or tell me to take an action — assign workers, send SMS, check Discord alerts.
       </ThemedText>
     </View>
   );
@@ -253,7 +463,7 @@ export default function ClawdWorkspaceScreen() {
       <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.border, paddingBottom: insets.bottom > 0 ? insets.bottom : Spacing.md }]}>
         <TextInput
           style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-          placeholder="Ask Clawd..."
+          placeholder="Ask Clawd or give it an action to take..."
           placeholderTextColor={theme.textMuted}
           value={inputText}
           onChangeText={setInputText}
@@ -325,71 +535,164 @@ export default function ClawdWorkspaceScreen() {
   );
 
   const filteredRuns = alertFilter === "all" ? runs : runs.filter((r) => r.assistantType === alertFilter);
+  const pendingDiscordCount = discordAlertsList.filter((a) => a.status === "pending").length;
 
   const renderAlerts = () => (
     <ScrollView
       style={styles.flex}
       contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.lg }, wideStyle]}
-      refreshControl={<RefreshControl refreshing={runsLoading} onRefresh={() => refetchRuns()} tintColor={theme.primary} />}
+      refreshControl={<RefreshControl refreshing={runsLoading || discordAlertsLoading} onRefresh={() => { refetchRuns(); refetchDiscordAlerts(); }} tintColor={theme.primary} />}
     >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContainer}>
-        {ASSISTANT_TYPES.map((type) => (
-          <Pressable
-            key={type}
-            onPress={() => setAlertFilter(type)}
-            style={[styles.filterChip, alertFilter === type ? { backgroundColor: theme.primary } : { backgroundColor: theme.backgroundSecondary }]}
-            testID={`filter-${type}`}
-          >
-            <ThemedText style={[styles.filterChipText, { color: alertFilter === type ? "#fff" : theme.textSecondary }]}>
-              {type === "all" ? "All" : type.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-            </ThemedText>
-          </Pressable>
-        ))}
-      </ScrollView>
-      {runsLoading ? (
-        <ActivityIndicator color={theme.primary} style={styles.loader} />
-      ) : filteredRuns.length > 0 ? (
-        filteredRuns.map((run) => {
-          const findings = run.outputFindings;
-          let severity = 0;
-          try {
-            if (findings) {
-              const parsed = JSON.parse(findings);
-              severity = parsed.severityScore || parsed.severity_score || parsed.severity || 0;
-            }
-          } catch {}
-          const sevColor = getSeverityColor(severity);
-          return (
-            <Card key={run.id} style={styles.alertCard}>
-              <View style={styles.alertHeader}>
-                <View style={styles.alertTypeRow}>
-                  <Feather name="cpu" size={14} color={theme.primary} />
-                  <ThemedText style={styles.alertType}>
-                    {run.assistantType.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+      {/* Sub-tab selector */}
+      <View style={[styles.subTabBar, { borderColor: theme.border }]}>
+        <Pressable
+          onPress={() => setAlertsTab("discord")}
+          style={[styles.subTabBtn, alertsTab === "discord" ? { backgroundColor: theme.primary } : { backgroundColor: theme.backgroundSecondary }]}
+        >
+          <Feather name="bell" size={13} color={alertsTab === "discord" ? "#fff" : theme.textSecondary} />
+          <ThemedText style={[styles.subTabText, { color: alertsTab === "discord" ? "#fff" : theme.textSecondary }]}>
+            Discord {pendingDiscordCount > 0 ? `(${pendingDiscordCount})` : ""}
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => setAlertsTab("runs")}
+          style={[styles.subTabBtn, alertsTab === "runs" ? { backgroundColor: theme.primary } : { backgroundColor: theme.backgroundSecondary }]}
+        >
+          <Feather name="cpu" size={13} color={alertsTab === "runs" ? "#fff" : theme.textSecondary} />
+          <ThemedText style={[styles.subTabText, { color: alertsTab === "runs" ? "#fff" : theme.textSecondary }]}>AI Runs</ThemedText>
+        </Pressable>
+      </View>
+
+      {alertsTab === "discord" ? (
+        <>
+          {discordAlertsLoading ? (
+            <ActivityIndicator color={theme.primary} style={styles.loader} />
+          ) : discordAlertsList.length > 0 ? (
+            discordAlertsList.map((alert) => {
+              const typeColor = getAlertTypeColor(alert.type);
+              const statusColor = getStatusColor(alert.status);
+              const isPending = alert.status === "pending";
+
+              return (
+                <Card key={alert.id} style={{ ...styles.alertCard, borderLeftWidth: 3, borderLeftColor: typeColor }}>
+                  <View style={styles.alertHeader}>
+                    <View style={styles.alertTypeRow}>
+                      <View style={[styles.alertTypeDot, { backgroundColor: typeColor }]} />
+                      <ThemedText style={[styles.alertType, { color: typeColor }]}>
+                        {alert.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
+                      <ThemedText style={[styles.statusText, { color: statusColor }]}>
+                        {alert.status.charAt(0).toUpperCase() + alert.status.slice(1)}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText style={[styles.alertTitle, { color: theme.text }]}>{alert.title}</ThemedText>
+                  <ThemedText style={[styles.alertFindings, { color: theme.textSecondary }]} numberOfLines={2}>
+                    {alert.message}
                   </ThemedText>
-                </View>
-                <View style={[styles.severityBadge, { backgroundColor: sevColor + "20" }]}>
-                  <View style={[styles.severityDot, { backgroundColor: sevColor }]} />
-                </View>
-              </View>
-              <ThemedText style={styles.alertFindings} numberOfLines={3}>
-                {findings || "No findings recorded"}
+                  {alert.actionsTaken ? (
+                    <ThemedText style={[styles.actionsText, { color: theme.textMuted }]} numberOfLines={1}>
+                      Actions: {alert.actionsTaken.slice(0, 80)}
+                    </ThemedText>
+                  ) : null}
+                  {alert.acknowledgedBy ? (
+                    <ThemedText style={[styles.ackText, { color: "#22C55E" }]}>
+                      Acknowledged by {alert.acknowledgedBy}
+                    </ThemedText>
+                  ) : null}
+                  <View style={styles.alertFooter}>
+                    <View>
+                      <ThemedText style={[styles.alertTime, { color: theme.textMuted }]}>{formatTimeAgo(alert.createdAt)}</ThemedText>
+                      <ThemedText style={[styles.alertIdText, { color: theme.textMuted }]}>{alert.alertId}</ThemedText>
+                    </View>
+                    {isPending ? (
+                      <Pressable
+                        onPress={() => handleAcknowledge(alert.alertId)}
+                        style={[styles.ackBtn, { backgroundColor: "#22C55E" }]}
+                        disabled={ackMutation.isPending}
+                      >
+                        <Feather name="check" size={12} color="#fff" />
+                        <ThemedText style={styles.ackBtnText}>Acknowledge</ThemedText>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </Card>
+              );
+            })
+          ) : (
+            <Card style={styles.emptyCard}>
+              <Feather name="bell-off" size={32} color={theme.textSecondary} />
+              <ThemedText style={styles.emptyTitle}>No Discord Alerts</ThemedText>
+              <ThemedText style={[styles.emptySub, { color: theme.textSecondary }]}>
+                Alerts for sick calls, client requests, and critical events will appear here.
               </ThemedText>
-              <View style={styles.alertFooter}>
-                <ThemedText style={[styles.alertTime, { color: theme.textMuted }]}>{formatTimeAgo(run.createdAt)}</ThemedText>
-                {run.durationMs ? (
-                  <ThemedText style={[styles.alertDuration, { color: theme.textMuted }]}>{Math.round(run.durationMs / 1000)}s</ThemedText>
-                ) : null}
-              </View>
             </Card>
-          );
-        })
+          )}
+        </>
       ) : (
-        <Card style={styles.emptyCard}>
-          <Feather name="bell-off" size={32} color={theme.textSecondary} />
-          <ThemedText style={styles.emptyTitle}>No Alerts</ThemedText>
-          <ThemedText style={[styles.emptySub, { color: theme.textSecondary }]}>No recent assistant runs found.</ThemedText>
-        </Card>
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContainer}>
+            {ASSISTANT_TYPES.map((type) => (
+              <Pressable
+                key={type}
+                onPress={() => setAlertFilter(type)}
+                style={[styles.filterChip, alertFilter === type ? { backgroundColor: theme.primary } : { backgroundColor: theme.backgroundSecondary }]}
+                testID={`filter-${type}`}
+              >
+                <ThemedText style={[styles.filterChipText, { color: alertFilter === type ? "#fff" : theme.textSecondary }]}>
+                  {type === "all" ? "All" : type.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {runsLoading ? (
+            <ActivityIndicator color={theme.primary} style={styles.loader} />
+          ) : filteredRuns.length > 0 ? (
+            filteredRuns.map((run) => {
+              const findings = run.outputFindings;
+              let severity = 0;
+              try {
+                if (findings) {
+                  const parsed = JSON.parse(findings);
+                  severity = parsed.severityScore || parsed.severity_score || parsed.severity || 0;
+                }
+              } catch {}
+              const sevColor = getSeverityColor(severity);
+              return (
+                <Card key={run.id} style={styles.alertCard}>
+                  <View style={styles.alertHeader}>
+                    <View style={styles.alertTypeRow}>
+                      <Feather name="cpu" size={14} color={theme.primary} />
+                      <ThemedText style={styles.alertType}>
+                        {run.assistantType.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </ThemedText>
+                    </View>
+                    <View style={[styles.severityBadge, { backgroundColor: sevColor + "20" }]}>
+                      <View style={[styles.severityDot, { backgroundColor: sevColor }]} />
+                    </View>
+                  </View>
+                  <ThemedText style={styles.alertFindings} numberOfLines={3}>
+                    {findings || "No findings recorded"}
+                  </ThemedText>
+                  <View style={styles.alertFooter}>
+                    <ThemedText style={[styles.alertTime, { color: theme.textMuted }]}>{formatTimeAgo(run.createdAt)}</ThemedText>
+                    {run.durationMs ? (
+                      <ThemedText style={[styles.alertDuration, { color: theme.textMuted }]}>{Math.round(run.durationMs / 1000)}s</ThemedText>
+                    ) : null}
+                  </View>
+                </Card>
+              );
+            })
+          ) : (
+            <Card style={styles.emptyCard}>
+              <Feather name="bell-off" size={32} color={theme.textSecondary} />
+              <ThemedText style={styles.emptyTitle}>No Alerts</ThemedText>
+              <ThemedText style={[styles.emptySub, { color: theme.textSecondary }]}>No recent assistant runs found.</ThemedText>
+            </Card>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -461,13 +764,23 @@ const styles = StyleSheet.create({
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: Spacing.sm, borderBottomWidth: 2 },
   tabLabel: { fontSize: 13, fontWeight: "600" },
   chatList: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
-  msgRow: { marginVertical: Spacing.xs, maxWidth: "80%", flexDirection: "row", gap: 8 },
+  msgRow: { marginVertical: Spacing.xs, maxWidth: "85%", flexDirection: "row", gap: 8 },
   msgLeft: { alignSelf: "flex-start" },
   msgRight: { alignSelf: "flex-end" },
-  msgAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 4 },
+  msgContent: { flexShrink: 1, gap: 4 },
+  msgAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 4, flexShrink: 0 },
   msgBubble: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.lg, flexShrink: 1 },
   msgText: { fontSize: 15, lineHeight: 20 },
   msgTime: { fontSize: 11, marginTop: 4, textAlign: "right" },
+  actionModeBadge: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 4 },
+  actionModeBadgeText: { fontSize: 10, fontWeight: "600", color: "#22C55E" },
+  toolBadgesContainer: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 2 },
+  toolBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: BorderRadius.full, borderWidth: 1 },
+  toolBadgeText: { fontSize: 10, fontWeight: "600" },
+  promptBox: { padding: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1, marginTop: 4, maxHeight: 200 },
+  promptText: { fontSize: 12, lineHeight: 16, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },
+  copyBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: BorderRadius.sm, marginTop: Spacing.sm, alignSelf: "flex-start" },
+  copyBtnText: { fontSize: 12, fontWeight: "600", color: "#fff" },
   thinkingBar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   thinkingText: { fontSize: 13, fontWeight: "500" },
   chipsScroll: { maxHeight: 44 },
@@ -491,18 +804,30 @@ const styles = StyleSheet.create({
   assistantChip: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: BorderRadius.full },
   assistantChipText: { fontSize: 12, fontWeight: "500" },
   metaText: { fontSize: 11, marginTop: Spacing.sm },
+  subTabBar: { flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.md, borderRadius: BorderRadius.md, padding: 3 },
+  subTabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: Spacing.sm, borderRadius: BorderRadius.sm },
+  subTabText: { fontSize: 12, fontWeight: "600" },
   filterScroll: { marginBottom: Spacing.sm, maxHeight: 40 },
-  filterContainer: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
+  filterContainer: { gap: Spacing.sm, paddingHorizontal: 0 },
   filterChip: { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: BorderRadius.full },
   filterChipText: { fontSize: 12, fontWeight: "600" },
   alertCard: { padding: Spacing.md, marginBottom: Spacing.sm },
   alertHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   alertTypeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  alertTypeDot: { width: 8, height: 8, borderRadius: 4 },
   alertType: { fontSize: 13, fontWeight: "600" },
+  alertTitle: { fontSize: 14, fontWeight: "700", marginBottom: 2 },
   alertFindings: { fontSize: 13, lineHeight: 18, marginBottom: Spacing.sm },
-  alertFooter: { flexDirection: "row", justifyContent: "space-between" },
+  actionsText: { fontSize: 11, lineHeight: 15, marginBottom: 4, fontStyle: "italic" },
+  ackText: { fontSize: 11, fontWeight: "600", marginBottom: 4 },
+  alertFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   alertTime: { fontSize: 11 },
+  alertIdText: { fontSize: 10 },
   alertDuration: { fontSize: 11 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: BorderRadius.full },
+  statusText: { fontSize: 11, fontWeight: "600" },
+  ackBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: BorderRadius.sm },
+  ackBtnText: { fontSize: 11, fontWeight: "600", color: "#fff" },
   insightsTitle: { fontSize: 18, fontWeight: "700", marginBottom: 2 },
   insightsSub: { fontSize: 13, marginBottom: Spacing.md },
   insightCard: { padding: Spacing.md, marginBottom: Spacing.sm },

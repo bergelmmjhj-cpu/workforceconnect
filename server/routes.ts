@@ -52,7 +52,9 @@ import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not, asc } from 
 import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, logSMS } from "./services/openphone";
 import { sendCSVEmail, sendEmail } from "./services/email";
 import { orchestrate, generateBriefing } from "./services/clawd";
-import { clawdChatMessages, clawdAssistantRuns } from "../shared/schema";
+import { clawdChatMessages, clawdAssistantRuns, discordAlerts } from "../shared/schema";
+import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
+import { handleSickCall, handleClientRequest } from "./services/clawd/auto-responder";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -2100,6 +2102,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: JSON.stringify({
           assistantsInvoked: result.assistantsInvoked,
           overallSeverity: result.overallSeverity,
+          isActionMode: result.isActionMode || false,
+          toolCalls: result.toolCalls || [],
           metadata: result.metadata,
         }),
       });
@@ -2184,6 +2188,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[CLAWD] Runs error:", error);
       res.status(500).json({ error: error.message || "Failed to fetch assistant runs" });
+    }
+  });
+
+  // ========================================
+  // Discord Alerts API
+  // ========================================
+
+  app.get("/api/discord-alerts", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const type = req.query.type as string | undefined;
+
+      const conditions = [];
+      if (status && status !== "all") conditions.push(eq(discordAlerts.status, status));
+      if (type) conditions.push(eq(discordAlerts.type, type));
+
+      const alerts = await db.select()
+        .from(discordAlerts)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(discordAlerts.createdAt))
+        .limit(50);
+
+      res.json(alerts);
+    } catch (error: any) {
+      console.error("[Discord Alerts] Fetch error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch alerts" });
+    }
+  });
+
+  app.post("/api/discord-alerts/:alertId/acknowledge", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { alertId } = req.params;
+      const { responseNote } = req.body;
+      const userId = (req as any).user?.id || "unknown";
+
+      const [user] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+      const acknowledgedBy = user?.fullName || userId;
+
+      const success = await acknowledgeAlert(alertId, acknowledgedBy, responseNote);
+      if (!success) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+
+      res.json({ success: true, acknowledgedBy });
+    } catch (error: any) {
+      console.error("[Discord Alerts] Acknowledge error:", error);
+      res.status(500).json({ error: error.message || "Failed to acknowledge alert" });
+    }
+  });
+
+  // Discord webhook — receives ACK replies from the Discord channel
+  app.post("/api/webhooks/discord", async (req: Request, res: Response) => {
+    try {
+      res.status(200).json({ received: true });
+
+      const body = req.body;
+
+      // Handle Discord interaction pings
+      if (body?.type === 1) return;
+
+      // Parse message content for ACK pattern
+      const content: string = body?.content || body?.message?.content || "";
+      const ackMatch = content.match(/ACK\s+(WFC-[A-Z0-9]+)/i) || content.match(/ACKNOWLEDGE\s+(WFC-[A-Z0-9]+)/i);
+
+      if (!ackMatch) {
+        console.log("[Discord Webhook] No ACK pattern found in:", content.slice(0, 100));
+        return;
+      }
+
+      const alertId = ackMatch[1].toUpperCase();
+      const username = body?.author?.username || body?.username || "Discord User";
+
+      const success = await acknowledgeAlert(alertId, username);
+      console.log(`[Discord Webhook] Alert ${alertId} ${success ? "acknowledged" : "not found"} by ${username}`);
+    } catch (error: any) {
+      console.error("[Discord Webhook] Error:", error?.message);
     }
   });
 
@@ -7827,7 +7907,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isShiftKeyword = ["ACCEPT SHIFT", "ACCEPT", "DECLINE SHIFT", "DECLINE"].includes(upperBody);
 
       if (!isShiftKeyword) {
-        console.log(`[OPENPHONE WEBHOOK] Non-keyword message from ${senderPhone}: "${messageBody}" - ignoring`);
+        // Classify the non-keyword message
+        const lowerBody = messageBody.toLowerCase();
+
+        const SICK_CALL_PATTERNS = [
+          "sick", "not feeling well", "can't make it", "cannot make it",
+          "calling in", "won't be able", "will not be able", "unwell",
+          "not coming in", "feeling terrible", "doctor", "hospital",
+          "family emergency", "emergency", "can't come", "cannot come",
+        ];
+
+        const CLIENT_REQUEST_PATTERNS = [
+          "need staff", "need workers", "need someone", "extra worker",
+          "additional staff", "coverage", "can you send", "short staffed",
+          "need coverage", "need a worker", "need people", "need help",
+        ];
+
+        const isSickCall = SICK_CALL_PATTERNS.some((p) => lowerBody.includes(p));
+        const isClientRequest = CLIENT_REQUEST_PATTERNS.some((p) => lowerBody.includes(p));
+        const classification = isSickCall ? "sick_call" : isClientRequest ? "client_request" : "general";
+
+        console.log(`[OPENPHONE WEBHOOK] Classified message as: ${classification} from ${senderPhone}`);
+
+        // Update the sms_log with classification
+        try {
+          await db.update(smsLogs)
+            .set({ classification })
+            .where(and(eq(smsLogs.phoneNumber, senderPhone), eq(smsLogs.direction, "inbound")));
+        } catch (e) { /* non-critical */ }
+
+        // Trigger auto-responses asynchronously
+        if (isSickCall) {
+          setImmediate(() => {
+            handleSickCall({
+              workerId: worker?.id || null,
+              workerName: worker?.fullName || "Unknown Worker",
+              workerPhone: senderPhone,
+              smsMessage: messageBody,
+            }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleSickCall error:", err?.message));
+          });
+        } else if (isClientRequest) {
+          setImmediate(() => {
+            handleClientRequest({
+              phoneNumber: senderPhone,
+              smsMessage: messageBody,
+            }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleClientRequest error:", err?.message));
+          });
+        } else {
+          console.log(`[OPENPHONE WEBHOOK] General message from ${senderPhone}: "${messageBody}" - no auto-response`);
+        }
+
         return;
       }
 

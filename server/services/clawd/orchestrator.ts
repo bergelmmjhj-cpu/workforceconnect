@@ -1,9 +1,11 @@
-import type { AssistantOutput, AssistantType, OrchestrationRequest, OrchestrationResponse } from "./types";
+import type { AssistantOutput, AssistantType, OrchestrationRequest, OrchestrationResponse, ToolCallLog } from "./types";
 import { analyzeStaffing } from "./assistants/staffing";
 import { analyzeAttendance } from "./assistants/attendance";
 import { analyzeRecruitment } from "./assistants/recruitment";
 import { analyzePayroll } from "./assistants/payroll";
 import { analyzeClientRisk } from "./assistants/client-risk";
+import { callClaudeWithTools } from "./anthropic-client";
+import { CLAWD_TOOLS, executeTool } from "./tools";
 import { db } from "../../db";
 import { clawdAssistantRuns } from "@shared/schema";
 
@@ -121,6 +123,34 @@ const ROUTING_RULES: RoutingRule[] = [
   },
 ];
 
+// Patterns that indicate the user wants Clawd to TAKE AN ACTION (not just analyze)
+const ACTION_INTENT_PATTERNS: RegExp[] = [
+  /\b(assign|add|put)\b.*(worker|staff|person)/i,
+  /\b(blast|broadcast|send.*offer|offer.*shift)\b/i,
+  /\bcreate\b.*(shift|request|schedule)/i,
+  /\bschedule\b.*(shift|worker)/i,
+  /\bsend\b.*(sms|text|message|notification)/i,
+  /\b(text|sms)\b.*(worker|staff|lilee|gm)/i,
+  /\bnotify\b.*(discord|gm|lilee|team)/i,
+  /\bcheck\b.*(discord|alert|incoming|sms|message)/i,
+  /\bread\b.*(sms|text|message|incoming)/i,
+  /\bwho\s+(texted|called|messaged)/i,
+  /\bincoming\s+(sms|text|message)/i,
+  /\b(sick\s*call|calling\s*in\s*sick|sick\s*day)\b/i,
+  /\b(cover|coverage|replacement)\b.*shift/i,
+  /\bfind\b.*(replacement|cover|backup|available)/i,
+  /\b(remove|cancel|terminate)\b.*(worker|shift|request)/i,
+  /\backnowledge\b.*(alert|discord)/i,
+  /\bwhat.*(worker|staff)\s*(are|is)\s*available/i,
+  /\bavailable\s*(worker|staff)\b/i,
+  /\blilee\b/i,
+  /\bdiscord\b/i,
+];
+
+function detectActionIntent(userMessage: string): boolean {
+  return ACTION_INTENT_PATTERNS.some((p) => p.test(userMessage));
+}
+
 function classifyByKeywords(userMessage: string): { assistants: AssistantType[]; reasoning: string } {
   const matchedAssistants = new Set<AssistantType>();
   const matchedPatterns: string[] = [];
@@ -151,9 +181,107 @@ function classifyByKeywords(userMessage: string): { assistants: AssistantType[];
   };
 }
 
+const ACTION_MODE_SYSTEM_PROMPT = `You are Clawd, the WFConnect AI Operations Assistant. You are integrated into a workforce management platform that handles staff deployment, shift scheduling, and communications.
+
+You can BOTH analyze data AND take real actions. You have access to tools to look up information and perform operations.
+
+## Your capabilities:
+- **Look up** workers, shifts, workplaces, shift requests, and incoming SMS messages
+- **Send SMS** to workers asking if they're available to cover shifts
+- **Notify GM Lilee** (+14166028038) about critical events — ALWAYS do this for sick calls, client requests, urgent staffing issues
+- **Post to Discord** for team-wide visibility
+- **Send internal app messages** to workers
+- **Create shift requests** in the system
+- **Generate Replit AI prompts** when you need a new capability built
+
+## Rules:
+1. Always use lookup tools FIRST to find the right IDs and context before taking action
+2. For sick calls or client requests: contact available workers AND always notify GM Lilee AND Discord
+3. For ANY critical operational event: notify GM Lilee via notify_gm_lilee
+4. Be specific in confirmations — tell the user exactly what you did (names, numbers, times)
+5. If you cannot do something with your available tools, use generate_replit_prompt to create a clear prompt for Replit AI to build the missing capability
+
+Today's date: ${new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" })}
+Current time (Toronto): ${new Date().toLocaleTimeString("en-CA", { timeZone: "America/Toronto" })}`;
+
 export async function orchestrate(request: OrchestrationRequest): Promise<OrchestrationResponse> {
   const startTime = Date.now();
 
+  // Detect if the user wants Clawd to take action
+  const isActionMode = detectActionIntent(request.userMessage);
+
+  if (isActionMode) {
+    return orchestrateWithTools(request, startTime);
+  }
+
+  return orchestrateAnalysis(request, startTime);
+}
+
+async function orchestrateWithTools(request: OrchestrationRequest, startTime: number): Promise<OrchestrationResponse> {
+  console.log(`[Clawd] Action mode detected for: "${request.userMessage.slice(0, 80)}..."`);
+
+  // Build conversation history for Claude
+  const messages: Array<{ role: "user" | "assistant"; content: string }> = [
+    ...request.conversationHistory
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    { role: "user", content: request.userMessage },
+  ];
+
+  let finalResponse = "";
+  let toolCalls: ToolCallLog[] = [];
+
+  try {
+    const result = await callClaudeWithTools(
+      ACTION_MODE_SYSTEM_PROMPT,
+      messages,
+      CLAWD_TOOLS,
+      (toolName, input) => executeTool(toolName, input, request.userId),
+      { maxTokens: 2048 }
+    );
+
+    finalResponse = result.finalResponse;
+    toolCalls = result.toolCalls;
+  } catch (err: any) {
+    console.error("[Clawd] Tool-use orchestration failed:", err?.message);
+    finalResponse = `I encountered an error while trying to perform this action: ${err?.message || "Unknown error"}. Please try again or rephrase your request.`;
+  }
+
+  const totalDurationMs = Date.now() - startTime;
+
+  try {
+    await db.insert(clawdAssistantRuns).values({
+      assistantType: "executive",
+      inputContext: JSON.stringify({
+        userMessage: request.userMessage,
+        mode: "action",
+        toolsUsed: toolCalls.map((tc) => tc.toolName),
+      }),
+      outputFindings: JSON.stringify({
+        response: finalResponse.slice(0, 1000),
+        toolCallCount: toolCalls.length,
+        toolCalls: toolCalls.slice(0, 5),
+        severityScore: 0,
+      }),
+      durationMs: totalDurationMs,
+      userId: request.userId,
+    });
+  } catch (err) {
+    console.error("[Clawd] Failed to log action run:", err);
+  }
+
+  return {
+    response: finalResponse,
+    assistantsInvoked: [],
+    assistantOutputs: [],
+    overallSeverity: 0,
+    isActionMode: true,
+    toolCalls,
+    metadata: { totalDurationMs, model: "claude-sonnet-4-6" },
+  };
+}
+
+async function orchestrateAnalysis(request: OrchestrationRequest, startTime: number): Promise<OrchestrationResponse> {
   const classification = classifyByKeywords(request.userMessage);
 
   const assistantPromises = classification.assistants.map((assistantType) => {
@@ -181,6 +309,7 @@ export async function orchestrate(request: OrchestrationRequest): Promise<Orches
       assistantType: "executive",
       inputContext: JSON.stringify({
         userMessage: request.userMessage,
+        mode: "analysis",
         classification,
         assistantsInvoked: classification.assistants,
       }),
@@ -202,10 +331,8 @@ export async function orchestrate(request: OrchestrationRequest): Promise<Orches
     assistantsInvoked: classification.assistants,
     assistantOutputs,
     overallSeverity,
-    metadata: {
-      totalDurationMs,
-      model: "claude-sonnet-4-6",
-    },
+    isActionMode: false,
+    metadata: { totalDurationMs, model: "claude-sonnet-4-6" },
   };
 }
 

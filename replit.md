@@ -40,6 +40,12 @@ Key features include:
 - **Clawd AI — Multi-Agent Business Intelligence**: A multi-agent orchestration system for admin/HR users. It comprises 6 specialized assistants and 5 analytics services, coordinated by an Executive Orchestrator, to provide structured insights and responses based on user queries, utilizing Anthropic's Claude. The frontend provides a 4-tab workspace for interaction.
 - **GM Lilee SMS Notifications**: Sends SMS alerts to a specific GM phone number for critical operational events and automated daily/weekly deployment reports.
 - **Director Appointments System**: A standalone system for tracking lead-generation appointments, including CRUD API, admin-only frontend, and integration with a CRM.
+- **Clawd AI Action Tools**: Tool-use (agentic loop) via Anthropic Claude. 13 tools: 7 lookup (workers, shifts, workplaces, shift requests, SMS logs, Discord alerts, available workers) + 6 action (send SMS, notify GM Lilee, send Discord, internal message, blast shift, generate Replit prompt). SMS classification detects sick calls and client requests and triggers smart auto-responses with audit trail.
+- **Two-Way Discord Integration**: Outbound alerts via webhook (stored in DB `app_config`, configurable via System Settings UI). Inbound ACK via `POST /api/webhooks/discord`. Full `discord_alerts` table with status tracking and in-app acknowledgment buttons.
+- **Toronto Timezone Utility**: `server/utils/time.ts` provides `nowToronto()`, `toToronto()`, `formatToronto()` using `date-fns-tz`.
+- **AI Follow-Up SMS Service**: `server/services/aiFollowupService.ts` logs AI-sent SMS messages and sends human-like follow-ups after 2 hours if no reply. Cancelled automatically when recipient responds. Scheduler runs every 15 minutes.
+- **Applicant Portal**: Public form at `apply.wfconnect.org` and `/apply`. Applicants submit name, Canadian address (Google Places autocomplete), phone, position, job source, photo, and resume. Files stored as base64. Admin screen shows all applicants with status management (new/reviewing/interviewed/hired/rejected) and one-click download for photo and resume.
+- **System Settings UI**: Admin screen to configure app-wide settings (Discord webhook URL) stored in `app_config` DB table with test button and setup instructions.
 
 ## External Dependencies
 

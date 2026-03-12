@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apply Now — WFConnect</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #6C5CE7;
+      --primary-dark: #5849c7;
+      --bg: #f7f8fc;
+      --card: #ffffff;
+      --text: #1a1a2e;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --error: #ef4444;
+      --success: #22c55e;
+      --radius: 12px;
+      --input-h: 52px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 20px; text-align: center; }
+    .header-logo { display: inline-flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 40px; height: 40px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+    .logo-icon svg { width: 22px; height: 22px; fill: white; }
+    .logo-text { font-size: 22px; font-weight: 700; color: var(--text); }
+    .logo-text span { color: var(--primary); }
+    .header-subtitle { margin-top: 6px; color: var(--text-muted); font-size: 14px; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px 16px 80px; }
+    .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); padding: 28px; margin-bottom: 20px; }
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+    .card-title .num { width: 28px; height: 28px; background: var(--primary); color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    .field label .req { color: var(--error); }
+    .field input, .field select, .field textarea {
+      width: 100%; height: var(--input-h); padding: 0 16px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      font-size: 16px; background: #fff; color: var(--text);
+      outline: none; transition: border-color 0.15s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--primary); }
+    .field input.error, .field select.error { border-color: var(--error); }
+    .field textarea { height: auto; padding: 14px 16px; resize: none; }
+    .field-error { color: var(--error); font-size: 12px; margin-top: 4px; display: none; }
+    .field-error.show { display: block; }
+    /* Address autocomplete */
+    .autocomplete-wrap { position: relative; }
+    .suggestions { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1.5px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; z-index: 100; max-height: 220px; overflow-y: auto; display: none; }
+    .suggestions.open { display: block; }
+    .suggestion-item { padding: 12px 16px; cursor: pointer; font-size: 14px; border-bottom: 1px solid var(--border); }
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover, .suggestion-item.active { background: var(--bg); }
+    /* File upload */
+    .upload-area {
+      border: 2px dashed var(--border); border-radius: 10px; padding: 28px 16px;
+      text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    }
+    .upload-area:hover, .upload-area.drag-over { border-color: var(--primary); background: #f0edff; }
+    .upload-area.has-file { border-style: solid; border-color: var(--success); background: #f0fff4; }
+    .upload-icon { font-size: 32px; margin-bottom: 10px; }
+    .upload-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .upload-sub { font-size: 13px; color: var(--text-muted); }
+    .upload-filename { font-size: 14px; font-weight: 600; color: var(--success); margin-top: 8px; }
+    .upload-area input[type="file"] { display: none; }
+    .upload-clear { background: none; border: none; color: var(--error); font-size: 12px; cursor: pointer; margin-top: 6px; text-decoration: underline; }
+    /* Progress */
+    .upload-progress { margin-top: 8px; }
+    .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--primary); border-radius: 2px; transition: width 0.3s; width: 0%; }
+    /* Submit */
+    .submit-btn {
+      width: 100%; height: 56px; background: var(--primary); color: white;
+      border: none; border-radius: 12px; font-size: 17px; font-weight: 700;
+      cursor: pointer; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .submit-btn:hover:not(:disabled) { background: var(--primary-dark); }
+    .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .spinner { width: 20px; height: 20px; border: 2.5px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Success state */
+    .success-screen { display: none; text-align: center; padding: 60px 20px; }
+    .success-screen.show { display: block; }
+    .success-icon { width: 80px; height: 80px; background: #dcfce7; border-radius: 50%; margin: 0 auto 24px; display: flex; align-items: center; justify-content: center; font-size: 40px; }
+    .success-title { font-size: 26px; font-weight: 700; margin-bottom: 12px; }
+    .success-sub { color: var(--text-muted); font-size: 16px; line-height: 1.6; }
+    /* Form hidden during success */
+    #apply-form.hidden { display: none; }
+    /* Responsive */
+    @media (max-width: 480px) {
+      .card { padding: 20px; }
+      .card-title { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
+    <div class="logo-text">WF<span>Connect</span></div>
+  </div>
+  <div class="header-subtitle">Join our growing team of professionals</div>
+</div>
+
+<div class="container">
+
+  <!-- Success Screen -->
+  <div class="success-screen" id="success-screen">
+    <div class="success-icon">✅</div>
+    <div class="success-title">Application Received!</div>
+    <div class="success-sub">
+      Thank you for applying to WFConnect.<br><br>
+      Our team will review your application and reach out to you soon.<br>
+      Please keep an eye on your phone for a message from us.
+    </div>
+  </div>
+
+  <!-- Application Form -->
+  <form id="apply-form" novalidate>
+
+    <!-- Section 1: Personal Info -->
+    <div class="card">
+      <div class="card-title"><span class="num">1</span>Personal Information</div>
+
+      <div class="field">
+        <label>Full Name <span class="req">*</span></label>
+        <input type="text" id="full_name" name="full_name" placeholder="Jane Smith" autocomplete="name" />
+        <div class="field-error" id="err-full_name">Please enter your full name</div>
+      </div>
+
+      <div class="field">
+        <label>Phone Number <span class="req">*</span></label>
+        <input type="tel" id="phone" name="phone" placeholder="(416) 555-0100" autocomplete="tel" />
+        <div class="field-error" id="err-phone">Please enter a valid phone number</div>
+      </div>
+
+      <div class="field">
+        <label>Home Address (Canada only) <span class="req">*</span></label>
+        <div class="autocomplete-wrap">
+          <input type="text" id="address_full" name="address_full" placeholder="Start typing your address..." autocomplete="off" />
+          <div class="suggestions" id="address-suggestions"></div>
+        </div>
+        <div class="field-error" id="err-address_full">Please enter a valid Canadian address</div>
+        <input type="hidden" id="address_street" name="address_street" />
+        <input type="hidden" id="address_city" name="address_city" />
+        <input type="hidden" id="address_province" name="address_province" />
+        <input type="hidden" id="address_postal_code" name="address_postal_code" />
+        <input type="hidden" id="address_country" name="address_country" value="Canada" />
+      </div>
+    </div>
+
+    <!-- Section 2: Position -->
+    <div class="card">
+      <div class="card-title"><span class="num">2</span>Position Details</div>
+
+      <div class="field">
+        <label>Position Applying For <span class="req">*</span></label>
+        <select id="applying_for" name="applying_for">
+          <option value="">Select a position...</option>
+          <option value="Security Guard">Security Guard</option>
+          <option value="Concierge">Concierge</option>
+          <option value="Receptionist">Receptionist</option>
+          <option value="Event Staff">Event Staff</option>
+          <option value="Hotel Staff">Hotel Staff</option>
+          <option value="Supervisor">Supervisor</option>
+          <option value="Other">Other</option>
+        </select>
+        <div class="field-error" id="err-applying_for">Please select a position</div>
+      </div>
+
+      <div class="field">
+        <label>Where did you see this job posting? <span class="req">*</span></label>
+        <select id="job_posting_source" name="job_posting_source">
+          <option value="">Select a source...</option>
+          <option value="Indeed">Indeed</option>
+          <option value="LinkedIn">LinkedIn</option>
+          <option value="Facebook">Facebook</option>
+          <option value="Instagram">Instagram</option>
+          <option value="Word of Mouth / Referral">Word of Mouth / Referral</option>
+          <option value="WFConnect Website">WFConnect Website</option>
+          <option value="Job Fair">Job Fair</option>
+          <option value="Other">Other</option>
+        </select>
+        <div class="field-error" id="err-job_posting_source">Please select where you saw the posting</div>
+      </div>
+    </div>
+
+    <!-- Section 3: Documents -->
+    <div class="card">
+      <div class="card-title"><span class="num">3</span>Upload Documents</div>
+
+      <div class="field">
+        <label>Profile Photo <span class="req">*</span></label>
+        <div class="upload-area" id="photo-upload-area" onclick="document.getElementById('photo-file').click()">
+          <div class="upload-icon">📷</div>
+          <div class="upload-title">Upload your photo</div>
+          <div class="upload-sub">JPG, PNG, WEBP — max 10 MB</div>
+          <div class="upload-filename" id="photo-filename" style="display:none"></div>
+          <button type="button" class="upload-clear" id="photo-clear" style="display:none" onclick="clearFile('photo', event)">Remove</button>
+          <input type="file" id="photo-file" accept=".jpg,.jpeg,.png,.webp" />
+        </div>
+        <div class="field-error" id="err-photo">Please upload a profile photo</div>
+      </div>
+
+      <div class="field">
+        <label>Resume <span class="req">*</span></label>
+        <div class="upload-area" id="resume-upload-area" onclick="document.getElementById('resume-file').click()">
+          <div class="upload-icon">📄</div>
+          <div class="upload-title">Upload your resume</div>
+          <div class="upload-sub">PDF, DOC, DOCX — max 10 MB</div>
+          <div class="upload-filename" id="resume-filename" style="display:none"></div>
+          <button type="button" class="upload-clear" id="resume-clear" style="display:none" onclick="clearFile('resume', event)">Remove</button>
+          <input type="file" id="resume-file" accept=".pdf,.doc,.docx" />
+        </div>
+        <div class="field-error" id="err-resume">Please upload your resume</div>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <button type="submit" class="submit-btn" id="submit-btn">
+      Submit Application
+    </button>
+
+  </form>
+</div>
+
+<script>
+const PHOTO_ACCEPT = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+const RESUME_ACCEPT = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+const MAX_SIZE = 10 * 1024 * 1024;
+
+let photoData = null, resumeData = null;
+let addressValidated = false;
+let submitPending = false;
+
+// --- ADDRESS AUTOCOMPLETE ---
+let autocompleteTimer;
+const addressInput = document.getElementById('address_full');
+const suggestionsBox = document.getElementById('address-suggestions');
+
+addressInput.addEventListener('input', () => {
+  addressValidated = false;
+  clearTimeout(autocompleteTimer);
+  const val = addressInput.value.trim();
+  if (val.length < 3) { hideSuggestions(); return; }
+  autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
+});
+
+addressInput.addEventListener('blur', () => { setTimeout(hideSuggestions, 200); });
+
+async function fetchSuggestions(input) {
+  try {
+    const resp = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}&country=CA`);
+    const data = await resp.json();
+    if (!data.predictions || data.predictions.length === 0) { hideSuggestions(); return; }
+    renderSuggestions(data.predictions);
+  } catch { hideSuggestions(); }
+}
+
+function renderSuggestions(predictions) {
+  suggestionsBox.innerHTML = '';
+  predictions.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'suggestion-item';
+    item.textContent = p.description;
+    item.addEventListener('mousedown', (e) => { e.preventDefault(); selectPlace(p.place_id, p.description); });
+    suggestionsBox.appendChild(item);
+  });
+  suggestionsBox.classList.add('open');
+}
+
+function hideSuggestions() { suggestionsBox.classList.remove('open'); }
+
+async function selectPlace(placeId, description) {
+  addressInput.value = description;
+  hideSuggestions();
+  try {
+    const resp = await fetch(`/api/places/details?place_id=${placeId}`);
+    const data = await resp.json();
+    const comps = data.result?.address_components || [];
+    let street_number = '', route = '', city = '', province = '', postal = '', country = '';
+    comps.forEach(c => {
+      if (c.types.includes('street_number')) street_number = c.long_name;
+      if (c.types.includes('route')) route = c.long_name;
+      if (c.types.includes('locality') || c.types.includes('sublocality_level_1')) city = city || c.long_name;
+      if (c.types.includes('administrative_area_level_1')) province = c.short_name;
+      if (c.types.includes('postal_code')) postal = c.long_name;
+      if (c.types.includes('country')) country = c.long_name;
+    });
+    if (country !== 'Canada') {
+      showError('address_full', 'Only Canadian addresses are accepted');
+      addressInput.value = '';
+      addressValidated = false;
+      return;
+    }
+    document.getElementById('address_street').value = [street_number, route].filter(Boolean).join(' ');
+    document.getElementById('address_city').value = city;
+    document.getElementById('address_province').value = province;
+    document.getElementById('address_postal_code').value = postal;
+    document.getElementById('address_country').value = 'Canada';
+    clearError('address_full');
+    addressValidated = true;
+  } catch { addressValidated = true; }
+}
+
+// --- FILE UPLOAD ---
+function setupFileUpload(type) {
+  const fileInput = document.getElementById(`${type}-file`);
+  const area = document.getElementById(`${type}-upload-area`);
+
+  fileInput.addEventListener('change', () => handleFile(type, fileInput.files[0]));
+
+  area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('drag-over'); });
+  area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
+  area.addEventListener('drop', (e) => {
+    e.preventDefault(); area.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(type, file);
+  });
+}
+
+function handleFile(type, file) {
+  if (!file) return;
+  const accept = type === 'photo' ? PHOTO_ACCEPT : RESUME_ACCEPT;
+  const label = type === 'photo' ? 'photo' : 'resume';
+
+  if (!accept.includes(file.type)) {
+    showError(type, `Invalid file type. Accepted: ${type === 'photo' ? 'JPG, PNG, WEBP' : 'PDF, DOC, DOCX'}`);
+    return;
+  }
+  if (file.size > MAX_SIZE) {
+    showError(type, 'File too large — max 10 MB');
+    return;
+  }
+  clearError(type);
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (type === 'photo') photoData = { data: e.target.result, filename: file.name, mime: file.type, size: file.size };
+    else resumeData = { data: e.target.result, filename: file.name, mime: file.type, size: file.size };
+    const area = document.getElementById(`${type}-upload-area`);
+    const fn = document.getElementById(`${type}-filename`);
+    const clr = document.getElementById(`${type}-clear`);
+    area.classList.add('has-file');
+    fn.textContent = '✅ ' + file.name;
+    fn.style.display = 'block';
+    clr.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearFile(type, event) {
+  event.stopPropagation();
+  if (type === 'photo') photoData = null;
+  else resumeData = null;
+  const area = document.getElementById(`${type}-upload-area`);
+  const fn = document.getElementById(`${type}-filename`);
+  const clr = document.getElementById(`${type}-clear`);
+  const input = document.getElementById(`${type}-file`);
+  area.classList.remove('has-file');
+  fn.style.display = 'none';
+  clr.style.display = 'none';
+  fn.textContent = '';
+  input.value = '';
+}
+
+setupFileUpload('photo');
+setupFileUpload('resume');
+
+// --- VALIDATION HELPERS ---
+function showError(field, msg) {
+  const el = document.getElementById(`err-${field}`);
+  const inp = document.getElementById(field) || document.getElementById(`${field}-upload-area`);
+  if (el) { el.textContent = msg || el.textContent; el.classList.add('show'); }
+  if (inp) inp.classList.add('error');
+}
+function clearError(field) {
+  const el = document.getElementById(`err-${field}`);
+  const inp = document.getElementById(field) || document.getElementById(`${field}-upload-area`);
+  if (el) el.classList.remove('show');
+  if (inp) inp.classList.remove('error');
+}
+
+function validatePhone(val) {
+  const digits = val.replace(/\D/g, '');
+  return digits.length >= 10 && digits.length <= 11;
+}
+
+// --- FORM SUBMIT ---
+document.getElementById('apply-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (submitPending) return;
+
+  let valid = true;
+
+  const fullName = document.getElementById('full_name').value.trim();
+  if (!fullName) { showError('full_name', 'Please enter your full name'); valid = false; } else clearError('full_name');
+
+  const phone = document.getElementById('phone').value.trim();
+  if (!validatePhone(phone)) { showError('phone', 'Please enter a valid Canadian phone number'); valid = false; } else clearError('phone');
+
+  const address = document.getElementById('address_full').value.trim();
+  if (!address) { showError('address_full', 'Please enter your address'); valid = false; } else clearError('address_full');
+
+  const applyingFor = document.getElementById('applying_for').value;
+  if (!applyingFor) { showError('applying_for', 'Please select a position'); valid = false; } else clearError('applying_for');
+
+  const source = document.getElementById('job_posting_source').value;
+  if (!source) { showError('job_posting_source', 'Please select where you saw the posting'); valid = false; } else clearError('job_posting_source');
+
+  if (!photoData) { showError('photo', 'Please upload a profile photo'); valid = false; } else clearError('photo');
+  if (!resumeData) { showError('resume', 'Please upload your resume'); valid = false; } else clearError('resume');
+
+  if (!valid) {
+    document.querySelector('.field-error.show')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  submitPending = true;
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Submitting...';
+
+  try {
+    const payload = {
+      fullName,
+      phone,
+      addressFull: address,
+      addressStreet: document.getElementById('address_street').value,
+      addressCity: document.getElementById('address_city').value,
+      addressProvince: document.getElementById('address_province').value,
+      addressPostalCode: document.getElementById('address_postal_code').value,
+      addressCountry: 'Canada',
+      applyingFor,
+      jobPostingSource: source,
+      photoData: photoData.data,
+      photoFilename: photoData.filename,
+      photoMimeType: photoData.mime,
+      photoFileSize: photoData.size,
+      resumeData: resumeData.data,
+      resumeFilename: resumeData.filename,
+      resumeMimeType: resumeData.mime,
+      resumeFileSize: resumeData.size,
+    };
+
+    const resp = await fetch('/api/applicants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || 'Submission failed');
+
+    document.getElementById('apply-form').classList.add('hidden');
+    document.getElementById('success-screen').classList.add('show');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Submit Application';
+    submitPending = false;
+    alert('Something went wrong: ' + (err.message || 'Please try again.'));
+  }
+});
+</script>
+</body>
+</html>

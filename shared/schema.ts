@@ -1115,3 +1115,76 @@ export const insertAppointmentSchema = createInsertSchema(appointments).omit({
 
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
+
+// ============================================
+// App Config Schema (System-wide settings)
+// ============================================
+
+export const appConfig = pgTable("app_config", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+});
+
+export type AppConfig = typeof appConfig.$inferSelect;
+
+// ============================================
+// AI Message Log Schema (Claude follow-up tracking)
+// ============================================
+
+export const aiMessageLog = pgTable("ai_message_log", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  recipientPhone: text("recipient_phone").notNull(),
+  recipientName: text("recipient_name"),
+  message: text("message").notNull(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  responseReceived: boolean("response_received").default(false).notNull(),
+  responseReceivedAt: timestamp("response_received_at"),
+  followupSent: boolean("followup_sent").default(false).notNull(),
+  followupSentAt: timestamp("followup_sent_at"),
+  followupMessage: text("followup_message"),
+  triggeredBy: text("triggered_by").default("clawd"), // clawd, auto_responder, manual
+  contextNote: text("context_note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AiMessageLog = typeof aiMessageLog.$inferSelect;
+
+// ============================================
+// Applicants Schema (Public application portal)
+// ============================================
+
+export const applicants = pgTable("applicants", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  fullName: text("full_name").notNull(),
+  phone: text("phone").notNull(),
+  addressFull: text("address_full").notNull(),
+  addressStreet: text("address_street"),
+  addressCity: text("address_city"),
+  addressProvince: text("address_province"),
+  addressPostalCode: text("address_postal_code"),
+  addressCountry: text("address_country").default("Canada"),
+  applyingFor: text("applying_for").notNull(),
+  jobPostingSource: text("job_posting_source").notNull(),
+  photoData: text("photo_data"), // base64 data URI
+  photoFilename: text("photo_filename"),
+  photoMimeType: text("photo_mime_type"),
+  photoFileSize: integer("photo_file_size"),
+  resumeData: text("resume_data"), // base64 data URI
+  resumeFilename: text("resume_filename"),
+  resumeMimeType: text("resume_mime_type"),
+  resumeFileSize: integer("resume_file_size"),
+  status: text("status").notNull().default("new"), // new, reviewing, interviewed, hired, rejected
+  adminNotes: text("admin_notes"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Applicant = typeof applicants.$inferSelect;

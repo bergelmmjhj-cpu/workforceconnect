@@ -97,6 +97,18 @@ export default function AdminManageScreen() {
       description: "Create, edit, approve, and invite HR/Client users",
       onPress: () => rootNavigate("UserManagement"),
     },
+    {
+      icon: "user-plus",
+      title: "Applicants",
+      description: "Review applications submitted via apply.wfconnect.org",
+      onPress: () => rootNavigate("ApplicantsAdmin"),
+    },
+    {
+      icon: "settings",
+      title: "System Settings",
+      description: "Configure Discord webhook URL and system integrations",
+      onPress: () => rootNavigate("SystemSettings"),
+    },
   ];
 
   const isWeb = Platform.OS === "web";

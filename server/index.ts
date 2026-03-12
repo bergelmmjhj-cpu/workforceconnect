@@ -443,13 +443,14 @@ function setupCors(app: express.Application) {
 function setupBodyParsing(app: express.Application) {
   app.use(
     express.json({
+      limit: "30mb", // Increased for base64 file uploads (photo + resume, each up to 10MB → ~13.3MB base64)
       verify: (req, _res, buf) => {
         req.rawBody = buf;
       },
     }),
   );
 
-  app.use(express.urlencoded({ extended: false }));
+  app.use(express.urlencoded({ extended: false, limit: "30mb" }));
 }
 
 function setupRequestLogging(app: express.Application) {
@@ -597,6 +598,24 @@ function configureExpoAndLanding(app: express.Application) {
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.sendFile(faviconPath);
   });
+
+  // Serve Applicant Portal (apply.wfconnect.org)
+  const applyFormPath = path.resolve(process.cwd(), "server", "templates", "apply-form.html");
+  const applyFormTemplate = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : null;
+
+  function isApplySubdomain(req: Request): boolean {
+    const host = (req.hostname || req.headers.host || "").toLowerCase();
+    return host.startsWith("apply.") || host.includes("apply.wfconnect");
+  }
+
+  if (applyFormTemplate) {
+    app.get("/apply", (_req: Request, res: Response) => {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applyFormTemplate);
+    });
+    log("Applicant portal available at /apply and apply.wfconnect.org");
+  }
 
   // Serve Contractor Payment & Processing Guide
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
@@ -774,6 +793,13 @@ function configureExpoAndLanding(app: express.Application) {
       return res.status(200).send(contractorGuideTemplate);
     }
 
+    // Apply subdomain — public applicant portal
+    if (isApplySubdomain(req) && applyFormTemplate) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applyFormTemplate);
+    }
+
     // Default - serve landing page
     return serveLandingPage({
       req,
@@ -928,6 +954,16 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
           await aiAssistant.startAssistant();
         } catch (aiErr: any) {
           log("[AI] Startup failed (non-blocking):", aiErr.message);
+        }
+      })();
+
+      // AI Follow-up SMS Scheduler (non-blocking)
+      (async () => {
+        try {
+          const followup = await import("./services/aiFollowupService");
+          followup.startFollowupScheduler();
+        } catch (err: any) {
+          log("[AI FOLLOWUP] Startup failed (non-blocking):", err.message);
         }
       })();
     },

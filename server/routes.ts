@@ -52,9 +52,10 @@ import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not, asc } from 
 import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, logSMS } from "./services/openphone";
 import { sendCSVEmail, sendEmail } from "./services/email";
 import { orchestrate, generateBriefing } from "./services/clawd";
-import { clawdChatMessages, clawdAssistantRuns, discordAlerts } from "../shared/schema";
+import { clawdChatMessages, clawdAssistantRuns, discordAlerts, appConfig, applicants, aiMessageLog } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
 import { handleSickCall, handleClientRequest } from "./services/clawd/auto-responder";
+import { logAiMessage, markResponseReceived } from "./services/aiFollowupService";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -2442,6 +2443,239 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[APPOINTMENTS] Error deleting:", error);
       res.status(500).json({ error: "Failed to delete appointment" });
+    }
+  });
+
+  // ========================================
+  // System Config API (App-wide settings)
+  // ========================================
+
+  app.get("/api/config", checkRoles("admin", "hr"), async (_req: Request, res: Response) => {
+    try {
+      const configs = await db.select().from(appConfig).orderBy(asc(appConfig.key));
+      const result: Record<string, string> = {};
+      configs.forEach((c) => { result[c.key] = c.value; });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch config" });
+    }
+  });
+
+  app.put("/api/config/:key", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const { key } = req.params;
+      const { value, description } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!value && value !== "") {
+        return res.status(400).json({ error: "value is required" });
+      }
+
+      await db.insert(appConfig)
+        .values({ key, value, description: description || null, updatedBy: userId || null })
+        .onConflictDoUpdate({
+          target: appConfig.key,
+          set: { value, description: description || null, updatedAt: new Date(), updatedBy: userId || null },
+        });
+
+      res.json({ success: true, key, value });
+    } catch (error: any) {
+      console.error("[CONFIG] Update error:", error);
+      res.status(500).json({ error: "Failed to update config" });
+    }
+  });
+
+  app.delete("/api/config/:key", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      await db.delete(appConfig).where(eq(appConfig.key, req.params.key));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to delete config" });
+    }
+  });
+
+  // ========================================
+  // Applicants API (Public portal + Admin)
+  // ========================================
+
+  // Public submission — no auth required
+  app.post("/api/applicants", async (req: Request, res: Response) => {
+    try {
+      const {
+        fullName, phone, addressFull, addressStreet, addressCity, addressProvince,
+        addressPostalCode, addressCountry, applyingFor, jobPostingSource,
+        photoData: photoDataIn, photoFilename, photoMimeType, photoFileSize,
+        resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize,
+      } = req.body;
+
+      if (!fullName?.trim()) return res.status(400).json({ error: "Full name required" });
+      if (!phone?.trim()) return res.status(400).json({ error: "Phone required" });
+      if (!addressFull?.trim()) return res.status(400).json({ error: "Address required" });
+      if (!applyingFor?.trim()) return res.status(400).json({ error: "Position required" });
+      if (!jobPostingSource?.trim()) return res.status(400).json({ error: "Job posting source required" });
+      if (!photoDataIn) return res.status(400).json({ error: "Photo required" });
+      if (!resumeDataIn) return res.status(400).json({ error: "Resume required" });
+
+      const PHOTO_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+      const RESUME_TYPES = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+      const MAX_SIZE = 10 * 1024 * 1024;
+
+      if (photoMimeType && !PHOTO_TYPES.includes(photoMimeType)) {
+        return res.status(400).json({ error: "Invalid photo file type" });
+      }
+      if (resumeMimeType && !RESUME_TYPES.includes(resumeMimeType)) {
+        return res.status(400).json({ error: "Invalid resume file type" });
+      }
+      if (photoFileSize && photoFileSize > MAX_SIZE) {
+        return res.status(400).json({ error: "Photo exceeds 10 MB limit" });
+      }
+      if (resumeFileSize && resumeFileSize > MAX_SIZE) {
+        return res.status(400).json({ error: "Resume exceeds 10 MB limit" });
+      }
+
+      const now = new Date();
+      const [applicant] = await db.insert(applicants).values({
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        addressFull: addressFull.trim(),
+        addressStreet: addressStreet?.trim() || null,
+        addressCity: addressCity?.trim() || null,
+        addressProvince: addressProvince?.trim() || null,
+        addressPostalCode: addressPostalCode?.trim() || null,
+        addressCountry: addressCountry?.trim() || "Canada",
+        applyingFor: applyingFor.trim(),
+        jobPostingSource: jobPostingSource.trim(),
+        photoData: photoDataIn,
+        photoFilename: photoFilename || null,
+        photoMimeType: photoMimeType || null,
+        photoFileSize: photoFileSize || null,
+        resumeData: resumeDataIn,
+        resumeFilename: resumeFilename || null,
+        resumeMimeType: resumeMimeType || null,
+        resumeFileSize: resumeFileSize || null,
+        status: "new",
+        submittedAt: now,
+      }).returning({ id: applicants.id });
+
+      console.log(`[APPLICANTS] New submission: ${fullName} (${phone}) for ${applyingFor}`);
+      res.json({ success: true, applicantId: applicant.id });
+    } catch (error: any) {
+      console.error("[APPLICANTS] Submission error:", error);
+      res.status(500).json({ error: "Failed to submit application" });
+    }
+  });
+
+  app.get("/api/applicants", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { search, status, limit: limitParam } = req.query;
+      const limitVal = Math.min(parseInt(limitParam as string) || 50, 200);
+
+      const conditions = [];
+      if (status && status !== "all") conditions.push(eq(applicants.status, status as string));
+      if (search) {
+        const s = `%${search}%`;
+        conditions.push(
+          sql`(${applicants.fullName} ILIKE ${s} OR ${applicants.phone} ILIKE ${s})`
+        );
+      }
+
+      const rows = await db.select({
+        id: applicants.id,
+        fullName: applicants.fullName,
+        phone: applicants.phone,
+        addressFull: applicants.addressFull,
+        addressCity: applicants.addressCity,
+        addressProvince: applicants.addressProvince,
+        applyingFor: applicants.applyingFor,
+        jobPostingSource: applicants.jobPostingSource,
+        photoFilename: applicants.photoFilename,
+        photoMimeType: applicants.photoMimeType,
+        resumeFilename: applicants.resumeFilename,
+        resumeMimeType: applicants.resumeMimeType,
+        status: applicants.status,
+        submittedAt: applicants.submittedAt,
+      }).from(applicants)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(applicants.submittedAt))
+        .limit(limitVal);
+
+      res.json(rows);
+    } catch (error: any) {
+      console.error("[APPLICANTS] List error:", error);
+      res.status(500).json({ error: "Failed to fetch applicants" });
+    }
+  });
+
+  app.get("/api/applicants/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const [row] = await db.select().from(applicants).where(eq(applicants.id, req.params.id));
+      if (!row) return res.status(404).json({ error: "Applicant not found" });
+      // Strip file data from main response for speed
+      const { photoData: _p, resumeData: _r, ...safe } = row;
+      res.json({ ...safe, hasPhoto: !!_p, hasResume: !!_r });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch applicant" });
+    }
+  });
+
+  app.patch("/api/applicants/:id/status", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { status, adminNotes } = req.body;
+      const VALID = ["new", "reviewing", "interviewed", "hired", "rejected"];
+      if (!VALID.includes(status)) return res.status(400).json({ error: "Invalid status" });
+
+      const [updated] = await db.update(applicants)
+        .set({ status, adminNotes: adminNotes || null, updatedAt: new Date() })
+        .where(eq(applicants.id, req.params.id))
+        .returning({ id: applicants.id, status: applicants.status });
+
+      if (!updated) return res.status(404).json({ error: "Applicant not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to update status" });
+    }
+  });
+
+  app.get("/api/applicants/:id/download/photo", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const [row] = await db.select({ photoData: applicants.photoData, photoFilename: applicants.photoFilename, photoMimeType: applicants.photoMimeType })
+        .from(applicants).where(eq(applicants.id, req.params.id));
+      if (!row?.photoData) return res.status(404).json({ error: "Photo not found" });
+
+      const base64 = row.photoData.split(",")[1] || row.photoData;
+      const buffer = Buffer.from(base64, "base64");
+      res.setHeader("Content-Type", row.photoMimeType || "image/jpeg");
+      res.setHeader("Content-Disposition", `attachment; filename="${row.photoFilename || "photo.jpg"}"`);
+      res.send(buffer);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to download photo" });
+    }
+  });
+
+  app.get("/api/applicants/:id/download/resume", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const [row] = await db.select({ resumeData: applicants.resumeData, resumeFilename: applicants.resumeFilename, resumeMimeType: applicants.resumeMimeType })
+        .from(applicants).where(eq(applicants.id, req.params.id));
+      if (!row?.resumeData) return res.status(404).json({ error: "Resume not found" });
+
+      const base64 = row.resumeData.split(",")[1] || row.resumeData;
+      const buffer = Buffer.from(base64, "base64");
+      res.setHeader("Content-Type", row.resumeMimeType || "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${row.resumeFilename || "resume.pdf"}"`);
+      res.send(buffer);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to download resume" });
+    }
+  });
+
+  // AI Message Log API
+  app.get("/api/ai-message-log", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const logs = await db.select().from(aiMessageLog)
+        .orderBy(desc(aiMessageLog.sentAt)).limit(100);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch AI message log" });
     }
   });
 
@@ -7855,6 +8089,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`[OPENPHONE WEBHOOK] From: ${senderPhone}, Body: "${messageBody}"`);
+
+      // Mark any pending AI follow-up messages as responded
+      markResponseReceived(senderPhone).catch(() => {});
 
       const normalizedPhone = senderPhone.replace(/[^\d]/g, "");
       const phoneVariants = [

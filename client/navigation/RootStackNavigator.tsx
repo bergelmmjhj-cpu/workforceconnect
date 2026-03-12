@@ -35,6 +35,8 @@ import ResetPasswordScreen from "@/screens/ResetPasswordScreen";
 import UserManagementScreen from "@/screens/UserManagementScreen";
 import ClawdWorkspaceScreen from "@/screens/ClawdWorkspaceScreen";
 import AppointmentsScreen from "@/screens/AppointmentsScreen";
+import SystemSettingsScreen from "@/screens/SystemSettingsScreen";
+import ApplicantsAdminScreen from "@/screens/ApplicantsAdminScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -76,6 +78,8 @@ export type RootStackParamList = {
   UserManagement: undefined;
   ClawdWorkspace: undefined;
   Appointments: undefined;
+  SystemSettings: undefined;
+  ApplicantsAdmin: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -327,6 +331,20 @@ export default function RootStackNavigator() {
             component={AppointmentsScreen}
             options={{
               headerTitle: "Appointments",
+            }}
+          />
+          <Stack.Screen
+            name="SystemSettings"
+            component={SystemSettingsScreen}
+            options={{
+              headerTitle: "System Settings",
+            }}
+          />
+          <Stack.Screen
+            name="ApplicantsAdmin"
+            component={ApplicantsAdminScreen}
+            options={{
+              headerTitle: "Applicants",
             }}
           />
         </>

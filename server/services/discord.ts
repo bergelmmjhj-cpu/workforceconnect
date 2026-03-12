@@ -1,9 +1,7 @@
 import { db } from "../db";
-import { discordAlerts } from "../../shared/schema";
+import { discordAlerts, appConfig } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 const COLOR_MAP: Record<string, number> = {
   red: 0xEF4444,
@@ -12,6 +10,14 @@ const COLOR_MAP: Record<string, number> = {
   amber: 0xF59E0B,
   purple: 0x8B5CF6,
 };
+
+async function getWebhookUrl(): Promise<string | null> {
+  try {
+    const [row] = await db.select().from(appConfig).where(eq(appConfig.key, "discord_webhook_url"));
+    if (row?.value) return row.value;
+  } catch {}
+  return process.env.DISCORD_WEBHOOK_URL || null;
+}
 
 interface DiscordField {
   name: string;
@@ -36,8 +42,9 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
   error?: string;
 }> {
   const alertId = `WFC-${Date.now().toString(36).toUpperCase()}`;
+  const webhookUrl = await getWebhookUrl();
 
-  if (!DISCORD_WEBHOOK_URL) {
+  if (!webhookUrl) {
     console.log("[DISCORD] Webhook URL not configured, skipping notification");
     return { success: false, error: "Webhook URL not configured" };
   }
@@ -52,7 +59,7 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
       timestamp: new Date().toISOString(),
     };
 
-    const response = await fetch(DISCORD_WEBHOOK_URL, {
+    const response = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

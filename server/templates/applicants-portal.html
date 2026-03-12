@@ -175,13 +175,22 @@
     </div>
     <div class="login-subtitle">Applicants Portal — Admin Access</div>
     <form id="login-form">
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="login-email" placeholder="admin@wfconnect.org" required autocomplete="email" />
+      <div id="credentials-fields">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="admin@wfconnect.org" required autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password" />
+        </div>
       </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password" />
+      <div id="totp-fields" style="display:none;">
+        <div class="form-group">
+          <label>Two-Factor Authentication Code</label>
+          <input type="text" id="login-totp" placeholder="Enter 6-digit code" maxlength="8" autocomplete="one-time-code" inputmode="numeric" style="text-align:center;font-size:1.2em;letter-spacing:4px;" />
+        </div>
+        <div style="font-size:0.85em;color:#6B7280;margin-bottom:12px;">Enter the code from your authenticator app or a recovery code.</div>
       </div>
       <button type="submit" class="login-btn" id="login-btn">Sign In</button>
       <div class="login-error" id="login-error"></div>
@@ -288,8 +297,13 @@ function apiFetch(url, opts = {}) {
 
 function showLogin() {
   currentUser = null;
+  pending2FAUserId = null;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('credentials-fields').style.display = 'block';
+  document.getElementById('totp-fields').style.display = 'none';
+  document.getElementById('login-btn').textContent = 'Sign In';
+  document.getElementById('login-error').classList.remove('show');
 }
 
 function showDashboard() {
@@ -299,42 +313,74 @@ function showDashboard() {
   loadApplicants();
 }
 
-// Login
+let pending2FAUserId = null;
+
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
   const btn = document.getElementById('login-btn');
   const errEl = document.getElementById('login-error');
 
   btn.disabled = true;
-  btn.textContent = 'Signing in...';
   errEl.classList.remove('show');
 
   try {
-    const resp = await apiFetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await resp.json();
+    if (pending2FAUserId) {
+      btn.textContent = 'Verifying...';
+      const code = document.getElementById('login-totp').value.trim();
+      if (!code) throw new Error('Please enter your verification code');
 
-    if (!resp.ok) throw new Error(data.error || 'Login failed');
-    if (data.pending) throw new Error('Account pending approval');
-    if (data.requires2FA) throw new Error('2FA accounts not supported in web portal — use the mobile app');
-    if (!data.user) throw new Error('Login failed');
+      const resp = await apiFetch('/api/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: pending2FAUserId, code }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.verified) throw new Error(data.error || 'Invalid code');
 
-    const role = data.user.role;
-    if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
+      const role = data.user.role;
+      if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
 
-    currentUser = data.user;
-    showDashboard();
+      currentUser = data.user;
+      pending2FAUserId = null;
+      showDashboard();
+    } else {
+      btn.textContent = 'Signing in...';
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      const resp = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) throw new Error(data.error || 'Login failed');
+      if (data.pending) throw new Error('Account pending approval');
+
+      if (data.requires2FA) {
+        pending2FAUserId = data.userId;
+        document.getElementById('credentials-fields').style.display = 'none';
+        document.getElementById('totp-fields').style.display = 'block';
+        document.getElementById('login-btn').textContent = 'Verify';
+        document.getElementById('login-totp').focus();
+        return;
+      }
+
+      if (!data.user) throw new Error('Login failed');
+
+      const role = data.user.role;
+      if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
+
+      currentUser = data.user;
+      showDashboard();
+    }
   } catch (err) {
     errEl.textContent = err.message;
     errEl.classList.add('show');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Sign In';
+    if (!pending2FAUserId) btn.textContent = 'Sign In';
   }
 });
 

@@ -1224,6 +1224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (delta !== null) {
         const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+        setSessionCookie(res, user.id, user.role);
         res.json({ verified: true, user: userWithoutSensitive });
         return;
       }
@@ -1238,6 +1239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(users.id, userId));
 
           const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+          setSessionCookie(res, user.id, user.role);
           res.json({ verified: true, user: userWithoutSensitive, remainingRecoveryCodes: codes.length });
           return;
         }

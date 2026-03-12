@@ -603,9 +603,22 @@ function configureExpoAndLanding(app: express.Application) {
   const applyFormPath = path.resolve(process.cwd(), "server", "templates", "apply-form.html");
   const applyFormTemplate = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : null;
 
+  // Serve Applicants Admin Portal (apply.wfconnect.org/applicants)
+  const applicantsPortalPath = path.resolve(process.cwd(), "server", "templates", "applicants-portal.html");
+  const applicantsPortalTemplate = fs.existsSync(applicantsPortalPath) ? fs.readFileSync(applicantsPortalPath, "utf-8") : null;
+
   function isApplySubdomain(req: Request): boolean {
     const host = (req.hostname || req.headers.host || "").toLowerCase();
     return host.startsWith("apply.") || host.includes("apply.wfconnect");
+  }
+
+  if (applicantsPortalTemplate) {
+    app.get("/applicants", (_req: Request, res: Response) => {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applicantsPortalTemplate);
+    });
+    log("Applicants admin portal available at /applicants and apply.wfconnect.org/applicants");
   }
 
   if (applyFormTemplate) {

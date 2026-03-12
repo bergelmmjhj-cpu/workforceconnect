@@ -619,7 +619,9 @@ function configureExpoAndLanding(app: express.Application) {
       }
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache");
-      return res.status(200).send(applicantsPortalTemplate);
+      const googleClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "";
+      const rendered = applicantsPortalTemplate.replace("__GOOGLE_CLIENT_ID__", googleClientId);
+      return res.status(200).send(rendered);
     });
     log("Applicants admin portal available at /applicants and apply.wfconnect.org/applicants");
   }
@@ -628,7 +630,8 @@ function configureExpoAndLanding(app: express.Application) {
     app.get("/apply", (_req: Request, res: Response) => {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache");
-      return res.status(200).send(applyFormTemplate);
+      const fresh = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : applyFormTemplate;
+      return res.status(200).send(fresh);
     });
     log("Applicant portal available at /apply and apply.wfconnect.org");
   }

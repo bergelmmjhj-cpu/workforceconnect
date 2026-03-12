@@ -21,11 +21,8 @@
     }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
     .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 20px; text-align: center; }
-    .header-logo { display: inline-flex; align-items: center; gap: 10px; }
-    .logo-icon { width: 40px; height: 40px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-    .logo-icon svg { width: 22px; height: 22px; fill: white; }
-    .logo-text { font-size: 22px; font-weight: 700; color: var(--text); }
-    .logo-text span { color: var(--primary); }
+    .header-logo { display: inline-flex; align-items: center; justify-content: center; }
+    .logo-img { height: 48px; width: auto; display: block; }
     .header-subtitle { margin-top: 6px; color: var(--text-muted); font-size: 14px; }
     .container { max-width: 640px; margin: 0 auto; padding: 24px 16px 80px; }
     .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); padding: 28px; margin-bottom: 20px; }
@@ -98,10 +95,7 @@
 
 <div class="header">
   <div class="header-logo">
-    <div class="logo-icon">
-      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    </div>
-    <div class="logo-text">WF<span>Connect</span></div>
+    <img src="/logo.png" alt="WFConnect" class="logo-img" />
   </div>
   <div class="header-subtitle">Join our growing team of professionals</div>
 </div>

@@ -879,6 +879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+      setSessionCookie(res, user.id, user.role);
       res.json({ user: { ...userWithoutSensitive, mustChangePassword: user.mustChangePassword || false } });
     } catch (error) {
       console.error("Error with Google auth:", error);

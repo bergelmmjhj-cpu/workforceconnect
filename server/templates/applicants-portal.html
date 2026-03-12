@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -44,6 +45,12 @@
     .login-btn { width: 100%; height: 48px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 8px; transition: background .15s; }
     .login-btn:hover { background: var(--primary-dark); }
     .login-btn:disabled { opacity: .6; cursor: not-allowed; }
+    .divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--text-muted); font-size: 13px; }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .google-btn-wrap { width: 100%; display: flex; justify-content: center; margin-bottom: 4px; }
+    .google-btn-wrap .google-btn { width: 100%; height: 44px; display: flex; align-items: center; justify-content: center; gap: 10px; background: white; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; font-weight: 600; color: #374151; cursor: pointer; transition: box-shadow .15s; }
+    .google-btn-wrap .google-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+    .google-btn-wrap .google-btn:disabled { opacity: .6; cursor: not-allowed; }
     .login-error { color: var(--error); font-size: 13px; margin-top: 12px; display: none; }
     .login-error.show { display: block; }
 
@@ -174,15 +181,25 @@
       <div class="brand">WF<span>Connect</span></div>
     </div>
     <div class="login-subtitle">Applicants Portal — Admin Access</div>
+    <div id="google-signin-section">
+      <div class="google-btn-wrap">
+        <button type="button" class="google-btn" id="google-btn" onclick="handleGoogleSignIn()">
+          <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Sign in with Google
+        </button>
+      </div>
+      <div class="divider">or sign in with email</div>
+      <div id="google-error" style="display:none;color:#dc2626;font-size:13px;margin-bottom:8px;text-align:center;"></div>
+    </div>
     <form id="login-form">
       <div id="credentials-fields">
         <div class="form-group">
           <label>Email</label>
-          <input type="email" id="login-email" placeholder="admin@wfconnect.org" required autocomplete="email" />
+          <input type="email" id="login-email" placeholder="admin@wfconnect.org" autocomplete="email" />
         </div>
         <div class="form-group">
           <label>Password</label>
-          <input type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password" />
+          <input type="password" id="login-password" placeholder="Enter your password" autocomplete="current-password" />
         </div>
       </div>
       <div id="totp-fields" style="display:none;">
@@ -268,10 +285,84 @@
 <div class="toast" id="toast"></div>
 
 <script>
+const GOOGLE_CLIENT_ID = '__GOOGLE_CLIENT_ID__';
 let currentUser = null;
 let applicants = [];
 let searchTimer = null;
 let pending2FAUserId = null;
+let googleInitialized = false;
+
+function initGoogleSignIn() {
+  if (!window.google || !GOOGLE_CLIENT_ID || googleInitialized) return;
+  googleInitialized = true;
+  window.google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+  });
+}
+
+window.addEventListener('load', () => { setTimeout(initGoogleSignIn, 500); });
+
+async function handleGoogleSignIn() {
+  initGoogleSignIn();
+  if (!window.google || !GOOGLE_CLIENT_ID) {
+    showToast('Google Sign-In not available. Please use email/password.', 'error');
+    return;
+  }
+  window.google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      document.getElementById('google-error').textContent = 'Google sign-in could not be displayed. Check that pop-ups are allowed or try email/password.';
+      document.getElementById('google-error').style.display = 'block';
+    }
+  });
+}
+
+async function handleGoogleCredential(response) {
+  const btn = document.getElementById('google-btn');
+  const errEl = document.getElementById('google-error');
+  if (errEl) errEl.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+
+  try {
+    const resp = await apiFetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: response.credential }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) throw new Error(data.error || 'Google sign-in failed');
+    if (data.pending) throw new Error('Your account is pending admin approval');
+    if (data.registered) throw new Error('Account created — pending admin approval');
+
+    if (data.requires2FA) {
+      pending2FAUserId = data.userId;
+      document.getElementById('google-signin-section').style.display = 'none';
+      document.getElementById('credentials-fields').style.display = 'none';
+      document.getElementById('totp-fields').style.display = 'block';
+      document.getElementById('login-btn').textContent = 'Verify';
+      document.getElementById('login-btn').style.display = 'block';
+      document.getElementById('login-totp').focus();
+      return;
+    }
+
+    if (!data.user) throw new Error('Google sign-in failed');
+    const role = data.user.role;
+    if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
+
+    currentUser = data.user;
+    showDashboard();
+  } catch (err) {
+    if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+    else showToast(err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign in with Google'; }
+    const gBtn = document.getElementById('google-btn');
+    if (gBtn) { gBtn.disabled = false; gBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google'; }
+  }
+}
 
 function getHeaders() {
   return { 'Content-Type': 'application/json' };
@@ -304,12 +395,17 @@ async function apiFetch(url, opts = {}) {
 function showLogin() {
   currentUser = null;
   pending2FAUserId = null;
+  googleInitialized = false;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('dashboard').classList.remove('show');
+  document.getElementById('google-signin-section').style.display = 'block';
   document.getElementById('credentials-fields').style.display = 'block';
   document.getElementById('totp-fields').style.display = 'none';
   document.getElementById('login-btn').textContent = 'Sign In';
   document.getElementById('login-error').classList.remove('show');
+  const gErr = document.getElementById('google-error');
+  if (gErr) gErr.style.display = 'none';
+  setTimeout(initGoogleSignIn, 300);
 }
 
 function showDashboard() {
@@ -351,6 +447,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
       btn.textContent = 'Signing in...';
       const email = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value;
+      if (!email) throw new Error('Please enter your email address');
+      if (!password) throw new Error('Please enter your password');
 
       const resp = await apiFetch('/api/auth/login', {
         method: 'POST',
@@ -364,6 +462,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
       if (data.requires2FA) {
         pending2FAUserId = data.userId;
+        document.getElementById('google-signin-section').style.display = 'none';
         document.getElementById('credentials-fields').style.display = 'none';
         document.getElementById('totp-fields').style.display = 'block';
         document.getElementById('login-btn').textContent = 'Verify';

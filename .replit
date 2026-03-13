@@ -80,3 +80,7 @@ ensurePreviewReachable = "/status"
 DEMO_MODE = "false"
 WEEKDAYS_TEAM_ID = "a532a7d3-e5db-4881-8146-f2522ff9d349"
 DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1479327532221333504/-EUpXGiUOnRwaEhEp_zBHzB7RzlRgRz2T_ra2tMcEXd8ERW4KGJq6sJhE5f1EyNYjHzh"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 60000

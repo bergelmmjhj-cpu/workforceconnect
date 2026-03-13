@@ -613,12 +613,12 @@ export default function ClawdWorkspaceScreen() {
           multiline
           maxLength={2000}
           testID="clawd-input"
-          onKeyPress={(e: any) => {
-            if (Platform.OS === "web" && e.nativeEvent?.key === "Enter" && !e.nativeEvent?.shiftKey) {
+          onKeyPress={Platform.OS === "web" ? (e: any) => {
+            if (e.nativeEvent?.key === "Enter" && !e.nativeEvent?.shiftKey) {
               e.preventDefault();
               handleSend();
             }
-          }}
+          } : undefined}
         />
         <Pressable
           onPress={() => handleSend()}

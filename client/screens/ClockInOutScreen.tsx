@@ -48,6 +48,13 @@ type ClockInOutRouteProp = RouteProp<RootStackParamList, "ClockInOut">;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BIG_BUTTON_SIZE = 120;
 
+const CATEGORY_COLORS: Record<string, string> = {
+  hotel: "#6366f1",
+  banquet: "#f59e0b",
+  janitorial: "#10b981",
+  airbnb: "#FF5A5F",
+};
+
 interface ShiftData {
   id: string;
   title: string;
@@ -621,14 +628,22 @@ export default function ClockInOutScreen() {
           <View style={[styles.bottomPanel, { backgroundColor: theme.backgroundRoot, paddingBottom: insets.bottom + Spacing.md }]}>
             <View style={styles.shiftInfoRow}>
               <View style={{ flex: 1 }}>
-                <ThemedText style={styles.shiftTitle} numberOfLines={1}>
-                  {shift.title || shift.roleType || "Shift"}
-                </ThemedText>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm }}>
+                  <ThemedText style={styles.shiftTitle} numberOfLines={1}>
+                    {shift.title || shift.roleType || "Shift"}
+                  </ThemedText>
+                  {shift.category ? (
+                    <View style={{ backgroundColor: (CATEGORY_COLORS[shift.category] || "#6b7280") + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                      <ThemedText style={{ fontSize: 11, fontWeight: "600", color: CATEGORY_COLORS[shift.category] || "#6b7280" }}>
+                        {shift.category.charAt(0).toUpperCase() + shift.category.slice(1)}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                </View>
                 <ThemedText style={[styles.shiftSub, { color: theme.textSecondary }]} numberOfLines={1}>
                   {shift.workplaceName || "Unknown Location"} · {shift.startTime}{shift.endTime ? ` - ${shift.endTime}` : ""}
                 </ThemedText>
               </View>
-              {distance !== null && !isNative ? null : null}
             </View>
 
             {clockInWindowLabel && !titoLog ? (

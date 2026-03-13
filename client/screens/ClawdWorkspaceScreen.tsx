@@ -89,13 +89,14 @@ type AssistantRun = {
   createdAt: string;
 };
 
-type TabKey = "chat" | "briefing" | "alerts" | "insights";
+type TabKey = "chat" | "briefing" | "alerts" | "insights" | "announce";
 
 const TABS: { key: TabKey; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
   { key: "chat", label: "Chat", icon: "message-circle" },
   { key: "briefing", label: "Briefing", icon: "file-text" },
   { key: "alerts", label: "Alerts", icon: "bell" },
   { key: "insights", label: "Insights", icon: "bar-chart-2" },
+  { key: "announce", label: "Announce", icon: "send" },
 ];
 
 const QUICK_PROMPTS = [
@@ -324,6 +325,12 @@ export default function ClawdWorkspaceScreen() {
   const [alertFilter, setAlertFilter] = useState("all");
   const [alertsTab, setAlertsTab] = useState<"runs" | "discord">("discord");
   const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
+
+  const [announceDraft, setAnnounceDraft] = useState("");
+  const [announcePreview, setAnnouncePreview] = useState<{ title: string; body: string; color: string } | null>(null);
+  const [announcePreviewing, setAnnouncePreviewing] = useState(false);
+  const [announceSending, setAnnounceSending] = useState(false);
+  const [announceSent, setAnnounceSent] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   const isWeb = Platform.OS === "web";
@@ -866,6 +873,193 @@ export default function ClawdWorkspaceScreen() {
     </ScrollView>
   );
 
+  const COLOR_META: Record<string, { label: string; hex: string }> = {
+    blue: { label: "Info", hex: "#3B82F6" },
+    green: { label: "Positive", hex: "#22C55E" },
+    amber: { label: "Heads-up", hex: "#F59E0B" },
+    red: { label: "Urgent", hex: "#EF4444" },
+    purple: { label: "Milestone", hex: "#8B5CF6" },
+  };
+
+  const handlePreviewAnnouncement = useCallback(async () => {
+    if (!announceDraft.trim()) return;
+    setAnnouncePreviewing(true);
+    setAnnouncePreview(null);
+    setAnnounceSent(false);
+    try {
+      const res = await apiRequest("POST", "/api/discord/preview-announcement", { rawText: announceDraft.trim() });
+      const data = await res.json();
+      setAnnouncePreview(data);
+    } catch {
+      Alert.alert("Error", "Failed to generate preview. Please try again.");
+    } finally {
+      setAnnouncePreviewing(false);
+    }
+  }, [announceDraft]);
+
+  const handleSendAnnouncement = useCallback(async () => {
+    if (!announcePreview) return;
+    setAnnounceSending(true);
+    try {
+      const res = await apiRequest("POST", "/api/discord/send-announcement", {
+        title: announcePreview.title,
+        body: announcePreview.body,
+        color: announcePreview.color,
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Send failed");
+      setAnnounceSent(true);
+      setAnnounceDraft("");
+      setAnnouncePreview(null);
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to send announcement.");
+    } finally {
+      setAnnounceSending(false);
+    }
+  }, [announcePreview]);
+
+  const renderAnnounce = () => {
+    const accentColor = announcePreview ? (COLOR_META[announcePreview.color]?.hex || theme.primary) : theme.primary;
+    return (
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + Spacing.lg }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Card style={{ padding: Spacing.md, marginBottom: Spacing.md }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.md }}>
+            <Feather name="send" size={18} color={theme.primary} />
+            <ThemedText style={{ fontWeight: "700", fontSize: 16, color: theme.text }}>Discord Announcement</ThemedText>
+          </View>
+          <ThemedText style={{ fontSize: 13, color: theme.textMuted, marginBottom: Spacing.sm }}>
+            Write a rough draft — Claude will polish it into a clean, professional announcement before you send.
+          </ThemedText>
+          <TextInput
+            style={[
+              {
+                backgroundColor: theme.inputBackground,
+                color: theme.text,
+                borderRadius: BorderRadius.md,
+                padding: Spacing.md,
+                minHeight: 120,
+                fontSize: 14,
+                textAlignVertical: "top",
+                borderWidth: 1,
+                borderColor: theme.border,
+                marginBottom: Spacing.md,
+              },
+            ]}
+            placeholder="e.g. reminder shift this friday 6am hotel 701 bay st need 3 workers call if you can make it"
+            placeholderTextColor={theme.textMuted}
+            value={announceDraft}
+            onChangeText={(t) => { setAnnounceDraft(t); setAnnouncePreview(null); setAnnounceSent(false); }}
+            multiline
+            maxLength={1000}
+            testID="announce-draft-input"
+          />
+          <Pressable
+            onPress={handlePreviewAnnouncement}
+            disabled={!announceDraft.trim() || announcePreviewing}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: Spacing.sm,
+              backgroundColor: announceDraft.trim() ? theme.primary : theme.backgroundSecondary,
+              paddingVertical: Spacing.sm + 2,
+              borderRadius: BorderRadius.md,
+            }}
+            testID="button-preview-announcement"
+          >
+            {announcePreviewing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Feather name="eye" size={16} color={announceDraft.trim() ? "#fff" : theme.textMuted} />
+            )}
+            <ThemedText style={{ color: announceDraft.trim() ? "#fff" : theme.textMuted, fontWeight: "600" }}>
+              {announcePreviewing ? "Claude is polishing..." : "Preview with Claude"}
+            </ThemedText>
+          </Pressable>
+        </Card>
+
+        {announcePreview ? (
+          <Card style={{ padding: Spacing.md, marginBottom: Spacing.md, borderLeftWidth: 4, borderLeftColor: accentColor }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.sm }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: accentColor }} />
+              <ThemedText style={{ fontSize: 12, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                {COLOR_META[announcePreview.color]?.label || "Info"} — Discord Preview
+              </ThemedText>
+            </View>
+            <ThemedText style={{ fontWeight: "700", fontSize: 16, color: theme.text, marginBottom: Spacing.sm }}>
+              {announcePreview.title}
+            </ThemedText>
+            <ThemedText style={{ fontSize: 14, color: theme.text, lineHeight: 21, marginBottom: Spacing.md }}>
+              {announcePreview.body}
+            </ThemedText>
+            <View style={{ flexDirection: "row", gap: Spacing.sm }}>
+              <Pressable
+                onPress={() => { setAnnouncePreview(null); }}
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  paddingVertical: Spacing.sm,
+                  borderRadius: BorderRadius.md,
+                  backgroundColor: theme.backgroundSecondary,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                }}
+                testID="button-revise-announcement"
+              >
+                <ThemedText style={{ color: theme.text, fontWeight: "600" }}>Revise</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={handleSendAnnouncement}
+                disabled={announceSending}
+                style={{
+                  flex: 2,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: Spacing.sm,
+                  paddingVertical: Spacing.sm,
+                  borderRadius: BorderRadius.md,
+                  backgroundColor: accentColor,
+                }}
+                testID="button-send-announcement"
+              >
+                {announceSending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Feather name="send" size={16} color="#fff" />
+                )}
+                <ThemedText style={{ color: "#fff", fontWeight: "700" }}>
+                  {announceSending ? "Sending..." : "Send to Discord"}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </Card>
+        ) : null}
+
+        {announceSent ? (
+          <Card style={{ padding: Spacing.lg, alignItems: "center", gap: Spacing.sm }}>
+            <Feather name="check-circle" size={32} color="#22C55E" />
+            <ThemedText style={{ fontWeight: "700", fontSize: 16, color: theme.text }}>Announcement Sent!</ThemedText>
+            <ThemedText style={{ fontSize: 13, color: theme.textMuted, textAlign: "center" }}>
+              Your announcement has been posted to Discord.
+            </ThemedText>
+            <Pressable
+              onPress={() => setAnnounceSent(false)}
+              style={{ paddingVertical: Spacing.sm, paddingHorizontal: Spacing.lg, backgroundColor: theme.primary, borderRadius: BorderRadius.md, marginTop: Spacing.sm }}
+              testID="button-new-announcement"
+            >
+              <ThemedText style={{ color: "#fff", fontWeight: "600" }}>New Announcement</ThemedText>
+            </Pressable>
+          </Card>
+        ) : null}
+      </ScrollView>
+    );
+  };
+
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () =>
@@ -886,6 +1080,7 @@ export default function ClawdWorkspaceScreen() {
       {activeTab === "briefing" ? renderBriefing() : null}
       {activeTab === "alerts" ? renderAlerts() : null}
       {activeTab === "insights" ? renderInsights() : null}
+      {activeTab === "announce" ? renderAnnounce() : null}
     </ThemedView>
   );
 }

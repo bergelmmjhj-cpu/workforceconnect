@@ -2339,6 +2339,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
+  // Discord Announcements (Claude-polished)
+  // ========================================
+
+  app.post("/api/discord/preview-announcement", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { rawText } = req.body;
+      if (!rawText || typeof rawText !== "string" || rawText.trim().length === 0) {
+        res.status(400).json({ error: "rawText is required" });
+        return;
+      }
+
+      const { callClaude } = await import("./services/clawd/anthropic-client");
+
+      const systemPrompt = `You are a professional communications assistant for WFConnect, a workforce management platform.
+Your job is to take rough announcement drafts and polish them into clear, professional Discord announcements.
+
+RULES:
+- Keep it concise (2-4 sentences max for the body)
+- Professional but warm in tone — avoid corporate jargon
+- Choose a color that fits the tone: "blue" (info/general), "green" (success/positive news), "amber" (heads-up/reminder), "red" (urgent), "purple" (milestone/celebration)
+- Return ONLY valid JSON, no extra text
+
+Respond with exactly:
+{"title":"Short headline (max 8 words)","body":"Polished announcement text here.","color":"blue"}`;
+
+      const response = await callClaude(systemPrompt, [
+        { role: "user", content: `Polish this announcement draft:\n\n${rawText.trim()}` },
+      ], { maxTokens: 400, temperature: 0.5 });
+
+      let parsed: { title: string; body: string; color: string };
+      try {
+        const cleaned = response.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        const firstBrace = cleaned.indexOf("{");
+        const lastBrace = cleaned.lastIndexOf("}");
+        parsed = JSON.parse(firstBrace !== -1 ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned);
+      } catch {
+        parsed = { title: "Announcement", body: response.slice(0, 500), color: "blue" };
+      }
+
+      res.json({ title: parsed.title || "Announcement", body: parsed.body || rawText, color: parsed.color || "blue" });
+    } catch (error: any) {
+      console.error("[DISCORD ANNOUNCE] Preview error:", error);
+      res.status(500).json({ error: error.message || "Failed to preview announcement" });
+    }
+  });
+
+  app.post("/api/discord/send-announcement", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { title, body, color } = req.body;
+      if (!title || !body) {
+        res.status(400).json({ error: "title and body are required" });
+        return;
+      }
+
+      const result = await sendDiscordNotification({
+        title: String(title),
+        message: String(body),
+        color: (["red","blue","green","amber","purple"].includes(color) ? color : "blue") as "blue",
+        type: "announcement",
+      });
+
+      if (!result.success) {
+        res.status(502).json({ error: result.error || "Failed to send to Discord" });
+        return;
+      }
+
+      res.json({ success: true, alertId: result.alertId });
+    } catch (error: any) {
+      console.error("[DISCORD ANNOUNCE] Send error:", error);
+      res.status(500).json({ error: error.message || "Failed to send announcement" });
+    }
+  });
+
+  // ========================================
   // Discord Alerts API
   // ========================================
 

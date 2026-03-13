@@ -693,8 +693,7 @@ function configureExpoAndLanding(app: express.Application) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     if (isApplySubdomain(req) && applyFormTemplate) {
       res.setHeader("Cache-Control", "no-cache");
-      const fresh = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : applyFormTemplate;
-      return res.status(200).send(fresh);
+      return res.status(200).send(applyFormTemplate);
     }
     res.setHeader("Cache-Control", "public, max-age=3600");
     return res.status(200).send(applyTemplate);

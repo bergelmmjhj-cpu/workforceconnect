@@ -7954,6 +7954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           workplaceName: workplaces.name,
           workplaceProvince: workplaces.province,
           workerName: users.fullName,
+          workerPhone: users.phone,
         })
         .from(shifts)
         .leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id))
@@ -7990,14 +7991,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const nowMinutes = local.hours * 60 + local.minutes;
 
         if (isToday) {
-          // Send only if shift starts between 15 min and 4 hours from now (local time)
+          // Send push+SMS if shift starts between 1 hour and 8 hours from now (local time)
           const minutesUntilShift = shiftMinutes - nowMinutes;
-          if (minutesUntilShift < 15 || minutesUntilShift > 240) continue;
+          if (minutesUntilShift < 60 || minutesUntilShift > 480) {
+            // Morning reminder pass: 7–9 AM for any shift today, sent via SMS only
+            const isMorningWindow = local.hours >= 7 && local.hours < 9;
+            if (isMorningWindow && minutesUntilShift > 0) {
+              const morningSmsType = "day_of_morning_sms";
+              const existingMorning = await db.select().from(sentReminders)
+                .where(and(
+                  eq(sentReminders.shiftId, shift.id),
+                  eq(sentReminders.workerId, shift.workerUserId),
+                  eq(sentReminders.reminderType, morningSmsType)
+                )).limit(1);
+              if (existingMorning.length === 0 && shift.workerPhone) {
+                const morningMsg = `Good morning ${shift.workerName || "there"}! You have a shift today — ${shift.title} at ${shift.workplaceName || "your workplace"} at ${shift.startTime} ${tzAbbr}. Have a great shift!`;
+                try {
+                  const mRes = await sendSMS(shift.workerPhone, morningMsg);
+                  await logSMS({ phoneNumber: shift.workerPhone, direction: "outbound", message: morningMsg, shiftId: shift.id, status: mRes.success ? "sent" : "failed" });
+                  await db.insert(sentReminders).values({ shiftId: shift.id, workerId: shift.workerUserId, reminderType: morningSmsType });
+                  console.log(`[Reminder] Morning SMS sent to ${shift.workerName} (${shift.workerPhone}) — ${shift.title}`);
+                } catch (mErr) {
+                  console.error(`[Reminder] Morning SMS failed for shift ${shift.id}:`, mErr);
+                }
+              }
+            }
+            continue;
+          }
         } else {
           // Day-before: only send between 18:00–21:00 in the workplace's local timezone
           if (local.hours < 18 || local.hours >= 21) continue;
         }
 
+        // Check push dedup
         const existing = await db
           .select()
           .from(sentReminders)
@@ -8035,11 +8061,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
             data: JSON.stringify({ shiftId: shift.id }),
           });
 
+          // Send SMS directly to the worker (tracked with separate dedup key)
+          const workerDisplay = shift.workerName || "there";
+          const workerSmsType = `${reminderType}_sms`;
+          const existingWorkerSms = await db.select().from(sentReminders)
+            .where(and(
+              eq(sentReminders.shiftId, shift.id),
+              eq(sentReminders.workerId, shift.workerUserId),
+              eq(sentReminders.reminderType, workerSmsType)
+            )).limit(1);
+
+          if (existingWorkerSms.length === 0 && shift.workerPhone) {
+            const workerMsg = isToday
+              ? `Hi ${workerDisplay}, reminder: you're working TODAY — ${shift.title} at ${shift.workplaceName || "your workplace"} at ${shift.startTime} ${tzAbbr}. See you there!`
+              : `Hi ${workerDisplay}, reminder: you have a shift TOMORROW — ${shift.title} at ${shift.workplaceName || "your workplace"} at ${shift.startTime} ${tzAbbr}. Reply if you have any questions.`;
+            try {
+              const wRes = await sendSMS(shift.workerPhone, workerMsg);
+              await logSMS({ phoneNumber: shift.workerPhone, direction: "outbound", message: workerMsg, shiftId: shift.id, status: wRes.success ? "sent" : "failed" });
+              await db.insert(sentReminders).values({ shiftId: shift.id, workerId: shift.workerUserId, reminderType: workerSmsType });
+              console.log(`[Reminder] Worker SMS sent to ${shift.workerName} (${shift.workerPhone}) — ${shift.title} on ${shift.date}`);
+            } catch (wErr) {
+              console.error(`[Reminder] Worker SMS failed for shift ${shift.id}:`, wErr);
+            }
+          }
+
           // Send CC copy to supervisor number
-          const workerDisplay = shift.workerName || "Worker";
           const ccMessage =
             `Shift Reminder Sent\n` +
-            `Worker: ${workerDisplay}\n` +
+            `Worker: ${shift.workerName || "Worker"}\n` +
             `Shift: ${shift.title}\n` +
             `Location: ${shift.workplaceName || "workplace"}\n` +
             `Date: ${shift.date}\n` +
@@ -8054,7 +8103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               shiftId: shift.id,
               status: ccResult.success ? "sent" : "failed",
             });
-            console.log(`[Reminder] CC sent to ${REMINDER_CC_PHONE} for ${workerDisplay} — ${shift.title} on ${shift.date}`);
+            console.log(`[Reminder] CC sent to ${REMINDER_CC_PHONE} for ${shift.workerName || "Worker"} — ${shift.title} on ${shift.date}`);
           } catch (smsErr) {
             console.error(`[Reminder] CC SMS failed for shift ${shift.id}:`, smsErr);
           }

@@ -613,13 +613,10 @@ export default function ClawdWorkspaceScreen() {
           multiline
           maxLength={2000}
           testID="clawd-input"
-          onKeyPress={(e) => {
-            if (Platform.OS === "web") {
-              const nativeEvent = e.nativeEvent as unknown as KeyboardEvent;
-              if (nativeEvent.key === "Enter" && !nativeEvent.shiftKey) {
-                nativeEvent.preventDefault?.();
-                handleSend();
-              }
+          onKeyPress={(e: any) => {
+            if (Platform.OS === "web" && e.nativeEvent?.key === "Enter" && !e.nativeEvent?.shiftKey) {
+              e.preventDefault();
+              handleSend();
             }
           }}
         />

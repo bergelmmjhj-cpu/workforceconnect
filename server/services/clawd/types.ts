@@ -18,7 +18,7 @@ export interface Risk {
   title: string;
   description: string;
   likelihood: "low" | "medium" | "high";
-  impact: "low" | "medium" | "high" | "critical";
+  impact: "low" | "medium" | "critical";
   affectedEntity?: string;
   affectedEntityId?: string;
 }
@@ -85,3 +85,17 @@ export const TIME_WINDOWS: Record<string, AnalyticsTimeWindow> = {
   "14d": { days: 14, label: "14-day" },
   "30d": { days: 30, label: "30-day" },
 };
+
+// Pending shift draft — stored in memory while Clawd waits for missing info
+export interface PendingShiftDraft {
+  type: "create_shift";
+  workerQuery: string | null;       // original worker name as typed
+  workplaceId: string | null;       // resolved workplace DB id
+  workplaceName: string | null;
+  date: string | null;              // YYYY-MM-DD
+  startTime: string | null;         // HH:MM
+  endTime: string | null;
+  missingFields: string[];          // e.g. ["worker"]
+  lastAttempt: number;              // Date.now()
+  userId: string;
+}

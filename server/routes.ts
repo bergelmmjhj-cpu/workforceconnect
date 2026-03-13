@@ -55,7 +55,8 @@ import { sendCSVEmail, sendEmail } from "./services/email";
 import { orchestrate, generateBriefing } from "./services/clawd";
 import { clawdChatMessages, clawdAssistantRuns, discordAlerts, appConfig, applicants, aiMessageLog } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
-import { handleSickCall, handleClientRequest } from "./services/clawd/auto-responder";
+import { handleSickCall, handleClientRequest, handleLateArrival } from "./services/clawd/auto-responder";
+import { classifySms } from "./services/clawd/sms-classifier";
 import { logAiMessage, markResponseReceived } from "./services/aiFollowupService";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
@@ -8413,54 +8414,92 @@ Respond with exactly:
       const isShiftKeyword = ["ACCEPT SHIFT", "ACCEPT", "DECLINE SHIFT", "DECLINE"].includes(upperBody);
 
       if (!isShiftKeyword) {
-        // Classify the non-keyword message
-        const lowerBody = messageBody.toLowerCase();
+        // ── Structured SMS Classification ─────────────────────────────────────
+        const classif = classifySms(messageBody);
+        const senderMatched = !!worker;
+        const senderLabel = senderMatched ? worker!.fullName : `Unmatched(${senderPhone})`;
 
-        const SICK_CALL_PATTERNS = [
-          "sick", "not feeling well", "can't make it", "cannot make it",
-          "calling in", "won't be able", "will not be able", "unwell",
-          "not coming in", "feeling terrible", "doctor", "hospital",
-          "family emergency", "emergency", "can't come", "cannot come",
-        ];
+        // Map intent to DB classification string
+        const dbClassification =
+          classif.intent === "staff_absence" ? "sick_call" :
+          classif.intent === "late_arrival" ? "late_arrival" :
+          classif.intent === "emergency" ? "sick_call" :
+          classif.intent === "client_request" ? "client_request" :
+          classif.intent === "unknown_staffing" ? "unknown_staffing" :
+          "general";
 
-        const CLIENT_REQUEST_PATTERNS = [
-          "need staff", "need workers", "need someone", "extra worker",
-          "additional staff", "coverage", "can you send", "short staffed",
-          "need coverage", "need a worker", "need people", "need help",
-        ];
+        console.log(
+          `[OPENPHONE WEBHOOK] intent=${classif.intent} confidence=${classif.confidence} urgency=${classif.urgency} ` +
+          `sender=${senderLabel} matched=${senderMatched} ` +
+          `entities={role:${classif.role_requested},qty:${classif.quantity_requested},date:${classif.shift_date},time:${classif.shift_time}} ` +
+          `msg="${messageBody.slice(0, 80)}"`
+        );
 
-        const isSickCall = SICK_CALL_PATTERNS.some((p) => lowerBody.includes(p));
-        const isClientRequest = CLIENT_REQUEST_PATTERNS.some((p) => lowerBody.includes(p));
-        const classification = isSickCall ? "sick_call" : isClientRequest ? "client_request" : "general";
-
-        console.log(`[OPENPHONE WEBHOOK] Classified message as: ${classification} from ${senderPhone}`);
-
-        // Update the sms_log with classification
+        // Update SMS log with classification
         try {
           await db.update(smsLogs)
-            .set({ classification })
+            .set({ classification: dbClassification })
             .where(and(eq(smsLogs.phoneNumber, senderPhone), eq(smsLogs.direction, "inbound")));
-        } catch (e) { /* non-critical */ }
+        } catch (_e) { /* non-critical */ }
 
-        // Trigger auto-responses asynchronously
-        if (isSickCall) {
+        // ── Automation Rules (fail-open) ──────────────────────────────────────
+        if (classif.intent === "staff_absence" || classif.intent === "emergency") {
+          // Always trigger — even for unknown senders
           setImmediate(() => {
             handleSickCall({
               workerId: worker?.id || null,
-              workerName: worker?.fullName || "Unknown Worker",
+              workerName: senderMatched ? worker!.fullName : `Unmatched number ${senderPhone}`,
               workerPhone: senderPhone,
               smsMessage: messageBody,
+              senderMatched,
+              classification: classif,
             }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleSickCall error:", err?.message));
           });
-        } else if (isClientRequest) {
+        } else if (classif.intent === "late_arrival") {
+          setImmediate(() => {
+            handleLateArrival({
+              workerId: worker?.id || null,
+              workerName: senderMatched ? worker!.fullName : `Unmatched number ${senderPhone}`,
+              workerPhone: senderPhone,
+              smsMessage: messageBody,
+              classification: classif,
+            }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleLateArrival error:", err?.message));
+          });
+        } else if (classif.intent === "client_request") {
+          // Always trigger — even for unknown senders
           setImmediate(() => {
             handleClientRequest({
               phoneNumber: senderPhone,
               smsMessage: messageBody,
+              senderMatched,
+              classification: classif,
             }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleClientRequest error:", err?.message));
           });
+        } else if (classif.intent === "unknown_staffing" && !senderMatched) {
+          // Unknown sender + staffing-related content → always alert, never drop
+          setImmediate(async () => {
+            try {
+              const { sendDiscordNotification: notifyDiscord } = await import("./services/discord");
+              const { sendSMS: sendAlert, logSMS: logAlert } = await import("./services/openphone");
+              const GM_LILEE = "+14166028038";
+
+              await notifyDiscord({
+                title: "Possible Staffing Message — Unmatched Sender",
+                message: `🟠 POSSIBLE STAFFING MESSAGE\nSender: Unmatched number ${senderPhone}\nMessage: "${messageBody}"\nConfidence: ${classif.confidence}\nAction: Manual review needed — sender not in system`,
+                color: "amber",
+                type: "general",
+                sourcePhone: senderPhone,
+              });
+
+              const gmMsg = `[WFConnect] Possible staffing message from unmatched number ${senderPhone}: "${messageBody.slice(0,120)}". Manual review needed.`;
+              await sendAlert(GM_LILEE, gmMsg);
+              await logAlert({ phoneNumber: GM_LILEE, direction: "outbound", message: gmMsg, status: "sent" });
+            } catch (err: any) {
+              console.error("[OPENPHONE WEBHOOK] unknown_staffing alert failed:", err?.message);
+            }
+          });
         } else {
-          console.log(`[OPENPHONE WEBHOOK] General message from ${senderPhone}: "${messageBody}" - no auto-response`);
+          console.log(`[OPENPHONE WEBHOOK] General message from ${senderLabel} — no action triggered`);
         }
 
         return;

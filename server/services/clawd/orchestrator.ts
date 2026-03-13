@@ -1,4 +1,4 @@
-import type { AssistantOutput, AssistantType, OrchestrationRequest, OrchestrationResponse, ToolCallLog } from "./types";
+import type { AssistantOutput, AssistantType, OrchestrationRequest, OrchestrationResponse, ToolCallLog, PendingShiftDraft } from "./types";
 import { analyzeStaffing } from "./assistants/staffing";
 import { analyzeAttendance } from "./assistants/attendance";
 import { analyzeRecruitment } from "./assistants/recruitment";
@@ -24,6 +24,31 @@ const ASSISTANT_LABELS: Record<string, string> = {
   payroll: "Payroll & Hours",
   client_risk: "Client & Site Risk",
 };
+
+// ─── Pending Shift Draft State (in-memory, per user) ─────────────────────────
+
+const pendingDrafts = new Map<string, PendingShiftDraft>();
+const PENDING_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+export function setPendingDraft(userId: string, draft: Omit<PendingShiftDraft, "userId" | "lastAttempt">) {
+  pendingDrafts.set(userId, { ...draft, userId, lastAttempt: Date.now() });
+}
+
+export function getPendingDraft(userId: string): PendingShiftDraft | null {
+  const draft = pendingDrafts.get(userId);
+  if (!draft) return null;
+  if (Date.now() - draft.lastAttempt > PENDING_EXPIRY_MS) {
+    pendingDrafts.delete(userId);
+    return null;
+  }
+  return draft;
+}
+
+export function clearPendingDraft(userId: string) {
+  pendingDrafts.delete(userId);
+}
+
+// ─── Routing ─────────────────────────────────────────────────────────────────
 
 function formatAssistantOutputs(outputs: AssistantOutput[]): string {
   if (outputs.length === 0) {
@@ -51,7 +76,7 @@ function formatAssistantOutputs(outputs: AssistantOutput[]): string {
     parts.push("");
 
     if (output.keyFindings.length > 0) {
-      output.keyFindings.slice(0, 5).forEach((f) => {
+      output.keyFindings.slice(0, 5).forEach(f => {
         const tag = f.severity === "critical" || f.severity === "high" ? ` [${f.severity.toUpperCase()}]` : "";
         parts.push(`- ${f.title}${tag}: ${f.detail}`);
       });
@@ -60,7 +85,7 @@ function formatAssistantOutputs(outputs: AssistantOutput[]): string {
 
     if (output.risks.length > 0) {
       parts.push("Risks:");
-      output.risks.slice(0, 3).forEach((r) => {
+      output.risks.slice(0, 3).forEach(r => {
         parts.push(`- ${r.title} (${r.likelihood} likelihood, ${r.impact} impact): ${r.description}`);
       });
       parts.push("");
@@ -68,7 +93,7 @@ function formatAssistantOutputs(outputs: AssistantOutput[]): string {
 
     if (output.recommendedActions.length > 0) {
       parts.push("Actions:");
-      output.recommendedActions.slice(0, 3).forEach((a) => {
+      output.recommendedActions.slice(0, 3).forEach(a => {
         const tag = a.priority === "urgent" || a.priority === "high" ? ` [${a.priority.toUpperCase()}]` : "";
         parts.push(`- ${a.title}${tag}: ${a.description}`);
       });
@@ -123,7 +148,7 @@ const ROUTING_RULES: RoutingRule[] = [
   },
 ];
 
-// Patterns that indicate the user wants Clawd to TAKE AN ACTION (not just analyze)
+// Patterns that trigger action mode from the current message alone
 const ACTION_INTENT_PATTERNS: RegExp[] = [
   /\b(assign|add|put)\b.*(worker|staff|person)/i,
   /\b(blast|broadcast|send.*offer|offer.*shift)\b/i,
@@ -145,10 +170,77 @@ const ACTION_INTENT_PATTERNS: RegExp[] = [
   /\bavailable\s*(worker|staff)\b/i,
   /\blilee\b/i,
   /\bdiscord\b/i,
+  // Shift creation (natural language)
+  /\b(book|set|put|schedule)\b.*(at|for)\b/i,
+  /\bneed\s+\w+\s+at\s+\w/i,
+  /\b(create|make|add)\s+a?\s*shift\b/i,
+  // Follow-up replies
+  /^\s*try\s+\w+/i,
+  /^\s*[\d\s\-\+\(\)]{7,15}\s*$/,             // phone number as standalone reply
+  /\bcan i have\b/i,
+  /\bi need\s+\d*\s*(hk|housekeep|server|staff)/i,
+  /\beven if (you can't|you cannot|there('s| is) no)\b/i,
+  /\bapply (same|similar) logic\b/i,
+  /\bstill (let us|notify|alert|report)\b/i,
+  /\bneed .+ (for|at) (tomorrow|tonight|today)\b/i,
+  // Worker/workplace lookup
+  /\b(find|look up|search for)\s+(a\s+)?(worker|staff|workplace|hotel)\b/i,
+];
+
+// Signals in the last assistant message that indicate an active action conversation
+const ACTIVE_ACTION_CONTEXT_SIGNALS = [
+  "What I Need From You",
+  "what I need from you",
+  "Still needed",
+  "still needed",
+  "Need from you",
+  "need from you",
+  "Once I confirm",
+  "once I confirm",
+  "What's the correct",
+  "what's the correct",
+  "Can you help me",
+  "please provide",
+  "Please provide",
+  "Worker Not Found",
+  "worker not found",
+  "Not found in system",
+  "not found in system",
+  "before I can proceed",
+  "to proceed with",
+  "I'll create the shift",
+  "Draft saved",
+  "draft saved",
+  "just need the worker",
+  "Just need the worker",
+  "provide a name or phone",
+  "phone number or",
+  "another name",
+  "try a different",
+  "Try a different",
+  "spelling variation",
+  "which workplace",
+  "Which workplace",
 ];
 
 function detectActionIntent(userMessage: string): boolean {
-  return ACTION_INTENT_PATTERNS.some((p) => p.test(userMessage));
+  return ACTION_INTENT_PATTERNS.some(p => p.test(userMessage));
+}
+
+function detectConversationActionContext(
+  history: Array<{ role: string; content: string }>
+): boolean {
+  if (history.length === 0) return false;
+  // Look at the last 4 messages for assistant responses in action mode
+  const recent = history.slice(-4);
+  const lastAssistant = [...recent].reverse().find(m => m.role === "assistant");
+  if (!lastAssistant) return false;
+  const content = lastAssistant.content;
+  return ACTIVE_ACTION_CONTEXT_SIGNALS.some(signal => content.includes(signal));
+}
+
+function hasPendingDraft(userId: string): boolean {
+  return getPendingDraft(userId) !== null;
 }
 
 function classifyByKeywords(userMessage: string): { assistants: AssistantType[]; reasoning: string } {
@@ -181,50 +273,148 @@ function classifyByKeywords(userMessage: string): { assistants: AssistantType[];
   };
 }
 
-const ACTION_MODE_SYSTEM_PROMPT = `You are Clawd, the WFConnect AI Operations Assistant. You are integrated into a workforce management platform that handles staff deployment, shift scheduling, and communications.
+// ─── System Prompts ───────────────────────────────────────────────────────────
 
-You can BOTH analyze data AND take real actions. You have access to tools to look up information and perform operations.
+function buildActionSystemPrompt(pendingDraft?: PendingShiftDraft | null): string {
+  const now = new Date();
+  const torontoDate = now.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+  const torontoTime = now.toLocaleTimeString("en-CA", { timeZone: "America/Toronto" });
 
-## Your capabilities:
-- **Look up** workers, shifts, workplaces, shift requests, and incoming SMS messages
-- **Send SMS** to workers asking if they're available to cover shifts
-- **Notify GM Lilee** (+14166028038) about critical events — ALWAYS do this for sick calls, client requests, urgent staffing issues
+  // Tomorrow's date
+  const tomorrow = new Date(now.toLocaleString("en-US", { timeZone: "America/Toronto" }));
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDate = tomorrow.toISOString().split("T")[0];
+
+  const pendingSection = pendingDraft ? `
+## ACTIVE PENDING WORKFLOW — RESUME THIS FIRST
+You have an incomplete shift creation in progress. DO NOT start a new workflow.
+
+Pending shift draft:
+- Worker query: "${pendingDraft.workerQuery || "unknown"}" — NOT YET RESOLVED
+- Workplace: ${pendingDraft.workplaceName || "not found"} (ID: ${pendingDraft.workplaceId || "unknown"})
+- Date: ${pendingDraft.date || "unknown"}
+- Time: ${pendingDraft.startTime || "?"} – ${pendingDraft.endTime || "?"}
+- Missing: ${pendingDraft.missingFields.join(", ")}
+
+The user's current message is likely providing the missing information:
+- If it looks like a phone number → use lookup_workers with phone=[message]
+- If it looks like a name or spelling variation → use lookup_workers with query=[message]
+- If it starts with "try" → strip "try" and search with the remainder
+- After resolving the worker → create the shift with the saved draft details
+` : "";
+
+  return `You are Clawd, the WFConnect AI Operations Assistant. You are integrated into a workforce management platform.
+
+You can BOTH analyze data AND take real actions. You have tools to look up information and perform operations.
+${pendingSection}
+## Capabilities:
+- **Look up** workers, shifts, workplaces, shift requests, incoming SMS
+- **Send SMS** to workers for shift coverage requests
+- **Notify GM Lilee** (+14166028038) — ALWAYS for sick calls, client requests, urgent staffing
 - **Post to Discord** for team-wide visibility
 - **Send internal app messages** to workers
 - **Create shift requests** in the system
-- **Generate Replit AI prompts** when you need a new capability built
+- **Generate Replit prompts** when a capability is missing
 
-## Rules:
-1. Always use lookup tools FIRST to find the right IDs and context before taking action
-2. For sick calls or client requests: contact available workers AND always notify GM Lilee AND Discord
-3. For ANY critical operational event: notify GM Lilee via notify_gm_lilee
-4. Be specific in confirmations — tell the user exactly what you did (names, numbers, times)
-5. If you cannot do something with your available tools, use generate_replit_prompt to create a clear prompt for Replit AI to build the missing capability
+## Operational Rules:
+1. Always use lookup tools FIRST before taking action
+2. Sick calls / client requests → notify GM Lilee AND Discord every time
+3. Be specific: name names, numbers, times in your responses
+4. If a tool fails → log it and continue with remaining steps
+5. Never stop mid-workflow without alerting — fail open
 
-Today's date: ${new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" })}
-Current time (Toronto): ${new Date().toLocaleTimeString("en-CA", { timeZone: "America/Toronto" })}`;
+## Response Format for Staffing Operations:
+For ANY shift/worker/staffing task, use this structure:
+
+**Understood:** [1 line — what the user wants]
+**Matched:** [what was found; what was NOT found]
+**Action taken:** [what was done]
+**Still needed:** [only if something is missing — omit if complete]
+
+Rules:
+- Short and operational — no long explanations
+- NEVER say "Analysis unavailable" for staffing tasks
+- If worker/workplace not found: say so clearly, ask for ONE specific thing
+- If user's message is short and you're mid-task: treat as follow-up answer, not new request
+- When shift creation fails due to missing worker: save all other fields and ask ONLY for the worker
+
+## Shift Creation Rules:
+
+### Worker name parsing (try all variations before giving up):
+- "BergelMMJ" → try "Bergel", "MMJ", each part separately
+- "Nino" → try first name search
+- "try X" → strip "try" and search for X
+- phone number only → search by phone
+
+### Workplace alias resolution:
+- "Hyatt place" / "Hyatt" → search workplaces for "hyatt"
+- "four points" / "4 points" → search for "four points"
+- "holiday inn" / "HI" → search for "holiday inn"
+- Always use lookup_workplaces, never guess an ID
+
+### Time parsing:
+- "8-4:30am" → 08:00 to 04:30 (next day, crosses midnight)
+  OR → 08:00 to 16:30 (same day, if end > start and end > 12)
+  → Default: if start < end → same day. If end < start and end < 12 → AM next day.
+  → Always state the resolved time in your response
+- "8am-4:30pm" → 08:00–16:30
+- "8 to 4:30" → default to 08:00–16:30 unless context suggests otherwise
+
+### Date:
+- "tomorrow" → ${tomorrowDate}
+- "tonight" / "today" → ${torontoDate}
+
+Today's date (Toronto): ${torontoDate}
+Current time (Toronto): ${torontoTime}`;
+}
+
+// ─── Orchestration ────────────────────────────────────────────────────────────
 
 export async function orchestrate(request: OrchestrationRequest): Promise<OrchestrationResponse> {
   const startTime = Date.now();
 
-  // Detect if the user wants Clawd to take action
-  const isActionMode = detectActionIntent(request.userMessage);
+  // Check pending draft first — this always forces action mode
+  const draft = getPendingDraft(request.userId);
+  const hasDraft = !!draft;
+
+  // Route to action mode if:
+  // 1. Current message matches action patterns, OR
+  // 2. Conversation history shows we're mid-action, OR
+  // 3. User has a pending shift draft
+  const isActionMode =
+    detectActionIntent(request.userMessage) ||
+    detectConversationActionContext(request.conversationHistory) ||
+    hasDraft;
+
+  const reason = detectActionIntent(request.userMessage)
+    ? "message pattern"
+    : detectConversationActionContext(request.conversationHistory)
+    ? "conversation context"
+    : hasDraft
+    ? "pending draft"
+    : "analysis";
+
+  console.log(`[Clawd] Routing to ${isActionMode ? "action" : "analysis"} mode (${reason}) for: "${request.userMessage.slice(0, 60)}"`);
 
   if (isActionMode) {
-    return orchestrateWithTools(request, startTime);
+    return orchestrateWithTools(request, startTime, draft);
   }
 
   return orchestrateAnalysis(request, startTime);
 }
 
-async function orchestrateWithTools(request: OrchestrationRequest, startTime: number): Promise<OrchestrationResponse> {
-  console.log(`[Clawd] Action mode detected for: "${request.userMessage.slice(0, 80)}..."`);
+async function orchestrateWithTools(
+  request: OrchestrationRequest,
+  startTime: number,
+  pendingDraft?: PendingShiftDraft | null
+): Promise<OrchestrationResponse> {
 
-  // Build conversation history for Claude
+  const systemPrompt = buildActionSystemPrompt(pendingDraft);
+
   const messages: Array<{ role: "user" | "assistant"; content: string }> = [
     ...request.conversationHistory
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      .filter(m => m.role === "user" || m.role === "assistant")
+      .map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
     { role: "user", content: request.userMessage },
   ];
 
@@ -233,7 +423,7 @@ async function orchestrateWithTools(request: OrchestrationRequest, startTime: nu
 
   try {
     const result = await callClaudeWithTools(
-      ACTION_MODE_SYSTEM_PROMPT,
+      systemPrompt,
       messages,
       CLAWD_TOOLS,
       (toolName, input) => executeTool(toolName, input, request.userId),
@@ -242,9 +432,20 @@ async function orchestrateWithTools(request: OrchestrationRequest, startTime: nu
 
     finalResponse = result.finalResponse;
     toolCalls = result.toolCalls;
+
+    // If Claude successfully looked up a worker AND a workplace, clear the pending draft
+    const workerLookupSuccess = toolCalls.some(
+      tc => tc.toolName === "lookup_workers" && tc.success && (tc.result as any)?.count > 0
+    );
+    const shiftCreated = toolCalls.some(
+      tc => tc.toolName === "create_shift_request" && tc.success
+    );
+    if (shiftCreated || (workerLookupSuccess && pendingDraft)) {
+      clearPendingDraft(request.userId);
+    }
   } catch (err: any) {
     console.error("[Clawd] Tool-use orchestration failed:", err?.message);
-    finalResponse = `I encountered an error while trying to perform this action: ${err?.message || "Unknown error"}. Please try again or rephrase your request.`;
+    finalResponse = `Something went wrong while handling your request: ${err?.message || "Unknown error"}. Please try again.`;
   }
 
   const totalDurationMs = Date.now() - startTime;
@@ -255,7 +456,8 @@ async function orchestrateWithTools(request: OrchestrationRequest, startTime: nu
       inputContext: JSON.stringify({
         userMessage: request.userMessage,
         mode: "action",
-        toolsUsed: toolCalls.map((tc) => tc.toolName),
+        hasPendingDraft: !!pendingDraft,
+        toolsUsed: toolCalls.map(tc => tc.toolName),
       }),
       outputFindings: JSON.stringify({
         response: finalResponse.slice(0, 1000),
@@ -284,10 +486,10 @@ async function orchestrateWithTools(request: OrchestrationRequest, startTime: nu
 async function orchestrateAnalysis(request: OrchestrationRequest, startTime: number): Promise<OrchestrationResponse> {
   const classification = classifyByKeywords(request.userMessage);
 
-  const assistantPromises = classification.assistants.map((assistantType) => {
+  const assistantPromises = classification.assistants.map(assistantType => {
     const fn = ASSISTANT_MAP[assistantType];
     if (!fn) return null;
-    return fn(request.userMessage, request.userId, undefined).catch((err) => {
+    return fn(request.userMessage, request.userId, undefined).catch(err => {
       console.error(`[Clawd] Assistant ${assistantType} failed:`, err);
       return null;
     });

@@ -25,11 +25,12 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
   // ----- LOOKUP TOOLS -----
   {
     name: "lookup_workers",
-    description: "Search for workers by name, role, or workplace. Use this to find the right worker ID before taking actions.",
+    description: "Search for workers by name, phone number, role, or workplace. Supports fuzzy name matching — try partial names, first names, or camelCase compressed names like 'BergelMMJ'. Use phone parameter for phone number lookup.",
     input_schema: {
       type: "object" as const,
       properties: {
-        query: { type: "string", description: "Name or partial name to search for" },
+        query: { type: "string", description: "Name or partial name to search for. Supports fuzzy matching — try first name alone, last name alone, or compressed names like 'BergelMMJ'." },
+        phone: { type: "string", description: "Phone number to search by (digits only or formatted). Use when user provides a phone number to identify a worker." },
         workplaceId: { type: "string", description: "Filter by workplace ID (optional)" },
         role: { type: "string", description: "Filter by role (optional)" },
         limit: { type: "number", description: "Max results to return (default 10)" },
@@ -239,38 +240,125 @@ export async function executeTool(toolName: string, input: Record<string, unknow
 // Lookup implementations
 // ============================================
 
+// Split a compressed/camelCase name into search tokens
+// "BergelMMJ" → ["Bergel", "MMJ", "Berge"]
+// "John Smith" → ["John", "Smith"]
+function tokenizeName(query: string): string[] {
+  // Strip common prefixes like "try ", "find ", "search "
+  const cleaned = query.replace(/^\s*(try|find|search|look\s*up)\s+/i, "").trim();
+  // Split on spaces
+  const spaceParts = cleaned.split(/\s+/).filter(Boolean);
+  // Also split camelCase / consecutive uppercase groups
+  const allTokens = new Set<string>();
+  for (const part of spaceParts) {
+    allTokens.add(part);
+    // Split camelCase: "BergelMMJ" → ["Bergel", "MMJ"]
+    const camel = part.split(/(?=[A-Z][a-z])|(?<=[a-z])(?=[A-Z])/).filter(t => t.length >= 2);
+    camel.forEach(t => allTokens.add(t));
+    // Also add first 5 chars as prefix
+    if (part.length > 4) allTokens.add(part.slice(0, 5));
+  }
+  return Array.from(allTokens).filter(t => t.length >= 2);
+}
+
 async function lookupWorkers(input: Record<string, unknown>) {
   const query = input.query as string | undefined;
+  const phone = input.phone as string | undefined;
   const workplaceId = input.workplaceId as string | undefined;
   const role = input.role as string | undefined;
   const limit = (input.limit as number) || 10;
 
-  let qb = db
-    .select({
-      id: users.id,
-      fullName: users.fullName,
-      email: users.email,
-      phone: users.phone,
-      role: users.role,
-      workerRoles: users.workerRoles,
-      isActive: users.isActive,
-    })
-    .from(users);
+  const baseSelect = {
+    id: users.id,
+    fullName: users.fullName,
+    email: users.email,
+    phone: users.phone,
+    role: users.role,
+    workerRoles: users.workerRoles,
+    isActive: users.isActive,
+  };
 
-  const conditions = [eq(users.role, "worker"), eq(users.isActive, true)];
+  const workerActiveConditions = [eq(users.role, "worker"), eq(users.isActive, true)];
 
-  if (query) conditions.push(ilike(users.fullName, `%${query}%`));
+  // Phone lookup path
+  if (phone) {
+    const normalizedInput = phone.replace(/[^\d]/g, "");
+    const allWorkers = await db.select(baseSelect).from(users).where(and(...workerActiveConditions));
+    const phoneMatches = allWorkers.filter(w => {
+      if (!w.phone) return false;
+      const wNorm = w.phone.replace(/[^\d]/g, "");
+      return wNorm === normalizedInput ||
+        wNorm.endsWith(normalizedInput) ||
+        normalizedInput.endsWith(wNorm) ||
+        (normalizedInput.length >= 10 && wNorm.includes(normalizedInput.slice(-10)));
+    });
+
+    if (phoneMatches.length > 0) {
+      return { workers: phoneMatches.slice(0, limit), count: phoneMatches.length, searchedBy: "phone" };
+    }
+    return { workers: [], count: 0, searchedBy: "phone", message: "No worker found with that phone number" };
+  }
+
+  // Name search — try primary match first, then fuzzy multi-token
+  if (query) {
+    const primaryConditions = [...workerActiveConditions, ilike(users.fullName, `%${query}%`)];
+    if (role) primaryConditions.push(ilike(users.workerRoles, `%${role}%`));
+
+    let results = await db.select(baseSelect).from(users).where(and(...primaryConditions)).limit(limit);
+
+    // If primary search found nothing, try token-by-token fuzzy search
+    if (results.length === 0) {
+      const tokens = tokenizeName(query);
+      const seen = new Set<string>();
+      for (const token of tokens) {
+        if (token.length < 2) continue;
+        const tokenConditions = [...workerActiveConditions, ilike(users.fullName, `%${token}%`)];
+        const tokenResults = await db.select(baseSelect).from(users).where(and(...tokenConditions)).limit(10);
+        for (const r of tokenResults) {
+          if (!seen.has(r.id)) {
+            seen.add(r.id);
+            results.push(r);
+          }
+        }
+        if (results.length >= limit) break;
+      }
+      if (results.length > 0) {
+        console.log(`[tools] Fuzzy worker lookup for "${query}" found ${results.length} via tokens: ${tokens.join(", ")}`);
+      }
+    }
+
+    // Workplace filter
+    if (workplaceId && results.length > 0) {
+      const assigned = await db
+        .select({ workerUserId: workplaceAssignments.workerUserId })
+        .from(workplaceAssignments)
+        .where(and(eq(workplaceAssignments.workplaceId, workplaceId), eq(workplaceAssignments.status, "active")));
+      const assignedIds = new Set(assigned.map(a => a.workerUserId));
+      results = results.filter(w => assignedIds.has(w.id));
+    }
+
+    return {
+      workers: results.slice(0, limit),
+      count: results.length,
+      searchedBy: "name",
+      searchQuery: query,
+      note: results.length === 0 ? `No worker found matching "${query}". Try providing a phone number instead.` : undefined,
+    };
+  }
+
+  // No query — list all workers (filtered by role/workplace)
+  const conditions = [...workerActiveConditions];
   if (role) conditions.push(ilike(users.workerRoles, `%${role}%`));
 
-  let results = await qb.where(and(...conditions)).limit(limit);
+  let results = await db.select(baseSelect).from(users).where(and(...conditions)).limit(limit);
 
   if (workplaceId) {
     const assigned = await db
       .select({ workerUserId: workplaceAssignments.workerUserId })
       .from(workplaceAssignments)
       .where(and(eq(workplaceAssignments.workplaceId, workplaceId), eq(workplaceAssignments.status, "active")));
-    const assignedIds = new Set(assigned.map((a) => a.workerUserId));
-    results = results.filter((w) => assignedIds.has(w.id));
+    const assignedIds = new Set(assigned.map(a => a.workerUserId));
+    results = results.filter(w => assignedIds.has(w.id));
   }
 
   return { workers: results, count: results.length };

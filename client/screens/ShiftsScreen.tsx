@@ -200,7 +200,16 @@ export default function ShiftsScreen() {
             <ThemedText style={styles.shiftTitle} numberOfLines={1}>
               {item.title}
             </ThemedText>
-            <StatusPill status={item.status as ShiftStatus} size="sm" />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {item.category ? (
+                <View style={{ backgroundColor: (categoryColors[item.category as ShiftCategory] || "#6b7280") + "20", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                  <ThemedText style={{ fontSize: 11, fontWeight: "600", color: categoryColors[item.category as ShiftCategory] || "#6b7280" }}>
+                    {categoryLabels[item.category as ShiftCategory] || item.category.charAt(0).toUpperCase() + item.category.slice(1)}
+                  </ThemedText>
+                </View>
+              ) : null}
+              <StatusPill status={item.status as ShiftStatus} size="sm" />
+            </View>
           </View>
         </View>
 

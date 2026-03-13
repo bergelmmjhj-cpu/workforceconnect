@@ -7968,8 +7968,7 @@ Respond with exactly:
   // Automated Shift Reminders (runs every 15 minutes)
   // ========================================
 
-  // Phone number that receives a CC copy of every shift reminder sent
-  const REMINDER_CC_PHONE = "+14372188887";
+  const GM_LILEE_PHONE = "+14166028038";
 
   function getShiftTimezone(province: string | null | undefined): string {
     const p = (province || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -8041,6 +8040,9 @@ Respond with exactly:
           )
         );
 
+      // Collect all workers reminded in this pass — sent as ONE consolidated SMS to Lilee after the loop
+      const lileeReminders: Array<{ name: string; title: string; location: string; date: string; time: string; tzAbbr: string; label: string }> = [];
+
       for (const shift of upcomingShifts) {
         if (!shift.workerUserId || !shift.startTime) continue;
 
@@ -8084,6 +8086,7 @@ Respond with exactly:
                   const mRes = await sendSMS(shift.workerPhone, morningMsg);
                   await logSMS({ phoneNumber: shift.workerPhone, direction: "outbound", message: morningMsg, shiftId: shift.id, status: mRes.success ? "sent" : "failed" });
                   await db.insert(sentReminders).values({ shiftId: shift.id, workerId: shift.workerUserId, reminderType: morningSmsType });
+                  lileeReminders.push({ name: shift.workerName || "Worker", title: shift.title || "", location: shift.workplaceName || "workplace", date: shift.date || "", time: shift.startTime || "", tzAbbr, label: "Today (morning)" });
                   console.log(`[Reminder] Morning SMS sent to ${shift.workerName} (${shift.workerPhone}) — ${shift.title}`);
                 } catch (mErr) {
                   console.error(`[Reminder] Morning SMS failed for shift ${shift.id}:`, mErr);
@@ -8127,6 +8130,8 @@ Respond with exactly:
             reminderType,
           });
 
+          lileeReminders.push({ name: shift.workerName || "Worker", title: shift.title || "", location: shift.workplaceName || "workplace", date: shift.date || "", time: shift.startTime || "", tzAbbr, label: isToday ? "Today" : "Tomorrow" });
+
           await db.insert(appNotifications).values({
             userId: shift.workerUserId,
             title,
@@ -8159,33 +8164,28 @@ Respond with exactly:
             }
           }
 
-          // Send CC copy to supervisor number
-          const ccMessage =
-            `Shift Reminder Sent\n` +
-            `Worker: ${shift.workerName || "Worker"}\n` +
-            `Shift: ${shift.title}\n` +
-            `Location: ${shift.workplaceName || "workplace"}\n` +
-            `Date: ${shift.date}\n` +
-            `Time: ${shift.startTime} (${tzAbbr})`;
-
-          try {
-            const ccResult = await sendSMS(REMINDER_CC_PHONE, ccMessage);
-            await logSMS({
-              phoneNumber: REMINDER_CC_PHONE,
-              direction: "outbound",
-              message: ccMessage,
-              shiftId: shift.id,
-              status: ccResult.success ? "sent" : "failed",
-            });
-            console.log(`[Reminder] CC sent to ${REMINDER_CC_PHONE} for ${shift.workerName || "Worker"} — ${shift.title} on ${shift.date}`);
-          } catch (smsErr) {
-            console.error(`[Reminder] CC SMS failed for shift ${shift.id}:`, smsErr);
-          }
-
         } catch (err) {
           console.error(`Failed to send reminder for shift ${shift.id}:`, err);
         }
       }
+
+      // Send ONE consolidated report to GM Lilee after the full pass
+      if (lileeReminders.length > 0) {
+        try {
+          const dateLabel = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto", month: "short", day: "numeric", year: "numeric" });
+          const groupLabels = [...new Set(lileeReminders.map(r => r.label))].join(" & ");
+          const lines = lileeReminders
+            .map(r => `\u2022 ${r.name} \u2192 ${r.location}, ${r.time} ${r.tzAbbr}`)
+            .join("\n");
+          const summary = `[WFC] Shift Reminders \u2014 ${dateLabel}\n${groupLabels} (${lileeReminders.length} worker${lileeReminders.length !== 1 ? "s" : ""}):\n\n${lines}`;
+          const lileeRes = await sendSMS(GM_LILEE_PHONE, summary);
+          await logSMS({ phoneNumber: GM_LILEE_PHONE, direction: "outbound", message: summary, status: lileeRes.success ? "sent" : "failed" });
+          console.log(`[Reminder] Consolidated report sent to Lilee — ${lileeReminders.length} workers`);
+        } catch (lileeErr) {
+          console.error("[Reminder] Failed to send consolidated Lilee report:", lileeErr);
+        }
+      }
+
     } catch (error) {
       console.error("Error processing shift reminders:", error);
     }

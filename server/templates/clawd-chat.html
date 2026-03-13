@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Clawd AI — Workforce Connect</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/clawd-manifest.json" />
+  <meta name="theme-color" content="#7C3AED" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Clawd AI" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple: #7C3AED;
+      --purple-dark: #5B21B6;
+      --purple-light: #EDE9FE;
+      --bg: #F9FAFB;
+      --surface: #FFFFFF;
+      --border: #E5E7EB;
+      --text: #111827;
+      --text-muted: #6B7280;
+      --user-bubble: #7C3AED;
+      --ai-bubble: #F3F4F6;
+      --danger: #DC2626;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0F0F11;
+        --surface: #1A1A1F;
+        --border: #2D2D35;
+        --text: #F9FAFB;
+        --text-muted: #9CA3AF;
+        --ai-bubble: #252530;
+        --purple-light: #2E1B6E;
+      }
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+    /* ── AUTH SCREEN ── */
+    #auth-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      background: linear-gradient(160deg, #7C3AED 0%, #5B21B6 100%);
+    }
+    .auth-card {
+      background: var(--surface);
+      border-radius: 20px;
+      padding: 36px 28px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+    .auth-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .auth-logo-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #7C3AED, #5B21B6);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+    .auth-logo-text { display: flex; flex-direction: column; }
+    .auth-logo-text .brand { font-size: 15px; font-weight: 700; color: var(--purple); letter-spacing: 0.5px; }
+    .auth-logo-text .sub { font-size: 12px; color: var(--text-muted); }
+    .auth-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .auth-card p { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      background: var(--bg);
+      color: var(--text);
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    .form-group input:focus { border-color: var(--purple); }
+    .btn-primary {
+      width: 100%;
+      padding: 13px;
+      background: linear-gradient(135deg, #7C3AED, #5B21B6);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .auth-error {
+      background: #FEF2F2;
+      border: 1px solid #FECACA;
+      color: var(--danger);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-top: 14px;
+      display: none;
+    }
+
+    /* ── CHAT SCREEN ── */
+    #chat-screen {
+      display: none;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+    }
+
+    /* Header */
+    .chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top, 16px) 16px 14px;
+      padding-top: max(env(safe-area-inset-top, 0px), 16px);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .header-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #7C3AED, #5B21B6);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .header-title { font-size: 16px; font-weight: 700; }
+    .header-subtitle { font-size: 12px; color: var(--text-muted); }
+    .status-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      background: #10B981;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    .btn-logout {
+      padding: 8px 14px;
+      background: transparent;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* Messages */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scroll-behavior: smooth;
+    }
+
+    .msg-row { display: flex; gap: 8px; max-width: 100%; }
+    .msg-row.user { flex-direction: row-reverse; }
+
+    .msg-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+    .msg-row.ai .msg-avatar { background: linear-gradient(135deg, #7C3AED, #5B21B6); color: #fff; }
+    .msg-row.user .msg-avatar { background: var(--border); color: var(--text-muted); }
+
+    .msg-bubble {
+      max-width: min(72%, 520px);
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 14.5px;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+    .msg-row.user .msg-bubble {
+      background: var(--user-bubble);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-row.ai .msg-bubble {
+      background: var(--ai-bubble);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+
+    /* Action mode badge */
+    .action-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #FEF3C7;
+      color: #92400E;
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    /* Markdown in AI messages */
+    .msg-bubble h1, .msg-bubble h2, .msg-bubble h3 { margin: 10px 0 4px; font-weight: 700; }
+    .msg-bubble h1 { font-size: 16px; }
+    .msg-bubble h2 { font-size: 15px; }
+    .msg-bubble h3 { font-size: 14px; }
+    .msg-bubble p { margin-bottom: 6px; }
+    .msg-bubble ul, .msg-bubble ol { padding-left: 18px; margin-bottom: 6px; }
+    .msg-bubble li { margin-bottom: 3px; }
+    .msg-bubble hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+    .msg-bubble strong { font-weight: 700; }
+    .msg-bubble em { font-style: italic; }
+    .msg-bubble code {
+      background: rgba(0,0,0,0.08);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+    }
+    .msg-bubble pre {
+      background: rgba(0,0,0,0.1);
+      border-radius: 8px;
+      padding: 10px 14px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .msg-bubble pre code { background: none; padding: 0; }
+
+    /* Thinking indicator */
+    .thinking-row { display: flex; gap: 8px; align-items: flex-end; }
+    .thinking-bubble {
+      background: var(--ai-bubble);
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      padding: 14px 18px;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .dot { width: 7px; height: 7px; background: var(--text-muted); border-radius: 50%; animation: bounce 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+
+    /* Empty state */
+    #empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      text-align: center;
+      padding: 40px 24px;
+      color: var(--text-muted);
+    }
+    .empty-icon {
+      width: 64px;
+      height: 64px;
+      background: var(--purple-light);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      margin: 0 auto 16px;
+    }
+    #empty-state h2 { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    #empty-state p { font-size: 14px; max-width: 280px; }
+
+    /* Suggestions */
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 20px; }
+    .suggestion-chip {
+      padding: 8px 14px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+    .suggestion-chip:hover { border-color: var(--purple); color: var(--purple); background: var(--purple-light); }
+
+    /* Input area */
+    .input-area {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+      flex-shrink: 0;
+    }
+    .input-row { display: flex; gap: 10px; align-items: flex-end; }
+    #msg-input {
+      flex: 1;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 22px;
+      font-size: 15px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      resize: none;
+      max-height: 120px;
+      min-height: 44px;
+      font-family: inherit;
+      transition: border-color 0.15s;
+      line-height: 1.4;
+    }
+    #msg-input:focus { border-color: var(--purple); }
+    #msg-input::placeholder { color: var(--text-muted); }
+    .btn-send {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #7C3AED, #5B21B6);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn-send:hover { opacity: 0.9; }
+    .btn-send:active { transform: scale(0.92); }
+    .btn-send:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-send svg { width: 20px; height: 20px; fill: #fff; }
+    .input-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; text-align: center; }
+
+    /* Install banner (iOS) */
+    #install-banner {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--purple-light);
+      border-bottom: 1px solid rgba(124,58,237,0.2);
+      font-size: 13px;
+      color: var(--purple-dark);
+    }
+    #install-banner.visible { display: flex; }
+    .btn-dismiss { margin-left: auto; background: none; border: none; cursor: pointer; color: var(--purple-dark); font-size: 18px; line-height: 1; }
+
+    /* Loading overlay */
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--purple);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- Loading overlay shown until auth check completes -->
+<div id="loading-overlay">
+  <div style="width:48px;height:48px;background:linear-gradient(135deg,#7C3AED,#5B21B6);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;">🤖</div>
+  <div class="spinner"></div>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" style="display:none;">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">🤖</div>
+      <div class="auth-logo-text">
+        <span class="brand">WORKFORCE CONNECT</span>
+        <span class="sub">Clawd AI — 24/7 Assistant</span>
+      </div>
+    </div>
+    <h1>Sign in</h1>
+    <p>Admin and HR access only</p>
+    <div class="form-group">
+      <label for="email-input">Email</label>
+      <input type="email" id="email-input" placeholder="you@wfconnect.org" autocomplete="email" />
+    </div>
+    <div class="form-group">
+      <label for="pass-input">Password</label>
+      <input type="password" id="pass-input" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button class="btn-primary" id="login-btn">Sign in</button>
+    <div class="auth-error" id="auth-error"></div>
+  </div>
+</div>
+
+<!-- CHAT SCREEN -->
+<div id="chat-screen">
+  <!-- iOS install hint -->
+  <div id="install-banner">
+    <span>📲</span>
+    <span>Install on your phone — tap <strong>Share</strong> then <strong>Add to Home Screen</strong></span>
+    <button class="btn-dismiss" id="dismiss-banner" aria-label="Dismiss">&times;</button>
+  </div>
+
+  <div class="chat-header">
+    <div class="header-left">
+      <div class="header-icon">🤖</div>
+      <div>
+        <div class="header-title">Clawd AI</div>
+        <div class="header-subtitle"><span class="status-dot"></span>Workforce Connect</div>
+      </div>
+    </div>
+    <button class="btn-logout" id="logout-btn">Sign out</button>
+  </div>
+
+  <div id="messages">
+    <div id="empty-state">
+      <div class="empty-icon">🤖</div>
+      <h2>Clawd AI is ready</h2>
+      <p>Ask about shifts, workers, staffing, or any operational question</p>
+      <div class="suggestions">
+        <button class="suggestion-chip" onclick="useSuggestion('Who is working tomorrow?')">Who is working tomorrow?</button>
+        <button class="suggestion-chip" onclick="useSuggestion('Any unfilled shifts this week?')">Unfilled shifts this week?</button>
+        <button class="suggestion-chip" onclick="useSuggestion('Show me a staffing summary for today')">Today\'s staffing summary</button>
+        <button class="suggestion-chip" onclick="useSuggestion('Check for any pending shift requests')">Pending shift requests?</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-row">
+      <textarea id="msg-input" placeholder="Ask Clawd anything..." rows="1"></textarea>
+      <button class="btn-send" id="send-btn" title="Send">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+    <div class="input-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const API = '';  // same origin
+  let isThinking = false;
+  let messagesData = [];
+
+  // ── Helpers ──────────────────────────────────────────────
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderMarkdown(md) {
+    let html = esc(md);
+    // code blocks
+    html = html.replace(/```[\s\S]*?```/g, m => {
+      const inner = m.replace(/^```[^\n]*\n?/, '').replace(/\n?```$/, '');
+      return '<pre><code>' + inner + '</code></pre>';
+    });
+    // inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // headings
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // bold & italic
+    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // hr
+    html = html.replace(/^---+$/gm, '<hr>');
+    // bullets
+    html = html.replace(/^[*\-] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+    // numbered
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    // line breaks
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = html.replace(/\n/g, '<br>');
+    return '<p>' + html + '</p>';
+  }
+
+  function detectActionMode(text) {
+    return /\b(sent|notified|blast|scheduled|created|updated|assigned)\b/i.test(text) &&
+           /\b(SMS|shift|worker|Discord|alert|reminder)\b/i.test(text);
+  }
+
+  function scrollToBottom() {
+    const m = document.getElementById('messages');
+    setTimeout(() => { m.scrollTop = m.scrollHeight; }, 50);
+  }
+
+  function showEmptyState(show) {
+    const es = document.getElementById('empty-state');
+    if (es) es.style.display = show ? 'flex' : 'none';
+  }
+
+  function appendMessage(role, content) {
+    const container = document.getElementById('messages');
+    showEmptyState(false);
+    const row = document.createElement('div');
+    row.className = 'msg-row ' + role;
+    const avatar = document.createElement('div');
+    avatar.className = 'msg-avatar';
+    avatar.textContent = role === 'ai' ? '🤖' : '👤';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+
+    if (role === 'ai') {
+      if (detectActionMode(content)) {
+        const badge = document.createElement('div');
+        badge.className = 'action-badge';
+        badge.innerHTML = '⚡ Action taken';
+        bubble.appendChild(badge);
+      }
+      bubble.innerHTML += renderMarkdown(content);
+    } else {
+      bubble.textContent = content;
+    }
+
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    container.appendChild(row);
+    scrollToBottom();
+    return row;
+  }
+
+  function showThinking() {
+    const container = document.getElementById('messages');
+    showEmptyState(false);
+    const row = document.createElement('div');
+    row.className = 'thinking-row';
+    row.id = 'thinking-indicator';
+    const avatar = document.createElement('div');
+    avatar.className = 'msg-avatar';
+    avatar.style.cssText = 'background:linear-gradient(135deg,#7C3AED,#5B21B6);color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-end;';
+    avatar.textContent = '🤖';
+    const bubble = document.createElement('div');
+    bubble.className = 'thinking-bubble';
+    bubble.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    container.appendChild(row);
+    scrollToBottom();
+  }
+
+  function hideThinking() {
+    const el = document.getElementById('thinking-indicator');
+    if (el) el.remove();
+  }
+
+  // ── Auth ──────────────────────────────────────────────────
+  async function checkAuth() {
+    try {
+      const res = await fetch(API + '/api/auth/verify', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.valid && (data.role === 'admin' || data.role === 'hr')) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  async function doLogin() {
+    const email = document.getElementById('email-input').value.trim();
+    const pass = document.getElementById('pass-input').value;
+    const errEl = document.getElementById('auth-error');
+    const btn = document.getElementById('login-btn');
+    errEl.style.display = 'none';
+    if (!email || !pass) { showAuthError('Please enter your email and password.'); return; }
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    try {
+      const res = await fetch(API + '/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password: pass }),
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        const role = data.user.role;
+        if (role !== 'admin' && role !== 'hr') {
+          showAuthError('Access is restricted to admin and HR accounts.');
+          return;
+        }
+        showChat();
+      } else {
+        showAuthError(data.message || 'Invalid email or password.');
+      }
+    } catch (_) {
+      showAuthError('Network error. Please try again.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  }
+
+  function showAuthError(msg) {
+    const el = document.getElementById('auth-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  async function doLogout() {
+    try { await fetch(API + '/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch (_) {}
+    location.reload();
+  }
+
+  // ── Chat ──────────────────────────────────────────────────
+  async function loadHistory() {
+    try {
+      const res = await fetch(API + '/api/clawd/history', { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const history = Array.isArray(data) ? data : (data.history || []);
+      if (history.length > 0) {
+        showEmptyState(false);
+        history.forEach(m => {
+          const role = m.role === 'user' ? 'user' : 'ai';
+          appendMessage(role, m.content || '');
+        });
+        scrollToBottom();
+      }
+    } catch (_) {}
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('msg-input');
+    const text = input.value.trim();
+    if (!text || isThinking) return;
+    input.value = '';
+    input.style.height = 'auto';
+    appendMessage('user', text);
+    isThinking = true;
+    document.getElementById('send-btn').disabled = true;
+    showThinking();
+    try {
+      const res = await fetch(API + '/api/clawd/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      hideThinking();
+      const reply = data.response || data.message || data.text || JSON.stringify(data);
+      appendMessage('ai', reply);
+    } catch (_) {
+      hideThinking();
+      appendMessage('ai', 'Sorry, something went wrong. Please try again.');
+    } finally {
+      isThinking = false;
+      document.getElementById('send-btn').disabled = false;
+      scrollToBottom();
+    }
+  }
+
+  function useSuggestion(text) {
+    document.getElementById('msg-input').value = text;
+    sendMessage();
+  }
+  window.useSuggestion = useSuggestion;
+
+  // ── Screen management ─────────────────────────────────────
+  function showLogin() {
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('chat-screen').style.display = 'none';
+  }
+
+  function showChat() {
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('chat-screen').style.display = 'flex';
+    loadHistory();
+    maybeShowInstallBanner();
+  }
+
+  // ── iOS install banner ────────────────────────────────────
+  function maybeShowInstallBanner() {
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone = window.navigator.standalone;
+    const dismissed = sessionStorage.getItem('install-dismissed');
+    if (isIos && !isStandalone && !dismissed) {
+      document.getElementById('install-banner').classList.add('visible');
+    }
+  }
+
+  // ── Auto-resize textarea ──────────────────────────────────
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  // ── Init ──────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', async () => {
+    const authed = await checkAuth();
+    if (authed) {
+      showChat();
+    } else {
+      showLogin();
+    }
+
+    // Login form
+    document.getElementById('login-btn').addEventListener('click', doLogin);
+    document.getElementById('pass-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+    document.getElementById('email-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('pass-input').focus();
+    });
+
+    // Chat input
+    const msgInput = document.getElementById('msg-input');
+    msgInput.addEventListener('input', () => autoResize(msgInput));
+    msgInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+    document.getElementById('send-btn').addEventListener('click', sendMessage);
+    document.getElementById('logout-btn').addEventListener('click', doLogout);
+    document.getElementById('dismiss-banner').addEventListener('click', () => {
+      sessionStorage.setItem('install-dismissed', '1');
+      document.getElementById('install-banner').classList.remove('visible');
+    });
+  });
+})();
+</script>
+</body>
+</html>

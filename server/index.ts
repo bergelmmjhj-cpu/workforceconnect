@@ -634,6 +634,26 @@ function configureExpoAndLanding(app: express.Application) {
     log("Applicant lead portal available at apply.wfconnect.org/apply");
   }
 
+  // Serve Clawd AI standalone web chat + PWA at /clawdai (app.wfconnect.org/clawdai)
+  const clawdChatPath = path.resolve(process.cwd(), "server", "templates", "clawd-chat.html");
+  const clawdChatTemplate = fs.existsSync(clawdChatPath) ? fs.readFileSync(clawdChatPath, "utf-8") : null;
+  if (clawdChatTemplate) {
+    app.get("/clawdai", (req: Request, res: Response, next: NextFunction) => {
+      if (!isAppSubdomain(req) && req.hostname !== "localhost" && !req.hostname?.includes("replit")) {
+        return next();
+      }
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(clawdChatTemplate);
+    });
+    const clawdManifestPath = path.resolve(process.cwd(), "server", "templates", "clawd-manifest.json");
+    app.get("/clawd-manifest.json", (_req: Request, res: Response) => {
+      res.setHeader("Content-Type", "application/manifest+json");
+      res.sendFile(clawdManifestPath);
+    });
+    log("Clawd AI web chat available at /clawdai and app.wfconnect.org/clawdai");
+  }
+
   // Serve Contractor Payment & Processing Guide
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
   const contractorGuideTemplate = fs.readFileSync(contractorGuidePath, "utf-8");

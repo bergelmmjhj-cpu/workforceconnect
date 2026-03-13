@@ -1,0 +1,24 @@
+{
+  "name": "Clawd AI — Workforce Connect",
+  "short_name": "Clawd AI",
+  "description": "24/7 AI workforce operations assistant for Workforce Connect",
+  "start_url": "/clawdai",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#7C3AED",
+  "background_color": "#F9FAFB",
+  "icons": [
+    {
+      "src": "/assets/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en"
+}

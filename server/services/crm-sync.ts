@@ -117,6 +117,17 @@ function utcToLocal(utcDateString: string, timezone: string): { date: string; ti
   return { date, time };
 }
 
+// CRM stores local Eastern times but incorrectly marks them with a Z (UTC) suffix.
+// This function extracts the raw date/time without any timezone conversion.
+function crmToLocal(isoString: string): { date: string; time: string } {
+  const raw = (isoString || "").replace(/Z$/, "").replace(/[+-]\d{2}:\d{2}$/, "");
+  const [datePart, timePart = ""] = raw.split("T");
+  return {
+    date: datePart || "",
+    time: timePart.substring(0, 5) || "",
+  };
+}
+
 export async function syncWorkplaces(dryRun = false, _skipLock = false): Promise<SyncResult> {
   if (!_skipLock && !acquireLock()) {
     throw new Error("A sync is already running. Please wait for it to complete.");
@@ -267,9 +278,8 @@ export async function syncConfirmedShifts(dryRun = false, _skipLock = false): Pr
           }
         }
 
-        const tz = getTimezoneForProvince(workplace.province);
-        const start = utcToLocal(crmShift.scheduledStartAt, tz);
-        const end = utcToLocal(crmShift.scheduledEndAt, tz);
+        const start = crmToLocal(crmShift.scheduledStartAt);
+        const end = crmToLocal(crmShift.scheduledEndAt);
 
         let workerUserId: string | null = null;
         if (crmShift.quoContactPhoneSnapshot) {
@@ -441,9 +451,8 @@ export async function syncHotelRequests(dryRun = false, _skipLock = false): Prom
           }
         }
 
-        const tz = getTimezoneForProvince(workplace.province);
-        const start = utcToLocal(crmReq.shiftStartAt, tz);
-        const end = utcToLocal(crmReq.shiftEndAt, tz);
+        const start = crmToLocal(crmReq.shiftStartAt);
+        const end = crmToLocal(crmReq.shiftEndAt);
 
         const statusMap: Record<string, string> = {
           NEW: "submitted",

@@ -177,7 +177,6 @@
     <div id="google-signin-section">
       <div id="g_signin_btn" style="display:flex;justify-content:center;margin-bottom:4px;"></div>
       <div class="divider">or sign in with email</div>
-      <div id="google-error" style="display:none;color:#dc2626;font-size:13px;margin-bottom:8px;text-align:center;"></div>
     </div>
     <form id="login-form">
       <div id="credentials-fields">
@@ -294,9 +293,8 @@ function initGoogleSignIn() {
     window.google.accounts.id.renderButton(btnContainer, {
       theme: 'outline',
       size: 'large',
-      width: 360,
+      width: '100%',
       text: 'signin_with',
-      shape: 'pill',
     });
   }
 }
@@ -304,9 +302,6 @@ function initGoogleSignIn() {
 window.addEventListener('load', () => { setTimeout(initGoogleSignIn, 500); });
 
 async function handleGoogleCredential(response) {
-  const errEl = document.getElementById('google-error');
-  if (errEl) errEl.style.display = 'none';
-
   try {
     const resp = await apiFetch('/api/auth/google', {
       method: 'POST',
@@ -337,8 +332,7 @@ async function handleGoogleCredential(response) {
     currentUser = data.user;
     showDashboard();
   } catch (err) {
-    if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
-    else showToast(err.message, 'error');
+    showToast(err.message, 'error');
   }
 }
 
@@ -381,8 +375,6 @@ function showLogin() {
   document.getElementById('totp-fields').style.display = 'none';
   document.getElementById('login-btn').textContent = 'Sign In';
   document.getElementById('login-error').classList.remove('show');
-  const gErr = document.getElementById('google-error');
-  if (gErr) gErr.style.display = 'none';
   setTimeout(initGoogleSignIn, 300);
 }
 

@@ -363,6 +363,17 @@ export default function ClawdWorkspaceScreen() {
     refetchInterval: 15000,
   });
 
+  const scrollToBottom = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
+  const handleContentSizeChange = useCallback(() => {
+    if (messages.length > prevMessageCountRef.current) {
+      scrollToBottom();
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length, scrollToBottom]);
+
   const sendMutation = useMutation({
     mutationFn: async (message: string) => {
       setIsSending(true);
@@ -372,6 +383,7 @@ export default function ClawdWorkspaceScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clawd/history"] });
       setIsSending(false);
+      scrollToBottom();
     },
     onError: () => {
       setIsSending(false);
@@ -395,23 +407,13 @@ export default function ClawdWorkspaceScreen() {
     },
   });
 
-  const scrollToBottom = useCallback(() => {
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, []);
-
-  const handleContentSizeChange = useCallback(() => {
-    if (messages.length > prevMessageCountRef.current) {
-      scrollToBottom();
-    }
-    prevMessageCountRef.current = messages.length;
-  }, [messages.length, scrollToBottom]);
-
   const handleSend = useCallback((text?: string) => {
     const msg = (text || inputText).trim();
     if (!msg || isSending) return;
     setInputText("");
     sendMutation.mutate(msg);
-  }, [inputText, isSending, sendMutation]);
+    scrollToBottom();
+  }, [inputText, isSending, sendMutation, scrollToBottom]);
 
   const handleInsightTap = useCallback((query: string) => {
     setActiveTab("chat");
@@ -613,8 +615,8 @@ export default function ClawdWorkspaceScreen() {
           multiline
           maxLength={2000}
           testID="clawd-input"
-          onKeyPress={Platform.OS === "web" ? (e: any) => {
-            if (e.nativeEvent?.key === "Enter" && !e.nativeEvent?.shiftKey) {
+          onKeyPress={Platform.OS === "web" ? (e: { nativeEvent: { key: string; shiftKey?: boolean }; preventDefault: () => void }) => {
+            if (e.nativeEvent.key === "Enter" && !e.nativeEvent.shiftKey) {
               e.preventDefault();
               handleSend();
             }

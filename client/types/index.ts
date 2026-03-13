@@ -302,7 +302,7 @@ export interface Shift {
 }
 
 export type ShiftFrequency = "one-time" | "recurring" | "open-ended";
-export type ShiftCategory = "hotel" | "banquet" | "janitorial";
+export type ShiftCategory = "hotel" | "banquet" | "janitorial" | "airbnb";
 
 export interface APIShift {
   id: string;

@@ -58,6 +58,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   hotel: "#6366f1",
   banquet: "#f59e0b",
   janitorial: "#10b981",
+  airbnb: "#FF5A5F",
 };
 
 export default function DashboardScreen() {

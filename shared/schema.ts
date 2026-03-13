@@ -618,7 +618,7 @@ export type ShiftStatusDB = z.infer<typeof shiftStatusEnum>;
 export const shiftFrequencyEnum = z.enum(["one-time", "recurring", "open-ended"]);
 export type ShiftFrequency = z.infer<typeof shiftFrequencyEnum>;
 
-export const shiftCategoryEnum = z.enum(["hotel", "banquet", "janitorial"]);
+export const shiftCategoryEnum = z.enum(["hotel", "banquet", "janitorial", "airbnb"]);
 export type ShiftCategory = z.infer<typeof shiftCategoryEnum>;
 
 export const seriesFrequencyEnum = z.enum(["daily", "weekly", "biweekly", "monthly"]);

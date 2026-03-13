@@ -59,6 +59,7 @@ const CATEGORY_OPTIONS: { value: ShiftCategory; label: string }[] = [
   { value: "hotel", label: "Hotel" },
   { value: "banquet", label: "Banquet" },
   { value: "janitorial", label: "Janitorial" },
+  { value: "airbnb", label: "Airbnb" },
 ];
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -67,6 +68,7 @@ const CATEGORY_COLORS: Record<ShiftCategory, string> = {
   hotel: "#6366f1",
   banquet: "#f59e0b",
   janitorial: "#10b981",
+  airbnb: "#FF5A5F",
 };
 
 const formatDate = (date: Date): string => {

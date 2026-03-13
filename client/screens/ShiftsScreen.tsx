@@ -32,12 +32,14 @@ const categoryColors: Record<ShiftCategory, string> = {
   hotel: "#7C3AED",
   banquet: "#D97706",
   janitorial: "#059669",
+  airbnb: "#FF5A5F",
 };
 
 const categoryLabels: Record<ShiftCategory, string> = {
   hotel: "Hotel",
   banquet: "Banquet",
   janitorial: "Janitorial",
+  airbnb: "Airbnb",
 };
 
 const frequencyIcons: Record<ShiftFrequency, string> = {

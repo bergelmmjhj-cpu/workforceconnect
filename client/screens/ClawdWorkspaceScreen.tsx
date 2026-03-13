@@ -332,6 +332,7 @@ export default function ClawdWorkspaceScreen() {
   const [announceSending, setAnnounceSending] = useState(false);
   const [announceSent, setAnnounceSent] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const prevMessageCountRef = useRef(0);
 
   const isWeb = Platform.OS === "web";
   const topPadding = isWeb ? Spacing.md : headerHeight + Spacing.md;
@@ -371,9 +372,6 @@ export default function ClawdWorkspaceScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clawd/history"] });
       setIsSending(false);
-      setTimeout(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-      }, 200);
     },
     onError: () => {
       setIsSending(false);
@@ -396,6 +394,17 @@ export default function ClawdWorkspaceScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/discord-alerts"] });
     },
   });
+
+  const scrollToBottom = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
+  const handleContentSizeChange = useCallback(() => {
+    if (messages.length > prevMessageCountRef.current) {
+      scrollToBottom();
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length, scrollToBottom]);
 
   const handleSend = useCallback((text?: string) => {
     const msg = (text || inputText).trim();
@@ -571,7 +580,9 @@ export default function ClawdWorkspaceScreen() {
         renderItem={renderMessage}
         inverted={messages.length > 0}
         ListEmptyComponent={messagesLoading ? <ActivityIndicator color={theme.primary} style={styles.loader} /> : <ChatEmptyState />}
-        contentContainerStyle={[styles.chatList, { paddingTop: Spacing.md }, messages.length > 0 ? undefined : { flexGrow: 1 }]}
+        contentContainerStyle={[styles.chatList, { paddingBottom: topPadding, paddingTop: Spacing.md }, messages.length > 0 ? undefined : { flexGrow: 1 }]}
+        scrollIndicatorInsets={{ top: isWeb ? 0 : headerHeight }}
+        onContentSizeChange={handleContentSizeChange}
         testID="clawd-messages-list"
       />
       {isSending ? (
@@ -1092,7 +1103,7 @@ const styles = StyleSheet.create({
   tabBarInner: { flexDirection: "row" },
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: Spacing.sm, borderBottomWidth: 2 },
   tabLabel: { fontSize: 13, fontWeight: "600" },
-  chatList: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
+  chatList: { paddingHorizontal: Spacing.md },
   msgRow: { marginVertical: Spacing.xs, maxWidth: "85%", flexDirection: "row", gap: 8 },
   msgLeft: { alignSelf: "flex-start" },
   msgRight: { alignSelf: "flex-end" },

@@ -626,14 +626,12 @@ function configureExpoAndLanding(app: express.Application) {
     log("Applicants admin portal available at /applicants and apply.wfconnect.org/applicants");
   }
 
+  // /apply is subdomain-aware:
+  //   apply.wfconnect.org  → apply-form.html  (standalone lead capture, cold calling pool)
+  //   guide.wfconnect.org  → apply.html       (full worker application form)
+  //   any other domain     → apply.html       (default full form)
   if (applyFormTemplate) {
-    app.get("/apply", (_req: Request, res: Response) => {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache");
-      const fresh = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : applyFormTemplate;
-      return res.status(200).send(fresh);
-    });
-    log("Applicant portal available at /apply and apply.wfconnect.org");
+    log("Applicant lead portal available at apply.wfconnect.org/apply");
   }
 
   // Serve Contractor Payment & Processing Guide
@@ -684,14 +682,22 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(accountDeletionTemplate);
   });
 
-  // Serve Worker Application Form
+  // Serve Worker Application Form (full form, used by guide.wfconnect.org)
   const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
   const applyTemplate = fs.readFileSync(applyPath, "utf-8");
 
-  app.get("/apply", (_req: Request, res: Response) => {
+  // Single subdomain-aware /apply route:
+  //   apply.wfconnect.org → apply-form.html (standalone lead capture)
+  //   everywhere else     → apply.html      (full worker registration form)
+  app.get("/apply", (req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    if (isApplySubdomain(req) && applyFormTemplate) {
+      res.setHeader("Cache-Control", "no-cache");
+      const fresh = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : applyFormTemplate;
+      return res.status(200).send(fresh);
+    }
     res.setHeader("Cache-Control", "public, max-age=3600");
-    res.status(200).send(applyTemplate);
+    return res.status(200).send(applyTemplate);
   });
 
   // Serve Payment Information Page

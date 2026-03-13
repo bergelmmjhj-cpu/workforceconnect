@@ -1652,6 +1652,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/public/positions", async (_req: Request, res: Response) => {
+    try {
+      const crmClient = await import("./services/weekdays-crm");
+      if (crmClient.isConfigured()) {
+        const workplaces = await crmClient.getWorkplaces();
+        const positionSet = new Set<string>();
+        for (const wp of workplaces) {
+          if (wp.jobPosition) positionSet.add(wp.jobPosition);
+          if (wp.positions) {
+            for (const p of wp.positions) {
+              if (p.title) positionSet.add(p.title);
+            }
+          }
+        }
+        if (positionSet.size > 0) {
+          const positions = Array.from(positionSet).sort((a, b) => a.localeCompare(b));
+          res.json({ positions });
+          return;
+        }
+      }
+      res.json({ positions: ["Housekeeper", "Houseperson", "Server", "Event Staff", "Concierge", "Receptionist", "Hotel Staff", "Supervisor", "Other"] });
+    } catch (error) {
+      console.error("Error fetching positions:", error);
+      res.json({ positions: ["Housekeeper", "Houseperson", "Server", "Event Staff", "Concierge", "Receptionist", "Hotel Staff", "Supervisor", "Other"] });
+    }
+  });
+
   // Worker Application Form Submission
   app.post("/api/public/apply", async (req: Request, res: Response) => {
     try {
@@ -6124,7 +6151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Google Places API Proxy (Address Autocomplete)
   // ========================================
 
-  app.get("/api/places/autocomplete", checkRoles("admin", "hr", "worker"), async (req: Request, res: Response) => {
+  app.get("/api/places/autocomplete", async (req: Request, res: Response) => {
     try {
       const { input } = req.query;
       
@@ -6160,7 +6187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/places/details/:placeId", checkRoles("admin", "hr", "worker"), async (req: Request, res: Response) => {
+  app.get("/api/places/details/:placeId", async (req: Request, res: Response) => {
     try {
       const { placeId } = req.params;
       

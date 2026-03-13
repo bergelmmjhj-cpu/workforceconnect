@@ -154,14 +154,7 @@
       <div class="field">
         <label>Position Applying For <span class="req">*</span></label>
         <select id="applying_for" name="applying_for">
-          <option value="">Select a position...</option>
-          <option value="Security Guard">Security Guard</option>
-          <option value="Concierge">Concierge</option>
-          <option value="Receptionist">Receptionist</option>
-          <option value="Event Staff">Event Staff</option>
-          <option value="Hotel Staff">Hotel Staff</option>
-          <option value="Supervisor">Supervisor</option>
-          <option value="Other">Other</option>
+          <option value="">Loading positions...</option>
         </select>
         <div class="field-error" id="err-applying_for">Please select a position</div>
       </div>
@@ -228,6 +221,31 @@ const RESUME_ACCEPT = ['application/pdf', 'application/msword', 'application/vnd
 const MAX_SIZE = 10 * 1024 * 1024;
 
 let photoData = null, resumeData = null;
+
+(async function loadPositions() {
+  const sel = document.getElementById('applying_for');
+  const fallback = ["Housekeeper", "Houseperson", "Server", "Event Staff", "Concierge", "Receptionist", "Hotel Staff", "Supervisor", "Other"];
+  function populateSelect(list) {
+    sel.textContent = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select a position...';
+    sel.appendChild(placeholder);
+    list.forEach(function(p) {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      sel.appendChild(opt);
+    });
+  }
+  try {
+    const resp = await fetch('/api/public/positions');
+    const data = await resp.json();
+    populateSelect(data.positions && data.positions.length > 0 ? data.positions : fallback);
+  } catch {
+    populateSelect(fallback);
+  }
+})();
 let addressValidated = false;
 let submitPending = false;
 
@@ -273,7 +291,7 @@ async function selectPlace(placeId, description) {
   addressInput.value = description;
   hideSuggestions();
   try {
-    const resp = await fetch(`/api/places/details?place_id=${placeId}`);
+    const resp = await fetch(`/api/places/details/${placeId}`);
     const data = await resp.json();
     const comps = data.result?.address_components || [];
     let street_number = '', route = '', city = '', province = '', postal = '', country = '';

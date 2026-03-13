@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from "react";
 import {
   View,
+  Text,
   StyleSheet,
   FlatList,
   TextInput,
@@ -190,6 +191,125 @@ function copyToClipboard(text: string) {
   }
 }
 
+function renderInlineMd(text: string, color: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <Text key={i} style={{ fontWeight: "700", color }}>
+          {part.slice(2, -2)}
+        </Text>
+      );
+    }
+    return (
+      <Text key={i} style={{ color }}>
+        {part}
+      </Text>
+    );
+  });
+}
+
+function SimpleMarkdown({ content, textColor }: { content: string; textColor: string }) {
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeLines: string[] = [];
+  let key = 0;
+
+  const flushCodeBlock = () => {
+    elements.push(
+      <View
+        key={key++}
+        style={{ backgroundColor: "rgba(0,0,0,0.08)", padding: 8, borderRadius: 6, marginVertical: 4 }}
+      >
+        <Text
+          selectable
+          style={{
+            fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+            fontSize: 12,
+            color: textColor,
+            lineHeight: 18,
+          }}
+        >
+          {codeLines.join("\n")}
+        </Text>
+      </View>
+    );
+    codeLines = [];
+    inCodeBlock = false;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.trim().startsWith("```")) {
+      if (inCodeBlock) {
+        flushCodeBlock();
+      } else {
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    if (line.trim() === "") {
+      elements.push(<View key={key++} style={{ height: 5 }} />);
+      continue;
+    }
+
+    if (line.trim() === "---" || line.trim() === "***") {
+      elements.push(
+        <View key={key++} style={{ height: 1, backgroundColor: "rgba(0,0,0,0.12)", marginVertical: 6 }} />
+      );
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const text = headingMatch[2];
+      const fontSize = level === 1 ? 17 : level === 2 ? 15 : 14;
+      elements.push(
+        <Text key={key++} style={{ fontSize, fontWeight: "700", color: textColor, marginTop: 8, marginBottom: 2, lineHeight: fontSize + 6 }}>
+          {renderInlineMd(text, textColor)}
+        </Text>
+      );
+      continue;
+    }
+
+    const bulletMatch = line.match(/^(\s*)([-*•])\s+(.+)/);
+    if (bulletMatch) {
+      const indent = bulletMatch[1].length * 8;
+      const text = bulletMatch[3];
+      elements.push(
+        <View key={key++} style={{ flexDirection: "row", marginVertical: 1, paddingLeft: indent }}>
+          <Text style={{ color: textColor, marginRight: 6, fontSize: 14, lineHeight: 20 }}>{"•"}</Text>
+          <Text style={{ flex: 1, fontSize: 14, color: textColor, lineHeight: 20 }}>
+            {renderInlineMd(text, textColor)}
+          </Text>
+        </View>
+      );
+      continue;
+    }
+
+    elements.push(
+      <Text key={key++} style={{ fontSize: 14, color: textColor, lineHeight: 21 }}>
+        {renderInlineMd(line, textColor)}
+      </Text>
+    );
+  }
+
+  if (inCodeBlock && codeLines.length > 0) {
+    flushCodeBlock();
+  }
+
+  return <>{elements}</>;
+}
+
 export default function ClawdWorkspaceScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -244,6 +364,9 @@ export default function ClawdWorkspaceScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clawd/history"] });
       setIsSending(false);
+      setTimeout(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 200);
     },
     onError: () => {
       setIsSending(false);
@@ -387,9 +510,11 @@ export default function ClawdWorkspaceScreen() {
                 <ThemedText style={styles.actionModeBadgeText}>Action Mode</ThemedText>
               </View>
             ) : null}
-            <ThemedText style={[styles.msgText, { color: isUser ? "#fff" : theme.text }]}>
-              {item.content}
-            </ThemedText>
+            {isUser ? (
+              <ThemedText style={[styles.msgText, { color: "#fff" }]}>{item.content}</ThemedText>
+            ) : (
+              <SimpleMarkdown content={item.content} textColor={theme.text} />
+            )}
             <ThemedText style={[styles.msgTime, { color: isUser ? "rgba(255,255,255,0.6)" : theme.textMuted }]}>
               {formatTimeAgo(item.createdAt)}
             </ThemedText>
@@ -470,6 +595,15 @@ export default function ClawdWorkspaceScreen() {
           multiline
           maxLength={2000}
           testID="clawd-input"
+          onKeyPress={(e) => {
+            if (Platform.OS === "web") {
+              const nativeEvent = e.nativeEvent as unknown as KeyboardEvent;
+              if (nativeEvent.key === "Enter" && !nativeEvent.shiftKey) {
+                nativeEvent.preventDefault?.();
+                handleSend();
+              }
+            }
+          }}
         />
         <Pressable
           onPress={() => handleSend()}
@@ -504,7 +638,7 @@ export default function ClawdWorkspaceScreen() {
                 </ThemedText>
               </View>
             </View>
-            <ThemedText style={styles.briefingBody}>{briefing.response}</ThemedText>
+            <SimpleMarkdown content={briefing.response} textColor={theme.text} />
           </Card>
           {briefing.assistantsInvoked.length > 0 ? (
             <Card style={styles.assistantsCard}>

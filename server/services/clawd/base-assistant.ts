@@ -77,11 +77,30 @@ ${userQuestion}`;
 
   let parsed: Omit<AssistantOutput, "assistantType">;
   try {
+    // Step 1: strip markdown code fences
     const cleaned = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    parsed = JSON.parse(cleaned);
+    // Step 2: try direct parse (no preamble)
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // Step 3: find outermost { } boundaries (handles Claude preamble text)
+      const firstBrace = cleaned.indexOf("{");
+      const lastBrace = cleaned.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+      } else {
+        throw new Error("No JSON object found in response");
+      }
+    }
   } catch {
+    // Final fallback: treat as plain text summary (strip any leftover markdown artifacts)
+    const plainText = responseText
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .replace(/^\s*[\[{][\s\S]*$/, "")
+      .trim();
     parsed = {
-      summary: responseText.slice(0, 500),
+      summary: plainText.slice(0, 500) || "Analysis unavailable.",
       keyFindings: [],
       risks: [],
       supportingEvidence: [],

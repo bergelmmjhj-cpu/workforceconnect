@@ -1327,16 +1327,21 @@
         .gallery-card.tall img { height: 100%; }
       }
 
+      .staffing-side {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
       .staffing-photos {
         display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 16px;
-        margin-top: 24px;
       }
       .staffing-photos img {
         width: 100%;
         border-radius: 12px;
         object-fit: cover;
-        height: 220px;
+        height: 180px;
       }
     </style>
   </head>
@@ -1593,25 +1598,27 @@
             </div>
           </div>
 
-          <div class="roles-grid">
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Housekeepers</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Housepersons</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Laundry Attendants</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Kitchen Helpers</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Dishwashers</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Breakfast Attendants</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Cooks</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Front Desk</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Night Auditors</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Maintenance</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Banquet Servers</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Bartenders</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Supervisors</div>
-            <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>General Labour</div>
-          </div>
-          <div class="staffing-photos">
-            <img src="/assets/work-desk-wipe.jpg" alt="Worker wiping hotel room desk" loading="lazy">
-            <img src="/assets/work-bathroom-mop.jpg" alt="Housekeeper mopping hotel bathroom" loading="lazy">
+          <div class="staffing-side">
+            <div class="roles-grid">
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Housekeepers</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Housepersons</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Laundry Attendants</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Kitchen Helpers</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Dishwashers</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Breakfast Attendants</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Cooks</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Front Desk</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Night Auditors</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Maintenance</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Banquet Servers</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Bartenders</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Supervisors</div>
+              <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>General Labour</div>
+            </div>
+            <div class="staffing-photos">
+              <img src="/assets/work-desk-wipe.jpg" alt="Worker wiping hotel room desk" loading="lazy">
+              <img src="/assets/work-bathroom-mop.jpg" alt="Housekeeper mopping hotel bathroom" loading="lazy">
+            </div>
           </div>
         </div>
       </div>

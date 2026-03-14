@@ -1284,6 +1284,60 @@
       }
 
       .text-muted { color: var(--text-muted); }
+
+      /* ─── GALLERY ─────────────────────────────────── */
+      .gallery-section { background: var(--bg); }
+      .gallery-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      @media (min-width: 640px) { .gallery-grid { grid-template-columns: repeat(2, 1fr); } }
+      @media (min-width: 900px) { .gallery-grid { grid-template-columns: repeat(3, 1fr); } }
+
+      .gallery-card {
+        position: relative;
+        border-radius: 12px;
+        overflow: hidden;
+        aspect-ratio: 4 / 3;
+      }
+      .gallery-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform .4s ease;
+      }
+      .gallery-card:hover img { transform: scale(1.04); }
+      .gallery-caption {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 32px 16px 14px;
+        background: linear-gradient(transparent, rgba(0,0,0,.62));
+        color: #fff;
+        font-size: .85rem;
+        font-weight: 500;
+        letter-spacing: .02em;
+      }
+      .gallery-card.tall { grid-row: span 2; aspect-ratio: auto; }
+      @media (min-width: 900px) {
+        .gallery-card.tall { aspect-ratio: auto; }
+        .gallery-card.tall img { height: 100%; }
+      }
+
+      .staffing-photos {
+        display: grid;
+        gap: 16px;
+        margin-top: 24px;
+      }
+      .staffing-photos img {
+        width: 100%;
+        border-radius: 12px;
+        object-fit: cover;
+        height: 220px;
+      }
     </style>
   </head>
   <body>
@@ -1476,6 +1530,49 @@
       </div>
     </section>
 
+    <!-- ═══ OUR PEOPLE AT WORK ══════════════════════════════════════ -->
+    <section class="section gallery-section" id="gallery">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">Our People at Work</div>
+          <h2 class="section-title">Real Workers. Real Properties. Real Results.</h2>
+          <div class="divider"></div>
+          <p class="section-desc">Every shift, our trained crews deliver consistent quality across GTA hotels and commercial properties.</p>
+        </div>
+
+        <div class="gallery-grid">
+          <div class="gallery-card tall">
+            <img src="/assets/work-bathroom-mop.jpg" alt="Housekeeper mopping hotel bathroom" loading="lazy">
+            <div class="gallery-caption">Bathroom turnover &mdash; hotel property, GTA</div>
+          </div>
+          <div class="gallery-card">
+            <img src="/assets/work-desk-wipe.jpg" alt="Worker wiping desk in hotel room" loading="lazy">
+            <div class="gallery-caption">Room detail cleaning &mdash; hotel property, GTA</div>
+          </div>
+          <div class="gallery-card">
+            <img src="/assets/work-sink-cleaning.jpg" alt="Worker cleaning bathroom vanity" loading="lazy">
+            <div class="gallery-caption">Vanity sanitation &mdash; hotel property, GTA</div>
+          </div>
+          <div class="gallery-card">
+            <img src="/assets/work-corridor-houseperson.jpg" alt="Houseperson carrying supplies in hotel corridor" loading="lazy">
+            <div class="gallery-caption">Houseperson on the move &mdash; hotel corridor, GTA</div>
+          </div>
+          <div class="gallery-card">
+            <img src="/assets/work-bathroom-sanitize.jpg" alt="Worker sanitizing hotel bathroom" loading="lazy">
+            <div class="gallery-caption">Bathroom sanitation &mdash; hotel property, GTA</div>
+          </div>
+          <div class="gallery-card">
+            <img src="/assets/work-detail-cleaning.jpg" alt="Worker detail cleaning hotel room floor" loading="lazy">
+            <div class="gallery-caption">Detail cleaning &mdash; hotel room, GTA</div>
+          </div>
+          <div class="gallery-card">
+            <img src="/assets/work-bathroom-corner.jpg" alt="Worker mopping bathroom corner" loading="lazy">
+            <div class="gallery-caption">Deep clean &mdash; hotel bathroom, GTA</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ═══ HOTEL STAFFING ══════════════════════════════════════════ -->
     <section class="section section-bg" id="staffing">
       <div class="container">
@@ -1511,6 +1608,10 @@
             <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Bartenders</div>
             <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Supervisors</div>
             <div class="role-tag"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>General Labour</div>
+          </div>
+          <div class="staffing-photos">
+            <img src="/assets/work-desk-wipe.jpg" alt="Worker wiping hotel room desk" loading="lazy">
+            <img src="/assets/work-bathroom-mop.jpg" alt="Housekeeper mopping hotel bathroom" loading="lazy">
           </div>
         </div>
       </div>

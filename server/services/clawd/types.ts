@@ -95,6 +95,7 @@ export interface PendingShiftDraft {
   date: string | null;              // YYYY-MM-DD
   startTime: string | null;         // HH:MM
   endTime: string | null;
+  roleType?: string | null;         // e.g. "housekeeping", "server"
   missingFields: string[];          // e.g. ["worker"]
   lastAttempt: number;              // Date.now()
   userId: string;

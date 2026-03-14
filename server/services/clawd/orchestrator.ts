@@ -347,8 +347,9 @@ You have an incomplete shift creation in progress. DO NOT start a new workflow.
 Pending shift draft:
 - Worker query: "${pendingDraft.workerQuery || "unknown"}" — NOT YET RESOLVED
 - Workplace: ${pendingDraft.workplaceName || "not found"} (ID: ${pendingDraft.workplaceId || "unknown"})
-- Date: ${pendingDraft.date || "unknown"}
-- Time: ${pendingDraft.startTime || "?"} – ${pendingDraft.endTime || "?"}
+- Date: ${pendingDraft.date || "unknown — re-parse from conversation history"}
+- Time: ${pendingDraft.startTime || "?"} – ${pendingDraft.endTime || "? — re-parse from conversation history"}
+${pendingDraft.roleType ? `- Role: ${pendingDraft.roleType}` : ""}
 - Missing: ${pendingDraft.missingFields.join(", ")}
 
 The user's current message is likely providing the missing information:
@@ -443,23 +444,25 @@ export async function orchestrate(request: OrchestrationRequest): Promise<Orches
   const startTime = Date.now();
 
   // Check pending draft first — this always forces action mode
-  const draft = getPendingDraft(request.userId);
-  const hasDraft = !!draft;
+  let activeDraft = getPendingDraft(request.userId);
 
-  // Route to action mode if:
-  // 1. Current message matches action patterns, OR
-  // 2. Conversation history shows we're mid-action, OR
-  // 3. User has a pending shift draft
   // Auto-clear stale draft if user explicitly cancels
-  if (hasDraft && draft) {
+  if (activeDraft) {
     const msg = request.userMessage.toLowerCase();
     const clearingKeywords = ["forget", "cancel", "start over", "never mind", "nevermind", "abort", "stop", "reset"];
     const explicitClear = clearingKeywords.some(kw => msg.includes(kw));
     if (explicitClear) {
       clearPendingDraft(request.userId);
+      activeDraft = null; // Reflect cleared state immediately so routing below is correct
     }
   }
 
+  const hasDraft = !!activeDraft;
+
+  // Route to action mode if:
+  // 1. Current message matches action patterns, OR
+  // 2. Conversation history shows we're mid-action, OR
+  // 3. User has a pending shift draft (after cancel check above)
   const isActionMode =
     detectActionIntent(request.userMessage) ||
     detectConversationActionContext(request.conversationHistory) ||
@@ -476,7 +479,7 @@ export async function orchestrate(request: OrchestrationRequest): Promise<Orches
   console.log(`[Clawd] Routing to ${isActionMode ? "action" : "analysis"} mode (${reason}) for: "${request.userMessage.slice(0, 60)}"`);
 
   if (isActionMode) {
-    return orchestrateWithTools(request, startTime, draft);
+    return orchestrateWithTools(request, startTime, activeDraft);
   }
 
   return orchestrateAnalysis(request, startTime);
@@ -552,7 +555,7 @@ async function orchestrateWithTools(
       }
     }
 
-    // If Claude successfully looked up a worker AND a workplace, clear the pending draft
+    // Determine outcome of tool calls
     const workerLookupSuccess = toolCalls.some(
       tc => tc.toolName === "lookup_workers" && tc.success && (tc.result as any)?.count > 0
     );
@@ -561,34 +564,47 @@ async function orchestrateWithTools(
     const shiftCreated = toolCalls.some(
       tc => tc.toolName === "create_shift_request" && tc.success
     );
-    if (shiftCreated || (workerLookupSuccess && pendingDraft)) {
+
+    // Only clear pending draft on successful shift creation or explicit cancel.
+    // Do NOT clear merely because worker was found — shift creation may still be pending.
+    if (shiftCreated) {
       clearPendingDraft(request.userId);
     }
 
-    // Auto-save pending draft when Claude found a workplace but couldn't resolve a worker.
-    // This enables the resume-via-short-reply workflow on subsequent messages.
+    // Auto-save pending draft when Claude found a workplace but couldn't resolve the worker.
+    // Extract as many known shift fields as possible from attempted tool call inputs.
     if (workerLookupFailed && !shiftCreated && !pendingDraft) {
       const workplaceTc = toolCalls.find(
         tc => tc.toolName === "lookup_workplaces" && tc.success && (tc.result as any)?.count > 0
       );
       const workerTc = toolCalls.find(tc => tc.toolName === "lookup_workers");
+      const shiftTc = toolCalls.find(tc => tc.toolName === "create_shift_request");
+
       const workerQuery = (workerTc?.input as any)?.query || (workerTc?.input as any)?.phone || null;
 
       if (workplaceTc) {
         const wpList: any[] = (workplaceTc.result as any)?.workplaces ?? [];
         const workplace = wpList[0];
         if (workplace) {
+          // Extract date/time from attempted create_shift_request call if present
+          const shiftInput = shiftTc?.input as any;
+          const savedDate = shiftInput?.date ?? null;
+          const savedStart = shiftInput?.startTime ?? null;
+          const savedEnd = shiftInput?.endTime ?? null;
+          const savedRole = shiftInput?.roleType ?? null;
+
           setPendingDraft(request.userId, {
             type: "create_shift",
             workerQuery,
             workplaceId: String(workplace.id),
             workplaceName: workplace.name,
-            date: null,
-            startTime: null,
-            endTime: null,
+            date: savedDate,
+            startTime: savedStart,
+            endTime: savedEnd,
+            roleType: savedRole ?? null,
             missingFields: ["worker"],
           });
-          console.log(`[Clawd] Draft saved: worker="${workerQuery}" workplace="${workplace.name}" user=${request.userId}`);
+          console.log(`[Clawd] Draft saved: worker="${workerQuery}" workplace="${workplace.name}" date="${savedDate}" time="${savedStart}-${savedEnd}" user=${request.userId}`);
         }
       }
     }

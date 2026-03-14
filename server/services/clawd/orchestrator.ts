@@ -272,7 +272,7 @@ const ACTION_INTENT_PATTERNS: RegExp[] = [
   // Follow-up replies and confirmations
   /^\s*try\s+\w+/i,
   /^\s*[\d\s\-\+\(\)]{7,15}\s*$/,             // phone number as standalone reply
-  /^\s*(yes|yep|yis|yeah|sure|ok|okay|go|proceed|do it|confirm|correct|sounds good|perfect|great)\s*[.!]?\s*$/i, // single-word confirmations
+  /^\s*(yes|yep|yis|yeah|sure|ok|okay|go ahead|go|proceed|do it|confirm|correct|sounds good|perfect|great)\s*[.!]?\s*$/i, // short confirmations
   /\bcan (i|you) have\b/i,
   /\bi need\s+\d*\s*(hk|housekeep|server|staff)/i,
   /\beven if (you can't|you cannot|there('s| is) no)\b/i,
@@ -633,10 +633,11 @@ async function orchestrateWithTools(
     }
 
     // Auto-save pending draft when Claude found a workplace but couldn't resolve the worker.
-    // Extract as many known shift fields as possible from attempted tool call inputs.
+    // Only save when exactly one workplace matched — avoids silently persisting an
+    // incorrect workplace when the query is ambiguous (2+ matches).
     if (workerLookupFailed && !shiftCreated && !pendingDraft) {
       const workplaceTc = toolCalls.find(
-        tc => tc.toolName === "lookup_workplaces" && tc.success && asLookupWorkplacesResult(tc.result).count > 0
+        tc => tc.toolName === "lookup_workplaces" && tc.success
       );
       const workerTc = toolCalls.find(tc => tc.toolName === "lookup_workers");
       const shiftTc = toolCalls.find(tc => tc.toolName === "create_shift_request");
@@ -646,8 +647,10 @@ async function orchestrateWithTools(
 
       if (workplaceTc) {
         const { workplaces } = asLookupWorkplacesResult(workplaceTc.result);
-        const workplace = workplaces[0];
-        if (workplace) {
+        // Only autosave when exactly one workplace matched — prevents silently saving
+        // the wrong workplace when the search returned ambiguous results.
+        if (workplaces.length === 1) {
+          const workplace = workplaces[0];
           // Extract date/time from attempted create_shift_request call if present
           const shiftInp = shiftTc ? asCreateShiftInput(shiftTc.input) : {};
 
@@ -663,6 +666,8 @@ async function orchestrateWithTools(
             missingFields: ["worker"],
           });
           console.log(`[Clawd] Draft saved: worker="${workerQuery}" workplace="${workplace.name}" date="${shiftInp.date}" time="${shiftInp.startTime}-${shiftInp.endTime}" user=${request.userId}`);
+        } else if (workplaces.length > 1) {
+          console.log(`[Clawd] Draft NOT saved: ambiguous workplace (${workplaces.length} matches) — user must confirm`);
         }
       }
     }

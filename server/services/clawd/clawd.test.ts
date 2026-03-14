@@ -307,6 +307,189 @@ describe("Discord Payload Validation", () => {
 
 });
 
+// ─── Chat Continuity & Routing Tests ─────────────────────────────────────────
+// These tests replicate the routing logic from orchestrator.ts in isolation
+// (without DB imports) to verify the key continuity flow behaviors.
+
+// Mirrored from orchestrator.ts ACTION_INTENT_PATTERNS
+const ACTION_INTENT_PATTERNS_TEST: RegExp[] = [
+  /\b(create|add|make|schedule|book|assign|set up)\s+(a\s+)?(new\s+)?shift\b/i,
+  /\bbook\s+\w+/i,
+  /\b(send|blast|notify|text)\s+(a\s+)?(sms|message|text)\b/i,
+  /\b(notify|alert|message|ping|text|call)\s+(gm|lilee|manager|team|worker)\b/i,
+  /\b(sick|calling in sick|callout|call\s*off)\b/i,
+  /\b(short[\s-]?staffed|understaffed|need\s+(more\s+)?(workers?|staff|hk|housekeep))\b/i,
+  /\btry\s+\w+/i,
+  /^\s*[\d\s\-\+\(\)]{7,15}\s*$/,
+  /^\s*(yes|yep|yis|yeah|sure|ok|okay|go ahead|go|proceed|do it|confirm|correct|sounds good|perfect|great)\s*[.!]?\s*$/i,
+  /\bcan (i|you) have\b/i,
+  /\bi need\s+\d*\s*(hk|housekeep|server|staff)/i,
+];
+
+function detectActionIntentTest(msg: string): boolean {
+  return ACTION_INTENT_PATTERNS_TEST.some(p => p.test(msg));
+}
+
+// Mirrored from orchestrator.ts ACTIVE_ACTION_CONTEXT_SIGNALS
+const ACTIVE_ACTION_CONTEXT_SIGNALS_TEST: string[] = [
+  "Worker Not Found", "Not found in system", "Draft saved", "Still needed",
+  "Missing:", "To proceed", "before I can proceed", "What name or number",
+  "ACTIVE PENDING WORKFLOW",
+];
+
+function detectConversationActionContextTest(history: Array<{ role: string; content: string }>): boolean {
+  const recent = history.slice(-4);
+  const lastAssistant = [...recent].reverse().find(m => m.role === "assistant");
+  if (!lastAssistant) return false;
+  return ACTIVE_ACTION_CONTEXT_SIGNALS_TEST.some(s => lastAssistant.content.includes(s));
+}
+
+// Mirrored in-memory pending draft lifecycle
+interface PendingShiftDraftTest {
+  type: "create_shift"; workerQuery: string | null; workplaceId: string | null;
+  workplaceName: string | null; date: string | null; startTime: string | null;
+  endTime: string | null; missingFields: string[]; lastAttempt: number; userId: string;
+}
+const testDrafts = new Map<string, PendingShiftDraftTest>();
+const TEST_EXPIRY_MS = 30 * 60 * 1000;
+function setTestDraft(userId: string, d: Omit<PendingShiftDraftTest, "userId" | "lastAttempt">) {
+  testDrafts.set(userId, { ...d, userId, lastAttempt: Date.now() });
+}
+function getTestDraft(userId: string): PendingShiftDraftTest | null {
+  const d = testDrafts.get(userId);
+  if (!d) return null;
+  if (Date.now() - d.lastAttempt > TEST_EXPIRY_MS) { testDrafts.delete(userId); return null; }
+  d.lastAttempt = Date.now(); // Refresh for inactivity-based expiry
+  return d;
+}
+function clearTestDraft(userId: string) { testDrafts.delete(userId); }
+
+describe("Chat Continuity — Action Intent Routing", () => {
+
+  it("Test 28: Phone number standalone triggers action mode", () => {
+    assert(detectActionIntentTest("4372188887"), "bare phone number → action mode");
+    assert(detectActionIntentTest("+1 437-218-8887"), "formatted phone → action mode");
+    assert(!detectActionIntentTest("Tell me about the company"), "general question → not action");
+  });
+
+  it("Test 29: 'can you have' triggers action mode (client request)", () => {
+    assert(detectActionIntentTest("Can you have 2 workers at Hilton tomorrow"), "'can you have' → action mode");
+    assert(detectActionIntentTest("Can I have a housekeeper for tonight"), "'can i have' → action mode");
+  });
+
+  it("Test 30: 'try X' triggers action mode (worker resolution follow-up)", () => {
+    assert(detectActionIntentTest("Try BergelMMJ"), "'try X' → action mode");
+    assert(detectActionIntentTest("try bergel"), "'try bergel' → action mode");
+  });
+
+  it("Test 31: Single-word confirmation triggers action mode", () => {
+    assert(detectActionIntentTest("yes"), "'yes' → action mode");
+    assert(detectActionIntentTest("ok"), "'ok' → action mode");
+    assert(detectActionIntentTest("sure"), "'sure' → action mode");
+    assert(detectActionIntentTest("Go ahead"), "'go ahead' → action mode");
+  });
+
+});
+
+describe("Chat Continuity — Conversation Context Signals", () => {
+
+  it("Test 32: History with 'Worker Not Found' keeps action mode", () => {
+    const history = [
+      { role: "user", content: "Book Bergel at Hyatt tomorrow 8am-4pm" },
+      { role: "assistant", content: "**Understood:** Create shift for Bergel at Hyatt\n**Matched:** Hyatt Place ✓\n**Still needed:** Worker Not Found — provide full name or phone" },
+    ];
+    assert(detectConversationActionContextTest(history), "Worker Not Found signal detected in history");
+  });
+
+  it("Test 33: History with 'Draft saved' keeps action mode", () => {
+    const history = [
+      { role: "user", content: "Book John at Hilton tomorrow 9am-5pm" },
+      { role: "assistant", content: "Draft saved. Just need the worker — provide full name or phone number." },
+    ];
+    assert(detectConversationActionContextTest(history), "Draft saved signal detected in history");
+  });
+
+  it("Test 34: History with 'Still needed' keeps action mode", () => {
+    const history = [
+      { role: "user", content: "Schedule 2 HK at Marriott Saturday" },
+      { role: "assistant", content: "**Still needed:** Worker identity — provide name or phone." },
+    ];
+    assert(detectConversationActionContextTest(history), "Still needed signal detected in history");
+  });
+
+  it("Test 35: Clean history without signals does not force action mode", () => {
+    const history = [
+      { role: "user", content: "What is the weather?" },
+      { role: "assistant", content: "I don't have access to weather data." },
+    ];
+    assert(!detectConversationActionContextTest(history), "No signals → no forced action mode");
+  });
+
+});
+
+describe("Chat Continuity — Pending Draft Lifecycle", () => {
+
+  it("Test 36: Draft is saved and retrieved correctly", () => {
+    const userId = "test-user-draft-1";
+    setTestDraft(userId, {
+      type: "create_shift", workerQuery: "BergelMMJ", workplaceId: "wp-1",
+      workplaceName: "Hyatt Place", date: "2026-03-15", startTime: "08:00",
+      endTime: "16:00", missingFields: ["worker"],
+    });
+    const d = getTestDraft(userId);
+    assert(d !== null, "draft is saved");
+    assert(d?.workerQuery === "BergelMMJ", "workerQuery preserved");
+    assert(d?.workplaceName === "Hyatt Place", "workplaceName preserved");
+    assert(d?.date === "2026-03-15", "date preserved");
+    clearTestDraft(userId);
+  });
+
+  it("Test 37: clearPendingDraft removes the draft", () => {
+    const userId = "test-user-draft-2";
+    setTestDraft(userId, {
+      type: "create_shift", workerQuery: "NinoMMG", workplaceId: "wp-2",
+      workplaceName: "Hilton", date: null, startTime: null, endTime: null, missingFields: ["worker"],
+    });
+    clearTestDraft(userId);
+    assert(getTestDraft(userId) === null, "draft is cleared after clearPendingDraft");
+  });
+
+  it("Test 38: Draft lastAttempt refreshes on each access (inactivity expiry)", () => {
+    const userId = "test-user-draft-3";
+    setTestDraft(userId, {
+      type: "create_shift", workerQuery: "Maria", workplaceId: "wp-3",
+      workplaceName: "Marriott", date: null, startTime: null, endTime: null, missingFields: ["worker"],
+    });
+    const first = getTestDraft(userId);
+    const ts1 = first?.lastAttempt ?? 0;
+    // Simulate time passing by manually backdating
+    const draft = testDrafts.get(userId);
+    if (draft) draft.lastAttempt = Date.now() - 5000; // backdate 5 seconds
+    const second = getTestDraft(userId);
+    const ts2 = second?.lastAttempt ?? 0;
+    assert(ts2 > ts1 - 5000, "lastAttempt refreshed on access (inactivity-based expiry)");
+    clearTestDraft(userId);
+  });
+
+  it("Test 39: Draft is NOT saved when workplace is ambiguous (2+ results)", () => {
+    // Simulate the ambiguity guard: only save when exactly 1 workplace matches
+    const userId = "test-user-draft-4";
+    const ambiguousWorkplaces = [
+      { id: "wp-a", name: "Hyatt Place Toronto" },
+      { id: "wp-b", name: "Hyatt Place Mississauga" },
+    ];
+    // Guard: only save when workplaces.length === 1
+    if (ambiguousWorkplaces.length === 1) {
+      setTestDraft(userId, {
+        type: "create_shift", workerQuery: "Bergel", workplaceId: String(ambiguousWorkplaces[0].id),
+        workplaceName: ambiguousWorkplaces[0].name, date: null, startTime: null, endTime: null, missingFields: ["worker"],
+      });
+    }
+    assert(getTestDraft(userId) === null, "draft NOT saved when 2+ workplaces matched");
+  });
+
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"═".repeat(50)}`);

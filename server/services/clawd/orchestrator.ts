@@ -497,9 +497,28 @@ async function orchestrateWithTools(
     .filter(m => m.role === "user" || m.role === "assistant")
     .slice(-MAX_HISTORY);
 
+  // When a pending draft is active, augment short/phone replies so Claude
+  // immediately knows they are worker-resolution attempts, not new requests
+  let effectiveUserMessage = request.userMessage;
+  if (pendingDraft) {
+    const trimmed = request.userMessage.trim();
+    const isPhoneLike = /^[\d\s\-\+\(\)]{7,15}$/.test(trimmed);
+    const isShortNonKeyword = trimmed.split(/\s+/).length <= 3 &&
+      !/\b(forget|cancel|start over|nevermind|abort|stop|reset)\b/i.test(trimmed);
+
+    if (isPhoneLike) {
+      effectiveUserMessage = `Phone number for worker lookup: ${trimmed}. Use lookup_workers with phone="${trimmed}" to resolve the pending shift draft.`;
+    } else if (isShortNonKeyword && !/\b(yes|ok|sure|go ahead|yep|proceed|confirm)\b/i.test(trimmed)) {
+      effectiveUserMessage = `Worker name attempt: "${trimmed}". Try lookup_workers with this name to resolve the pending shift draft.`;
+    }
+    if (effectiveUserMessage !== request.userMessage) {
+      console.log(`[Clawd] Draft resume: augmented message for worker resolution`);
+    }
+  }
+
   const messages: Array<{ role: "user" | "assistant"; content: string }> = [
     ...trimmedHistory.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-    { role: "user", content: request.userMessage },
+    { role: "user", content: effectiveUserMessage },
   ];
 
   let finalResponse = "";
@@ -537,11 +556,41 @@ async function orchestrateWithTools(
     const workerLookupSuccess = toolCalls.some(
       tc => tc.toolName === "lookup_workers" && tc.success && (tc.result as any)?.count > 0
     );
+    const workerLookupAttempted = toolCalls.some(tc => tc.toolName === "lookup_workers");
+    const workerLookupFailed = workerLookupAttempted && !workerLookupSuccess;
     const shiftCreated = toolCalls.some(
       tc => tc.toolName === "create_shift_request" && tc.success
     );
     if (shiftCreated || (workerLookupSuccess && pendingDraft)) {
       clearPendingDraft(request.userId);
+    }
+
+    // Auto-save pending draft when Claude found a workplace but couldn't resolve a worker.
+    // This enables the resume-via-short-reply workflow on subsequent messages.
+    if (workerLookupFailed && !shiftCreated && !pendingDraft) {
+      const workplaceTc = toolCalls.find(
+        tc => tc.toolName === "lookup_workplaces" && tc.success && (tc.result as any)?.count > 0
+      );
+      const workerTc = toolCalls.find(tc => tc.toolName === "lookup_workers");
+      const workerQuery = (workerTc?.input as any)?.query || (workerTc?.input as any)?.phone || null;
+
+      if (workplaceTc) {
+        const wpList: any[] = (workplaceTc.result as any)?.workplaces ?? [];
+        const workplace = wpList[0];
+        if (workplace) {
+          setPendingDraft(request.userId, {
+            type: "create_shift",
+            workerQuery,
+            workplaceId: String(workplace.id),
+            workplaceName: workplace.name,
+            date: null,
+            startTime: null,
+            endTime: null,
+            missingFields: ["worker"],
+          });
+          console.log(`[Clawd] Draft saved: worker="${workerQuery}" workplace="${workplace.name}" user=${request.userId}`);
+        }
+      }
     }
   } catch (err: any) {
     console.error("[Clawd] Tool-use orchestration failed:", err?.message);

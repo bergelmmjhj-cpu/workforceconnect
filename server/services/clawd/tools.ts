@@ -364,19 +364,72 @@ async function lookupWorkers(input: Record<string, unknown>) {
   return { workers: results, count: results.length };
 }
 
+// Common abbreviations to normalize before searching workplaces
+const WORKPLACE_ALIAS_PAIRS: [RegExp, string][] = [
+  [/\b4\s*points?\b/i, "four points"],
+  [/\bh\.?i\.?\b(?!\s*\w{4,})/i, "holiday inn"],
+  [/\bfour\s*pts?\b/i, "four points"],
+  [/\bmarriot\b/i, "marriott"],
+  [/\bshertaon\b/i, "sheraton"],
+  [/\bhilton\b/i, "hilton"],
+];
+
 async function lookupWorkplaces(input: Record<string, unknown>) {
-  const query = input.query as string | undefined;
+  const rawQuery = input.query as string | undefined;
 
-  const conditions = [eq(workplaces.isActive, true)];
-  if (query) conditions.push(ilike(workplaces.name, `%${query}%`));
+  const selectFields = {
+    id: workplaces.id,
+    name: workplaces.name,
+    addressLine1: workplaces.addressLine1,
+    city: workplaces.city,
+  };
 
-  const results = await db
-    .select({ id: workplaces.id, name: workplaces.name, addressLine1: workplaces.addressLine1, city: workplaces.city })
-    .from(workplaces)
-    .where(and(...conditions))
+  // No query — return all active workplaces
+  if (!rawQuery || !rawQuery.trim()) {
+    const results = await db.select(selectFields).from(workplaces)
+      .where(eq(workplaces.isActive, true)).limit(20);
+    return { workplaces: results, count: results.length };
+  }
+
+  // Normalize common alias abbreviations before searching
+  let normalizedQuery = rawQuery.trim();
+  for (const [pattern, replacement] of WORKPLACE_ALIAS_PAIRS) {
+    normalizedQuery = normalizedQuery.replace(pattern, replacement).trim();
+  }
+
+  // Primary search — normalized query
+  const primary = await db.select(selectFields).from(workplaces)
+    .where(and(eq(workplaces.isActive, true), ilike(workplaces.name, `%${normalizedQuery}%`)))
     .limit(20);
 
-  return { workplaces: results, count: results.length };
+  if (primary.length > 0) return { workplaces: primary, count: primary.length };
+
+  // Also try original query if normalization changed it
+  if (normalizedQuery.toLowerCase() !== rawQuery.toLowerCase().trim()) {
+    const original = await db.select(selectFields).from(workplaces)
+      .where(and(eq(workplaces.isActive, true), ilike(workplaces.name, `%${rawQuery.trim()}%`)))
+      .limit(20);
+    if (original.length > 0) return { workplaces: original, count: original.length };
+  }
+
+  // Token fallback: try each significant word in the query separately
+  const tokens = normalizedQuery.split(/\s+/).filter(t => t.length >= 3);
+  const seen = new Set<string>();
+  const tokenResults: (typeof primary[0])[] = [];
+  for (const token of tokens) {
+    const rows = await db.select(selectFields).from(workplaces)
+      .where(and(eq(workplaces.isActive, true), ilike(workplaces.name, `%${token}%`)))
+      .limit(20);
+    for (const row of rows) {
+      const key = String(row.id);
+      if (!seen.has(key)) {
+        seen.add(key);
+        tokenResults.push(row);
+      }
+    }
+  }
+
+  return { workplaces: tokenResults.slice(0, 20), count: tokenResults.length };
 }
 
 async function lookupShifts(input: Record<string, unknown>) {

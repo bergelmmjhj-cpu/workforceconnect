@@ -618,16 +618,47 @@ async function sendWorkerInternalMessage(input: Record<string, unknown>, callerU
 }
 
 async function toolCreateShiftRequest(input: Record<string, unknown>) {
+  const workplaceId = input.workplaceId as string;
+  const date = input.date as string;
+  const clientId = input.clientId as string;
+  const roleType = input.roleType as string;
+  const startTime = input.startTime as string;
+  const endTime = input.endTime as string;
+
   try {
+    // Duplicate detection: check if an open shift request already exists for same workplace, date, and time
+    const existing = await db
+      .select()
+      .from(shiftRequests)
+      .where(
+        and(
+          eq(shiftRequests.workplaceId, workplaceId),
+          eq(shiftRequests.date, date),
+          eq(shiftRequests.startTime, startTime),
+          eq(shiftRequests.status, "submitted")
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      const dup = existing[0];
+      return {
+        success: false,
+        duplicate: true,
+        error: `A shift request already exists for this workplace on ${date} at ${startTime} (Shift ID: ${dup.id}, status: ${dup.status}). To avoid duplicates, use the existing shift or choose a different time.`,
+        existingShiftId: dup.id,
+      };
+    }
+
     const [newRequest] = await db
       .insert(shiftRequests)
       .values({
-        clientId: input.clientId as string,
-        workplaceId: input.workplaceId as string,
-        roleType: input.roleType as string,
-        date: input.date as string,
-        startTime: input.startTime as string,
-        endTime: input.endTime as string,
+        clientId,
+        workplaceId,
+        roleType,
+        date,
+        startTime,
+        endTime,
         notes: input.notes as string | undefined,
         status: "submitted",
       })
@@ -635,7 +666,14 @@ async function toolCreateShiftRequest(input: Record<string, unknown>) {
 
     return { success: true, shiftRequestId: newRequest.id, shiftRequest: newRequest };
   } catch (err: any) {
-    return { success: false, error: err?.message };
+    const msg = err?.message || "Unknown database error";
+    if (msg.includes("foreign key")) {
+      return { success: false, error: "Invalid workplace or client ID — they may not exist in the system. Use lookup_workplaces to verify." };
+    }
+    if (msg.includes("not null") || msg.includes("violates")) {
+      return { success: false, error: `Missing required field: ${msg}. Ensure all fields (date, startTime, endTime, workplaceId, clientId, roleType) are provided.` };
+    }
+    return { success: false, error: `Shift creation failed: ${msg}` };
   }
 }
 

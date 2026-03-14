@@ -215,6 +215,7 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
   const elements: React.ReactNode[] = [];
   let inCodeBlock = false;
   let codeLines: string[] = [];
+  let tableLines: string[] = [];
   let key = 0;
 
   const flushCodeBlock = () => {
@@ -240,10 +241,55 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
     inCodeBlock = false;
   };
 
+  const flushTable = () => {
+    if (tableLines.length < 2) {
+      tableLines.forEach(tl => {
+        elements.push(
+          <Text key={key++} style={{ fontSize: 13, color: textColor, lineHeight: 20 }}>{tl}</Text>
+        );
+      });
+      tableLines = [];
+      return;
+    }
+    // Parse header + separator + rows
+    const parseCells = (row: string) =>
+      row.split("|").map(c => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+
+    const headerCells = parseCells(tableLines[0]);
+    const dataRows = tableLines.slice(2).map(parseCells); // skip separator line
+
+    elements.push(
+      <View key={key++} style={{ marginVertical: 6, borderRadius: 6, overflow: "hidden", borderWidth: 1, borderColor: "rgba(0,0,0,0.12)" }}>
+        {/* Header row */}
+        <View style={{ flexDirection: "row", backgroundColor: "rgba(0,0,0,0.08)" }}>
+          {headerCells.map((cell, ci) => (
+            <View key={ci} style={{ flex: 1, padding: 6, borderRightWidth: ci < headerCells.length - 1 ? 1 : 0, borderColor: "rgba(0,0,0,0.12)" }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: textColor }}>{cell}</Text>
+            </View>
+          ))}
+        </View>
+        {/* Data rows */}
+        {dataRows.map((row, ri) => (
+          <View key={ri} style={{ flexDirection: "row", backgroundColor: ri % 2 === 0 ? "transparent" : "rgba(0,0,0,0.04)" }}>
+            {headerCells.map((_, ci) => (
+              <View key={ci} style={{ flex: 1, padding: 6, borderRightWidth: ci < headerCells.length - 1 ? 1 : 0, borderTopWidth: 1, borderColor: "rgba(0,0,0,0.12)" }}>
+                <Text style={{ fontSize: 12, color: textColor }}>{row[ci] ?? ""}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+    tableLines = [];
+  };
+
+  const isTableLine = (line: string) => line.trim().startsWith("|") && line.trim().endsWith("|");
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     if (line.trim().startsWith("```")) {
+      if (tableLines.length > 0) flushTable();
       if (inCodeBlock) {
         flushCodeBlock();
       } else {
@@ -255,6 +301,14 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
     if (inCodeBlock) {
       codeLines.push(line);
       continue;
+    }
+
+    // Table detection
+    if (isTableLine(line)) {
+      tableLines.push(line);
+      continue;
+    } else if (tableLines.length > 0) {
+      flushTable();
     }
 
     if (line.trim() === "") {
@@ -306,6 +360,9 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
 
   if (inCodeBlock && codeLines.length > 0) {
     flushCodeBlock();
+  }
+  if (tableLines.length > 0) {
+    flushTable();
   }
 
   return <>{elements}</>;

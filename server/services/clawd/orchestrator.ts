@@ -25,6 +25,33 @@ const ASSISTANT_LABELS: Record<string, string> = {
   client_risk: "Client & Site Risk",
 };
 
+// ─── Worker Name Alias Memory (in-memory, per user, session-scoped) ──────────
+// Stores resolved mappings: compressedName → workerId, so repeat lookups skip API calls
+
+const workerAliases = new Map<string, Map<string, string>>(); // userId → { alias → workerId }
+const ALIAS_EXPIRY_MS = 4 * 60 * 60 * 1000; // 4 hours
+const workerAliasTimestamps = new Map<string, number>();
+
+export function setWorkerAlias(userId: string, alias: string, workerId: string) {
+  if (!workerAliases.has(userId)) workerAliases.set(userId, new Map());
+  workerAliases.get(userId)!.set(alias.toLowerCase().trim(), workerId);
+  workerAliasTimestamps.set(userId, Date.now());
+}
+
+export function getWorkerAliases(userId: string): Record<string, string> {
+  const ts = workerAliasTimestamps.get(userId) ?? 0;
+  if (Date.now() - ts > ALIAS_EXPIRY_MS) {
+    workerAliases.delete(userId);
+    workerAliasTimestamps.delete(userId);
+    return {};
+  }
+  const map = workerAliases.get(userId);
+  if (!map) return {};
+  const out: Record<string, string> = {};
+  map.forEach((v, k) => { out[k] = v; });
+  return out;
+}
+
 // ─── Pending Shift Draft State (in-memory, per user) ─────────────────────────
 
 const pendingDrafts = new Map<string, PendingShiftDraft>();
@@ -50,15 +77,23 @@ export function clearPendingDraft(userId: string) {
 
 // ─── Routing ─────────────────────────────────────────────────────────────────
 
+function isUselessOutput(output: AssistantOutput): boolean {
+  const emptyFindings = output.keyFindings.length === 0 && output.risks.length === 0 && output.recommendedActions.length === 0;
+  const fallbackSummary = output.summary === "Analysis unavailable." || output.summary === "" || output.confidenceScore <= 0.3;
+  return emptyFindings && fallbackSummary;
+}
+
 function formatAssistantOutputs(outputs: AssistantOutput[]): string {
-  if (outputs.length === 0) {
-    return "No data available at this time. Please try again later.";
+  const usefulOutputs = outputs.filter(o => !isUselessOutput(o));
+
+  if (usefulOutputs.length === 0) {
+    return "No significant issues found at this time.";
   }
 
   const parts: string[] = [];
 
-  if (outputs.length > 1) {
-    const allFindings = outputs.flatMap(o => o.keyFindings);
+  if (usefulOutputs.length > 1) {
+    const allFindings = usefulOutputs.flatMap(o => o.keyFindings);
     const criticalFindings = allFindings.filter(f => f.severity === "critical" || f.severity === "high");
     if (criticalFindings.length > 0) {
       parts.push("**Priority Alerts:**");
@@ -69,7 +104,7 @@ function formatAssistantOutputs(outputs: AssistantOutput[]): string {
     }
   }
 
-  for (const output of outputs) {
+  for (const output of usefulOutputs) {
     const label = ASSISTANT_LABELS[output.assistantType] || output.assistantType;
     parts.push(`**${label}**`);
     parts.push(output.summary);
@@ -174,9 +209,10 @@ const ACTION_INTENT_PATTERNS: RegExp[] = [
   /\b(book|set|put|schedule)\b.*(at|for)\b/i,
   /\bneed\s+\w+\s+at\s+\w/i,
   /\b(create|make|add)\s+a?\s*shift\b/i,
-  // Follow-up replies
+  // Follow-up replies and confirmations
   /^\s*try\s+\w+/i,
   /^\s*[\d\s\-\+\(\)]{7,15}\s*$/,             // phone number as standalone reply
+  /^\s*(yes|yep|yis|yeah|sure|ok|okay|go|proceed|do it|confirm|correct|sounds good|perfect|great)\s*[.!]?\s*$/i, // single-word confirmations
   /\bcan i have\b/i,
   /\bi need\s+\d*\s*(hk|housekeep|server|staff)/i,
   /\beven if (you can't|you cannot|there('s| is) no)\b/i,
@@ -221,6 +257,25 @@ const ACTIVE_ACTION_CONTEXT_SIGNALS = [
   "spelling variation",
   "which workplace",
   "Which workplace",
+  // Confirmation-seeking signals — AI asked user to confirm
+  "Shall I",
+  "shall I",
+  "go ahead and",
+  "Go ahead and",
+  "instead?",
+  "instead —",
+  "Shall I proceed",
+  "shall I proceed",
+  "Would you like me to",
+  "would you like me to",
+  "Do you want me to",
+  "do you want me to",
+  "Should I",
+  "should I",
+  "Confirm and I'll",
+  "confirm and I'll",
+  "Say yes",
+  "say yes",
 ];
 
 function detectActionIntent(userMessage: string): boolean {
@@ -275,7 +330,7 @@ function classifyByKeywords(userMessage: string): { assistants: AssistantType[];
 
 // ─── System Prompts ───────────────────────────────────────────────────────────
 
-function buildActionSystemPrompt(pendingDraft?: PendingShiftDraft | null): string {
+function buildActionSystemPrompt(pendingDraft?: PendingShiftDraft | null, aliases?: Record<string, string>): string {
   const now = new Date();
   const torontoDate = now.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
   const torontoTime = now.toLocaleTimeString("en-CA", { timeZone: "America/Toronto" });
@@ -300,13 +355,20 @@ The user's current message is likely providing the missing information:
 - If it looks like a phone number → use lookup_workers with phone=[message]
 - If it looks like a name or spelling variation → use lookup_workers with query=[message]
 - If it starts with "try" → strip "try" and search with the remainder
+- If the message is a short confirmation (yes, yep, ok, sure, go ahead) → proceed with the shift using the draft details
 - After resolving the worker → create the shift with the saved draft details
+` : "";
+
+  const aliasSection = aliases && Object.keys(aliases).length > 0 ? `
+## Known Worker Aliases (from earlier in this conversation)
+These names were already resolved — use the stored IDs directly without calling lookup_workers again:
+${Object.entries(aliases).map(([alias, id]) => `- "${alias}" → worker ID: ${id}`).join("\n")}
 ` : "";
 
   return `You are Clawd, the WFConnect AI Operations Assistant. You are integrated into a workforce management platform.
 
 You can BOTH analyze data AND take real actions. You have tools to look up information and perform operations.
-${pendingSection}
+${pendingSection}${aliasSection}
 ## Capabilities:
 - **Look up** workers, shifts, workplaces, shift requests, incoming SMS
 - **Send SMS** to workers for shift coverage requests
@@ -320,8 +382,10 @@ ${pendingSection}
 1. Always use lookup tools FIRST before taking action
 2. Sick calls / client requests → notify GM Lilee AND Discord every time
 3. Be specific: name names, numbers, times in your responses
-4. If a tool fails → log it and continue with remaining steps
+4. If a tool fails → tell the user exactly why (e.g. "SMS failed: insufficient credits") and suggest next steps
 5. Never stop mid-workflow without alerting — fail open
+6. Ask only ONE question at a time — never ask multiple things in the same message
+7. If a short message (yes/ok/sure/go ahead) follows a question you asked, treat it as confirmation
 
 ## Response Format for Staffing Operations:
 For ANY shift/worker/staffing task, use this structure:
@@ -329,14 +393,19 @@ For ANY shift/worker/staffing task, use this structure:
 **Understood:** [1 line — what the user wants]
 **Matched:** [what was found; what was NOT found]
 **Action taken:** [what was done]
-**Still needed:** [only if something is missing — omit if complete]
+**Still needed:** [only if something is missing — ONE question only]
+
+On successful shift creation, always end with:
+✓ **Shift created:** [Worker name] at [Workplace] on [Date], [StartTime]–[EndTime]
 
 Rules:
 - Short and operational — no long explanations
 - NEVER say "Analysis unavailable" for staffing tasks
-- If worker/workplace not found: say so clearly, ask for ONE specific thing
+- If worker/workplace not found: say so clearly, ask for ONE specific thing (name OR phone, not both)
 - If user's message is short and you're mid-task: treat as follow-up answer, not new request
 - When shift creation fails due to missing worker: save all other fields and ask ONLY for the worker
+- When user says "yes", "ok", "sure", "go ahead", "proceed" after you asked a question: treat as confirmation and execute
+- Store resolved worker names in memory so you don't re-lookup the same person
 
 ## Shift Creation Rules:
 
@@ -381,6 +450,16 @@ export async function orchestrate(request: OrchestrationRequest): Promise<Orches
   // 1. Current message matches action patterns, OR
   // 2. Conversation history shows we're mid-action, OR
   // 3. User has a pending shift draft
+  // Auto-clear stale draft if user explicitly cancels
+  if (hasDraft && draft) {
+    const msg = request.userMessage.toLowerCase();
+    const clearingKeywords = ["forget", "cancel", "start over", "never mind", "nevermind", "abort", "stop", "reset"];
+    const explicitClear = clearingKeywords.some(kw => msg.includes(kw));
+    if (explicitClear) {
+      clearPendingDraft(request.userId);
+    }
+  }
+
   const isActionMode =
     detectActionIntent(request.userMessage) ||
     detectConversationActionContext(request.conversationHistory) ||
@@ -409,12 +488,17 @@ async function orchestrateWithTools(
   pendingDraft?: PendingShiftDraft | null
 ): Promise<OrchestrationResponse> {
 
-  const systemPrompt = buildActionSystemPrompt(pendingDraft);
+  const aliases = getWorkerAliases(request.userId);
+  const systemPrompt = buildActionSystemPrompt(pendingDraft, aliases);
+
+  // Cap history at last 20 messages to stay within context limits
+  const MAX_HISTORY = 20;
+  const trimmedHistory = request.conversationHistory
+    .filter(m => m.role === "user" || m.role === "assistant")
+    .slice(-MAX_HISTORY);
 
   const messages: Array<{ role: "user" | "assistant"; content: string }> = [
-    ...request.conversationHistory
-      .filter(m => m.role === "user" || m.role === "assistant")
-      .map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+    ...trimmedHistory.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
     { role: "user", content: request.userMessage },
   ];
 
@@ -432,6 +516,22 @@ async function orchestrateWithTools(
 
     finalResponse = result.finalResponse;
     toolCalls = result.toolCalls;
+
+    // Record resolved worker aliases for this session
+    for (const tc of toolCalls) {
+      if (tc.toolName === "lookup_workers" && tc.success) {
+        const res = tc.result as any;
+        const workerList: any[] = res?.workers ?? res?.results ?? [];
+        if (workerList.length === 1) {
+          const w = workerList[0];
+          const query = (tc.input as any)?.query || (tc.input as any)?.phone;
+          if (query && w.id) {
+            setWorkerAlias(request.userId, query, String(w.id));
+            if (w.name) setWorkerAlias(request.userId, w.name, String(w.id));
+          }
+        }
+      }
+    }
 
     // If Claude successfully looked up a worker AND a workplace, clear the pending draft
     const workerLookupSuccess = toolCalls.some(

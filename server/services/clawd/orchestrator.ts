@@ -9,6 +9,63 @@ import { CLAWD_TOOLS, executeTool } from "./tools";
 import { db } from "../../db";
 import { clawdAssistantRuns } from "@shared/schema";
 
+// ─── Typed Tool Result Helpers ────────────────────────────────────────────────
+// Safely extract typed data from tool results (result: unknown) without as any.
+
+interface WorkerResult { id: string | number; name?: string; fullName?: string; }
+interface WorkplaceResult { id: string | number; name: string; addressLine1?: string; city?: string; }
+interface LookupWorkersOutput { workers: WorkerResult[]; count: number; }
+interface LookupWorkplacesOutput { workplaces: WorkplaceResult[]; count: number; }
+interface CreateShiftInput { date?: string; startTime?: string; endTime?: string; roleType?: string; }
+interface LookupInput { query?: string; phone?: string; }
+
+function asLookupWorkersResult(result: unknown): LookupWorkersOutput {
+  if (result && typeof result === "object") {
+    const r = result as Record<string, unknown>;
+    const workers = Array.isArray(r.workers) ? r.workers : (Array.isArray(r.results) ? r.results : []);
+    const count = typeof r.count === "number" ? r.count : workers.length;
+    return { workers: workers as WorkerResult[], count };
+  }
+  return { workers: [], count: 0 };
+}
+
+function asLookupWorkplacesResult(result: unknown): LookupWorkplacesOutput {
+  if (result && typeof result === "object") {
+    const r = result as Record<string, unknown>;
+    const workplaces = Array.isArray(r.workplaces) ? r.workplaces : [];
+    const count = typeof r.count === "number" ? r.count : workplaces.length;
+    return { workplaces: workplaces as WorkplaceResult[], count };
+  }
+  return { workplaces: [], count: 0 };
+}
+
+function asLookupInput(input: unknown): LookupInput {
+  if (input && typeof input === "object") {
+    const i = input as Record<string, unknown>;
+    return { query: typeof i.query === "string" ? i.query : undefined, phone: typeof i.phone === "string" ? i.phone : undefined };
+  }
+  return {};
+}
+
+function asCreateShiftInput(input: unknown): CreateShiftInput {
+  if (input && typeof input === "object") {
+    const i = input as Record<string, unknown>;
+    return {
+      date: typeof i.date === "string" ? i.date : undefined,
+      startTime: typeof i.startTime === "string" ? i.startTime : undefined,
+      endTime: typeof i.endTime === "string" ? i.endTime : undefined,
+      roleType: typeof i.roleType === "string" ? i.roleType : undefined,
+    };
+  }
+  return {};
+}
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) return String((err as Record<string, unknown>).message);
+  return "Unknown error";
+}
+
 const ASSISTANT_MAP: Record<string, (q: string, userId?: string, msgId?: string) => Promise<AssistantOutput>> = {
   staffing: analyzeStaffing,
   attendance: analyzeAttendance,
@@ -68,6 +125,9 @@ export function getPendingDraft(userId: string): PendingShiftDraft | null {
     pendingDrafts.delete(userId);
     return null;
   }
+  // Refresh lastAttempt to implement inactivity-based expiry, not creation-time expiry.
+  // The draft expires 30 min after the LAST relevant interaction, not after creation.
+  draft.lastAttempt = Date.now();
   return draft;
 }
 
@@ -213,7 +273,7 @@ const ACTION_INTENT_PATTERNS: RegExp[] = [
   /^\s*try\s+\w+/i,
   /^\s*[\d\s\-\+\(\)]{7,15}\s*$/,             // phone number as standalone reply
   /^\s*(yes|yep|yis|yeah|sure|ok|okay|go|proceed|do it|confirm|correct|sounds good|perfect|great)\s*[.!]?\s*$/i, // single-word confirmations
-  /\bcan i have\b/i,
+  /\bcan (i|you) have\b/i,
   /\bi need\s+\d*\s*(hk|housekeep|server|staff)/i,
   /\beven if (you can't|you cannot|there('s| is) no)\b/i,
   /\bapply (same|similar) logic\b/i,
@@ -542,14 +602,15 @@ async function orchestrateWithTools(
     // Record resolved worker aliases for this session
     for (const tc of toolCalls) {
       if (tc.toolName === "lookup_workers" && tc.success) {
-        const res = tc.result as any;
-        const workerList: any[] = res?.workers ?? res?.results ?? [];
-        if (workerList.length === 1) {
-          const w = workerList[0];
-          const query = (tc.input as any)?.query || (tc.input as any)?.phone;
+        const { workers } = asLookupWorkersResult(tc.result);
+        if (workers.length === 1) {
+          const w = workers[0];
+          const inp = asLookupInput(tc.input);
+          const query = inp.query ?? inp.phone ?? null;
           if (query && w.id) {
             setWorkerAlias(request.userId, query, String(w.id));
-            if (w.name) setWorkerAlias(request.userId, w.name, String(w.id));
+            const displayName = w.fullName ?? w.name;
+            if (displayName) setWorkerAlias(request.userId, displayName, String(w.id));
           }
         }
       }
@@ -557,7 +618,7 @@ async function orchestrateWithTools(
 
     // Determine outcome of tool calls
     const workerLookupSuccess = toolCalls.some(
-      tc => tc.toolName === "lookup_workers" && tc.success && (tc.result as any)?.count > 0
+      tc => tc.toolName === "lookup_workers" && tc.success && asLookupWorkersResult(tc.result).count > 0
     );
     const workerLookupAttempted = toolCalls.some(tc => tc.toolName === "lookup_workers");
     const workerLookupFailed = workerLookupAttempted && !workerLookupSuccess;
@@ -575,42 +636,40 @@ async function orchestrateWithTools(
     // Extract as many known shift fields as possible from attempted tool call inputs.
     if (workerLookupFailed && !shiftCreated && !pendingDraft) {
       const workplaceTc = toolCalls.find(
-        tc => tc.toolName === "lookup_workplaces" && tc.success && (tc.result as any)?.count > 0
+        tc => tc.toolName === "lookup_workplaces" && tc.success && asLookupWorkplacesResult(tc.result).count > 0
       );
       const workerTc = toolCalls.find(tc => tc.toolName === "lookup_workers");
       const shiftTc = toolCalls.find(tc => tc.toolName === "create_shift_request");
 
-      const workerQuery = (workerTc?.input as any)?.query || (workerTc?.input as any)?.phone || null;
+      const workerInp = workerTc ? asLookupInput(workerTc.input) : {};
+      const workerQuery = workerInp.query ?? workerInp.phone ?? null;
 
       if (workplaceTc) {
-        const wpList: any[] = (workplaceTc.result as any)?.workplaces ?? [];
-        const workplace = wpList[0];
+        const { workplaces } = asLookupWorkplacesResult(workplaceTc.result);
+        const workplace = workplaces[0];
         if (workplace) {
           // Extract date/time from attempted create_shift_request call if present
-          const shiftInput = shiftTc?.input as any;
-          const savedDate = shiftInput?.date ?? null;
-          const savedStart = shiftInput?.startTime ?? null;
-          const savedEnd = shiftInput?.endTime ?? null;
-          const savedRole = shiftInput?.roleType ?? null;
+          const shiftInp = shiftTc ? asCreateShiftInput(shiftTc.input) : {};
 
           setPendingDraft(request.userId, {
             type: "create_shift",
             workerQuery,
             workplaceId: String(workplace.id),
             workplaceName: workplace.name,
-            date: savedDate,
-            startTime: savedStart,
-            endTime: savedEnd,
-            roleType: savedRole ?? null,
+            date: shiftInp.date ?? null,
+            startTime: shiftInp.startTime ?? null,
+            endTime: shiftInp.endTime ?? null,
+            roleType: shiftInp.roleType ?? null,
             missingFields: ["worker"],
           });
-          console.log(`[Clawd] Draft saved: worker="${workerQuery}" workplace="${workplace.name}" date="${savedDate}" time="${savedStart}-${savedEnd}" user=${request.userId}`);
+          console.log(`[Clawd] Draft saved: worker="${workerQuery}" workplace="${workplace.name}" date="${shiftInp.date}" time="${shiftInp.startTime}-${shiftInp.endTime}" user=${request.userId}`);
         }
       }
     }
-  } catch (err: any) {
-    console.error("[Clawd] Tool-use orchestration failed:", err?.message);
-    finalResponse = `Something went wrong while handling your request: ${err?.message || "Unknown error"}. Please try again.`;
+  } catch (err: unknown) {
+    const msg = toErrorMessage(err);
+    console.error("[Clawd] Tool-use orchestration failed:", msg);
+    finalResponse = `Something went wrong while handling your request: ${msg}. Please try again.`;
   }
 
   const totalDurationMs = Date.now() - startTime;

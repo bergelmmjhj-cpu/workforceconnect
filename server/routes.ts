@@ -8435,11 +8435,13 @@ Respond with exactly:
           `msg="${messageBody.slice(0, 80)}"`
         );
 
-        // Update SMS log with classification
+        // Update SMS log with classification — target specific message by openphoneMessageId
         try {
-          await db.update(smsLogs)
-            .set({ classification: dbClassification })
-            .where(and(eq(smsLogs.phoneNumber, senderPhone), eq(smsLogs.direction, "inbound")));
+          if (openphoneMessageId) {
+            await db.update(smsLogs)
+              .set({ classification: dbClassification })
+              .where(eq(smsLogs.openphoneMessageId, openphoneMessageId));
+          }
         } catch (_e) { /* non-critical */ }
 
         // ── Automation Rules (fail-open) ──────────────────────────────────────

@@ -719,6 +719,14 @@ function configureExpoAndLanding(app: express.Application) {
     return res.status(200).send(applyTemplate);
   });
 
+  // /contractor-apply — unconditionally serves the full worker registration form
+  // (no hostname detection — works reliably regardless of how the proxy sets Host headers)
+  app.get("/contractor-apply", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return res.status(200).send(applyTemplate);
+  });
+
   // Serve Payment Information Page
   const paymentInfoPath = path.resolve(process.cwd(), "server", "templates", "payment-info.html");
   const paymentInfoTemplate = fs.readFileSync(paymentInfoPath, "utf-8");

@@ -148,6 +148,12 @@ export default function AppointmentsScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/appointments"] }),
   });
 
+  const sendSmsMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/appointments/${id}/send-sms`, {});
+    },
+  });
+
   const handleSave = useCallback(() => {
     if (!form.companyName.trim() || !form.contactName.trim()) return;
     createMutation.mutate(form);
@@ -284,6 +290,17 @@ export default function AppointmentsScreen() {
                 <Feather name="edit-2" size={14} color="#fff" />
                 <ThemedText style={styles.actionBtnText}>Add Notes</ThemedText>
               </Pressable>
+              {item.contactPhone ? (
+                <Pressable
+                  testID={`button-sms-${item.id}`}
+                  onPress={() => sendSmsMutation.mutate(item.id)}
+                  disabled={sendSmsMutation.isPending}
+                  style={[styles.actionBtn, { backgroundColor: "#6366F1", opacity: sendSmsMutation.isPending ? 0.6 : 1 }]}
+                >
+                  <Feather name="message-square" size={14} color="#fff" />
+                  <ThemedText style={styles.actionBtnText}>Send SMS</ThemedText>
+                </Pressable>
+              ) : null}
               <Pressable
                 testID={`button-cancel-${item.id}`}
                 onPress={() => deleteMutation.mutate(item.id)}

@@ -2612,10 +2612,67 @@ Respond with exactly:
       }
 
       const [created] = await db.insert(appointments).values(parsed.data).returning();
+
+      // Send SMS to contact phone
+      if (created.contactPhone) {
+        const apptDate = new Date(created.appointmentDate);
+        const dateLabel = apptDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+        const timeLabel = apptDate.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" });
+        const contactMsg = `Hi ${created.contactName}, this is WFConnect confirming your appointment on ${dateLabel} at ${timeLabel}. Location: ${created.location || "TBD"}. Questions? Reply to this message.`;
+        try {
+          const cRes = await sendSMS(created.contactPhone, contactMsg);
+          await logSMS({ phoneNumber: created.contactPhone, direction: "outbound", message: contactMsg, status: cRes.success ? "sent" : "failed" });
+        } catch (smsErr) {
+          console.error("[APPOINTMENTS] Contact SMS failed:", smsErr);
+        }
+      }
+
+      // Send SMS to assigned user
+      if (created.assignedUserId) {
+        const [assignedUser] = await db.select({ phone: users.phone, fullName: users.fullName }).from(users).where(eq(users.id, created.assignedUserId)).limit(1);
+        if (assignedUser?.phone) {
+          const apptDate = new Date(created.appointmentDate);
+          const dateLabel = apptDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+          const timeLabel = apptDate.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" });
+          const assignMsg = `Appointment assigned to you: ${created.title || created.companyName} on ${dateLabel} at ${timeLabel}. Location: ${created.location || "TBD"}.`;
+          try {
+            const aRes = await sendSMS(assignedUser.phone, assignMsg);
+            await logSMS({ phoneNumber: assignedUser.phone, direction: "outbound", message: assignMsg, status: aRes.success ? "sent" : "failed" });
+          } catch (smsErr) {
+            console.error("[APPOINTMENTS] Assignee SMS failed:", smsErr);
+          }
+        }
+      }
+
       res.status(201).json(created);
     } catch (error: any) {
       console.error("[APPOINTMENTS] Error creating:", error);
       res.status(500).json({ error: "Failed to create appointment" });
+    }
+  });
+
+  app.post("/api/appointments/:id/send-sms", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const [appt] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
+      if (!appt) {
+        res.status(404).json({ error: "Appointment not found" });
+        return;
+      }
+      if (!appt.contactPhone) {
+        res.status(400).json({ error: "No contact phone on this appointment" });
+        return;
+      }
+      const apptDate = new Date(appt.appointmentDate);
+      const dateLabel = apptDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+      const timeLabel = apptDate.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" });
+      const msg = `Hi ${appt.contactName}, this is WFConnect confirming your appointment on ${dateLabel} at ${timeLabel}. Location: ${appt.location || "TBD"}. Questions? Reply to this message.`;
+      const smsRes = await sendSMS(appt.contactPhone, msg);
+      await logSMS({ phoneNumber: appt.contactPhone, direction: "outbound", message: msg, status: smsRes.success ? "sent" : "failed" });
+      res.json({ success: true, sent: smsRes.success });
+    } catch (error: any) {
+      console.error("[APPOINTMENTS] send-sms error:", error);
+      res.status(500).json({ error: "Failed to send SMS" });
     }
   });
 

@@ -531,7 +531,13 @@ async function findAvailableWorkers(input: Record<string, unknown>) {
     .where(and(eq(workplaceAssignments.workplaceId, workplaceId), eq(workplaceAssignments.status, "active")));
 
   const assignedIds = assignedWorkers.map((a) => a.workerUserId);
-  if (assignedIds.length === 0) return { availableWorkers: [], count: 0 };
+  if (assignedIds.length === 0) {
+    return {
+      availableWorkers: [],
+      count: 0,
+      message: `No workers are assigned to workplace ${workplaceId}. Use lookup_workplaces to verify the workplace ID, or check workplace assignments in the admin panel.`,
+    };
+  }
 
   // Get workers already scheduled on that date at any workplace
   const busyWorkerRows = await db
@@ -542,7 +548,13 @@ async function findAvailableWorkers(input: Record<string, unknown>) {
   const busyIds = new Set(busyWorkerRows.map((r) => r.workerUserId).filter(Boolean));
   const availableIds = assignedIds.filter((id) => !busyIds.has(id));
 
-  if (availableIds.length === 0) return { availableWorkers: [], count: 0 };
+  if (availableIds.length === 0) {
+    return {
+      availableWorkers: [],
+      count: 0,
+      message: `All ${assignedIds.length} worker(s) assigned to this workplace are already scheduled on ${date}. Consider checking other dates or sending a shift offer blast to workers not assigned here.`,
+    };
+  }
 
   const workers = await db
     .select({ id: users.id, fullName: users.fullName, phone: users.phone, workerRoles: users.workerRoles, isActive: users.isActive })

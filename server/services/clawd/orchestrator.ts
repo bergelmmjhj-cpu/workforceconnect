@@ -513,7 +513,26 @@ export async function orchestrate(request: OrchestrationRequest): Promise<Orches
     const explicitClear = clearingKeywords.some(kw => msg.includes(kw));
     if (explicitClear) {
       clearPendingDraft(request.userId);
-      activeDraft = null; // Reflect cleared state immediately so routing below is correct
+      activeDraft = null;
+    }
+  }
+
+  // Auto-clear draft on genuine topic change: if the only reason for action mode is
+  // a pending draft (no action intent in current message, no active action context),
+  // and the new message is clearly a multi-word analysis/reporting query, clear the
+  // draft and let the analysis path answer the question instead.
+  if (
+    activeDraft &&
+    !detectActionIntent(request.userMessage) &&
+    !detectConversationActionContext(request.conversationHistory)
+  ) {
+    const wordCount = request.userMessage.trim().split(/\s+/).length;
+    const isAnalysisQuery = wordCount >= 5 &&
+      /\b(payroll|attendance|recruitment|report|analysis|overview|briefing|status|stat|issue|problem|risk|how (are|is)|what('s| is)|give me|show me)\b/i.test(request.userMessage);
+    if (isAnalysisQuery) {
+      clearPendingDraft(request.userId);
+      activeDraft = null;
+      console.log(`[Clawd] Draft auto-cleared: topic change detected ("${request.userMessage.slice(0, 50)}")`);
     }
   }
 
@@ -522,7 +541,7 @@ export async function orchestrate(request: OrchestrationRequest): Promise<Orches
   // Route to action mode if:
   // 1. Current message matches action patterns, OR
   // 2. Conversation history shows we're mid-action, OR
-  // 3. User has a pending shift draft (after cancel check above)
+  // 3. User has a pending shift draft (after cancel/topic-change check above)
   const isActionMode =
     detectActionIntent(request.userMessage) ||
     detectConversationActionContext(request.conversationHistory) ||

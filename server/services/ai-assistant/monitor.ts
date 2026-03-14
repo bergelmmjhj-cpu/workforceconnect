@@ -411,6 +411,9 @@ async function checkDailyDeploymentReport(): Promise<void> {
     const alreadySent = await isAlreadyAlerted("gm_report", dateStr, "daily");
     if (alreadySent) return;
 
+    // Reserve the slot first to prevent double-send on backend restart
+    await markAlerted("gm_report", dateStr, "daily");
+
     const todayShifts = await db
       .select({
         id: shifts.id,
@@ -421,22 +424,17 @@ async function checkDailyDeploymentReport(): Promise<void> {
       .where(
         and(
           sql`${shifts.date}::text = ${dateStr}`,
-          inArray(shifts.status, ["completed", "in_progress"]),
+          inArray(shifts.status, ["scheduled", "in_progress", "completed"]),
           isNotNull(shifts.workerUserId)
         )
       );
 
-    const todayStart = new Date(dateStr + "T00:00:00");
-    const todayEnd = new Date(dateStr + "T23:59:59");
-
+    // Use AT TIME ZONE to filter by Toronto calendar date, not UTC midnight
     const titoResults = await db
       .select({ id: titoLogs.id })
       .from(titoLogs)
       .where(
-        and(
-          gte(titoLogs.timeIn, todayStart),
-          lte(titoLogs.timeIn, todayEnd)
-        )
+        sql`DATE(${titoLogs.timeIn} AT TIME ZONE 'America/Toronto') = ${dateStr}::date`
       );
 
     const deploymentCount = titoResults.length;
@@ -465,7 +463,6 @@ async function checkDailyDeploymentReport(): Promise<void> {
     await sendSMS(GM_PHONE, smsMsg);
     await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: smsMsg, status: "sent" });
 
-    await markAlerted("gm_report", dateStr, "daily");
     await logAction({
       monitorType: "gm_daily_report",
       signalSummary: `Daily report sent: ${deploymentCount} deployed, ${shiftCount} shifts`,
@@ -492,6 +489,9 @@ async function checkWeeklyReport(): Promise<void> {
     const weekId = `week-${getISOWeek(dateStr)}`;
     const alreadySent = await isAlreadyAlerted("gm_report", weekId, "weekly");
     if (alreadySent) return;
+
+    // Reserve the slot first to prevent double-send on backend restart
+    await markAlerted("gm_report", weekId, "weekly");
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -561,7 +561,6 @@ async function checkWeeklyReport(): Promise<void> {
     await sendSMS(GM_PHONE, smsMsg);
     await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: smsMsg, status: "sent" });
 
-    await markAlerted("gm_report", weekId, "weekly");
     await logAction({
       monitorType: "gm_weekly_report",
       signalSummary: `Weekly report sent: ${weekShifts.length} deployments, ${uniqueWorkers} workers, ${Math.round(totalHours)}h`,

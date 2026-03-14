@@ -258,12 +258,16 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
     const headerCells = parseCells(tableLines[0]);
     const dataRows = tableLines.slice(2).map(parseCells); // skip separator line
 
-    elements.push(
-      <View key={key++} style={{ marginVertical: 6, borderRadius: 6, overflow: "hidden", borderWidth: 1, borderColor: "rgba(0,0,0,0.12)" }}>
+    // Use a minimum cell width and wrap in horizontal ScrollView for wide tables
+    const isWide = headerCells.length >= 4;
+    const cellMinWidth = isWide ? 90 : 0;
+
+    const tableContent = (
+      <View style={{ borderRadius: 6, overflow: "hidden", borderWidth: 1, borderColor: "rgba(0,0,0,0.12)", minWidth: isWide ? headerCells.length * cellMinWidth : undefined }}>
         {/* Header row */}
-        <View style={{ flexDirection: "row", backgroundColor: "rgba(0,0,0,0.08)" }}>
+        <View style={{ flexDirection: "row", backgroundColor: "rgba(0,0,0,0.10)" }}>
           {headerCells.map((cell, ci) => (
-            <View key={ci} style={{ flex: 1, padding: 6, borderRightWidth: ci < headerCells.length - 1 ? 1 : 0, borderColor: "rgba(0,0,0,0.12)" }}>
+            <View key={ci} style={{ flex: isWide ? undefined : 1, width: isWide ? cellMinWidth : undefined, padding: 7, borderRightWidth: ci < headerCells.length - 1 ? 1 : 0, borderColor: "rgba(0,0,0,0.12)" }}>
               <Text style={{ fontSize: 12, fontWeight: "700", color: textColor }}>{cell}</Text>
             </View>
           ))}
@@ -272,13 +276,25 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
         {dataRows.map((row, ri) => (
           <View key={ri} style={{ flexDirection: "row", backgroundColor: ri % 2 === 0 ? "transparent" : "rgba(0,0,0,0.04)" }}>
             {headerCells.map((_, ci) => (
-              <View key={ci} style={{ flex: 1, padding: 6, borderRightWidth: ci < headerCells.length - 1 ? 1 : 0, borderTopWidth: 1, borderColor: "rgba(0,0,0,0.12)" }}>
-                <Text style={{ fontSize: 12, color: textColor }}>{row[ci] ?? ""}</Text>
+              <View key={ci} style={{ flex: isWide ? undefined : 1, width: isWide ? cellMinWidth : undefined, padding: 7, borderRightWidth: ci < headerCells.length - 1 ? 1 : 0, borderTopWidth: 1, borderColor: "rgba(0,0,0,0.12)" }}>
+                <Text selectable style={{ fontSize: 12, color: textColor }}>{row[ci] ?? ""}</Text>
               </View>
             ))}
           </View>
         ))}
       </View>
+    );
+
+    elements.push(
+      isWide ? (
+        <ScrollView key={key++} horizontal showsHorizontalScrollIndicator={true} style={{ marginVertical: 6 }}>
+          {tableContent}
+        </ScrollView>
+      ) : (
+        <View key={key++} style={{ marginVertical: 6 }}>
+          {tableContent}
+        </View>
+      )
     );
     tableLines = [];
   };

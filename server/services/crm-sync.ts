@@ -211,12 +211,12 @@ export async function syncWorkplaces(dryRun = false, _skipLock = false): Promise
     }
 
     await completeSyncLog(logId, "completed", result);
-    console.log(`[CRM Sync] Workplaces: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
+    console.log(`[CRM-SYNC] Workplaces: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
   } catch (err: any) {
     result.errors++;
     result.errorMessages.push(`Fatal: ${err.message}`);
     await completeSyncLog(logId, "failed", result);
-    console.error("[CRM Sync] Workplaces sync failed:", err.message);
+    console.error("[CRM-SYNC] Workplaces sync failed:", err.message);
   } finally {
     if (!_skipLock) releaseLock();
   }
@@ -367,19 +367,19 @@ export async function syncConfirmedShifts(dryRun = false, _skipLock = false): Pr
             .where(eq(shifts.id, stale.id));
         }
         result.updated++;
-        console.log(`[CRM Sync] Cancelled stale shift: "${stale.title}" (id=${stale.id})${dryRun ? " (dry run)" : ""}`);
+        console.log(`[CRM-SYNC] Cancelled stale shift: "${stale.title}" (id=${stale.id})${dryRun ? " (dry run)" : ""}`);
       }
     } catch (err: any) {
       result.errorMessages.push(`Stale shift cleanup: ${err.message}`);
     }
 
     await completeSyncLog(logId, "completed", result);
-    console.log(`[CRM Sync] Shifts: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
+    console.log(`[CRM-SYNC] Shifts: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
   } catch (err: any) {
     result.errors++;
     result.errorMessages.push(`Fatal: ${err.message}`);
     await completeSyncLog(logId, "failed", result);
-    console.error("[CRM Sync] Shifts sync failed:", err.message);
+    console.error("[CRM-SYNC] Shifts sync failed:", err.message);
   } finally {
     if (!_skipLock) releaseLock();
   }
@@ -508,12 +508,12 @@ export async function syncHotelRequests(dryRun = false, _skipLock = false): Prom
     }
 
     await completeSyncLog(logId, "completed", result);
-    console.log(`[CRM Sync] Hotel requests: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
+    console.log(`[CRM-SYNC] Hotel requests: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
   } catch (err: any) {
     result.errors++;
     result.errorMessages.push(`Fatal: ${err.message}`);
     await completeSyncLog(logId, "failed", result);
-    console.error("[CRM Sync] Hotel requests sync failed:", err.message);
+    console.error("[CRM-SYNC] Hotel requests sync failed:", err.message);
   } finally {
     if (!_skipLock) releaseLock();
   }

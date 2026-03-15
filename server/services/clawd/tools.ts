@@ -1014,6 +1014,25 @@ async function toolCreateWorkplace(input: Record<string, unknown>) {
       };
     }
 
+    if (crmClient.isConfigured()) {
+      try {
+        const crmWorkplaces = await crmClient.getWorkplaces();
+        const normalizedName = name.trim().toLowerCase().replace(/\s+/g, " ");
+        const crmMatch = crmWorkplaces.find(
+          w => w.name.trim().toLowerCase().replace(/\s+/g, " ") === normalizedName
+        );
+        if (crmMatch) {
+          return {
+            success: false,
+            duplicate: true,
+            error: `A workplace named "${crmMatch.name}" already exists in the CRM (CRM ID: ${crmMatch.id}). It may not be in the local DB yet — run /api/admin/workplaces/sync-to-crm or wait for the next sync cycle.`,
+          };
+        }
+      } catch (crmErr: any) {
+        console.warn(`[CRM-SYNC] CRM duplicate check failed (proceeding): ${crmErr?.message}`);
+      }
+    }
+
     const geo = await geocodeAddress(address, city, province, postalCode, country);
 
     const [newWorkplace] = await db.insert(workplaces).values({
@@ -1127,24 +1146,25 @@ async function toolUpdateWorkplace(input: Record<string, unknown>) {
     let crmSyncNote = "";
     if (updated.crmExternalId && crmClient.isConfigured()) {
       try {
-        const crmUpdates: Record<string, unknown> = {};
-        if (input.name) crmUpdates.name = input.name;
+        const crmUpdates: crmClient.UpdateCrmWorkplaceInput = {};
+        if (input.name) crmUpdates.name = input.name as string;
         if (addressChanged) {
           const fullAddress = [
             updated.addressLine1, updated.city, updated.province, updated.postalCode,
           ].filter(Boolean).join(", ");
           crmUpdates.address = fullAddress;
-          crmUpdates.location = updated.city;
-          crmUpdates.province = updated.province;
+          crmUpdates.location = updated.city || undefined;
+          crmUpdates.province = updated.province || undefined;
         }
         if (geocoded) {
-          crmUpdates.latitude = updated.latitude;
-          crmUpdates.longitude = updated.longitude;
+          crmUpdates.latitude = updated.latitude ? Number(updated.latitude) : undefined;
+          crmUpdates.longitude = updated.longitude ? Number(updated.longitude) : undefined;
         }
-        if (input.isActive !== undefined) crmUpdates.isActive = input.isActive;
+        if (input.isActive !== undefined) crmUpdates.isActive = input.isActive as boolean;
 
-        if (Object.keys(crmUpdates).length > 0) {
-          await crmClient.updateCrmWorkplace(updated.crmExternalId, crmUpdates as any);
+        const hasUpdates = Object.values(crmUpdates).some(v => v !== undefined);
+        if (hasUpdates) {
+          await crmClient.updateCrmWorkplace(updated.crmExternalId, crmUpdates);
           crmSyncNote = " CRM record updated.";
           console.log(`[CRM-SYNC] Workplace "${updated.name}" synced to CRM (${updated.crmExternalId})`);
         }

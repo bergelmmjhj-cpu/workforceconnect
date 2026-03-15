@@ -119,7 +119,7 @@ async function handleAssignWorker(ctx: DiscordActionContext): Promise<ActionResu
     const smsBody = `Hi ${worker.fullName.split(" ")[0]}, you've been assigned to cover a shift. Please check WFConnect for details or reply to confirm. — WFConnect`;
     try {
       await sendSMS(worker.phone, smsBody);
-      await logSMS(worker.phone, smsBody, "outbound", worker.id, "clawd_discord_assign");
+      await logSMS({ phoneNumber: worker.phone, message: smsBody, direction: "outbound", workerId: String(worker.id), status: "sent" });
       actions.push("SMS notification sent");
     } catch (smsErr: any) {
       console.error("[DISCORD ACTIONS] SMS send failed:", smsErr?.message);
@@ -212,7 +212,7 @@ async function handleResendSms(ctx: DiscordActionContext): Promise<ActionResult>
   const body = `WFConnect Update: Your message regarding "${ctx.alert.title}" has been received and is being handled. We'll follow up shortly.`;
   try {
     await sendSMS(phone, body);
-    await logSMS(phone, body, "outbound", ctx.alert.sourceWorkerId || undefined, "clawd_discord_resend");
+    await logSMS({ phoneNumber: phone, message: body, direction: "outbound", workerId: ctx.alert.sourceWorkerId || undefined, status: "sent" });
     return { success: true, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Action:** SMS sent to ${phone}\n**Result:** Acknowledgment message sent\n**Still needed:** Await reply from recipient` };
   } catch (err: any) {
     return { success: false, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Blocked:** SMS send failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Check OpenPhone configuration` };
@@ -225,7 +225,7 @@ async function handleNotifyGmLilee(ctx: DiscordActionContext): Promise<ActionRes
 
   try {
     await sendSMS(GM_LILEE_PHONE, smsBody);
-    await logSMS(GM_LILEE_PHONE, smsBody, "outbound", undefined, "clawd_discord_lilee");
+    await logSMS({ phoneNumber: GM_LILEE_PHONE, message: smsBody, direction: "outbound", status: "sent" });
     return { success: true, message: `**Understood:** Notify GM Lilee\n**Action:** SMS sent to GM Lilee (+14166028038)\n**Result:** Alert forwarded successfully\n**Still needed:** Await GM Lilee response` };
   } catch (err: any) {
     return { success: false, message: `**Understood:** Notify GM Lilee\n**Blocked:** SMS failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Check OpenPhone configuration` };
@@ -285,7 +285,7 @@ async function handleNotifyClient(ctx: DiscordActionContext): Promise<ActionResu
       try {
         const smsBody = `[WFConnect] ${messageBody}`;
         await sendSMS(client.phone, smsBody);
-        await logSMS(client.phone, smsBody, "outbound", clientId, "clawd_discord_notify_client");
+        await logSMS({ phoneNumber: client.phone, message: smsBody, direction: "outbound", workerId: String(clientId), status: "sent" });
         return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal messaging failed, sent SMS to ${client.fullName} (${client.phone}) as fallback\n**Result:** Client has been notified via SMS\n**Still needed:** Await client response` };
       } catch {}
     }
@@ -330,7 +330,7 @@ async function handleEscalate(ctx: DiscordActionContext): Promise<ActionResult> 
 
   try {
     await sendSMS(GM_LILEE_PHONE, `[WFConnect URGENT] ${alertInfo}`);
-    await logSMS(GM_LILEE_PHONE, alertInfo, "outbound", undefined, "clawd_discord_escalation");
+    await logSMS({ phoneNumber: GM_LILEE_PHONE, message: alertInfo, direction: "outbound", status: "sent" });
   } catch {}
 
   await sendDiscordNotification({

@@ -396,7 +396,7 @@ function setOnlinePresence(client: Client) {
   try {
     client.user?.setPresence({
       status: PresenceUpdateStatus.Online,
-      activities: [{ name: "WFConnect Ops", type: 3 }],
+      activities: [],
     });
     console.log("[DISCORD BOT] Presence set to online");
   } catch (err: any) {
@@ -412,7 +412,7 @@ export async function startDiscordBot(): Promise<boolean> {
   }
 
   const MAX_RETRIES = 3;
-  const RETRY_DELAY_MS = 5000;
+  const BASE_DELAY_MS = 5000;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -457,10 +457,11 @@ export async function startDiscordBot(): Promise<boolean> {
       console.log("[DISCORD BOT] Bot started successfully");
       return true;
     } catch (err: any) {
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
       console.error(`[DISCORD BOT] Login attempt ${attempt}/${MAX_RETRIES} failed:`, err?.message);
       if (attempt < MAX_RETRIES) {
-        console.log(`[DISCORD BOT] Retrying in ${RETRY_DELAY_MS / 1000}s...`);
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        console.log(`[DISCORD BOT] Retrying in ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
       }
     }
   }

@@ -231,9 +231,10 @@ async function getAuthorizedUserIds(): Promise<Set<string>> {
 async function isOpenToAll(): Promise<boolean> {
   try {
     const [row] = await db.select().from(appConfig).where(eq(appConfig.key, "discord_open_to_all"));
-    return row?.value === "true";
+    if (!row) return true;
+    return row.value !== "false";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -398,12 +399,22 @@ async function handleMessage(message: Message) {
       return;
     }
 
+    // Short-circuit simple greetings — no API call needed
+    const simpleGreetings = /^(hi|hey|hello|yo|sup|test|ping|hiya|heya|howdy|what'?s up)[\s!?.]*$/i;
+    if (simpleGreetings.test(cleanContent)) {
+      const greeting = `Hey ${message.author.displayName || message.author.username}! I'm Oscar, WFConnect's AI assistant. Ask me anything — shifts, workers, availability, SMS alerts, or daily reports. What can I do for you?`;
+      await message.reply(greeting);
+      await logAction(null, message.author.id, message.author.username, "mention_greeting", content, "mention", greeting, true);
+      return;
+    }
+
     try {
       console.log(`[DISCORD BOT] @mention from ${message.author.username}: "${cleanContent.slice(0, 80)}"`);
       const response = await orchestrate({
         userMessage: cleanContent,
         conversationHistory: [],
         userId: `discord-${message.author.id}`,
+        forceActionMode: true,
       });
 
       const reply = response.response || "I couldn't process that right now. Try `/clawd help` for available commands.";

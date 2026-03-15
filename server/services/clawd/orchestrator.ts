@@ -525,6 +525,13 @@ Current time (Toronto): ${torontoTime}`;
 export async function orchestrate(request: OrchestrationRequest): Promise<OrchestrationResponse> {
   const startTime = Date.now();
 
+  // forceActionMode bypasses all routing logic — used for Discord @mentions
+  if (request.forceActionMode) {
+    console.log(`[Clawd] Force action mode (Discord @mention) for: "${request.userMessage.slice(0, 60)}"`);
+    const activeDraft = getPendingDraft(request.userId);
+    return orchestrateWithTools(request, startTime, activeDraft);
+  }
+
   // Check pending draft first — this always forces action mode
   let activeDraft = getPendingDraft(request.userId);
 

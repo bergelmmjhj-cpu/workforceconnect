@@ -49,7 +49,7 @@ export async function analyzeImageWithGPT(
     });
 
     const result = response.choices[0]?.message?.content || "";
-    console.log(`[VISION] Analyzed ${imageUrls.length} image URL(s): ${result.slice(0, 100)}...`);
+    console.log(`[VISION] Analyzed ${imageUrls.length} image URL(s): ${result.length} chars`);
     return result;
   } catch (err: any) {
     console.error("[VISION] Image URL analysis error:", err?.message);
@@ -91,7 +91,7 @@ export async function analyzeImageBase64WithGPT(
     });
 
     const result = response.choices[0]?.message?.content || "";
-    console.log(`[VISION] Analyzed ${base64Images.length} base64 image(s): ${result.slice(0, 100)}...`);
+    console.log(`[VISION] Analyzed ${base64Images.length} base64 image(s): ${result.length} chars`);
     return result;
   } catch (err: any) {
     console.error("[VISION] Base64 image analysis error:", err?.message);

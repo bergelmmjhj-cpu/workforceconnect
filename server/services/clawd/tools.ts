@@ -859,8 +859,12 @@ async function geocodeAddress(address: string, city: string, province: string, p
     url.searchParams.set("format", "json");
     url.searchParams.set("limit", "1");
     const res = await fetch(url.toString(), {
-      headers: { "User-Agent": "WFConnect/1.0 (workforce-management)" },
+      headers: { "User-Agent": "WFConnect/1.0" },
     });
+    if (!res.ok) {
+      console.log(`[tools] Nominatim returned HTTP ${res.status} for "${fullAddress}"`);
+      return null;
+    }
     const data = await res.json() as Array<{ lat: string; lon: string; display_name: string }>;
     if (data.length > 0) {
       const lat = parseFloat(data[0].lat);

@@ -194,6 +194,7 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
       type: "object" as const,
       properties: {
         query: { type: "string", description: "Name or partial name to search for (optional — omit to list all members)" },
+        limit: { type: "number", description: "Max results to return (default 50, max 200)" },
       },
     },
   },
@@ -785,9 +786,10 @@ async function toolCreateShiftRequest(input: Record<string, unknown>) {
   }
 }
 
-function lookupDiscordMembers(input: Record<string, unknown>) {
+async function lookupDiscordMembers(input: Record<string, unknown>) {
   const query = input.query as string | undefined;
-  const members = getGuildMembers(query);
+  const limit = input.limit as number | undefined;
+  const members = await getGuildMembers(query, limit);
 
   if (members.length === 0) {
     return {
@@ -801,7 +803,7 @@ function lookupDiscordMembers(input: Record<string, unknown>) {
 
   const nonBotMembers = members.filter(m => !m.isBot);
   return {
-    members: nonBotMembers.slice(0, 50),
+    members: nonBotMembers,
     count: nonBotMembers.length,
     botMembers: members.filter(m => m.isBot).length,
     searchedBy: query ? "name" : "all",

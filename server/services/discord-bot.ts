@@ -20,10 +20,16 @@ export interface DiscordMemberInfo {
   isBot: boolean;
 }
 
-export function getGuildMembers(query?: string): DiscordMemberInfo[] {
+export async function getGuildMembers(query?: string, limit?: number): Promise<DiscordMemberInfo[]> {
   if (!botClient) return [];
   const guild = botClient.guilds.cache.first();
   if (!guild) return [];
+
+  try {
+    await guild.members.fetch({ time: 10_000 });
+  } catch (err: any) {
+    console.warn("[DISCORD BOT] Failed to fetch guild members, using cache:", err?.message);
+  }
 
   let members = Array.from(guild.members.cache.values());
 
@@ -36,7 +42,9 @@ export function getGuildMembers(query?: string): DiscordMemberInfo[] {
     );
   }
 
-  return members.map(m => ({
+  const maxResults = limit && limit > 0 ? Math.min(limit, 200) : 50;
+
+  return members.slice(0, maxResults).map(m => ({
     discordId: m.user.id,
     username: m.user.username,
     displayName: m.displayName,
@@ -382,9 +390,7 @@ async function handleMessage(message: Message) {
     }
   }
 
-  const parsed = await parseCommand(message);
-
-  if (isMention && parsed.intent === "unknown") {
+  if (isMention) {
     const cleanContent = content.replace(/<@!?\d+>/g, "").trim();
     if (!cleanContent) {
       await message.reply("Hey! I'm Oscar, WFConnect's AI assistant. Ask me anything — shifts, workers, availability, operations. Or type `/clawd help` for the command list.");
@@ -410,6 +416,8 @@ async function handleMessage(message: Message) {
     }
     return;
   }
+
+  const parsed = await parseCommand(message);
 
   if (parsed.intent === "help") {
     await message.reply(HELP_MESSAGE);

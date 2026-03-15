@@ -256,11 +256,10 @@ async function parseCommand(message: Message): Promise<ParsedCommand> {
     }
   }
 
-  if (!result.alertContext && result.intent !== "help" && result.intent !== "unknown") {
-    result.alertContext = await findRecentAlert();
-    if (result.alertContext) {
-      result.alertId = result.alertContext.alertId;
-    }
+  const contextFreeIntents = new Set(["help", "unknown", "list_available", "notify_gm_lilee"]);
+  if (!result.alertContext && !contextFreeIntents.has(result.intent)) {
+    // No alert context found — do NOT fall back to recent alert for state-changing actions.
+    // Only explicit reply-to-message or WFC-XXXX ID should link to an alert.
   }
 
   return result;

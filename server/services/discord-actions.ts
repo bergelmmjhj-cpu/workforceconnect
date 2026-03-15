@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { discordAlerts, users, workplaces, workplaceAssignments, shifts, conversations, messages } from "../../shared/schema";
+import { discordAlerts, users, workplaces, workplaceAssignments, shifts, shiftRequests, conversations, messages } from "../../shared/schema";
 import { eq, and, ilike, sql } from "drizzle-orm";
 import { sendSMS, logSMS } from "./openphone";
 import { sendDiscordNotification, acknowledgeAlert } from "./discord";
@@ -63,7 +63,7 @@ async function handleAcknowledge(ctx: DiscordActionContext): Promise<ActionResul
 async function handleAssignWorker(ctx: DiscordActionContext): Promise<ActionResult> {
   const workerQuery = ctx.args.workerQuery;
   if (!workerQuery) {
-    return { success: false, message: "**Understood:** Assign a worker\n**Blocked:** No worker name provided\n**Need:** Specify who to assign, e.g. `assign Nino`" };
+    return { success: false, message: "**Understood:** Assign a worker\n**Blocked:** No worker name provided\n**Still needed:** Specify who to assign, e.g. `assign Nino`" };
   }
 
   const workers = await db.select({
@@ -78,24 +78,52 @@ async function handleAssignWorker(ctx: DiscordActionContext): Promise<ActionResu
   )).limit(5);
 
   if (workers.length === 0) {
-    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** No worker found matching "${workerQuery}"\n**Need:** Try a different name or check spelling` };
+    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** No worker found matching "${workerQuery}"\n**Still needed:** Try a different name or check spelling` };
   }
 
   if (workers.length > 1) {
     const list = workers.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
-    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** Multiple matches found:\n${list}\n**Need:** Be more specific with the name` };
+    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** Multiple matches found:\n${list}\n**Still needed:** Be more specific with the name` };
   }
 
   const worker = workers[0];
   const alertInfo = ctx.alert ? `\nAlert: ${ctx.alertId} — ${ctx.alert.title}` : "";
+  const actions: string[] = [];
+
+  if (ctx.alert?.workplaceId && ctx.alert?.shiftId) {
+    try {
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+      const [adminUser] = await db.select({ id: users.id }).from(users)
+        .where(and(eq(users.role, "admin"), eq(users.isActive, true)))
+        .limit(1);
+
+      if (adminUser) {
+        const [newRequest] = await db.insert(shiftRequests).values({
+          clientId: adminUser.id,
+          workplaceId: ctx.alert.workplaceId,
+          roleType: worker.workerRoles || "general",
+          date: today,
+          startTime: "08:00",
+          endTime: "16:00",
+          notes: `Auto-created via Discord assign command by ${ctx.discordUsername}`,
+          status: "submitted",
+        }).returning();
+        actions.push(`Shift request created (ID: ${newRequest.id})`);
+      }
+    } catch (err: any) {
+      console.error("[DISCORD ACTIONS] Shift request creation failed:", err?.message);
+    }
+  }
 
   if (worker.phone) {
     const smsBody = `Hi ${worker.fullName.split(" ")[0]}, you've been assigned to cover a shift. Please check WFConnect for details or reply to confirm. — WFConnect`;
     try {
       await sendSMS(worker.phone, smsBody);
       await logSMS(worker.phone, smsBody, "outbound", worker.id, "clawd_discord_assign");
+      actions.push("SMS notification sent");
     } catch (smsErr: any) {
       console.error("[DISCORD ACTIONS] SMS send failed:", smsErr?.message);
+      actions.push("SMS send failed");
     }
   }
 
@@ -104,12 +132,14 @@ async function handleAssignWorker(ctx: DiscordActionContext): Promise<ActionResu
       await db.update(discordAlerts)
         .set({ status: "acknowledged", acknowledgedBy: ctx.discordUsername, acknowledgedAt: new Date(), responseNote: `Assigned ${worker.fullName} via Discord` })
         .where(eq(discordAlerts.alertId, ctx.alertId));
+      actions.push("Alert acknowledged");
     } catch {}
   }
 
+  const actionSummary = actions.length > 0 ? actions.join(", ") : "Worker identified";
   return {
     success: true,
-    message: `**Understood:** Assign ${worker.fullName} to coverage${alertInfo}\n**Action:** Worker identified and notified via SMS\n**Result:** ${worker.fullName} (${worker.phone || "no phone"}) has been notified\n**Still needed:** Worker needs to confirm availability`,
+    message: `**Understood:** Assign ${worker.fullName} to coverage${alertInfo}\n**Action:** ${actionSummary}\n**Result:** ${worker.fullName} (${worker.phone || "no phone"}) has been notified\n**Still needed:** Worker needs to confirm availability`,
   };
 }
 
@@ -220,20 +250,25 @@ async function handleNotifyClient(ctx: DiscordActionContext): Promise<ActionResu
   const messageBody = `Update regarding your staffing request: We are working on coverage for you. We'll confirm details shortly. — WFConnect Team`;
 
   try {
+    const [adminUser] = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.role, "admin"), eq(users.isActive, true)))
+      .limit(1);
+    const senderUserId = adminUser?.id || clientId;
+
     let [conversation] = await db.select().from(conversations)
       .where(and(eq(conversations.workerUserId, clientId), eq(conversations.isArchived, false)))
       .limit(1);
 
     if (!conversation) {
       const [newConv] = await db.insert(conversations)
-        .values({ workerUserId: clientId, hrUserId: ctx.discordUserId || clientId, lastMessageAt: new Date(), lastMessagePreview: messageBody.slice(0, 100) })
+        .values({ workerUserId: clientId, hrUserId: senderUserId, lastMessageAt: new Date(), lastMessagePreview: messageBody.slice(0, 100) })
         .returning();
       conversation = newConv;
     }
 
     await db.insert(messages).values({
       conversationId: conversation.id,
-      senderUserId: ctx.discordUserId || clientId,
+      senderUserId,
       recipientUserId: clientId,
       body: messageBody,
       messageType: "text",

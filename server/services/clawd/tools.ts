@@ -18,6 +18,7 @@ import { getGuildMembers } from "../discord-bot";
 import { createCalendarEvent, listCalendarEvents } from "../google-calendar";
 import { sendGmail, readRecentGmailEmails } from "../google-gmail";
 import * as crmClient from "../weekdays-crm";
+import { enqueueCrmPush } from "../crm-sync";
 
 const GM_LILEE_PHONE = "+14166028038";
 
@@ -303,6 +304,96 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
       required: ["userRequest", "suggestedSolution"],
     },
   },
+  {
+    name: "lookup_crm_workplaces",
+    description: "Search the Weekdays CRM for workplaces. Returns CRM-side data including CRM IDs, addresses, and sync status. Use this to check what the CRM knows about a workplace.",
+    input_schema: {
+      type: "object",
+      properties: {
+        searchTerm: { type: "string", description: "Name or location to search for" },
+        limit: { type: "number", description: "Max results (default 20)" },
+      },
+    },
+  },
+  {
+    name: "lookup_crm_shifts",
+    description: "Search the Weekdays CRM for confirmed shifts. Returns CRM-side shift data including worker assignments, dates, and status.",
+    input_schema: {
+      type: "object",
+      properties: {
+        workplaceName: { type: "string", description: "Filter by workplace/hotel name" },
+        workerName: { type: "string", description: "Filter by worker name" },
+        dateFrom: { type: "string", description: "Start date filter (YYYY-MM-DD)" },
+        dateTo: { type: "string", description: "End date filter (YYYY-MM-DD)" },
+        limit: { type: "number", description: "Max results (default 20)" },
+      },
+    },
+  },
+  {
+    name: "lookup_crm_hotel_requests",
+    description: "Search the Weekdays CRM for hotel/staffing requests. Returns CRM-side request data including hotel name, role needed, dates, and status.",
+    input_schema: {
+      type: "object",
+      properties: {
+        hotelName: { type: "string", description: "Filter by hotel name" },
+        status: { type: "string", description: "Filter by status: NEW or CONFIRMED" },
+        limit: { type: "number", description: "Max results (default 20)" },
+      },
+    },
+  },
+  {
+    name: "create_crm_hotel_request",
+    description: "Create a new hotel/staffing request in the Weekdays CRM. This pushes a request directly to the CRM system for tracking.",
+    input_schema: {
+      type: "object",
+      properties: {
+        hotelName: { type: "string", description: "Name of the hotel/client requesting staff" },
+        roleNeeded: { type: "string", description: "Role needed (e.g., 'Housekeeper', 'Room Attendant')" },
+        location: { type: "string", description: "City or area" },
+        address: { type: "string", description: "Full address of the hotel" },
+        quantityNeeded: { type: "number", description: "Number of workers needed (default 1)" },
+        shiftStartAt: { type: "string", description: "Shift start datetime (ISO format)" },
+        shiftEndAt: { type: "string", description: "Shift end datetime (ISO format)" },
+        payRate: { type: "number", description: "Hourly pay rate" },
+        notes: { type: "string", description: "Additional notes" },
+      },
+      required: ["hotelName", "roleNeeded", "shiftStartAt", "shiftEndAt"],
+    },
+  },
+  {
+    name: "update_crm_hotel_request",
+    description: "Update an existing hotel/staffing request in the Weekdays CRM. Use lookup_crm_hotel_requests first to get the CRM ID.",
+    input_schema: {
+      type: "object",
+      properties: {
+        crmId: { type: "string", description: "CRM ID of the hotel request to update" },
+        hotelName: { type: "string", description: "Updated hotel name" },
+        roleNeeded: { type: "string", description: "Updated role" },
+        quantityNeeded: { type: "number", description: "Updated quantity" },
+        shiftStartAt: { type: "string", description: "Updated start datetime" },
+        shiftEndAt: { type: "string", description: "Updated end datetime" },
+        payRate: { type: "number", description: "Updated pay rate" },
+        notes: { type: "string", description: "Updated notes" },
+        status: { type: "string", description: "Status: NEW or CONFIRMED" },
+      },
+      required: ["crmId"],
+    },
+  },
+  {
+    name: "update_crm_confirmed_shift",
+    description: "Update a confirmed shift in the Weekdays CRM. Use lookup_crm_shifts first to get the CRM ID. Can update status, check-in time, completion time.",
+    input_schema: {
+      type: "object",
+      properties: {
+        crmId: { type: "string", description: "CRM ID of the confirmed shift to update" },
+        confirmStatus: { type: "string", description: "Status: CONFIRMED or COMPLETED" },
+        checkedInAt: { type: "string", description: "Check-in datetime (ISO format)" },
+        completedAt: { type: "string", description: "Completion datetime (ISO format)" },
+        notes: { type: "string", description: "Notes about the shift" },
+      },
+      required: ["crmId"],
+    },
+  },
 ];
 
 // ============================================
@@ -390,6 +481,18 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       })();
     case "generate_replit_prompt":
       return generateReplitPrompt(input);
+    case "lookup_crm_workplaces":
+      return lookupCrmWorkplaces(input);
+    case "lookup_crm_shifts":
+      return lookupCrmShifts(input);
+    case "lookup_crm_hotel_requests":
+      return lookupCrmHotelRequests(input);
+    case "create_crm_hotel_request":
+      return toolCreateCrmHotelRequest(input);
+    case "update_crm_hotel_request":
+      return toolUpdateCrmHotelRequest(input);
+    case "update_crm_confirmed_shift":
+      return toolUpdateCrmConfirmedShift(input);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }
@@ -1197,6 +1300,242 @@ async function toolUpdateWorkplace(input: Record<string, unknown>) {
     };
   } catch (err: any) {
     return { success: false, error: `Failed to update workplace: ${err?.message}` };
+  }
+}
+
+async function lookupCrmWorkplaces(input: Record<string, unknown>) {
+  if (!crmClient.isConfigured()) {
+    return { success: false, error: "CRM is not configured. WEEKDAYS_API_KEY and WEEKDAYS_TEAM_ID are required." };
+  }
+  try {
+    const allWorkplaces = await crmClient.fetchCrmWorkplaces();
+    let results = allWorkplaces;
+    const searchTerm = (input.searchTerm as string)?.toLowerCase();
+    if (searchTerm) {
+      results = results.filter(w =>
+        w.name.toLowerCase().includes(searchTerm) ||
+        (w.location || "").toLowerCase().includes(searchTerm) ||
+        (w.address || "").toLowerCase().includes(searchTerm)
+      );
+    }
+    const limit = Math.min((input.limit as number) || 20, 50);
+    return {
+      success: true,
+      count: results.length,
+      workplaces: results.slice(0, limit).map(w => ({
+        crmId: w.id,
+        name: w.name,
+        address: w.address,
+        location: w.location,
+        province: w.province,
+        isActive: w.isActive,
+        latitude: w.latitude,
+        longitude: w.longitude,
+      })),
+    };
+  } catch (err: any) {
+    return { success: false, error: `CRM lookup failed: ${err?.message}` };
+  }
+}
+
+async function lookupCrmShifts(input: Record<string, unknown>) {
+  if (!crmClient.isConfigured()) {
+    return { success: false, error: "CRM is not configured." };
+  }
+  try {
+    const allShifts = await crmClient.fetchCrmConfirmedShifts();
+    let results = allShifts;
+    const workplaceName = (input.workplaceName as string)?.toLowerCase();
+    const workerName = (input.workerName as string)?.toLowerCase();
+    const dateFrom = input.dateFrom as string;
+    const dateTo = input.dateTo as string;
+
+    if (workplaceName) {
+      results = results.filter(s =>
+        (s.hotelName || "").toLowerCase().includes(workplaceName)
+      );
+    }
+    if (workerName) {
+      results = results.filter(s =>
+        (s.workerName || "").toLowerCase().includes(workerName)
+      );
+    }
+    if (dateFrom) {
+      results = results.filter(s => s.shiftDate >= dateFrom);
+    }
+    if (dateTo) {
+      results = results.filter(s => s.shiftDate <= dateTo);
+    }
+
+    const limit = Math.min((input.limit as number) || 20, 50);
+    return {
+      success: true,
+      count: results.length,
+      shifts: results.slice(0, limit).map(s => ({
+        crmId: s.id,
+        hotelName: s.hotelName,
+        workerName: s.workerName,
+        shiftDate: s.shiftDate,
+        shiftStart: s.shiftStart,
+        shiftEnd: s.shiftEnd,
+        confirmStatus: s.confirmStatus,
+        checkedInAt: s.checkedInAt,
+        completedAt: s.completedAt,
+      })),
+    };
+  } catch (err: any) {
+    return { success: false, error: `CRM lookup failed: ${err?.message}` };
+  }
+}
+
+async function lookupCrmHotelRequests(input: Record<string, unknown>) {
+  if (!crmClient.isConfigured()) {
+    return { success: false, error: "CRM is not configured." };
+  }
+  try {
+    const allRequests = await crmClient.fetchCrmHotelRequests();
+    let results = allRequests;
+    const hotelName = (input.hotelName as string)?.toLowerCase();
+    const status = (input.status as string)?.toUpperCase();
+
+    if (hotelName) {
+      results = results.filter(r =>
+        (r.hotelName || "").toLowerCase().includes(hotelName)
+      );
+    }
+    if (status) {
+      results = results.filter(r => r.status === status);
+    }
+
+    const limit = Math.min((input.limit as number) || 20, 50);
+    return {
+      success: true,
+      count: results.length,
+      hotelRequests: results.slice(0, limit).map(r => ({
+        crmId: r.id,
+        hotelName: r.hotelName,
+        roleNeeded: r.roleNeeded,
+        quantityNeeded: r.quantityNeeded,
+        shiftStartAt: r.shiftStartAt,
+        shiftEndAt: r.shiftEndAt,
+        payRate: r.payRate,
+        status: r.status,
+        notes: r.notes,
+      })),
+    };
+  } catch (err: any) {
+    return { success: false, error: `CRM lookup failed: ${err?.message}` };
+  }
+}
+
+async function toolCreateCrmHotelRequest(input: Record<string, unknown>) {
+  if (!crmClient.isConfigured()) {
+    return { success: false, error: "CRM is not configured." };
+  }
+  const hotelName = input.hotelName as string;
+  const roleNeeded = input.roleNeeded as string;
+  const shiftStartAt = input.shiftStartAt as string;
+  const shiftEndAt = input.shiftEndAt as string;
+  if (!hotelName || !roleNeeded || !shiftStartAt || !shiftEndAt) {
+    return { success: false, error: "Missing required fields: hotelName, roleNeeded, shiftStartAt, shiftEndAt" };
+  }
+
+  try {
+    const result = await crmClient.createCrmHotelRequest({
+      hotelName,
+      roleNeeded,
+      location: input.location as string,
+      address: input.address as string,
+      quantityNeeded: input.quantityNeeded as number,
+      shiftStartAt,
+      shiftEndAt,
+      payRate: input.payRate as number,
+      notes: input.notes as string,
+    });
+    return {
+      success: true,
+      hotelRequest: {
+        crmId: result.id,
+        hotelName: result.hotelName,
+        roleNeeded: result.roleNeeded,
+        status: result.status,
+      },
+      note: `Hotel request created in CRM with ID ${result.id}`,
+    };
+  } catch (err: any) {
+    await enqueueCrmPush("hotel_request", "new", "create", {
+      hotelName, roleNeeded, shiftStartAt, shiftEndAt,
+      location: input.location, address: input.address,
+      quantityNeeded: input.quantityNeeded, payRate: input.payRate, notes: input.notes,
+    });
+    return { success: false, error: `CRM push failed (queued for retry): ${err?.message}` };
+  }
+}
+
+async function toolUpdateCrmHotelRequest(input: Record<string, unknown>) {
+  if (!crmClient.isConfigured()) {
+    return { success: false, error: "CRM is not configured." };
+  }
+  const crmId = input.crmId as string;
+  if (!crmId) {
+    return { success: false, error: "Missing required field: crmId. Use lookup_crm_hotel_requests to find the ID." };
+  }
+
+  try {
+    const updates: crmClient.UpdateCrmHotelRequestInput = {};
+    if (input.hotelName) updates.hotelName = input.hotelName as string;
+    if (input.roleNeeded) updates.roleNeeded = input.roleNeeded as string;
+    if (input.quantityNeeded !== undefined) updates.quantityNeeded = input.quantityNeeded as number;
+    if (input.shiftStartAt) updates.shiftStartAt = input.shiftStartAt as string;
+    if (input.shiftEndAt) updates.shiftEndAt = input.shiftEndAt as string;
+    if (input.payRate !== undefined) updates.payRate = input.payRate as number;
+    if (input.notes) updates.notes = input.notes as string;
+    if (input.status) updates.status = input.status as "NEW" | "CONFIRMED";
+
+    const result = await crmClient.updateCrmHotelRequest(crmId, updates);
+    return {
+      success: true,
+      hotelRequest: {
+        crmId: result.id,
+        hotelName: result.hotelName,
+        status: result.status,
+      },
+      note: `Hotel request ${crmId} updated in CRM`,
+    };
+  } catch (err: any) {
+    await enqueueCrmPush("hotel_request", crmId, "update", { crmExternalId: crmId, ...input });
+    return { success: false, error: `CRM update failed (queued for retry): ${err?.message}` };
+  }
+}
+
+async function toolUpdateCrmConfirmedShift(input: Record<string, unknown>) {
+  if (!crmClient.isConfigured()) {
+    return { success: false, error: "CRM is not configured." };
+  }
+  const crmId = input.crmId as string;
+  if (!crmId) {
+    return { success: false, error: "Missing required field: crmId. Use lookup_crm_shifts to find the ID." };
+  }
+
+  try {
+    const updates: crmClient.UpdateCrmConfirmedShiftInput = {};
+    if (input.confirmStatus) updates.confirmStatus = input.confirmStatus as "CONFIRMED" | "COMPLETED";
+    if (input.checkedInAt) updates.checkedInAt = input.checkedInAt as string;
+    if (input.completedAt) updates.completedAt = input.completedAt as string;
+    if (input.notes) updates.notes = input.notes as string;
+
+    const result = await crmClient.updateCrmConfirmedShift(crmId, updates);
+    return {
+      success: true,
+      shift: {
+        crmId: result.id,
+        confirmStatus: result.confirmStatus,
+      },
+      note: `Confirmed shift ${crmId} updated in CRM`,
+    };
+  } catch (err: any) {
+    await enqueueCrmPush("confirmed_shift", crmId, "update", { crmExternalId: crmId, ...input });
+    return { success: false, error: `CRM update failed (queued for retry): ${err?.message}` };
   }
 }
 

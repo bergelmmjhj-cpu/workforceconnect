@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { workplaces, shifts, shiftRequests, crmSyncLogs, users } from "../../shared/schema";
-import { eq, and, sql, isNull, ne, notInArray } from "drizzle-orm";
+import { workplaces, shifts, shiftRequests, crmSyncLogs, crmPushQueue, users } from "../../shared/schema";
+import { eq, and, sql, isNull, ne, notInArray, lte, gte, count } from "drizzle-orm";
 import * as crmClient from "./weekdays-crm";
 
 let syncRunning = false;
@@ -701,5 +701,163 @@ export async function backfillWorkplacesToCrm(): Promise<{ pushed: number; match
     result.details.push(`Backfill error: ${err.message}`);
     console.error("[CRM-SYNC] Backfill error:", err.message);
     return result;
+  }
+}
+
+export async function enqueueCrmPush(
+  entityType: string,
+  entityId: string,
+  action: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  try {
+    await db.insert(crmPushQueue).values({
+      entityType,
+      entityId,
+      action,
+      payload: JSON.stringify(payload),
+      status: "pending",
+      attempts: 0,
+      nextRetryAt: new Date(),
+    });
+    console.log(`[CRM-PUSH] Enqueued ${action} for ${entityType}/${entityId}`);
+  } catch (err: any) {
+    console.error(`[CRM-PUSH] Failed to enqueue ${action} for ${entityType}/${entityId}:`, err.message);
+  }
+}
+
+export async function processCrmPushQueue(): Promise<{ processed: number; succeeded: number; failed: number }> {
+  const result = { processed: 0, succeeded: 0, failed: 0 };
+  if (!crmClient.isConfigured()) return result;
+
+  try {
+    const pending = await db
+      .select()
+      .from(crmPushQueue)
+      .where(
+        and(
+          eq(crmPushQueue.status, "pending"),
+          lte(crmPushQueue.nextRetryAt, new Date())
+        )
+      )
+      .limit(20);
+
+    for (const item of pending) {
+      const [claimed] = await db
+        .update(crmPushQueue)
+        .set({ status: "processing" })
+        .where(and(eq(crmPushQueue.id, item.id), eq(crmPushQueue.status, "pending")))
+        .returning();
+      if (!claimed) continue;
+
+      result.processed++;
+      try {
+        const payload = JSON.parse(item.payload);
+        await executeCrmPushAction(item.entityType, item.action, item.entityId, payload);
+
+        await db
+          .update(crmPushQueue)
+          .set({ status: "completed", completedAt: new Date() })
+          .where(eq(crmPushQueue.id, item.id));
+        result.succeeded++;
+        console.log(`[CRM-PUSH] Completed ${item.action} for ${item.entityType}/${item.entityId}`);
+      } catch (err: any) {
+        const newAttempts = item.attempts + 1;
+        const backoffMs = Math.min(60000 * Math.pow(2, newAttempts), 3600000);
+        const nextRetry = new Date(Date.now() + backoffMs);
+
+        if (newAttempts >= item.maxAttempts) {
+          await db
+            .update(crmPushQueue)
+            .set({ status: "failed", attempts: newAttempts, lastError: err.message, completedAt: new Date() })
+            .where(eq(crmPushQueue.id, item.id));
+          result.failed++;
+          console.error(`[CRM-PUSH] Permanently failed ${item.action} for ${item.entityType}/${item.entityId}: ${err.message}`);
+        } else {
+          await db
+            .update(crmPushQueue)
+            .set({ status: "pending", attempts: newAttempts, lastError: err.message, nextRetryAt: nextRetry })
+            .where(eq(crmPushQueue.id, item.id));
+          console.warn(`[CRM-PUSH] Retry ${newAttempts}/${item.maxAttempts} for ${item.entityType}/${item.entityId}, next at ${nextRetry.toISOString()}`);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("[CRM-PUSH] Queue processing error:", err.message);
+  }
+
+  return result;
+}
+
+async function executeCrmPushAction(
+  entityType: string,
+  action: string,
+  entityId: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  switch (`${entityType}:${action}`) {
+    case "confirmed_shift:update": {
+      const crmId = payload.crmExternalId as string;
+      if (!crmId) throw new Error("Missing crmExternalId");
+      await crmClient.updateCrmConfirmedShift(crmId, payload as any);
+      break;
+    }
+    case "hotel_request:create": {
+      await crmClient.createCrmHotelRequest(payload as any);
+      break;
+    }
+    case "hotel_request:update": {
+      const crmId = payload.crmExternalId as string;
+      if (!crmId) throw new Error("Missing crmExternalId");
+      await crmClient.updateCrmHotelRequest(crmId, payload as any);
+      break;
+    }
+    case "workplace:update": {
+      const crmId = payload.crmExternalId as string;
+      if (!crmId) throw new Error("Missing crmExternalId");
+      await crmClient.updateCrmWorkplace(crmId, payload as any);
+      break;
+    }
+    default:
+      throw new Error(`Unknown CRM push action: ${entityType}:${action}`);
+  }
+}
+
+export async function getCrmPushQueueStats(): Promise<{
+  pending: number;
+  failed: number;
+  completedToday: number;
+}> {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [pendingResult] = await db
+      .select({ count: count() })
+      .from(crmPushQueue)
+      .where(eq(crmPushQueue.status, "pending"));
+
+    const [failedResult] = await db
+      .select({ count: count() })
+      .from(crmPushQueue)
+      .where(eq(crmPushQueue.status, "failed"));
+
+    const [completedResult] = await db
+      .select({ count: count() })
+      .from(crmPushQueue)
+      .where(
+        and(
+          eq(crmPushQueue.status, "completed"),
+          gte(crmPushQueue.completedAt, todayStart)
+        )
+      );
+
+    return {
+      pending: pendingResult?.count ?? 0,
+      failed: failedResult?.count ?? 0,
+      completedToday: completedResult?.count ?? 0,
+    };
+  } catch {
+    return { pending: 0, failed: 0, completedToday: 0 };
   }
 }

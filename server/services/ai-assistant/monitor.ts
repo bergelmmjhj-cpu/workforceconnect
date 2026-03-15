@@ -579,6 +579,45 @@ async function checkWeeklyReport(): Promise<void> {
   }
 }
 
+async function checkCrmSyncHealth(): Promise<void> {
+  try {
+    const { getCrmPushQueueStats } = await import("../crm-sync");
+    const stats = await getCrmPushQueueStats();
+
+    if (stats.failed > 0) {
+      const msg = `CRM Push Queue Alert: ${stats.failed} failed item(s) in push queue, ${stats.pending} pending`;
+      console.warn(`[AI] ${msg}`);
+
+      try {
+        const { sendDiscordNotification } = await import("../discord");
+        await sendDiscordNotification({
+          title: "CRM Sync Health Warning",
+          description: msg,
+          color: 0xff9500,
+        });
+      } catch {}
+
+      await logAction({
+        monitorType: "crm_sync_health",
+        signalSummary: msg,
+        actionTaken: "alert_sent",
+        alertSentTo: "discord",
+      });
+    }
+
+    if (stats.pending > 10) {
+      console.warn(`[AI] CRM push queue backlog: ${stats.pending} pending items`);
+      await logAction({
+        monitorType: "crm_sync_health",
+        signalSummary: `Push queue backlog: ${stats.pending} pending`,
+        actionTaken: "logged",
+      });
+    }
+  } catch (err: any) {
+    console.error("[AI] checkCrmSyncHealth error:", err?.message);
+  }
+}
+
 export async function runMonitorCycle(): Promise<void> {
   const activationTs = await getOrSetActivationTimestamp();
 
@@ -586,6 +625,7 @@ export async function runMonitorCycle(): Promise<void> {
     checkContactLeads(activationTs),
     checkShiftRequests(activationTs),
     checkUnfilledShifts(),
+    checkCrmSyncHealth(),
   ]);
 
   const now = new Date();

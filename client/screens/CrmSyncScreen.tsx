@@ -29,12 +29,19 @@ type SyncResult = {
   errorMessages: string[];
 };
 
+type PushQueueStats = {
+  pending: number;
+  failed: number;
+  completedToday: number;
+};
+
 type SyncStatus = {
   configured: boolean;
   connected: boolean;
   connectionError?: string;
   lastSyncError: string | null;
   syncRunning: boolean;
+  pushQueue?: PushQueueStats;
   lastSyncs: Record<
     string,
     {
@@ -372,9 +379,71 @@ export default function CrmSyncScreen() {
 
         <ThemedText style={styles.sectionHeader}>Sync Categories</ThemedText>
 
+        <ThemedText style={[styles.directionLabel, { color: theme.textSecondary }]}>
+          CRM to App (Inbound)
+        </ThemedText>
         {renderSyncCategory("Workplaces", "workplaces", "map-pin")}
         {renderSyncCategory("Confirmed Shifts", "shifts", "calendar")}
         {renderSyncCategory("Hotel Requests", "hotel-requests", "briefcase")}
+
+        <ThemedText style={[styles.directionLabel, { color: theme.textSecondary, marginTop: Spacing.md }]}>
+          App to CRM (Outbound)
+        </ThemedText>
+        <Card style={styles.categoryCard}>
+          <View style={styles.categoryHeader}>
+            <View style={[styles.categoryIcon, { backgroundColor: "#007AFF15" }]}>
+              <Feather name="upload-cloud" size={18} color="#007AFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.categoryLabel}>Push Queue</ThemedText>
+              <ThemedText style={[styles.categoryTime, { color: theme.textSecondary }]}>
+                TITO events, shift updates, hotel requests
+              </ThemedText>
+            </View>
+            {status?.pushQueue ? (
+              <View style={[styles.configBadge, {
+                backgroundColor: status.pushQueue.failed > 0 ? "#FF3B3020" :
+                  status.pushQueue.pending > 0 ? "#FF950020" : "#34C75920"
+              }]}>
+                <ThemedText style={[styles.configBadgeText, {
+                  color: status.pushQueue.failed > 0 ? "#FF3B30" :
+                    status.pushQueue.pending > 0 ? "#FF9500" : "#34C759"
+                }]}>
+                  {status.pushQueue.failed > 0 ? `${status.pushQueue.failed} Failed` :
+                    status.pushQueue.pending > 0 ? `${status.pushQueue.pending} Pending` : "Clear"}
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
+          {status?.pushQueue ? (
+            <View style={styles.categoryStats}>
+              <View style={styles.statItem}>
+                <ThemedText style={[styles.statValue, { color: "#34C759" }]}>
+                  {status.pushQueue.completedToday}
+                </ThemedText>
+                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Today
+                </ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={[styles.statValue, { color: "#FF9500" }]}>
+                  {status.pushQueue.pending}
+                </ThemedText>
+                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Pending
+                </ThemedText>
+              </View>
+              <View style={styles.statItem}>
+                <ThemedText style={[styles.statValue, { color: status.pushQueue.failed > 0 ? "#FF3B30" : theme.textSecondary }]}>
+                  {status.pushQueue.failed}
+                </ThemedText>
+                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                  Failed
+                </ThemedText>
+              </View>
+            </View>
+          ) : null}
+        </Card>
 
         <ThemedText style={styles.sectionHeader}>Recent Sync History</ThemedText>
 
@@ -526,4 +595,12 @@ const styles = StyleSheet.create({
   logStat: { fontSize: 13, fontWeight: "600" },
   emptyCard: { padding: Spacing.lg, alignItems: "center" },
   emptyText: { fontSize: 14 },
+  directionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
 });

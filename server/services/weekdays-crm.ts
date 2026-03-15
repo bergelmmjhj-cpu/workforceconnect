@@ -327,3 +327,98 @@ export async function updateCrmWorkplace(crmId: string, input: UpdateCrmWorkplac
   console.log(`[CRM-SYNC] Workplace updated in CRM: ID ${crmId}`);
   return result;
 }
+
+export interface CreateCrmHotelRequestInput {
+  hotelName: string;
+  location?: string;
+  address?: string;
+  roleNeeded: string;
+  quantityNeeded?: number;
+  shiftStartAt: string;
+  shiftEndAt: string;
+  payRate?: number;
+  notes?: string;
+}
+
+export async function createCrmHotelRequest(input: CreateCrmHotelRequestInput): Promise<CrmHotelRequest> {
+  const teamId = getTeamId();
+  const body = {
+    hotelName: input.hotelName,
+    location: input.location || "",
+    address: input.address || "",
+    roleNeeded: input.roleNeeded,
+    quantityNeeded: input.quantityNeeded || 1,
+    shiftStartAt: input.shiftStartAt,
+    shiftEndAt: input.shiftEndAt,
+    payRate: input.payRate,
+    notes: input.notes || "",
+  };
+
+  console.log(`[CRM-SYNC] Creating hotel request in CRM: "${input.hotelName}" - ${input.roleNeeded}`);
+  const result = await fetchWithRetry<CrmHotelRequest>(
+    `/api/teams/${teamId}/hotel-requests`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Hotel request created in CRM: ID ${result.id}`);
+  return result;
+}
+
+export interface UpdateCrmHotelRequestInput {
+  hotelName?: string;
+  location?: string;
+  address?: string;
+  roleNeeded?: string;
+  quantityNeeded?: number;
+  shiftStartAt?: string;
+  shiftEndAt?: string;
+  payRate?: number;
+  notes?: string;
+  status?: "NEW" | "CONFIRMED";
+}
+
+export async function updateCrmHotelRequest(crmId: string, input: UpdateCrmHotelRequestInput): Promise<CrmHotelRequest> {
+  const teamId = getTeamId();
+  const body: Record<string, unknown> = {};
+  if (input.hotelName !== undefined) body.hotelName = input.hotelName;
+  if (input.location !== undefined) body.location = input.location;
+  if (input.address !== undefined) body.address = input.address;
+  if (input.roleNeeded !== undefined) body.roleNeeded = input.roleNeeded;
+  if (input.quantityNeeded !== undefined) body.quantityNeeded = input.quantityNeeded;
+  if (input.shiftStartAt !== undefined) body.shiftStartAt = input.shiftStartAt;
+  if (input.shiftEndAt !== undefined) body.shiftEndAt = input.shiftEndAt;
+  if (input.payRate !== undefined) body.payRate = input.payRate;
+  if (input.notes !== undefined) body.notes = input.notes;
+  if (input.status !== undefined) body.status = input.status;
+
+  console.log(`[CRM-SYNC] Updating hotel request in CRM: ID ${crmId}`);
+  const result = await fetchWithRetry<CrmHotelRequest>(
+    `/api/teams/${teamId}/hotel-requests/${crmId}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Hotel request updated in CRM: ID ${crmId}`);
+  return result;
+}
+
+export interface UpdateCrmConfirmedShiftInput {
+  confirmStatus?: "CONFIRMED" | "COMPLETED";
+  checkedInAt?: string;
+  completedAt?: string;
+  notes?: string;
+}
+
+export async function updateCrmConfirmedShift(crmId: string, input: UpdateCrmConfirmedShiftInput): Promise<CrmConfirmedShift> {
+  const teamId = getTeamId();
+  const body: Record<string, unknown> = {};
+  if (input.confirmStatus !== undefined) body.confirmStatus = input.confirmStatus;
+  if (input.checkedInAt !== undefined) body.checkedInAt = input.checkedInAt;
+  if (input.completedAt !== undefined) body.completedAt = input.completedAt;
+  if (input.notes !== undefined) body.notes = input.notes;
+
+  console.log(`[CRM-SYNC] Updating confirmed shift in CRM: ID ${crmId}`);
+  const result = await fetchWithRetry<CrmConfirmedShift>(
+    `/api/teams/${teamId}/confirmed-shifts/${crmId}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Confirmed shift updated in CRM: ID ${crmId}`);
+  return result;
+}

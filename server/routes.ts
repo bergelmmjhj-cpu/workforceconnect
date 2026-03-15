@@ -2000,9 +2000,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { getSyncStatus } = await import("./services/crm-sync");
+      const { getSyncStatus, getCrmPushQueueStats } = await import("./services/crm-sync");
       const status = await getSyncStatus();
-      res.json(status);
+      const pushQueueStats = await getCrmPushQueueStats();
+      res.json({ ...status, pushQueue: pushQueueStats });
     } catch (error: any) {
       console.error("Error getting sync status:", error);
       res.status(500).json({ error: "Failed to get sync status" });
@@ -2515,6 +2516,70 @@ Respond with exactly:
       console.log(`[Discord Webhook] Alert ${alertId} ${success ? "acknowledged" : "not found"} by ${username}`);
     } catch (error: any) {
       console.error("[Discord Webhook] Error:", error?.message);
+    }
+  });
+
+  app.post("/api/webhooks/crm", async (req: Request, res: Response) => {
+    try {
+      const webhookSecret = process.env.WEEKDAYS_API_KEY;
+      const providedSecret = req.headers["x-webhook-secret"] || req.headers["authorization"]?.replace("Bearer ", "");
+      if (!webhookSecret || providedSecret !== webhookSecret) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      res.status(200).json({ received: true });
+
+      const { event, data } = req.body || {};
+      if (!event || !data) return;
+
+      console.log(`[CRM Webhook] Received event: ${event}`);
+
+      if (event === "hotel_request.created" || event === "hotel_request.updated") {
+        const { syncHotelRequests } = await import("./services/crm-sync");
+        await syncHotelRequests(false).catch(err =>
+          console.error("[CRM Webhook] Hotel request sync failed:", err?.message)
+        );
+
+        if (event === "hotel_request.created" && data.hotelName) {
+          try {
+            const { sendDiscordNotification } = await import("./services/discord");
+            await sendDiscordNotification({
+              title: "New CRM Hotel Request",
+              description: `**${data.hotelName}** needs ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"}\nShift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
+              color: 0x00bcd4,
+            });
+          } catch (discordErr: any) {
+            console.error("[CRM Webhook] Discord alert failed:", discordErr?.message);
+          }
+
+          try {
+            const GM_PHONE = "+14166028038";
+            const { sendSMS, logSMS } = await import("./services/openphone");
+            const msg = `CRM Alert: New hotel request from ${data.hotelName} - ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"} needed`;
+            await sendSMS(GM_PHONE, msg);
+            await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: msg, status: "sent" });
+          } catch (smsErr: any) {
+            console.error("[CRM Webhook] SMS alert failed:", smsErr?.message);
+          }
+        }
+      }
+
+      if (event === "confirmed_shift.updated" || event === "confirmed_shift.created") {
+        const { syncConfirmedShifts } = await import("./services/crm-sync");
+        await syncConfirmedShifts(false).catch(err =>
+          console.error("[CRM Webhook] Shift sync failed:", err?.message)
+        );
+      }
+
+      if (event === "workplace.updated" || event === "workplace.created") {
+        const { syncWorkplaces } = await import("./services/crm-sync");
+        await syncWorkplaces(false).catch(err =>
+          console.error("[CRM Webhook] Workplace sync failed:", err?.message)
+        );
+      }
+    } catch (error: any) {
+      console.error("[CRM Webhook] Error:", error?.message);
     }
   });
 
@@ -3936,6 +4001,24 @@ Respond with exactly:
         gpsVerified: true,
       });
 
+      if (shiftId) {
+        (async () => {
+          try {
+            const [shiftForCrm] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+            if (shiftForCrm?.crmExternalId) {
+              const { enqueueCrmPush } = await import("./services/crm-sync");
+              await enqueueCrmPush("confirmed_shift", shiftId, "update", {
+                crmExternalId: shiftForCrm.crmExternalId,
+                checkedInAt: titoLog.timeIn.toISOString(),
+                confirmStatus: "CONFIRMED",
+              });
+            }
+          } catch (crmErr: any) {
+            console.error("[CRM-PUSH] TITO clock-in push failed:", crmErr?.message);
+          }
+        })();
+      }
+
       try {
         const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
         const workerName = worker?.fullName || "Worker";
@@ -4308,6 +4391,25 @@ Respond with exactly:
         flaggedForReview: isFlagged || !hasGps,
         timesheetEntryCreated,
       });
+
+      if (titoLog.shiftId) {
+        (async () => {
+          try {
+            const [shiftForCrm] = await db.select().from(shifts).where(eq(shifts.id, titoLog.shiftId!));
+            if (shiftForCrm?.crmExternalId) {
+              const { enqueueCrmPush } = await import("./services/crm-sync");
+              await enqueueCrmPush("confirmed_shift", titoLog.shiftId!, "update", {
+                crmExternalId: shiftForCrm.crmExternalId,
+                completedAt: clockOutTime.toISOString(),
+                confirmStatus: "COMPLETED",
+                notes: `Clock-out: ${totalHours}h, GPS verified: ${isWithinRadius}`,
+              });
+            }
+          } catch (crmErr: any) {
+            console.error("[CRM-PUSH] TITO clock-out push failed:", crmErr?.message);
+          }
+        })();
+      }
 
       try {
         const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));

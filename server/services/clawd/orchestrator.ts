@@ -472,6 +472,12 @@ ${pendingSection}${aliasSection}
 - **List upcoming Google Calendar events** — view what's on the calendar
 - **Send emails via Gmail** — email workers, clients, or HR with formatted messages
 - **Read recent Gmail emails** — check inbox for messages or search by keyword
+- **Look up CRM workplaces** — search the Weekdays CRM for workplace data and sync status
+- **Look up CRM shifts** — search CRM confirmed shifts by workplace, worker, or date range
+- **Look up CRM hotel requests** — search CRM hotel/staffing requests by hotel name or status
+- **Create CRM hotel requests** — push new staffing requests directly to the CRM
+- **Update CRM hotel requests** — modify existing CRM hotel request details or status
+- **Update CRM confirmed shifts** — update shift status, check-in/completion times in CRM
 - **Generate Replit prompts** when a capability is missing
 
 ## Operational Rules:

@@ -1000,8 +1000,18 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
             } catch (err: any) {
               log("[CRM] Auto-sync failed:", err.message);
             }
-          }, 15 * 60 * 1000);
-          log("[CRM] Auto-sync scheduled every 15 minutes");
+          }, 3 * 60 * 1000);
+          setInterval(async () => {
+            try {
+              const pushResult = await crmSync.processCrmPushQueue();
+              if (pushResult.processed > 0) {
+                log(`[CRM] Push queue: ${pushResult.succeeded} succeeded, ${pushResult.failed} failed of ${pushResult.processed}`);
+              }
+            } catch (err: any) {
+              log("[CRM] Push queue processing failed:", err.message);
+            }
+          }, 60 * 1000);
+          log("[CRM] Auto-sync scheduled every 3 minutes, push queue every 1 minute");
         } catch (crmErr: any) {
           log("[CRM] Startup check failed (non-blocking):", crmErr.message);
         }

@@ -1030,6 +1030,28 @@ export const crmSyncLogs = pgTable("crm_sync_logs", {
 
 export type CrmSyncLog = typeof crmSyncLogs.$inferSelect;
 
+export const crmPushQueue = pgTable("crm_push_queue", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  action: text("action").notNull(),
+  payload: text("payload").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  lastError: text("last_error"),
+  nextRetryAt: timestamp("next_retry_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  statusIdx: index("crm_push_queue_status_idx").on(table.status),
+  nextRetryIdx: index("crm_push_queue_next_retry_idx").on(table.nextRetryAt),
+}));
+
+export type CrmPushQueueItem = typeof crmPushQueue.$inferSelect;
+
 export const aiActionLogs = pgTable("ai_action_logs", {
   id: varchar("id")
     .primaryKey()

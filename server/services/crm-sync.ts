@@ -800,30 +800,61 @@ export async function processCrmPushQueue(): Promise<{ processed: number; succee
 async function executeCrmPushAction(
   entityType: string,
   action: string,
-  entityId: string,
+  _entityId: string,
   payload: Record<string, unknown>
 ): Promise<void> {
   switch (`${entityType}:${action}`) {
     case "confirmed_shift:update": {
       const crmId = payload.crmExternalId as string;
       if (!crmId) throw new Error("Missing crmExternalId");
-      await crmClient.updateCrmConfirmedShift(crmId, payload as any);
+      const shiftUpdate: crmClient.UpdateCrmConfirmedShiftInput = {};
+      if (payload.confirmStatus) shiftUpdate.confirmStatus = payload.confirmStatus as "CONFIRMED" | "COMPLETED";
+      if (payload.checkedInAt) shiftUpdate.checkedInAt = payload.checkedInAt as string;
+      if (payload.completedAt) shiftUpdate.completedAt = payload.completedAt as string;
+      if (payload.notes) shiftUpdate.notes = payload.notes as string;
+      await crmClient.updateCrmConfirmedShift(crmId, shiftUpdate);
       break;
     }
     case "hotel_request:create": {
-      await crmClient.createCrmHotelRequest(payload as any);
+      const hrInput: crmClient.CreateCrmHotelRequestInput = {
+        hotelName: payload.hotelName as string,
+        roleNeeded: payload.roleNeeded as string,
+        shiftStartAt: payload.shiftStartAt as string,
+        shiftEndAt: payload.shiftEndAt as string,
+        location: payload.location as string | undefined,
+        address: payload.address as string | undefined,
+        quantityNeeded: payload.quantityNeeded as number | undefined,
+        payRate: payload.payRate as number | undefined,
+        notes: payload.notes as string | undefined,
+      };
+      await crmClient.createCrmHotelRequest(hrInput);
       break;
     }
     case "hotel_request:update": {
       const crmId = payload.crmExternalId as string;
       if (!crmId) throw new Error("Missing crmExternalId");
-      await crmClient.updateCrmHotelRequest(crmId, payload as any);
+      const hrUpdate: crmClient.UpdateCrmHotelRequestInput = {};
+      if (payload.hotelName) hrUpdate.hotelName = payload.hotelName as string;
+      if (payload.roleNeeded) hrUpdate.roleNeeded = payload.roleNeeded as string;
+      if (payload.quantityNeeded !== undefined) hrUpdate.quantityNeeded = payload.quantityNeeded as number;
+      if (payload.shiftStartAt) hrUpdate.shiftStartAt = payload.shiftStartAt as string;
+      if (payload.shiftEndAt) hrUpdate.shiftEndAt = payload.shiftEndAt as string;
+      if (payload.payRate !== undefined) hrUpdate.payRate = payload.payRate as number;
+      if (payload.notes) hrUpdate.notes = payload.notes as string;
+      if (payload.status) hrUpdate.status = payload.status as "NEW" | "CONFIRMED";
+      await crmClient.updateCrmHotelRequest(crmId, hrUpdate);
       break;
     }
     case "workplace:update": {
       const crmId = payload.crmExternalId as string;
       if (!crmId) throw new Error("Missing crmExternalId");
-      await crmClient.updateCrmWorkplace(crmId, payload as any);
+      const wpUpdate: crmClient.UpdateCrmWorkplaceInput = {};
+      if (payload.name) wpUpdate.name = payload.name as string;
+      if (payload.address) wpUpdate.address = payload.address as string;
+      if (payload.location) wpUpdate.location = payload.location as string;
+      if (payload.province) wpUpdate.province = payload.province as string;
+      if (payload.isActive !== undefined) wpUpdate.isActive = payload.isActive as boolean;
+      await crmClient.updateCrmWorkplace(crmId, wpUpdate);
       break;
     }
     default:

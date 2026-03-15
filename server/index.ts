@@ -992,12 +992,21 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
           } catch (backfillErr: any) {
             log("[CRM] Backfill failed (non-blocking):", backfillErr.message);
           }
+          let lastSyncFailed = false;
           setInterval(async () => {
             try {
               if (crmSync.isSyncRunning()) return;
-              await crmSync.syncConfirmedShifts(false);
-              await crmSync.syncHotelRequests(false);
+              if (lastSyncFailed) {
+                log("[CRM] Previous sync failed — attempting full recovery sync");
+                await crmSync.syncAll(false);
+                lastSyncFailed = false;
+                log("[CRM] Recovery sync completed successfully");
+              } else {
+                await crmSync.syncConfirmedShifts(false);
+                await crmSync.syncHotelRequests(false);
+              }
             } catch (err: any) {
+              lastSyncFailed = true;
               log("[CRM] Auto-sync failed:", err.message);
             }
           }, 3 * 60 * 1000);

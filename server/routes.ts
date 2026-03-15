@@ -2521,9 +2521,14 @@ Respond with exactly:
 
   app.post("/api/webhooks/crm", async (req: Request, res: Response) => {
     try {
-      const webhookSecret = process.env.WEEKDAYS_API_KEY;
-      const providedSecret = req.headers["x-webhook-secret"] || req.headers["authorization"]?.replace("Bearer ", "");
-      if (!webhookSecret || providedSecret !== webhookSecret) {
+      const webhookSecret = process.env.CRM_WEBHOOK_SECRET || process.env.WEEKDAYS_API_KEY;
+      if (!webhookSecret) {
+        res.status(501).json({ error: "CRM webhook secret not configured" });
+        return;
+      }
+
+      const providedSecret = req.headers["x-crm-webhook-secret"] as string;
+      if (!providedSecret || providedSecret !== webhookSecret) {
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
@@ -2531,52 +2536,36 @@ Respond with exactly:
       res.status(200).json({ received: true });
 
       const { event, data } = req.body || {};
-      if (!event || !data) return;
+      console.log(`[CRM Webhook] Received event: ${event || "unknown"}`);
 
-      console.log(`[CRM Webhook] Received event: ${event}`);
-
-      if (event === "hotel_request.created" || event === "hotel_request.updated") {
-        const { syncHotelRequests } = await import("./services/crm-sync");
-        await syncHotelRequests(false).catch(err =>
-          console.error("[CRM Webhook] Hotel request sync failed:", err?.message)
+      const { syncAll, isSyncRunning } = await import("./services/crm-sync");
+      if (!isSyncRunning()) {
+        syncAll(false).catch(err =>
+          console.error("[CRM Webhook] syncAll failed:", err?.message)
         );
+      }
 
-        if (event === "hotel_request.created" && data.hotelName) {
-          try {
-            const { sendDiscordNotification } = await import("./services/discord");
-            await sendDiscordNotification({
-              title: "New CRM Hotel Request",
-              description: `**${data.hotelName}** needs ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"}\nShift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
-              color: 0x00bcd4,
-            });
-          } catch (discordErr: any) {
-            console.error("[CRM Webhook] Discord alert failed:", discordErr?.message);
-          }
-
-          try {
-            const GM_PHONE = "+14166028038";
-            const { sendSMS, logSMS } = await import("./services/openphone");
-            const msg = `CRM Alert: New hotel request from ${data.hotelName} - ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"} needed`;
-            await sendSMS(GM_PHONE, msg);
-            await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: msg, status: "sent" });
-          } catch (smsErr: any) {
-            console.error("[CRM Webhook] SMS alert failed:", smsErr?.message);
-          }
+      if (event === "hotel_request.created" && data?.hotelName) {
+        try {
+          const { sendDiscordNotification } = await import("./services/discord");
+          await sendDiscordNotification({
+            title: "New CRM Hotel Request",
+            description: `**${data.hotelName}** needs ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"}\nShift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
+            color: 0x00bcd4,
+          });
+        } catch (discordErr: any) {
+          console.error("[CRM Webhook] Discord alert failed:", discordErr?.message);
         }
-      }
 
-      if (event === "confirmed_shift.updated" || event === "confirmed_shift.created") {
-        const { syncConfirmedShifts } = await import("./services/crm-sync");
-        await syncConfirmedShifts(false).catch(err =>
-          console.error("[CRM Webhook] Shift sync failed:", err?.message)
-        );
-      }
-
-      if (event === "workplace.updated" || event === "workplace.created") {
-        const { syncWorkplaces } = await import("./services/crm-sync");
-        await syncWorkplaces(false).catch(err =>
-          console.error("[CRM Webhook] Workplace sync failed:", err?.message)
-        );
+        try {
+          const GM_PHONE = "+14166028038";
+          const { sendSMS, logSMS } = await import("./services/openphone");
+          const msg = `CRM Alert: New hotel request from ${data.hotelName} - ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"} needed`;
+          await sendSMS(GM_PHONE, msg);
+          await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: msg, status: "sent" });
+        } catch (smsErr: any) {
+          console.error("[CRM Webhook] SMS alert failed:", smsErr?.message);
+        }
       }
     } catch (error: any) {
       console.error("[CRM Webhook] Error:", error?.message);

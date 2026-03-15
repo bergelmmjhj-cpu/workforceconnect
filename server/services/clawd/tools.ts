@@ -1352,19 +1352,19 @@ async function lookupCrmShifts(input: Record<string, unknown>) {
 
     if (workplaceName) {
       results = results.filter(s =>
-        (s.hotelName || "").toLowerCase().includes(workplaceName)
+        (s.request?.hotelName || "").toLowerCase().includes(workplaceName)
       );
     }
     if (workerName) {
       results = results.filter(s =>
-        (s.workerName || "").toLowerCase().includes(workerName)
+        (s.quoContactNameSnapshot || "").toLowerCase().includes(workerName)
       );
     }
     if (dateFrom) {
-      results = results.filter(s => s.shiftDate >= dateFrom);
+      results = results.filter(s => s.scheduledStartAt >= dateFrom);
     }
     if (dateTo) {
-      results = results.filter(s => s.shiftDate <= dateTo);
+      results = results.filter(s => s.scheduledStartAt <= dateTo);
     }
 
     const limit = Math.min((input.limit as number) || 20, 50);
@@ -1373,12 +1373,14 @@ async function lookupCrmShifts(input: Record<string, unknown>) {
       count: results.length,
       shifts: results.slice(0, limit).map(s => ({
         crmId: s.id,
-        hotelName: s.hotelName,
-        workerName: s.workerName,
-        shiftDate: s.shiftDate,
-        shiftStart: s.shiftStart,
-        shiftEnd: s.shiftEnd,
+        hotelName: s.request?.hotelName || "",
+        roleNeeded: s.request?.roleNeeded || "",
+        location: s.request?.location || "",
+        workerContact: s.quoContactNameSnapshot || "",
+        scheduledStart: s.scheduledStartAt,
+        scheduledEnd: s.scheduledEndAt,
         confirmStatus: s.confirmStatus,
+        confirmedAt: s.confirmedAt,
         checkedInAt: s.checkedInAt,
         completedAt: s.completedAt,
       })),

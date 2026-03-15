@@ -523,6 +523,25 @@ export default function ClawdWorkspaceScreen() {
     }
   }, []);
 
+  const handleTakePhoto = useCallback(async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Camera Permission", "Camera access is required to take photos.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        base64: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]?.base64) {
+        setPendingImages(prev => [...prev, result.assets[0].base64!]);
+      }
+    } catch (err) {
+      console.error("Camera error:", err);
+    }
+  }, []);
+
   const handleInsightTap = useCallback((query: string) => {
     setActiveTab("chat");
     sendMutation.mutate({ message: query });
@@ -737,6 +756,15 @@ export default function ClawdWorkspaceScreen() {
         >
           <Feather name="image" size={18} color={theme.textMuted} />
         </Pressable>
+        {Platform.OS !== "web" ? (
+          <Pressable
+            onPress={handleTakePhoto}
+            style={[styles.imageBtn, { backgroundColor: theme.backgroundSecondary }]}
+            testID="clawd-camera-button"
+          >
+            <Feather name="camera" size={18} color={theme.textMuted} />
+          </Pressable>
+        ) : null}
         <TextInput
           style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
           placeholder={pendingImages.length > 0 ? "Add a message about the image..." : "Ask Clawd or give it an action to take..."}

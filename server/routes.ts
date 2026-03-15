@@ -8421,12 +8421,42 @@ Respond with exactly:
       const messageBody = (messageData.body || messageData.content || messageData.text || "").trim();
       const openphoneMessageId = messageData.id;
 
-      if (!senderPhone || !messageBody) {
+      const mediaUrls: string[] = [];
+      if (Array.isArray(messageData.media)) {
+        for (const m of messageData.media) {
+          if (m?.url && typeof m.url === "string" && /^https?:\/\//i.test(m.url)) {
+            mediaUrls.push(m.url);
+          }
+        }
+      }
+
+      if (!senderPhone || (!messageBody && mediaUrls.length === 0)) {
         console.log("[OPENPHONE WEBHOOK] Missing sender phone or message body");
         return;
       }
 
-      console.log(`[OPENPHONE WEBHOOK] From: ${senderPhone}, Body: "${messageBody}"`);
+      console.log(`[OPENPHONE WEBHOOK] From: ${senderPhone}, Body: "${messageBody}"${mediaUrls.length > 0 ? `, Media: ${mediaUrls.length} file(s)` : ""}`);
+
+      if (mediaUrls.length > 0) {
+        const imageUrls = mediaUrls.filter(u => /\.(jpg|jpeg|png|gif|webp)/i.test(u) || u.includes("image"));
+        if (imageUrls.length > 0) {
+          console.log(`[OPENPHONE WEBHOOK] Processing ${imageUrls.length} MMS image(s) via Clawd vision`);
+          setImmediate(async () => {
+            try {
+              const result = await orchestrate({
+                userMessage: messageBody || "Analyze this image sent via SMS",
+                conversationHistory: [],
+                userId: `sms-${senderPhone}`,
+                imageUrls,
+                forceActionMode: true,
+              });
+              console.log(`[OPENPHONE WEBHOOK] Vision analysis complete: ${result.response?.slice(0, 120)}`);
+            } catch (err: any) {
+              console.error("[OPENPHONE WEBHOOK] Vision analysis failed:", err?.message);
+            }
+          });
+        }
+      }
 
       // Mark any pending AI follow-up messages as responded
       markResponseReceived(senderPhone).catch(() => {});

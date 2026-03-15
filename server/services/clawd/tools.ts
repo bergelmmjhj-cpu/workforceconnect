@@ -212,7 +212,7 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
         country: { type: "string", description: "Country (default: Canada)" },
         geofenceRadiusMeters: { type: "number", description: "Geofence radius in meters for TITO (default: 150)" },
       },
-      required: ["name", "address", "city", "province"],
+      required: ["name", "address", "city", "province", "postalCode"],
     },
   },
   {
@@ -886,12 +886,13 @@ async function toolCreateWorkplace(input: Record<string, unknown>) {
   const country = (input.country as string) || "Canada";
   const geofenceRadius = input.geofenceRadiusMeters as number | undefined;
 
-  if (!name || !address || !city || !province) {
+  if (!name || !address || !city || !province || !postalCode) {
     const missing = [];
     if (!name) missing.push("name");
     if (!address) missing.push("address");
     if (!city) missing.push("city");
     if (!province) missing.push("province");
+    if (!postalCode) missing.push("postalCode");
     return { success: false, error: `Missing required fields: ${missing.join(", ")}` };
   }
 
@@ -916,7 +917,7 @@ async function toolCreateWorkplace(input: Record<string, unknown>) {
       addressLine1: address,
       city,
       province,
-      postalCode: postalCode || null,
+      postalCode,
       country,
       latitude: geo?.lat ?? null,
       longitude: geo?.lng ?? null,

@@ -2582,8 +2582,8 @@ Respond with exactly:
           const { sendDiscordNotification } = await import("./services/discord");
           await sendDiscordNotification({
             title: "New CRM Hotel Request",
-            description: `**${data.hotelName}** needs ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"}\nShift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
-            color: 0x00bcd4,
+            message: `**${data.hotelName}** needs ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"}\nShift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
+            color: "blue",
           });
         } catch (discordErr: any) {
           console.error("[CRM Webhook] Discord alert failed:", discordErr?.message);

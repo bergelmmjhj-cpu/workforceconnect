@@ -2218,7 +2218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const { message } = req.body;
+      const { message, imageBase64 } = req.body;
       if (!message || typeof message !== "string" || message.trim().length === 0) {
         res.status(400).json({ error: "message is required" });
         return;
@@ -2231,16 +2231,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const conversationHistory = history.map(h => ({ role: h.role, content: h.content }));
 
+      const MAX_IMAGES = 4;
+      const MAX_BASE64_SIZE = 5 * 1024 * 1024;
+      let images: string[] | undefined = Array.isArray(imageBase64)
+        ? imageBase64.filter((s: unknown) => typeof s === "string" && (s as string).length <= MAX_BASE64_SIZE).slice(0, MAX_IMAGES)
+        : undefined;
+
       const result = await orchestrate({
         userMessage: message.trim(),
         conversationHistory,
         userId,
+        imageBase64: images && images.length > 0 ? images : undefined,
       });
+
+      const userContent = images && images.length > 0
+        ? `[User sent ${images.length} image(s)]\n${message.trim()}`
+        : message.trim();
 
       await db.insert(clawdChatMessages).values({
         userId,
         role: "user",
-        content: message.trim(),
+        content: userContent,
       });
 
       await db.insert(clawdChatMessages).values({

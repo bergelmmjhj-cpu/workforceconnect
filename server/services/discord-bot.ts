@@ -423,12 +423,20 @@ async function handleMessage(message: Message) {
 
     try {
       try { await message.react('🤔'); } catch {}
+      const imageUrls = message.attachments
+        .filter(a => a.contentType?.startsWith("image/"))
+        .map(a => a.url);
+      if (imageUrls.length > 0) {
+        console.log(`[DISCORD BOT] @mention includes ${imageUrls.length} image attachment(s)`);
+      }
+
       console.log(`[DISCORD BOT] @mention from ${message.author.username}: "${cleanContent.slice(0, 80)}"`);
       const response = await orchestrate({
-        userMessage: cleanContent,
+        userMessage: cleanContent || "Analyze this image",
         conversationHistory: [],
         userId: `discord-${message.author.id}`,
         forceActionMode: true,
+        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
       });
 
       const reply = response.response || "I couldn't process that right now. Try `/clawd help` for available commands.";

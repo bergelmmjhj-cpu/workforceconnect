@@ -12,6 +12,7 @@ import {
   Platform,
   Clipboard,
   Alert,
+  Image,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Feather } from "@expo/vector-icons";
@@ -19,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -404,6 +406,7 @@ export default function ClawdWorkspaceScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("chat");
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [alertFilter, setAlertFilter] = useState("all");
   const [alertsTab, setAlertsTab] = useState<"runs" | "discord">("discord");
   const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
@@ -457,9 +460,13 @@ export default function ClawdWorkspaceScreen() {
   }, [messages.length, scrollToBottom]);
 
   const sendMutation = useMutation({
-    mutationFn: async (message: string) => {
+    mutationFn: async ({ message, images }: { message: string; images?: string[] }) => {
       setIsSending(true);
-      const res = await apiRequest("POST", "/api/clawd/chat", { message });
+      const body: Record<string, unknown> = { message };
+      if (images && images.length > 0) {
+        body.imageBase64 = images;
+      }
+      const res = await apiRequest("POST", "/api/clawd/chat", body);
       return res.json();
     },
     onSuccess: () => {
@@ -491,15 +498,34 @@ export default function ClawdWorkspaceScreen() {
 
   const handleSend = useCallback((text?: string) => {
     const msg = (text || inputText).trim();
-    if (!msg || isSending) return;
+    if (!msg && pendingImages.length === 0) return;
+    if (isSending) return;
+    const images = pendingImages.length > 0 ? [...pendingImages] : undefined;
     setInputText("");
-    sendMutation.mutate(msg);
+    setPendingImages([]);
+    sendMutation.mutate({ message: msg || "Analyze this image", images });
     scrollToBottom();
-  }, [inputText, isSending, sendMutation, scrollToBottom]);
+  }, [inputText, isSending, sendMutation, scrollToBottom, pendingImages]);
+
+  const handlePickImage = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        base64: true,
+        quality: 0.7,
+        allowsMultipleSelection: false,
+      });
+      if (!result.canceled && result.assets[0]?.base64) {
+        setPendingImages(prev => [...prev, result.assets[0].base64!]);
+      }
+    } catch (err) {
+      console.error("Image picker error:", err);
+    }
+  }, []);
 
   const handleInsightTap = useCallback((query: string) => {
     setActiveTab("chat");
-    sendMutation.mutate(query);
+    sendMutation.mutate({ message: query });
   }, [sendMutation]);
 
   const handleAcknowledge = useCallback((alertId: string) => {
@@ -687,10 +713,33 @@ export default function ClawdWorkspaceScreen() {
           </Pressable>
         ))}
       </ScrollView>
+      {pendingImages.length > 0 ? (
+        <View style={[styles.pendingImagesRow, { borderTopColor: theme.border }]}>
+          {pendingImages.map((b64, idx) => (
+            <View key={idx} style={styles.pendingImageWrap}>
+              <Image source={{ uri: `data:image/jpeg;base64,${b64}` }} style={styles.pendingImageThumb} />
+              <Pressable
+                onPress={() => setPendingImages(prev => prev.filter((_, i) => i !== idx))}
+                style={[styles.pendingImageRemove, { backgroundColor: theme.error || "#EF4444" }]}
+                testID={`remove-image-${idx}`}
+              >
+                <Feather name="x" size={10} color="#fff" />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
       <View style={[styles.inputBar, { backgroundColor: theme.surface, borderTopColor: theme.border, paddingBottom: insets.bottom > 0 ? insets.bottom : Spacing.md }]}>
+        <Pressable
+          onPress={handlePickImage}
+          style={[styles.imageBtn, { backgroundColor: theme.backgroundSecondary }]}
+          testID="clawd-image-button"
+        >
+          <Feather name="image" size={18} color={theme.textMuted} />
+        </Pressable>
         <TextInput
           style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-          placeholder="Ask Clawd or give it an action to take..."
+          placeholder={pendingImages.length > 0 ? "Add a message about the image..." : "Ask Clawd or give it an action to take..."}
           placeholderTextColor={theme.textMuted}
           value={inputText}
           onChangeText={setInputText}
@@ -706,11 +755,11 @@ export default function ClawdWorkspaceScreen() {
         />
         <Pressable
           onPress={() => handleSend()}
-          disabled={!inputText.trim() || isSending}
-          style={[styles.sendBtn, { backgroundColor: inputText.trim() ? theme.primary : theme.backgroundSecondary }]}
+          disabled={!inputText.trim() && pendingImages.length === 0 || isSending}
+          style={[styles.sendBtn, { backgroundColor: (inputText.trim() || pendingImages.length > 0) ? theme.primary : theme.backgroundSecondary }]}
           testID="clawd-send-button"
         >
-          <Feather name="send" size={18} color={inputText.trim() ? "#fff" : theme.textMuted} />
+          <Feather name="send" size={18} color={(inputText.trim() || pendingImages.length > 0) ? "#fff" : theme.textMuted} />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -1211,6 +1260,11 @@ const styles = StyleSheet.create({
   inputBar: { flexDirection: "row", alignItems: "flex-end", paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, borderTopWidth: 1, gap: Spacing.sm },
   input: { flex: 1, minHeight: 40, maxHeight: 120, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.lg, fontSize: 16 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
+  imageBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
+  pendingImagesRow: { flexDirection: "row", paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, gap: Spacing.sm, borderTopWidth: 1 },
+  pendingImageWrap: { position: "relative" },
+  pendingImageThumb: { width: 56, height: 56, borderRadius: BorderRadius.md },
+  pendingImageRemove: { position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 9, justifyContent: "center", alignItems: "center" },
   scrollContent: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
   briefingCard: { padding: Spacing.md, marginBottom: Spacing.md },
   briefingHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: Spacing.sm },

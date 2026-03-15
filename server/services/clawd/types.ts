@@ -53,6 +53,8 @@ export interface OrchestrationRequest {
   conversationHistory: Array<{ role: string; content: string }>;
   userId: string;
   forceActionMode?: boolean;
+  imageUrls?: string[];
+  imageBase64?: string[];
 }
 
 export interface ToolCallLog {

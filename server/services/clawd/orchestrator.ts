@@ -8,6 +8,7 @@ import { callClaudeWithTools } from "./anthropic-client";
 import { CLAWD_TOOLS, executeTool } from "./tools";
 import { db } from "../../db";
 import { clawdAssistantRuns } from "@shared/schema";
+import { analyzeImageWithGPT, analyzeImageBase64WithGPT } from "../openai-vision";
 
 // ─── Typed Tool Result Helpers ────────────────────────────────────────────────
 // Safely extract typed data from tool results (result: unknown) without as any.
@@ -459,6 +460,7 @@ ${pendingSection}${aliasSection}
 - **Create shift requests** in the system
 - **Create workplaces** with auto-geocoded coordinates (address → lat/lng)
 - **Update workplaces** (name, address, geofence radius, active status)
+- **Analyze images** — photos sent by users are automatically analyzed and described for you
 - **Generate Replit prompts** when a capability is missing
 
 ## Operational Rules:
@@ -526,6 +528,29 @@ Current time (Toronto): ${torontoTime}`;
 
 export async function orchestrate(request: OrchestrationRequest): Promise<OrchestrationResponse> {
   const startTime = Date.now();
+
+  const hasImages = (request.imageUrls && request.imageUrls.length > 0) ||
+    (request.imageBase64 && request.imageBase64.length > 0);
+
+  if (hasImages) {
+    try {
+      let imageDescription = "";
+      if (request.imageUrls && request.imageUrls.length > 0) {
+        imageDescription = await analyzeImageWithGPT(request.imageUrls);
+      } else if (request.imageBase64 && request.imageBase64.length > 0) {
+        imageDescription = await analyzeImageBase64WithGPT(request.imageBase64);
+      }
+      if (imageDescription) {
+        request = {
+          ...request,
+          userMessage: `[Image analysis: ${imageDescription}]\n\nUser message: ${request.userMessage}`,
+        };
+        console.log(`[Clawd] Image analyzed, augmented message (${imageDescription.length} chars)`);
+      }
+    } catch (err: any) {
+      console.error("[Clawd] Image analysis failed (continuing without):", err?.message);
+    }
+  }
 
   // forceActionMode bypasses all routing logic — used for Discord @mentions
   if (request.forceActionMode) {

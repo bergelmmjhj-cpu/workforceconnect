@@ -46,6 +46,7 @@ Key features include:
 - **Clawd AI Web Chat (PWA)**: Standalone, session-authenticated HTML page for admin/HR, offering full markdown rendering and PWA installability.
 - **CRM Timezone Fix**: `crmToLocal()` in `server/services/crm-sync.ts` correctly handles CRM ISO date strings without erroneous timezone conversion.
 - **Consolidated Lilee Shift Reminder SMS**: Sends one consolidated report SMS to GM Lilee for all newly-reminded workers, preventing individual CC texts.
+- **GPT-4o Vision Integration**: Image analysis in Clawd AI via GPT-4o Vision model. Supports image uploads in the app (base64), Discord image attachments (URLs), and SMS image analysis. Images are pre-processed into text descriptions that augment the user's message before orchestration.
 
 ## External Dependencies
 
@@ -63,6 +64,7 @@ Key features include:
 ### Cloud Services & APIs
 - **OpenPhone API**: For sending and receiving SMS messages.
 - **Anthropic API**: Integrated for Clawd AI's large language model capabilities (Claude-Sonnet-4-6).
+- **OpenAI API (GPT-4o)**: Used for vision/image analysis in Clawd AI via Replit AI integrations.
 - **SendGrid**: Used for sending emails.
 - **Google Places API**: For location-based services.
 

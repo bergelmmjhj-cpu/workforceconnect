@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, PresenceUpdateStatus, type Message, type GuildMember } from "discord.js";
 import { db } from "../db";
 import { discordAlerts, discordActionLogs, appConfig } from "../../shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { executeDiscordAction, type DiscordActionContext } from "./discord-actions";
 import { orchestrate } from "./clawd/orchestrator";
 
@@ -218,23 +218,27 @@ function parseNaturalLanguage(content: string): { intent: string; args: Record<s
   return null;
 }
 
-async function getAuthorizedUserIds(): Promise<Set<string>> {
-  try {
-    const [row] = await db.select().from(appConfig).where(eq(appConfig.key, "discord_authorized_users"));
-    if (!row?.value) return new Set();
-    return new Set(row.value.split(",").map(id => id.trim()).filter(Boolean));
-  } catch {
-    return new Set();
-  }
-}
+let _configCache: { openToAll: boolean; authorizedIds: Set<string>; lastFetched: number } | null = null;
+const CONFIG_CACHE_TTL_MS = 60_000;
 
-async function isOpenToAll(): Promise<boolean> {
+async function getDiscordConfig(): Promise<{ openToAll: boolean; authorizedIds: Set<string> }> {
+  const now = Date.now();
+  if (_configCache && now - _configCache.lastFetched < CONFIG_CACHE_TTL_MS) {
+    return _configCache;
+  }
   try {
-    const [row] = await db.select().from(appConfig).where(eq(appConfig.key, "discord_open_to_all"));
-    if (!row) return true;
-    return row.value !== "false";
+    const rows = await db.select().from(appConfig)
+      .where(inArray(appConfig.key, ["discord_open_to_all", "discord_authorized_users"]));
+    const openRow = rows.find(r => r.key === "discord_open_to_all");
+    const authRow = rows.find(r => r.key === "discord_authorized_users");
+    const openToAll = openRow ? openRow.value !== "false" : true;
+    const authorizedIds = authRow?.value
+      ? new Set(authRow.value.split(",").map((id: string) => id.trim()).filter(Boolean))
+      : new Set<string>();
+    _configCache = { openToAll, authorizedIds, lastFetched: now };
+    return _configCache;
   } catch {
-    return true;
+    return { openToAll: true, authorizedIds: new Set() };
   }
 }
 
@@ -381,9 +385,8 @@ async function handleMessage(message: Message) {
 
   if (!isClawdCommand && !hasAlertId && !hasKnownCommand && !isMention) return;
 
-  const openToAll = await isOpenToAll();
-  if (!openToAll) {
-    const authorizedIds = await getAuthorizedUserIds();
+  const { openToAll, authorizedIds } = await getDiscordConfig();
+  if (!openToAll && !isMention) {
     if (authorizedIds.size === 0 || !authorizedIds.has(message.author.id)) {
       await message.reply("Not authorized to use Oscar. Contact an admin to add your Discord user ID in System Settings, or ask them to enable open access for all channel members.");
       await logAction(null, message.author.id, message.author.username, "unauthorized", content, "unauthorized", "rejected", false, authorizedIds.size === 0 ? "No authorized users configured" : "User not in authorized list");

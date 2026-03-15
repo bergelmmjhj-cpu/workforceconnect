@@ -218,29 +218,35 @@ function parseNaturalLanguage(content: string): { intent: string; args: Record<s
   return null;
 }
 
-let _configCache: { openToAll: boolean; authorizedIds: Set<string>; lastFetched: number } | null = null;
-const CONFIG_CACHE_TTL_MS = 60_000;
+let _configCache: { openToAll: boolean; authorizedIds: Set<string> } = {
+  openToAll: true,
+  authorizedIds: new Set(),
+};
 
-async function getDiscordConfig(): Promise<{ openToAll: boolean; authorizedIds: Set<string> }> {
-  const now = Date.now();
-  if (_configCache && now - _configCache.lastFetched < CONFIG_CACHE_TTL_MS) {
-    return _configCache;
-  }
+async function refreshDiscordConfig(): Promise<void> {
   try {
     const rows = await db.select().from(appConfig)
       .where(inArray(appConfig.key, ["discord_open_to_all", "discord_authorized_users"]));
     const openRow = rows.find(r => r.key === "discord_open_to_all");
     const authRow = rows.find(r => r.key === "discord_authorized_users");
-    const openToAll = openRow ? openRow.value !== "false" : true;
-    const authorizedIds = authRow?.value
-      ? new Set(authRow.value.split(",").map((id: string) => id.trim()).filter(Boolean))
-      : new Set<string>();
-    _configCache = { openToAll, authorizedIds, lastFetched: now };
-    return _configCache;
+    _configCache = {
+      openToAll: openRow ? openRow.value !== "false" : true,
+      authorizedIds: authRow?.value
+        ? new Set(authRow.value.split(",").map((id: string) => id.trim()).filter(Boolean))
+        : new Set<string>(),
+    };
   } catch {
-    if (_configCache) return _configCache;
-    return { openToAll: true, authorizedIds: new Set() };
+    _configCache = { openToAll: true, authorizedIds: new Set() };
   }
+}
+
+function getDiscordConfig(): { openToAll: boolean; authorizedIds: Set<string> } {
+  return _configCache;
+}
+
+function startConfigRefresh() {
+  refreshDiscordConfig();
+  setInterval(refreshDiscordConfig, 60_000);
 }
 
 async function findAlertByDiscordMessageId(messageId: string): Promise<typeof discordAlerts.$inferSelect | null> {
@@ -524,6 +530,7 @@ export async function startDiscordBot(): Promise<boolean> {
       client.on("clientReady", () => {
         console.log(`[DISCORD BOT] Logged in as ${client.user?.tag}`);
         setOnlinePresence(client);
+        startConfigRefresh();
       });
 
       client.on("messageCreate", handleMessage);

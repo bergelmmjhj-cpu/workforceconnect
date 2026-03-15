@@ -1308,8 +1308,11 @@ async function lookupCrmWorkplaces(input: Record<string, unknown>) {
     return { success: false, error: "CRM is not configured. WEEKDAYS_API_KEY and WEEKDAYS_TEAM_ID are required." };
   }
   try {
-    const allWorkplaces = await crmClient.getWorkplaces();
-    let results = allWorkplaces;
+    const crmAll = await crmClient.getWorkplaces();
+    const localAll = await db.select({ id: workplaces.id, crmExternalId: workplaces.crmExternalId }).from(workplaces);
+    const localByCrmId = new Map(localAll.filter(w => w.crmExternalId).map(w => [w.crmExternalId!, w]));
+
+    let results = crmAll;
     const searchTerm = (input.searchTerm as string)?.toLowerCase();
     if (searchTerm) {
       results = results.filter(w =>
@@ -1331,6 +1334,8 @@ async function lookupCrmWorkplaces(input: Record<string, unknown>) {
         isActive: w.isActive,
         latitude: w.latitude,
         longitude: w.longitude,
+        localMatch: localByCrmId.has(w.id),
+        missingLocally: !localByCrmId.has(w.id),
       })),
     };
   } catch (err: any) {

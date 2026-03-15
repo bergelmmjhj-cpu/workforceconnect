@@ -1829,7 +1829,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
 
-            const firstName = (updatedApplication.fullName || "worker").split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+            const fullNameToUse = updatedApplication.fullName || "Worker";
+            const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.fullName, fullNameToUse)).limit(1);
+            if (fullNameDuplicate) {
+              res.status(409).json({ error: `A worker named "${fullNameToUse}" already exists.` });
+              return;
+            }
+
+            const firstName = fullNameToUse.split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
             const phoneLast4 = (updatedApplication.phone || "0000").replace(/\D/g, "").slice(-4);
             const tempPassword = `${firstName}${phoneLast4}`;
             const hashedPassword = await bcrypt.hash(tempPassword, 10);
@@ -1838,7 +1845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               id: crypto.randomUUID(),
               email: updatedApplication.email.toLowerCase(),
               password: hashedPassword,
-              fullName: updatedApplication.fullName || "Worker",
+              fullName: fullNameToUse,
               role: "worker",
               phone: updatedApplication.phone || undefined,
               isActive: true,
@@ -8975,7 +8982,7 @@ Respond with exactly:
 
   app.post("/api/admin/invite-user", checkRoles("admin"), async (req: Request, res: Response) => {
     try {
-      const { email, fullName, role, businessName } = req.body;
+      const { email, fullName, role, businessName, phone } = req.body;
 
       if (!email || !fullName || !role) {
         res.status(400).json({ error: "Email, full name, and role are required" });
@@ -9006,6 +9013,12 @@ Respond with exactly:
           res.status(409).json({ error: `A user with phone ${phone} already exists.` });
           return;
         }
+      }
+
+      const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.fullName, fullName.trim())).limit(1);
+      if (fullNameDuplicate) {
+        res.status(409).json({ error: `A user with name "${fullName}" already exists.` });
+        return;
       }
 
       // Generate temp password: firstName + 4 random digits

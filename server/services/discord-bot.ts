@@ -424,7 +424,7 @@ export async function startDiscordBot(): Promise<boolean> {
         ],
       });
 
-      client.on("ready", () => {
+      client.on("clientReady", () => {
         console.log(`[DISCORD BOT] Logged in as ${client.user?.tag}`);
         setOnlinePresence(client);
       });

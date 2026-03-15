@@ -477,6 +477,11 @@ function setOnlinePresence(client: Client) {
 }
 
 export async function startDiscordBot(): Promise<boolean> {
+  if (process.env.DISCORD_BOT_ENABLED === "false") {
+    console.log("[DISCORD BOT] DISCORD_BOT_ENABLED=false, skipping bot startup (production-only mode)");
+    return false;
+  }
+
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) {
     console.log("[DISCORD BOT] No DISCORD_BOT_TOKEN set, skipping bot startup");

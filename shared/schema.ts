@@ -30,7 +30,7 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  phoneUnique: uniqueIndex("users_phone_unique").on(table.phone).where(table.phone !== null),
+  phoneUnique: uniqueIndex("users_phone_unique").on(table.phone).where(sql`${table.phone} IS NOT NULL`),
 }));
 
 export const insertUserSchema = createInsertSchema(users).pick({

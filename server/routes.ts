@@ -1572,6 +1572,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      // Duplicate phone/fullName guard for worker creation
+      const phone = req.body.phone as string | undefined;
+      if (phone) {
+        const [phoneDup] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).limit(1);
+        if (phoneDup) {
+          res.status(409).json({ error: `A worker with phone ${phone} already exists.` });
+          return;
+        }
+      }
+      if (role === "worker") {
+        const [nameDup] = await db.select({ id: users.id }).from(users).where(eq(users.fullName, fullName.trim())).limit(1);
+        if (nameDup) {
+          res.status(409).json({ error: `A worker named "${fullName}" already exists.` });
+          return;
+        }
+      }
+
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 

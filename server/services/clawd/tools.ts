@@ -1354,6 +1354,7 @@ async function lookupCrmShifts(input: Record<string, unknown>) {
     const workerName = (input.workerName as string)?.toLowerCase();
     const dateFrom = input.dateFrom as string;
     const dateTo = input.dateTo as string;
+    const status = (input.status as string)?.toUpperCase();
 
     if (workplaceName) {
       results = results.filter(s =>
@@ -1370,6 +1371,9 @@ async function lookupCrmShifts(input: Record<string, unknown>) {
     }
     if (dateTo) {
       results = results.filter(s => s.scheduledStartAt <= dateTo);
+    }
+    if (status) {
+      results = results.filter(s => s.confirmStatus === status);
     }
 
     const limit = Math.min((input.limit as number) || 20, 50);
@@ -1404,14 +1408,24 @@ async function lookupCrmHotelRequests(input: Record<string, unknown>) {
     let results = allRequests;
     const hotelName = (input.hotelName as string)?.toLowerCase();
     const status = (input.status as string)?.toUpperCase();
+    const location = (input.location as string)?.toLowerCase();
+    const dateFrom = input.dateFrom as string;
+    const dateTo = input.dateTo as string;
 
     if (hotelName) {
-      results = results.filter(r =>
-        (r.hotelName || "").toLowerCase().includes(hotelName)
-      );
+      results = results.filter(r => (r.hotelName || "").toLowerCase().includes(hotelName));
     }
     if (status) {
       results = results.filter(r => r.status === status);
+    }
+    if (location) {
+      results = results.filter(r => (r.location || "").toLowerCase().includes(location));
+    }
+    if (dateFrom) {
+      results = results.filter(r => r.shiftStartAt >= dateFrom);
+    }
+    if (dateTo) {
+      results = results.filter(r => r.shiftStartAt <= dateTo);
     }
 
     const limit = Math.min((input.limit as number) || 20, 50);
@@ -1423,6 +1437,8 @@ async function lookupCrmHotelRequests(input: Record<string, unknown>) {
         hotelName: r.hotelName,
         roleNeeded: r.roleNeeded,
         quantityNeeded: r.quantityNeeded,
+        location: r.location,
+        address: r.address,
         shiftStartAt: r.shiftStartAt,
         shiftEndAt: r.shiftEndAt,
         payRate: r.payRate,

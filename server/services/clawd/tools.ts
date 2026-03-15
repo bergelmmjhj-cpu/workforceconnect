@@ -699,19 +699,32 @@ async function toolCreateShiftRequest(input: Record<string, unknown>) {
         and(
           eq(shiftRequests.workplaceId, workplaceId),
           eq(shiftRequests.date, date),
-          eq(shiftRequests.startTime, startTime),
-          eq(shiftRequests.status, "submitted")
+          or(
+            eq(shiftRequests.startTime, startTime),
+            and(
+              lte(shiftRequests.startTime, endTime),
+              gte(shiftRequests.endTime, startTime)
+            )
+          ),
+          or(
+            eq(shiftRequests.status, "submitted"),
+            eq(shiftRequests.status, "accepted")
+          )
         )
       )
-      .limit(1);
+      .limit(3);
 
     if (existing.length > 0) {
       const dup = existing[0];
+      const isExact = dup.startTime === startTime && dup.endTime === endTime;
       return {
         success: false,
         duplicate: true,
-        error: `A shift request already exists for this workplace on ${date} at ${startTime} (Shift ID: ${dup.id}, status: ${dup.status}). To avoid duplicates, use the existing shift or choose a different time.`,
+        error: isExact
+          ? `Exact duplicate: a ${dup.status} shift request already exists for this workplace on ${date} at ${startTime}–${endTime} (ID: ${dup.id}). Use the existing one or cancel it first.`
+          : `Overlapping shift: a ${dup.status} shift request exists for this workplace on ${date} at ${dup.startTime}–${dup.endTime} (ID: ${dup.id}). The requested time ${startTime}–${endTime} overlaps. Adjust the time or cancel the existing request.`,
         existingShiftId: dup.id,
+        existingShift: { id: dup.id, status: dup.status, startTime: dup.startTime, endTime: dup.endTime },
       };
     }
 
@@ -733,12 +746,21 @@ async function toolCreateShiftRequest(input: Record<string, unknown>) {
   } catch (err: any) {
     const msg = err?.message || "Unknown database error";
     if (msg.includes("foreign key")) {
-      return { success: false, error: "Invalid workplace or client ID — they may not exist in the system. Use lookup_workplaces to verify." };
+      return { success: false, error: `Invalid workplace ID "${workplaceId}" or client ID "${clientId}" — one or both don't exist in the system. Use lookup_workplaces to find valid IDs.` };
     }
     if (msg.includes("not null") || msg.includes("violates")) {
-      return { success: false, error: `Missing required field: ${msg}. Ensure all fields (date, startTime, endTime, workplaceId, clientId, roleType) are provided.` };
+      const missingFields = [];
+      if (!date) missingFields.push("date");
+      if (!startTime) missingFields.push("startTime");
+      if (!endTime) missingFields.push("endTime");
+      if (!workplaceId) missingFields.push("workplaceId");
+      if (!clientId) missingFields.push("clientId");
+      if (!roleType) missingFields.push("roleType");
+      return { success: false, error: missingFields.length > 0
+        ? `Missing required fields: ${missingFields.join(", ")}. All six fields are needed to create a shift request.`
+        : `Database constraint error: ${msg}` };
     }
-    return { success: false, error: `Shift creation failed: ${msg}` };
+    return { success: false, error: `Shift creation failed: ${msg}. Try again or use generate_replit_prompt to escalate.` };
   }
 }
 

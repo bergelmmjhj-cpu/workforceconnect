@@ -274,7 +274,7 @@ const ACTION_INTENT_PATTERNS: RegExp[] = [
   // Follow-up replies and confirmations
   /^\s*try\s+\w+/i,
   /^\s*[\d\s\-\+\(\)]{7,15}\s*$/,             // phone number as standalone reply
-  /^\s*(yes|yep|yis|yeah|sure|ok|okay|go ahead|go|proceed|do it|confirm|correct|sounds good|perfect|great)\s*[.!]?\s*$/i, // short confirmations
+  /^\s*(yes|yep|yis|yeah|sure|ok|okay|go ahead|go|proceed|do it|confirm|correct|sounds good|perfect|great|absolutely|right|that's right|that works|approved|affirmative|done|send it|do that|exactly|yup)\s*[.!]?\s*$/i, // short confirmations
   /\bcan (i|you) have\b/i,
   /\bi need\s+\d*\s*(hk|housekeep|server|staff)/i,
   /\beven if (you can't|you cannot|there('s| is) no)\b/i,
@@ -344,6 +344,18 @@ const ACTIVE_ACTION_CONTEXT_SIGNALS = [
   "confirm and I'll",
   "Say yes",
   "say yes",
+  "Ready to send",
+  "ready to send",
+  "Want me to",
+  "want me to",
+  "I can also",
+  "i can also",
+  "Let me know",
+  "let me know",
+  "Does that look right",
+  "does that look right",
+  "Look correct",
+  "look correct",
 ];
 
 function detectActionIntent(userMessage: string): boolean {
@@ -473,8 +485,10 @@ Rules:
 - If worker/workplace not found: say so clearly, ask for ONE specific thing (name OR phone, not both)
 - If user's message is short and you're mid-task: treat as follow-up answer, not new request
 - When shift creation fails due to missing worker: save all other fields and ask ONLY for the worker
-- When user says "yes", "ok", "sure", "go ahead", "proceed" after you asked a question: treat as confirmation and execute
+- When user says "yes", "ok", "sure", "go ahead", "proceed", "absolutely", "do that", "send it" after you asked a question: treat as confirmation and execute
 - Store resolved worker names in memory so you don't re-lookup the same person
+- When presenting a shift confirmation, list all details on one line: worker, workplace, date, time range
+- Never ask the user to confirm what you can already derive from the conversation
 
 ## Shift Creation Rules:
 
@@ -581,11 +595,15 @@ async function orchestrateWithTools(
   const aliases = getWorkerAliases(request.userId);
   const systemPrompt = buildActionSystemPrompt(pendingDraft, aliases);
 
-  // Cap history at last 20 messages to stay within context limits
   const MAX_HISTORY = 20;
+  const MAX_MSG_CHARS = 2000;
   const trimmedHistory = request.conversationHistory
     .filter(m => m.role === "user" || m.role === "assistant")
-    .slice(-MAX_HISTORY);
+    .slice(-MAX_HISTORY)
+    .map(m => m.content.length > MAX_MSG_CHARS
+      ? { ...m, content: m.content.slice(0, MAX_MSG_CHARS) + "\n[...truncated]" }
+      : m
+    );
 
   // When a pending draft is active, augment short/phone replies so Claude
   // immediately knows they are worker-resolution attempts, not new requests

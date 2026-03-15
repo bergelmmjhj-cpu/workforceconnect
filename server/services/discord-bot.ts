@@ -328,9 +328,9 @@ async function handleMessage(message: Message) {
   if (!isClawdCommand && !hasAlertId && !hasKnownCommand) return;
 
   const authorizedIds = await getAuthorizedUserIds();
-  if (authorizedIds.size > 0 && !authorizedIds.has(message.author.id)) {
-    await message.reply("Not authorized to take actions via Discord. Contact an admin to be added.");
-    await logAction(null, message.author.id, message.author.username, "unauthorized", content, "unauthorized", "rejected", false, "User not in authorized list");
+  if (authorizedIds.size === 0 || !authorizedIds.has(message.author.id)) {
+    await message.reply("Not authorized to take actions via Discord. Contact an admin to add your Discord user ID in System Settings.");
+    await logAction(null, message.author.id, message.author.username, "unauthorized", content, "unauthorized", "rejected", false, authorizedIds.size === 0 ? "No authorized users configured" : "User not in authorized list");
     return;
   }
 

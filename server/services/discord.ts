@@ -81,9 +81,11 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
     }
 
     let discordMessageId: string | null = null;
+    let discordChannelId: string | null = null;
     try {
       const resJson = await response.clone().json();
       discordMessageId = resJson?.id || null;
+      discordChannelId = resJson?.channel_id || null;
     } catch {}
 
     try {
@@ -100,6 +102,7 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
         shiftId: opts.shiftId || null,
         originalMessage: opts.originalMessage || null,
         discordMessageId,
+        discordChannelId,
         status: "pending",
         actionsTaken: opts.actionsTaken || null,
       });

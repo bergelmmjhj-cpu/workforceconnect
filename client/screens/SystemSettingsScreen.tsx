@@ -44,7 +44,7 @@ const CONFIG_SETTINGS: ConfigSetting[] = [
   {
     key: "discord_authorized_users",
     label: "Authorized Discord Users",
-    description: "Comma-separated Discord user IDs allowed to trigger ClawdAI actions from Discord. Find your Discord user ID: User Settings > Advanced > enable Developer Mode, then right-click your name and Copy User ID. Leave empty to allow all users.",
+    description: "Comma-separated Discord user IDs allowed to trigger ClawdAI actions from Discord. Find your Discord user ID: User Settings > Advanced > enable Developer Mode, then right-click your name and Copy User ID. At least one ID is required for the bot to accept commands.",
     placeholder: "123456789012345678, 987654321098765432",
     sensitive: false,
     icon: "shield",

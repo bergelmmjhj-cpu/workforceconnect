@@ -256,11 +256,13 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
       row.split("|").map(c => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
 
     const headerCells = parseCells(tableLines[0]);
-    const dataRows = tableLines.slice(2).map(parseCells); // skip separator line
+    const sepIdx = tableLines.findIndex((tl, i) => i > 0 && isSeparatorLine(tl));
+    const dataRows = tableLines.slice(sepIdx >= 0 ? sepIdx + 1 : 1).map(parseCells);
 
     // Use a minimum cell width and wrap in horizontal ScrollView for wide tables
     const isWide = headerCells.length >= 4;
-    const cellMinWidth = isWide ? 90 : 0;
+    const maxCellContent = Math.max(...headerCells.map(c => c.length), ...dataRows.flat().map(c => (c || "").length));
+    const cellMinWidth = isWide ? Math.max(90, Math.min(maxCellContent * 8, 200)) : 0;
 
     const tableContent = (
       <View style={{ borderRadius: 6, overflow: "hidden", borderWidth: 1, borderColor: "rgba(0,0,0,0.12)", minWidth: isWide ? headerCells.length * cellMinWidth : undefined }}>
@@ -299,7 +301,11 @@ function SimpleMarkdown({ content, textColor }: { content: string; textColor: st
     tableLines = [];
   };
 
-  const isTableLine = (line: string) => line.trim().startsWith("|") && line.trim().endsWith("|");
+  const isTableLine = (line: string) => {
+    const trimmed = line.trim();
+    return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.split("|").length >= 3;
+  };
+  const isSeparatorLine = (line: string) => /^\s*\|[\s\-:| ]+\|\s*$/.test(line);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];

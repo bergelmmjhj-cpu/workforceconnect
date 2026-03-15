@@ -44,26 +44,26 @@ export async function executeDiscordAction(ctx: DiscordActionContext): Promise<A
     case "summarize":
       return handleSummarize(ctx);
     default:
-      return { success: false, message: `**Understood:** ${ctx.intent}\n**Blocked:** Unknown action type\n**Need:** Try \`/clawd help\` for available commands` };
+      return { success: false, message: `**Understood:** ${ctx.intent}\n**Blocked:** Unknown action type\n**Fallback:** No action taken\n**Still needed:** Try \`/clawd help\` for available commands` };
   }
 }
 
 async function handleAcknowledge(ctx: DiscordActionContext): Promise<ActionResult> {
   if (!ctx.alertId) {
-    return { success: false, message: "**Understood:** Acknowledge alert\n**Blocked:** No alert ID found in context\n**Need:** Reply to a specific alert message or include the WFC-XXXX ID" };
+    return { success: false, message: "**Understood:** Acknowledge alert\n**Blocked:** No alert ID found in context\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert message or include the WFC-XXXX ID" };
   }
 
   const success = await acknowledgeAlert(ctx.alertId, ctx.discordUsername, `Acknowledged via Discord by ${ctx.discordUsername}`);
   if (success) {
     return { success: true, message: `**Understood:** Acknowledge alert ${ctx.alertId}\n**Action:** Status updated to acknowledged\n**Result:** Alert ${ctx.alertId} acknowledged by ${ctx.discordUsername}` };
   }
-  return { success: false, message: `**Understood:** Acknowledge alert ${ctx.alertId}\n**Blocked:** Alert not found in system\n**Need:** Verify the alert ID is correct` };
+  return { success: false, message: `**Understood:** Acknowledge alert ${ctx.alertId}\n**Blocked:** Alert not found in system\n**Fallback:** No action taken\n**Still needed:** Verify the alert ID is correct` };
 }
 
 async function handleAssignWorker(ctx: DiscordActionContext): Promise<ActionResult> {
   const workerQuery = ctx.args.workerQuery;
   if (!workerQuery) {
-    return { success: false, message: "**Understood:** Assign a worker\n**Blocked:** No worker name provided\n**Still needed:** Specify who to assign, e.g. `assign Nino`" };
+    return { success: false, message: "**Understood:** Assign a worker\n**Blocked:** No worker name provided\n**Fallback:** No action taken\n**Still needed:** Specify who to assign, e.g. `assign Nino`" };
   }
 
   const workers = await db.select({
@@ -78,12 +78,12 @@ async function handleAssignWorker(ctx: DiscordActionContext): Promise<ActionResu
   )).limit(5);
 
   if (workers.length === 0) {
-    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** No worker found matching "${workerQuery}"\n**Still needed:** Try a different name or check spelling` };
+    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** No worker found matching "${workerQuery}"\n**Fallback:** No action taken\n**Still needed:** Try a different name or check spelling` };
   }
 
   if (workers.length > 1) {
     const list = workers.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
-    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** Multiple matches found:\n${list}\n**Still needed:** Be more specific with the name` };
+    return { success: false, message: `**Understood:** Assign "${workerQuery}"\n**Blocked:** Multiple matches found:\n${list}\n**Fallback:** No action taken\n**Still needed:** Be more specific with the name` };
   }
 
   const worker = workers[0];
@@ -201,12 +201,12 @@ async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionRes
 
 async function handleResendSms(ctx: DiscordActionContext): Promise<ActionResult> {
   if (!ctx.alert) {
-    return { success: false, message: "**Understood:** Resend SMS\n**Blocked:** No alert context found\n**Need:** Reply to a specific alert message" };
+    return { success: false, message: "**Understood:** Resend SMS\n**Blocked:** No alert context found\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert message" };
   }
 
   const phone = ctx.alert.sourcePhone;
   if (!phone) {
-    return { success: false, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Blocked:** No phone number associated with this alert\n**Need:** This alert doesn't have a source phone number` };
+    return { success: false, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Blocked:** No phone number associated with this alert\n**Fallback:** No action taken\n**Still needed:** This alert doesn't have a source phone number` };
   }
 
   const body = `WFConnect Update: Your message regarding "${ctx.alert.title}" has been received and is being handled. We'll follow up shortly.`;
@@ -215,7 +215,7 @@ async function handleResendSms(ctx: DiscordActionContext): Promise<ActionResult>
     await logSMS(phone, body, "outbound", ctx.alert.sourceWorkerId || undefined, "clawd_discord_resend");
     return { success: true, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Action:** SMS sent to ${phone}\n**Result:** Acknowledgment message sent` };
   } catch (err: any) {
-    return { success: false, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Blocked:** SMS send failed: ${err?.message}\n**Need:** Check OpenPhone configuration` };
+    return { success: false, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Blocked:** SMS send failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Check OpenPhone configuration` };
   }
 }
 
@@ -228,23 +228,23 @@ async function handleNotifyGmLilee(ctx: DiscordActionContext): Promise<ActionRes
     await logSMS(GM_LILEE_PHONE, smsBody, "outbound", undefined, "clawd_discord_lilee");
     return { success: true, message: `**Understood:** Notify GM Lilee\n**Action:** SMS sent to GM Lilee (+14166028038)\n**Result:** Alert forwarded successfully` };
   } catch (err: any) {
-    return { success: false, message: `**Understood:** Notify GM Lilee\n**Blocked:** SMS failed: ${err?.message}\n**Need:** Check OpenPhone configuration` };
+    return { success: false, message: `**Understood:** Notify GM Lilee\n**Blocked:** SMS failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Check OpenPhone configuration` };
   }
 }
 
 async function handleNotifyClient(ctx: DiscordActionContext): Promise<ActionResult> {
   if (!ctx.alert) {
-    return { success: false, message: "**Understood:** Notify client\n**Blocked:** No alert context found\n**Need:** Reply to a specific alert to identify the client" };
+    return { success: false, message: "**Understood:** Notify client\n**Blocked:** No alert context found\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert to identify the client" };
   }
 
   const clientId = ctx.alert.clientId;
   if (!clientId) {
-    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** No client ID linked to this alert\n**Still needed:** Send a manual message through the WFConnect app instead` };
+    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** No client ID linked to this alert\n**Fallback:** No action taken\n**Still needed:** Send a manual message through the WFConnect app instead` };
   }
 
   const [client] = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone }).from(users).where(eq(users.id, clientId)).limit(1);
   if (!client) {
-    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Client user not found in system\n**Still needed:** Verify client data in admin panel` };
+    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Client user not found in system\n**Fallback:** No action taken\n**Still needed:** Verify client data in admin panel` };
   }
 
   const messageBody = `Update regarding your staffing request: We are working on coverage for you. We'll confirm details shortly. — WFConnect Team`;
@@ -289,13 +289,13 @@ async function handleNotifyClient(ctx: DiscordActionContext): Promise<ActionResu
         return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal messaging failed, sent SMS to ${client.fullName} (${client.phone}) as fallback\n**Result:** Client has been notified via SMS` };
       } catch {}
     }
-    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Failed to send message: ${err?.message}\n**Still needed:** Notify client manually via the app` };
+    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Failed to send message: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Notify client manually via the app` };
   }
 }
 
 async function handleMarkResolved(ctx: DiscordActionContext): Promise<ActionResult> {
   if (!ctx.alertId) {
-    return { success: false, message: "**Understood:** Mark resolved\n**Blocked:** No alert ID found\n**Need:** Reply to a specific alert message" };
+    return { success: false, message: "**Understood:** Mark resolved\n**Blocked:** No alert ID found\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert message" };
   }
 
   try {
@@ -304,13 +304,13 @@ async function handleMarkResolved(ctx: DiscordActionContext): Promise<ActionResu
       .where(eq(discordAlerts.alertId, ctx.alertId));
     return { success: true, message: `**Understood:** Mark ${ctx.alertId} resolved\n**Action:** Status updated\n**Result:** Alert ${ctx.alertId} marked as resolved by ${ctx.discordUsername}` };
   } catch (err: any) {
-    return { success: false, message: `**Understood:** Mark resolved\n**Blocked:** Database update failed: ${err?.message}\n**Need:** Try again or resolve manually in app` };
+    return { success: false, message: `**Understood:** Mark resolved\n**Blocked:** Database update failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Try again or resolve manually in app` };
   }
 }
 
 async function handleMarkUnresolved(ctx: DiscordActionContext): Promise<ActionResult> {
   if (!ctx.alertId) {
-    return { success: false, message: "**Understood:** Mark unresolved\n**Blocked:** No alert ID found\n**Need:** Reply to a specific alert message" };
+    return { success: false, message: "**Understood:** Mark unresolved\n**Blocked:** No alert ID found\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert message" };
   }
 
   try {
@@ -319,7 +319,7 @@ async function handleMarkUnresolved(ctx: DiscordActionContext): Promise<ActionRe
       .where(eq(discordAlerts.alertId, ctx.alertId));
     return { success: true, message: `**Understood:** Reopen ${ctx.alertId}\n**Action:** Status updated to pending\n**Result:** Alert ${ctx.alertId} reopened` };
   } catch (err: any) {
-    return { success: false, message: `**Understood:** Mark unresolved\n**Blocked:** Database update failed: ${err?.message}\n**Need:** Try again` };
+    return { success: false, message: `**Understood:** Mark unresolved\n**Blocked:** Database update failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Try again` };
   }
 }
 
@@ -353,7 +353,7 @@ async function handleEscalate(ctx: DiscordActionContext): Promise<ActionResult> 
 
 async function handleSummarize(ctx: DiscordActionContext): Promise<ActionResult> {
   if (!ctx.alert) {
-    return { success: false, message: "**Understood:** Summarize alert\n**Blocked:** No alert context found\n**Need:** Reply to a specific alert message or include the WFC-XXXX ID" };
+    return { success: false, message: "**Understood:** Summarize alert\n**Blocked:** No alert context found\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert message or include the WFC-XXXX ID" };
   }
 
   const a = ctx.alert;

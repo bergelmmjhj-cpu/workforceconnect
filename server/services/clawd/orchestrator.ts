@@ -149,7 +149,7 @@ function formatAssistantOutputs(outputs: AssistantOutput[]): string {
   const usefulOutputs = outputs.filter(o => !isUselessOutput(o));
 
   if (usefulOutputs.length === 0) {
-    return "That's outside what my analytics tools can see. Try asking me to check internal messages, Discord alerts, or SMS logs instead.";
+    return "That's outside what my analytics can see — try asking me to check internal messages or Discord instead.";
   }
 
   const parts: string[] = [];

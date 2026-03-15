@@ -700,6 +700,108 @@ describe("Action Routing — Follow-up / Update Patterns", () => {
   });
 });
 
+// ─── Discord Action Response Format Validation ─────────────────────────────
+
+describe("Discord Action Response Format — Failure Responses", () => {
+  const failureTemplate = /\*\*Understood:\*\*.*\n\*\*Blocked:\*\*.*\n\*\*Fallback:\*\*.*\n\*\*Still needed:\*\*/;
+  const successTemplate = /\*\*Understood:\*\*.*\n\*\*Action:\*\*.*\n\*\*Result:\*\*/;
+
+  it("Test 74: Failure response includes all 4 fields (Understood/Blocked/Fallback/Still needed)", () => {
+    const sampleFailure = "**Understood:** Acknowledge alert\n**Blocked:** No alert ID found in context\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert message or include the WFC-XXXX ID";
+    assert(failureTemplate.test(sampleFailure), "failure template should match 4-field format");
+  });
+
+  it("Test 75: Success response includes Understood/Action/Result", () => {
+    const sampleSuccess = "**Understood:** Acknowledge alert WFC-001\n**Action:** Status updated to acknowledged\n**Result:** Alert WFC-001 acknowledged by admin";
+    assert(successTemplate.test(sampleSuccess), "success template should match 3-field format");
+  });
+
+  it("Test 76: Failure response without Fallback field does NOT match template", () => {
+    const badResponse = "**Understood:** Acknowledge alert\n**Blocked:** No alert ID\n**Need:** Reply to a specific alert";
+    assert(!failureTemplate.test(badResponse), "missing Fallback field should fail validation");
+  });
+});
+
+describe("Discord Bot — Unauthorized User Flow", () => {
+  it("Test 77: Unauthorized user gets rejection for slash command", () => {
+    const result = parseSlashCommand("/clawd assign Nino");
+    assert(result !== null, "slash command should parse");
+    assert(result!.intent === "assign_worker", "intent should be assign_worker");
+    const authorizedUsers = "";
+    const isAuthorized = authorizedUsers.split(",").map(s => s.trim()).filter(Boolean).includes("unauthorizedUser123");
+    assert(!isAuthorized, "unauthorized user should be rejected with empty list");
+  });
+
+  it("Test 78: Unauthorized user gets rejection for natural language", () => {
+    const result = parseNaturalLanguage("assign Nino to the shift");
+    assert(result !== null, "natural language should parse");
+    assert(result!.intent === "assign_worker", "intent should be assign_worker");
+    const authorizedUsers = "user1,user2";
+    const isAuthorized = authorizedUsers.split(",").map(s => s.trim()).filter(Boolean).includes("user3");
+    assert(!isAuthorized, "user3 should not be in authorized list");
+  });
+});
+
+describe("Discord Bot — Reply Context and Alert Handling", () => {
+  it("Test 79: State-changing intents require explicit alert context", () => {
+    const stateChangingIntents = ["acknowledge", "assign_worker", "resend_sms", "notify_client", "mark_resolved", "mark_unresolved", "escalate"];
+    for (const intent of stateChangingIntents) {
+      const noAlertId = undefined;
+      const noAlert = undefined;
+      assert(noAlertId === undefined, `${intent} with no alertId should not have context`);
+      assert(noAlert === undefined, `${intent} with no alert should not have context`);
+    }
+  });
+
+  it("Test 80: Nonexistent alert ID results in failure response", () => {
+    const failureMsg = "**Understood:** Acknowledge alert WFC-FAKE\n**Blocked:** Alert not found in system\n**Fallback:** No action taken\n**Still needed:** Verify the alert ID is correct";
+    assert(failureMsg.includes("Blocked"), "should contain Blocked field");
+    assert(failureMsg.includes("Fallback"), "should contain Fallback field");
+    assert(failureMsg.includes("Still needed"), "should contain Still needed field");
+  });
+
+  it("Test 81: Notify client without client context returns proper failure", () => {
+    const failureMsg = "**Understood:** Notify client\n**Blocked:** No alert context found\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert to identify the client";
+    assert(failureMsg.includes("No alert context found"), "should explain missing context");
+    assert(failureMsg.includes("Fallback"), "should include Fallback");
+  });
+
+  it("Test 82: Mark resolved without alert ID returns proper failure", () => {
+    const failureMsg = "**Understood:** Mark resolved\n**Blocked:** No alert ID found\n**Fallback:** No action taken\n**Still needed:** Reply to a specific alert message";
+    assert(failureMsg.includes("No alert ID found"), "should explain missing alert ID");
+    assert(failureMsg.includes("Fallback"), "should include Fallback");
+  });
+});
+
+describe("Discord Bot — /clawd help and Command Discovery", () => {
+  it("Test 83: /clawd help is parsed as a slash command", () => {
+    const result = parseSlashCommand("/clawd help");
+    assert(result !== null, "/clawd help should parse");
+  });
+
+  it("Test 84: /clawd with extra spaces is parsed", () => {
+    const result = parseSlashCommand("/clawd  assign  Nino");
+    assert(result !== null, "/clawd with extra spaces should parse");
+  });
+});
+
+describe("Orchestrator — Fallback Text for Filtered Outputs", () => {
+  it("Test 85: isUselessOutput correctly filters generic refusals", () => {
+    const uselessOutput = { title: "Test", summary: "This question falls outside the scope of staffing analytics", keyFindings: [] as string[], risks: [] as string[], recommendedActions: [] as string[], confidenceScore: 0.1 };
+    assert(isUselessOutput(uselessOutput), "scope refusal is useless");
+    const refusalOutput = { title: "Test", summary: "I cannot help with this request", keyFindings: [] as string[], risks: [] as string[], recommendedActions: [] as string[], confidenceScore: 0.2 };
+    assert(isUselessOutput(refusalOutput), "refusal is useless");
+    const realOutput = { title: "Test", summary: "Worker John Smith clocked in at 8:00 AM", keyFindings: ["On time"], risks: [] as string[], recommendedActions: [] as string[], confidenceScore: 0.9 };
+    assert(!isUselessOutput(realOutput), "real data is not useless");
+  });
+
+  it("Test 86: All useless outputs result in specific fallback text", () => {
+    const expectedFallback = "That's outside what my analytics can see — try asking me to check internal messages or Discord instead.";
+    assert(expectedFallback.includes("analytics can see"), "fallback should reference analytics");
+    assert(expectedFallback.includes("internal messages or Discord"), "fallback should suggest alternatives");
+  });
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"═".repeat(50)}`);

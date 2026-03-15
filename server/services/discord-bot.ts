@@ -424,15 +424,25 @@ async function handleMessage(message: Message) {
     try {
       try { await message.react('🤔'); } catch {}
       const imageUrls = message.attachments
-        .filter(a => a.contentType?.startsWith("image/"))
+        .filter(a => {
+          if (a.contentType?.startsWith("image/")) return true;
+          if (!a.contentType && a.url && /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(a.url)) return true;
+          return false;
+        })
         .map(a => a.url);
+      
       if (imageUrls.length > 0) {
         console.log(`[DISCORD BOT] @mention includes ${imageUrls.length} image attachment(s)`);
       }
 
-      console.log(`[DISCORD BOT] @mention from ${message.author.username}: "${cleanContent.slice(0, 80)}"`);
+      if (!cleanContent && imageUrls.length === 0) {
+        console.log(`[DISCORD BOT] @mention with no text or images, ignoring`);
+        return;
+      }
+
+      console.log(`[DISCORD BOT] @mention from ${message.author.username}: "${cleanContent?.slice(0, 80) || '(image only)'}"`);
       const response = await orchestrate({
-        userMessage: cleanContent || "Analyze this image",
+        userMessage: cleanContent || (imageUrls.length > 0 ? "Analyze this image" : ""),
         conversationHistory: [],
         userId: `discord-${message.author.id}`,
         forceActionMode: true,

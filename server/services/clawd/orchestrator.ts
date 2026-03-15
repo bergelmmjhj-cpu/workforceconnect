@@ -290,6 +290,13 @@ const ACTION_INTENT_PATTERNS: RegExp[] = [
   /\bfollow[\s\-]?up\b/i,
   /\bupdate\s+on\b/i,
   /\bcheck\s+(if|whether|for)\b.*\b(replied|responded|got\s+back)\b/i,
+  // Google Calendar / Gmail
+  /\b(send|write|draft|email|e-mail)\b.*(worker|staff|client|team|lilee|gm|hr)/i,
+  /\b(email|e-mail|gmail)\b/i,
+  /\b(create|add|schedule|book)\b.*(calendar|event|appointment|meeting)/i,
+  /\b(list|check|show|what.*(on|in))\b.*(calendar|schedule|events|appointments)/i,
+  /\bread\b.*(email|inbox|gmail|e-mail)/i,
+  /\bcheck\b.*(email|inbox|gmail|e-mail)/i,
 ];
 
 // Signals in the last assistant message that indicate an active action conversation

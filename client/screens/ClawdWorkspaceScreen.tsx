@@ -148,6 +148,7 @@ const ACTION_TOOL_NAMES = new Set([
   "send_worker_internal_message", "assign_worker_to_shift",
   "blast_shift_to_workers", "create_shift_request", "create_workplace",
   "update_workplace", "generate_replit_prompt",
+  "create_calendar_event", "send_email_gmail",
 ]);
 
 function formatTimeAgo(dateString: string | null | undefined): string {

@@ -581,10 +581,40 @@ async function checkWeeklyReport(): Promise<void> {
 
 async function checkCrmSyncHealth(): Promise<void> {
   try {
-    const { getCrmPushQueueStats } = await import("../crm-sync");
+    const { getCrmPushQueueStats, getLastSyncCompletedAt } = await import("../crm-sync");
     const stats = await getCrmPushQueueStats();
 
-    if (stats.failed > 0) {
+    if (stats.failed >= 5) {
+      const alertKey = `crm_push_failed_${Math.floor(stats.failed / 5) * 5}`;
+      const alreadyAlerted = await isAlreadyAlerted("crm_sync", alertKey, "push_failures");
+      if (!alreadyAlerted) {
+        const msg = `CRM Push Queue Critical: ${stats.failed} permanently failed item(s), ${stats.pending} pending`;
+        console.warn(`[AI] ${msg}`);
+
+        try {
+          const { sendDiscordNotification } = await import("../discord");
+          await sendDiscordNotification({
+            title: "CRM Sync Health Critical",
+            description: msg,
+            color: 0xff0000,
+          });
+        } catch {}
+
+        try {
+          const smsMsg = `CRM Alert: ${stats.failed} push queue items permanently failed. Check admin panel.`;
+          await sendSMS(GM_PHONE, smsMsg);
+          await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: smsMsg, status: "sent" });
+        } catch {}
+
+        await markAlerted("crm_sync", alertKey, "push_failures");
+        await logAction({
+          monitorType: "crm_sync_health",
+          signalSummary: msg,
+          actionTaken: "critical_alert_sent",
+          alertSentTo: "discord,sms",
+        });
+      }
+    } else if (stats.failed > 0) {
       const msg = `CRM Push Queue Alert: ${stats.failed} failed item(s) in push queue, ${stats.pending} pending`;
       console.warn(`[AI] ${msg}`);
 
@@ -612,6 +642,36 @@ async function checkCrmSyncHealth(): Promise<void> {
         signalSummary: `Push queue backlog: ${stats.pending} pending`,
         actionTaken: "logged",
       });
+    }
+
+    const lastSync = getLastSyncCompletedAt();
+    if (lastSync) {
+      const minutesSinceSync = (Date.now() - lastSync.getTime()) / 60000;
+      if (minutesSinceSync > 10) {
+        const staleKey = `crm_sync_stale_${Math.floor(minutesSinceSync / 10) * 10}min`;
+        const alreadyAlerted = await isAlreadyAlerted("crm_sync", staleKey, "stale_sync");
+        if (!alreadyAlerted) {
+          const msg = `CRM Sync Stale: Last successful sync was ${Math.round(minutesSinceSync)} minutes ago`;
+          console.warn(`[AI] ${msg}`);
+
+          try {
+            const { sendDiscordNotification } = await import("../discord");
+            await sendDiscordNotification({
+              title: "CRM Sync Stale Warning",
+              description: msg,
+              color: 0xff9500,
+            });
+          } catch {}
+
+          await markAlerted("crm_sync", staleKey, "stale_sync");
+          await logAction({
+            monitorType: "crm_sync_health",
+            signalSummary: msg,
+            actionTaken: "stale_alert_sent",
+            alertSentTo: "discord",
+          });
+        }
+      }
     }
   } catch (err: any) {
     console.error("[AI] checkCrmSyncHealth error:", err?.message);

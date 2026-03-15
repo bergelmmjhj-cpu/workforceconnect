@@ -5,6 +5,8 @@ import * as crmClient from "./weekdays-crm";
 
 let syncRunning = false;
 let lastAutoSyncError: string | null = null;
+let lastSyncCompletedAt: Date | null = null;
+let lastPushCompletedAt: Date | null = null;
 let cachedConnectionStatus: { connected: boolean; error?: string; checkedAt: number } | null = null;
 const CONNECTION_CACHE_TTL = 60000;
 
@@ -38,8 +40,44 @@ export function getLastAutoSyncError(): string | null {
   return lastAutoSyncError;
 }
 
+export function getLastSyncCompletedAt(): Date | null {
+  return lastSyncCompletedAt;
+}
+
+export function getLastPushCompletedAt(): Date | null {
+  return lastPushCompletedAt;
+}
+
+export function markSyncCompleted(): void {
+  lastSyncCompletedAt = new Date();
+}
+
 export function clearAutoSyncError(): void {
   lastAutoSyncError = null;
+}
+
+async function sendCrmNewRequestAlerts(crmReq: crmClient.CrmHotelRequest): Promise<void> {
+  const alertMsg = `New CRM Hotel Request: ${crmReq.hotelName} needs ${crmReq.quantityNeeded || 1} ${crmReq.roleNeeded || "worker(s)"} — ${crmReq.shiftStartAt || "TBD"} to ${crmReq.shiftEndAt || "TBD"}`;
+
+  try {
+    const { sendDiscordNotification } = await import("./discord");
+    await sendDiscordNotification({
+      title: "New CRM Hotel Request (Sync)",
+      description: alertMsg,
+      color: 0x00bcd4,
+    });
+  } catch (err: any) {
+    console.error("[CRM-SYNC] Discord alert failed:", err?.message);
+  }
+
+  try {
+    const GM_PHONE = "+14166028038";
+    const { sendSMS, logSMS } = await import("./openphone");
+    await sendSMS(GM_PHONE, alertMsg);
+    await logSMS({ phoneNumber: GM_PHONE, direction: "outbound", message: alertMsg, status: "sent" });
+  } catch (err: any) {
+    console.error("[CRM-SYNC] SMS alert failed:", err?.message);
+  }
 }
 
 export async function getCachedConnectionStatus(): Promise<{ connected: boolean; error?: string }> {
@@ -498,6 +536,10 @@ export async function syncHotelRequests(dryRun = false, _skipLock = false): Prom
               crmRequestId: crmReq.id,
               crmSource: true,
             });
+
+            sendCrmNewRequestAlerts(crmReq).catch(err =>
+              console.error("[CRM-SYNC] Alert failed for new hotel request:", err?.message)
+            );
           }
           result.created++;
         }
@@ -567,6 +609,7 @@ export async function syncAll(dryRun = false): Promise<FullSyncResult> {
       lastAutoSyncError = null;
     }
 
+    lastSyncCompletedAt = new Date();
     return fullResult;
   } finally {
     releaseLock();
@@ -794,6 +837,10 @@ export async function processCrmPushQueue(): Promise<{ processed: number; succee
     console.error("[CRM-PUSH] Queue processing error:", err.message);
   }
 
+  if (result.processed > 0) {
+    lastPushCompletedAt = new Date();
+  }
+
   return result;
 }
 
@@ -866,6 +913,8 @@ export async function getCrmPushQueueStats(): Promise<{
   pending: number;
   failed: number;
   completedToday: number;
+  lastPushAt: string | null;
+  lastSyncAt: string | null;
 }> {
   try {
     const todayStart = new Date();
@@ -895,8 +944,10 @@ export async function getCrmPushQueueStats(): Promise<{
       pending: pendingResult?.count ?? 0,
       failed: failedResult?.count ?? 0,
       completedToday: completedResult?.count ?? 0,
+      lastPushAt: lastPushCompletedAt?.toISOString() || null,
+      lastSyncAt: lastSyncCompletedAt?.toISOString() || null,
     };
   } catch {
-    return { pending: 0, failed: 0, completedToday: 0 };
+    return { pending: 0, failed: 0, completedToday: 0, lastPushAt: null, lastSyncAt: null };
   }
 }

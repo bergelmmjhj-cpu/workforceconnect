@@ -33,6 +33,8 @@ type PushQueueStats = {
   pending: number;
   failed: number;
   completedToday: number;
+  lastPushAt: string | null;
+  lastSyncAt: string | null;
 };
 
 type SyncStatus = {
@@ -442,6 +444,20 @@ export default function CrmSyncScreen() {
                 </ThemedText>
               </View>
             </View>
+            {status.pushQueue.lastSyncAt || status.pushQueue.lastPushAt ? (
+              <View style={{ marginTop: 8 }}>
+                {status.pushQueue.lastSyncAt ? (
+                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary, fontSize: 12 }]}>
+                    Last sync: {new Date(status.pushQueue.lastSyncAt).toLocaleString()}
+                  </ThemedText>
+                ) : null}
+                {status.pushQueue.lastPushAt ? (
+                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary, fontSize: 12 }]}>
+                    Last push: {new Date(status.pushQueue.lastPushAt).toLocaleString()}
+                  </ThemedText>
+                ) : null}
+              </View>
+            ) : null}
           ) : null}
         </Card>
 

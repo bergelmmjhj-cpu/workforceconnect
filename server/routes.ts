@@ -2521,9 +2521,9 @@ Respond with exactly:
 
   app.post("/api/webhooks/crm", async (req: Request, res: Response) => {
     try {
-      const webhookSecret = process.env.CRM_WEBHOOK_SECRET || process.env.WEEKDAYS_API_KEY;
+      const webhookSecret = process.env.CRM_WEBHOOK_SECRET;
       if (!webhookSecret) {
-        res.status(501).json({ error: "CRM webhook secret not configured" });
+        res.status(501).json({ error: "CRM webhook secret not configured. Set CRM_WEBHOOK_SECRET env var." });
         return;
       }
 
@@ -7238,6 +7238,23 @@ Respond with exactly:
             await db.update(shiftRequests)
               .set({ status: "filled", updatedAt: new Date() })
               .where(eq(shiftRequests.id, shift.requestId));
+
+            const [filledReq] = await db.select({ crmRequestId: shiftRequests.crmRequestId })
+              .from(shiftRequests)
+              .where(eq(shiftRequests.id, shift.requestId));
+            if (filledReq?.crmRequestId) {
+              try {
+                const { enqueueCrmPush } = await import("./services/crm-sync");
+                await enqueueCrmPush({
+                  entityType: "hotel_request",
+                  action: "update",
+                  entityId: shift.requestId,
+                  payload: { crmExternalId: filledReq.crmRequestId, status: "CONFIRMED" },
+                });
+              } catch (crmErr: any) {
+                console.error("[CRM] Failed to enqueue hotel request update:", crmErr?.message);
+              }
+            }
           }
 
           const hrAdmins = await db.select({ id: users.id })

@@ -1004,6 +1004,7 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
               } else {
                 await crmSync.syncConfirmedShifts(false);
                 await crmSync.syncHotelRequests(false);
+                crmSync.markSyncCompleted();
               }
             } catch (err: any) {
               lastSyncFailed = true;

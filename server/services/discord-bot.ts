@@ -394,10 +394,13 @@ async function handleMessage(message: Message) {
   if (isMention && !content.startsWith("/clawd")) {
     const cleanContent = content.replace(/<@!?\d+>/g, "").trim();
     if (!cleanContent) {
+      try { await message.react('👋'); } catch {}
       await message.reply("Hey! I'm Oscar, WFConnect's AI assistant. Ask me anything — shifts, workers, availability, operations. Or type `/clawd help` for the command list.");
       await logAction(null, message.author.id, message.author.username, "mention_empty", content, "mention", "greeting sent", true);
       return;
     }
+
+    try { await message.react('👀'); } catch {}
 
     // Short-circuit simple greetings — no API call needed
     const simpleGreetings = /^(hi|hey|hello|yo|sup|test|ping|hiya|heya|howdy|what'?s up)[\s!?.]*$/i;
@@ -409,6 +412,7 @@ async function handleMessage(message: Message) {
     }
 
     try {
+      try { await message.react('🤔'); } catch {}
       console.log(`[DISCORD BOT] @mention from ${message.author.username}: "${cleanContent.slice(0, 80)}"`);
       const response = await orchestrate({
         userMessage: cleanContent,

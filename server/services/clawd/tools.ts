@@ -851,25 +851,24 @@ async function lookupDiscordMembers(input: Record<string, unknown>) {
 }
 
 async function geocodeAddress(address: string, city: string, province: string, postalCode?: string, country?: string): Promise<{ lat: number; lng: number } | null> {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-  if (!apiKey) {
-    console.log("[tools] No GOOGLE_PLACES_API_KEY set, skipping geocoding");
-    return null;
-  }
   const parts = [address, city, province, postalCode, country || "Canada"].filter(Boolean);
   const fullAddress = parts.join(", ");
   try {
-    const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-    url.searchParams.set("address", fullAddress);
-    url.searchParams.set("key", apiKey);
-    const res = await fetch(url.toString());
-    const data = await res.json() as { status: string; results: Array<{ geometry: { location: { lat: number; lng: number } } }> };
-    if (data.status === "OK" && data.results.length > 0) {
-      const loc = data.results[0].geometry.location;
-      console.log(`[tools] Geocoded "${fullAddress}" → ${loc.lat}, ${loc.lng}`);
-      return { lat: loc.lat, lng: loc.lng };
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("q", fullAddress);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("limit", "1");
+    const res = await fetch(url.toString(), {
+      headers: { "User-Agent": "WFConnect/1.0 (workforce-management)" },
+    });
+    const data = await res.json() as Array<{ lat: string; lon: string; display_name: string }>;
+    if (data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      console.log(`[tools] Geocoded "${fullAddress}" → ${lat}, ${lng}`);
+      return { lat, lng };
     }
-    console.log(`[tools] Geocoding returned ${data.status} for "${fullAddress}"`);
+    console.log(`[tools] Nominatim returned no results for "${fullAddress}"`);
     return null;
   } catch (err: any) {
     console.error("[tools] Geocoding error:", err?.message);

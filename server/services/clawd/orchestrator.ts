@@ -457,6 +457,8 @@ ${pendingSection}${aliasSection}
 - **Post to Discord** for team-wide visibility
 - **Send internal app messages** to workers
 - **Create shift requests** in the system
+- **Create workplaces** with auto-geocoded coordinates (address → lat/lng)
+- **Update workplaces** (name, address, geofence radius, active status)
 - **Generate Replit prompts** when a capability is missing
 
 ## Operational Rules:

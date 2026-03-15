@@ -235,6 +235,57 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "create_calendar_event",
+    description: "Create an event in Google Calendar. Use for scheduling shift briefings, client meetings, availability blocks, or reminders.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        summary: { type: "string", description: "Event title/name (e.g. 'Shift Briefing — Oakville')" },
+        startDateTime: { type: "string", description: "Start time in ISO format (e.g. 2026-03-15T10:00:00-05:00)" },
+        endDateTime: { type: "string", description: "End time in ISO format" },
+        description: { type: "string", description: "Event description (optional)" },
+        attendees: { type: "array", items: { type: "string" }, description: "Email addresses of attendees (optional)" },
+      },
+      required: ["summary", "startDateTime", "endDateTime"],
+    },
+  },
+  {
+    name: "list_calendar_events",
+    description: "List upcoming Google Calendar events. Use to check schedule, availability, and planned operations.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        maxResults: { type: "number", description: "Max events to return (default: 10)" },
+        timeMin: { type: "string", description: "Start time in ISO format (optional, default: now)" },
+      },
+    },
+  },
+  {
+    name: "send_email_gmail",
+    description: "Send an email via Gmail. Use for worker approvals, shift confirmations, payroll notifications, or client communication.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Email body/message" },
+        isHtml: { type: "boolean", description: "Whether body is HTML (default: false)" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+  {
+    name: "read_recent_emails",
+    description: "Read recent emails from Gmail inbox. Use to check for worker/client replies, process requests, or monitor important messages.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        maxResults: { type: "number", description: "Max emails to fetch (default: 10)" },
+        query: { type: "string", description: "Gmail query (e.g. 'is:unread', 'from:worker@gmail.com'). Default: unread emails" },
+      },
+    },
+  },
+  {
     name: "generate_replit_prompt",
     description: "When you cannot fulfill a user's request with the available tools, use this to generate a detailed, copy-ready prompt for Replit AI that describes the problem and solution needed. Always use this as a fallback when stuck.",
     input_schema: {
@@ -287,6 +338,53 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       return toolUpdateWorkplace(input);
     case "lookup_discord_members":
       return lookupDiscordMembers(input);
+    case "create_calendar_event":
+      return (async () => {
+        try {
+          const r = await createCalendarEvent({
+            summary: input.summary as string,
+            startDateTime: input.startDateTime as string,
+            endDateTime: input.endDateTime as string,
+            description: input.description as string | undefined,
+            attendees: input.attendees as string[] | undefined,
+          });
+          return { success: true, ...r };
+        } catch (e: any) {
+          return { success: false, error: e?.message };
+        }
+      })();
+    case "list_calendar_events":
+      return (async () => {
+        try {
+          const r = await listCalendarEvents(Math.min((input.maxResults as number) || 10, 100), input.timeMin as string | undefined);
+          return { success: true, events: r };
+        } catch (e: any) {
+          return { success: false, error: e?.message };
+        }
+      })();
+    case "send_email_gmail":
+      return (async () => {
+        try {
+          const r = await sendGmail({
+            to: input.to as string,
+            subject: input.subject as string,
+            body: input.body as string,
+            isHtml: input.isHtml as boolean | undefined,
+          });
+          return { success: true, ...r };
+        } catch (e: any) {
+          return { success: false, error: e?.message };
+        }
+      })();
+    case "read_recent_emails":
+      return (async () => {
+        try {
+          const r = await readRecentGmailEmails(Math.min((input.maxResults as number) || 10, 50), input.query as string | undefined);
+          return { success: true, emails: r };
+        } catch (e: any) {
+          return { success: false, error: e?.message };
+        }
+      })();
     case "generate_replit_prompt":
       return generateReplitPrompt(input);
     default:

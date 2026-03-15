@@ -69,7 +69,7 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: "WFConnect Clawd AI",
+        username: "Oscar — WFConnect AI",
         embeds: [embed],
       }),
     });

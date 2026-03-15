@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Switch,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -36,7 +37,7 @@ const CONFIG_SETTINGS: ConfigSetting[] = [
   {
     key: "discord_webhook_url",
     label: "Discord Webhook URL",
-    description: "Paste your Discord channel webhook URL. Clawd AI will send critical alerts (sick calls, client requests, urgent events) to this channel.",
+    description: "Paste your Discord channel webhook URL. Oscar will send critical alerts (sick calls, client requests, urgent events) to this channel.",
     placeholder: "https://discordapp.com/api/webhooks/...",
     sensitive: true,
     icon: "bell",
@@ -44,7 +45,7 @@ const CONFIG_SETTINGS: ConfigSetting[] = [
   {
     key: "discord_authorized_users",
     label: "Authorized Discord Users",
-    description: "Comma-separated Discord user IDs allowed to trigger ClawdAI actions from Discord. Find your Discord user ID: User Settings > Advanced > enable Developer Mode, then right-click your name and Copy User ID. At least one ID is required for the bot to accept commands.",
+    description: "Comma-separated Discord user IDs allowed to trigger Oscar actions from Discord. Find your Discord user ID: User Settings > Advanced > enable Developer Mode, then right-click your name and Copy User ID. Only used when 'Allow all members' is OFF.",
     placeholder: "123456789012345678, 987654321098765432",
     sensitive: false,
     icon: "shield",
@@ -138,7 +139,7 @@ export default function SystemSettingsScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            username: "WFConnect Clawd AI",
+            username: "Oscar — WFConnect AI",
             embeds: [{
               title: "✅ Test Notification",
               description: "Your Discord webhook is configured correctly! WFConnect alerts will be sent here.",
@@ -286,11 +287,45 @@ export default function SystemSettingsScreen() {
             })
           )}
 
+          <Card style={styles.settingCard}>
+            <View style={styles.settingHeader}>
+              <View style={[styles.settingIcon, { backgroundColor: theme.primary + "15" }]}>
+                <Feather name="users" size={20} color={theme.primary} />
+              </View>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Allow All Discord Members</ThemedText>
+                <View style={[styles.statusBadge, { backgroundColor: config["discord_open_to_all"] === "true" ? "#22C55E20" : "#F59E0B20" }]}>
+                  <View style={[styles.statusDot, { backgroundColor: config["discord_open_to_all"] === "true" ? "#22C55E" : "#F59E0B" }]} />
+                  <ThemedText style={[styles.statusText, { color: config["discord_open_to_all"] === "true" ? "#22C55E" : "#F59E0B" }]}>
+                    {config["discord_open_to_all"] === "true" ? "Enabled" : "Restricted"}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+            <ThemedText style={[styles.settingDesc, { color: theme.textSecondary }]}>
+              When enabled, anyone in your Discord channel can talk to Oscar without being on the authorized users list. When disabled, only listed Discord user IDs can interact.
+            </ThemedText>
+            <View style={styles.toggleRow}>
+              <ThemedText style={[styles.toggleLabel, { color: theme.text }]}>
+                {config["discord_open_to_all"] === "true" ? "Open to all members" : "Restricted to authorized users"}
+              </ThemedText>
+              <Switch
+                value={config["discord_open_to_all"] === "true"}
+                onValueChange={(val) => {
+                  saveMutation.mutate({ key: "discord_open_to_all", value: val ? "true" : "false" });
+                }}
+                trackColor={{ false: theme.border, true: theme.primary + "80" }}
+                thumbColor={config["discord_open_to_all"] === "true" ? theme.primary : "#f4f3f4"}
+                testID="toggle-discord-open-to-all"
+              />
+            </View>
+          </Card>
+
           {/* Info card */}
           <Card style={{ ...styles.infoCard, backgroundColor: theme.primary + "08", borderColor: theme.primary + "20" }}>
             <Feather name="info" size={16} color={theme.primary} style={{ marginBottom: 8 }} />
             <ThemedText style={[styles.infoText, { color: theme.textSecondary }]}>
-              Settings saved here take effect immediately. The Discord webhook URL is stored securely in the database and used by Clawd AI for real-time operational alerts.
+              Settings saved here take effect immediately. The Discord webhook URL is stored securely in the database and used by Oscar for real-time operational alerts.
             </ThemedText>
           </Card>
         </View>
@@ -328,6 +363,8 @@ const styles = StyleSheet.create({
   howToCard: { padding: Spacing.md, borderRadius: BorderRadius.md, marginTop: Spacing.sm, gap: 4 },
   howToTitle: { fontSize: 13, fontWeight: "700", marginBottom: 4 },
   howToStep: { fontSize: 13, lineHeight: 18 },
+  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: Spacing.sm },
+  toggleLabel: { fontSize: 14, fontWeight: "500", flex: 1 },
   infoCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, marginTop: 4 },
   infoText: { fontSize: 13, lineHeight: 19 },
 });

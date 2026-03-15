@@ -184,6 +184,15 @@ async function getAuthorizedUserIds(): Promise<Set<string>> {
   }
 }
 
+async function isOpenToAll(): Promise<boolean> {
+  try {
+    const [row] = await db.select().from(appConfig).where(eq(appConfig.key, "discord_open_to_all"));
+    return row?.value === "true";
+  } catch {
+    return false;
+  }
+}
+
 async function findAlertByDiscordMessageId(messageId: string): Promise<typeof discordAlerts.$inferSelect | null> {
   try {
     const [alert] = await db.select().from(discordAlerts)
@@ -265,7 +274,7 @@ async function parseCommand(message: Message): Promise<ParsedCommand> {
   return result;
 }
 
-const HELP_MESSAGE = `**ClawdAI Discord Commands**
+const HELP_MESSAGE = `**Oscar — WFConnect AI Assistant**
 
 **Reply to any alert** with:
 - \`assign [name]\` — Assign a worker to cover
@@ -326,11 +335,14 @@ async function handleMessage(message: Message) {
 
   if (!isClawdCommand && !hasAlertId && !hasKnownCommand) return;
 
-  const authorizedIds = await getAuthorizedUserIds();
-  if (authorizedIds.size === 0 || !authorizedIds.has(message.author.id)) {
-    await message.reply("Not authorized to take actions via Discord. Contact an admin to add your Discord user ID in System Settings.");
-    await logAction(null, message.author.id, message.author.username, "unauthorized", content, "unauthorized", "rejected", false, authorizedIds.size === 0 ? "No authorized users configured" : "User not in authorized list");
-    return;
+  const openToAll = await isOpenToAll();
+  if (!openToAll) {
+    const authorizedIds = await getAuthorizedUserIds();
+    if (authorizedIds.size === 0 || !authorizedIds.has(message.author.id)) {
+      await message.reply("Not authorized to use Oscar. Contact an admin to add your Discord user ID in System Settings, or ask them to enable open access for all channel members.");
+      await logAction(null, message.author.id, message.author.username, "unauthorized", content, "unauthorized", "rejected", false, authorizedIds.size === 0 ? "No authorized users configured" : "User not in authorized list");
+      return;
+    }
   }
 
   const parsed = await parseCommand(message);
@@ -342,7 +354,7 @@ async function handleMessage(message: Message) {
   }
 
   if (parsed.intent === "unknown") {
-    await message.reply("I didn't understand that command. Reply `/clawd help` to see available commands.");
+    await message.reply("I didn't understand that command. Reply `/clawd help` to see what Oscar can do.");
     await logAction(null, message.author.id, message.author.username, "unknown", content, "unknown", "unrecognized", false, "No matching intent");
     return;
   }

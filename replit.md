@@ -1,60 +1,51 @@
 # Workforce Connect
 
 ## Overview
-
-Workforce Connect is a cross-platform mobile and web application designed to optimize workforce management for Clients, Workers, and HR teams. It facilitates staff deployment, GPS-verified time tracking (TITO), and real-time communication. The platform aims to improve efficiency, ensure compliance, and provide role-based access with multi-timezone support, including a business website for marketing and lead generation. The project's vision is to become a leading solution in workforce management, enhancing operational effectiveness and user experience for all stakeholders.
+Workforce Connect is a cross-platform mobile and web application designed to optimize workforce management for Clients, Workers, and HR teams. It facilitates staff deployment, GPS-verified time tracking (TITO), and real-time communication. The platform aims to improve efficiency, ensure compliance, and provide role-based access with multi-timezone support. The project's vision is to become a leading solution in workforce management, enhancing operational effectiveness and user experience for all stakeholders.
 
 ## User Preferences
-
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
 ### Frontend
-
-The frontend is a React Native (Expo) application supporting iOS, Android, and Web. It uses React Navigation for role-adaptive navigation, TanStack Query for server state, and React Context for authentication. UI components are custom-themed, support light/dark modes, and employ React Native Reanimated for animations. A multi-stage onboarding process is implemented for workers. GPS-based time tracking (TITO) uses `react-native-maps` for geofenced location verification (100-meter radius using Haversine formula). Two-Factor Authentication (2FA) is integrated. The web version features a persistent, authenticated, and role-gated sidebar navigation on wide screens, with responsive content width constraints applied across various screen types to prevent stretching.
+The frontend is a React Native (Expo) application supporting iOS, Android, and Web. It uses React Navigation for role-adaptive navigation, TanStack Query for server state, and React Context for authentication. UI components are custom-themed, support light/dark modes, and employ React Native Reanimated for animations. A multi-stage onboarding process is implemented for workers. GPS-based time tracking (TITO) uses `react-native-maps` for geofenced location verification (100-meter radius using Haversine formula). Two-Factor Authentication (2FA) is integrated. The web version features persistent, authenticated, and role-gated sidebar navigation, with responsive content width constraints.
 
 ### Backend
-
 The backend is an Express.js application built with TypeScript, offering RESTful API endpoints. It utilizes PostgreSQL with Drizzle ORM for type-safe database interactions. The backend also hosts a marketing landing page. Authentication uses bcrypt for password hashing and implements role-based access control (admin, hr, client, worker).
 
 Key features include:
 - **Internal Messaging System**: Real-time polling for communication.
 - **Workplace Management**: Admins manage locations, assign workers, and view TITO logs.
 - **Timesheets & Payroll**: Supports bi-weekly pay periods with admin review, approval, and CSV export. TITO operations are idempotent with server-side calculations and audit logging.
-- **TITO System**: Server-side validation for shift durations, active sessions, and shift boundaries. Includes accident recovery mechanisms (cancellation, correction requests), and a comprehensive filter bar with compact, expandable cards. **TitoCard UI**: Compact horizontal layout displaying worker name, shift date, clock times (in/out), verification method icon, and status pill. Collapsible expand/collapse toggle reveals full details (location, notes, approval actions, verification proofs). Phone, text, and call buttons removed for clean UX. Workplace assignments filtered to active locations only. Cancelled shifts show reduced opacity.
+- **TITO System**: Server-side validation for shift durations, active sessions, and shift boundaries. Includes accident recovery mechanisms (cancellation, correction requests).
 - **User Management**: Admins can perform CRUD operations on users, manage roles, and toggle user status.
 - **Shift Request Management**: Workflow for creating, accepting/declining shifts with fill-to-capacity logic, smart-assignment, broadcast capabilities, and history tracking.
-- **Automated Notifications**: Push and in-app notifications for various operational events (shift offers, reminders, late clock-ins, etc.).
+- **Automated Notifications**: Push and in-app notifications for various operational events.
 - **Shift Series Model**: Defines and expands recurring shifts.
 - **Multi-mode Roster View**: Daily, weekly, bi-weekly, monthly, and semi-monthly views of shifts.
-- **Profile Photo Requirement**: Upload and admin review workflow for user profile photos.
-- **Profile Editing**: Users can edit their own profile details; admins can edit any user's phone number.
+- **Profile Management**: Users can edit their own profile details; admins can manage profile photos and edit phone numbers.
 - **Two-Factor Authentication**: Backend APIs for TOTP setup, verification, disabling, and recovery codes.
 - **Application-to-Account Bridge**: Automates user account creation for approved worker applications, sending temporary credentials via SMS.
-- **Auth Improvements**: Manages pending accounts, admin-driven account activation/creation emails, password reset flow, and admin invite functionality for HR/Client roles.
-- **Force Password Change**: Requires users to change a temporary password upon first login.
+- **Auth Improvements**: Manages pending accounts, admin-driven account activation/creation emails, password reset flow, and admin invite functionality for HR/Client roles, including force password change on first login.
 - **Bulk SMS**: Admins can send app download/login instructions to workers via SMS.
 - **Consolidated Email Timesheet**: Allows admins/HR to email filtered timesheet CSVs.
-- **AI Operations Assistant**: An embedded background monitor that runs every 5 minutes, checking 5 signal types (e.g., new leads, unacknowledged shift requests, urgent unfilled shifts, pending accounts digest) and triggering alerts or actions. It maintains an audit trail and prevents duplicate alerts.
-- **Clawd AI — Multi-Agent Business Intelligence**: A multi-agent orchestration system for admin/HR users. It comprises 6 specialized assistants and 5 analytics services, coordinated by an Executive Orchestrator, to provide structured insights and responses based on user queries, utilizing Anthropic's Claude. The frontend provides a 4-tab workspace for interaction.
+- **AI Operations Assistant**: An embedded background monitor checking various operational signals and triggering alerts or actions.
+- **Clawd AI — Multi-Agent Business Intelligence**: A multi-agent orchestration system providing structured insights and responses based on user queries, utilizing Anthropic's Claude. The frontend provides a 4-tab workspace.
 - **GM Lilee SMS Notifications**: Sends SMS alerts to a specific GM phone number for critical operational events and automated daily/weekly deployment reports.
 - **Director Appointments System**: A standalone system for tracking lead-generation appointments, including CRUD API, admin-only frontend, and integration with a CRM.
-- **Clawd AI Action Tools**: Tool-use (agentic loop) via Anthropic Claude. 13 tools: 7 lookup (workers, shifts, workplaces, shift requests, SMS logs, Discord alerts, available workers) + 6 action (send SMS, notify GM Lilee, send Discord, internal message, blast shift, generate Replit prompt). SMS classification detects sick calls and client requests and triggers smart auto-responses with audit trail.
-- **Clawd AI SMS Intelligence Engine**: Structured SMS classification pipeline in `server/services/clawd/sms-classifier.ts`. 6 intent categories: staff_absence, late_arrival, emergency, client_request, general_inquiry, unknown_staffing. Entity extraction: role, quantity, date, time, worker name, workplace. Fail-open design: unknown senders always trigger Discord + GM Lilee alerts. Late arrival handled separately. Full audit logging on every inbound SMS. Supersedes simple keyword array approach.
-- **Clawd AI Chat Continuity**: Sticky action mode in `server/services/clawd/orchestrator.ts` — if last assistant message contains action-context signals (Worker Not Found, Still needed, Draft saved, etc.), the next reply stays in action mode regardless of message length. Pending shift draft state (in-memory Map, 30-min TTL) persists partial shift creation across messages: worker resolution via name or phone number automatically resumes the workflow. 15+ new ACTION_INTENT_PATTERNS including phone-only replies, "try X" lookups, meta-instructions. Fuzzy worker name lookup in tools.ts: tokenizes camelCase names (BergelMMJ → Bergel + MMJ), tries each part independently. Phone-number lookup path added to lookup_workers tool. Operational response format enforced: Understood / Matched / Action taken / Still needed — no "Analysis unavailable" for staffing tasks.
-- **Clawd AI Test Suite**: 131 automated tests in `server/services/clawd/clawd.test.ts`. Covers SMS classification accuracy, entity extraction, orchestrator routing, Discord command parsing (slash + natural language), authorization, isUselessOutput filtering, follow-up/update routing patterns, and edge cases. Run with: `npx tsx server/services/clawd/clawd.test.ts`.
-- **Two-Way Discord Integration**: Outbound alerts via webhook (stored in DB `app_config`, configurable via System Settings UI). Inbound ACK via `POST /api/webhooks/discord`. Full `discord_alerts` table with context fields (workerId, clientId, workplaceId, shiftId, discordChannelId, originalMessage) and status tracking. **Discord Bot** (`server/services/discord-bot.ts`): Connects via `discord.js` Gateway when `DISCORD_BOT_TOKEN` env var is set. Listens for messages in any channel. Supports natural language commands (assign X, mark resolved, who is available, escalate, notify client, etc.) and `/clawd` prefix commands. Reply-to-message context links actions to original alerts. Authorization via `discord_authorized_users` in `app_config` (configurable in System Settings). **Action executor** (`server/services/discord-actions.ts`): 10 action intents (acknowledge, assign_worker, list_available, resend_sms, notify_gm_lilee, notify_client, mark_resolved, mark_unresolved, escalate, summarize). All actions logged to `discord_action_logs` table with full audit trail. Responses follow operational format: Understood / Action / Result / Still needed.
-- **Toronto Timezone Utility**: `server/utils/time.ts` provides `nowToronto()`, `toToronto()`, `formatToronto()` using `date-fns-tz`.
-- **AI Follow-Up SMS Service**: `server/services/aiFollowupService.ts` logs AI-sent SMS messages and sends human-like follow-ups after 2 hours if no reply. Cancelled automatically when recipient responds. Scheduler runs every 15 minutes.
-- **Applicant Portal**: Public form at `apply.wfconnect.org` and `/apply`. Applicants submit name, Canadian address (Google Places autocomplete), phone, position, job source, photo, and resume. Files stored as base64. Admin screen shows all applicants with status management (new/reviewing/interviewed/hired/rejected) and one-click download for photo and resume.
-- **Applicants Admin Web Portal**: Standalone HTML page at `apply.wfconnect.org/applicants` (route: `/applicants`). Password-protected login for admin/HR. Features: stats dashboard, searchable/filterable table, slide-in detail panel, status management, document downloads. Auth verified server-side via `GET /api/auth/verify` on every page load. XSS-protected with `esc()`/`escAttr()` escaping. Served on apply subdomain, localhost, and Replit dev domains.
-- **Auth Verification Endpoint**: `GET /api/auth/verify` validates user ID and role from headers against the database, checking that the user exists and is active. Used by the applicants web portal for server-side auth validation on page load.
-- **System Settings UI**: Admin screen to configure app-wide settings (Discord webhook URL) stored in `app_config` DB table with test button and setup instructions.
-- **Clawd AI Web Chat (PWA)**: Standalone HTML page at `app.wfconnect.org/clawdai` (`server/templates/clawd-chat.html`). Session-authenticated (admin/HR only). Full markdown rendering, action mode badges, auto-scroll. PWA-installable on iPhone (Safari → Share → Add to Home Screen) and Android (Chrome install prompt). Manifest at `/clawd-manifest.json` (`server/templates/clawd-manifest.json`). Routes registered in `server/index.ts` before SPA fallback.
-- **CRM Timezone Fix**: `crmToLocal()` in `server/services/crm-sync.ts` extracts raw date/time from CRM ISO strings without timezone conversion (CRM incorrectly marks local Eastern times with Z suffix). Replaces `utcToLocal()` for shift and hotel-request syncing.
-- **Consolidated Lilee Shift Reminder SMS**: `processShiftReminders()` in `server/routes.ts` now collects all newly-reminded workers into a `lileeReminders[]` array during the pass. After the loop, if any workers were reminded, ONE consolidated report SMS is sent to GM Lilee (+14166028038) instead of individual CC texts per worker. Natural dedup via sentReminders prevents duplicate consolidated messages.
-- **Discord Bot & Webhook Integration**: Oscar (AI assistant) connects via `DISCORD_BOT_TOKEN` to receive messages and commands from Discord channels. Supports 10+ natural language intents (assign worker, check availability, escalate, resolve alerts, etc.) and `/clawd` prefix commands. All actions logged to `discord_action_logs` table. Outbound alerts sent via `discord_webhook_url` (configurable in System Settings). `discord_open_to_all` flag enables/disables authorization checking. When enabled, all channel members can interact with Oscar; when disabled, only `discord_authorized_users` list can use commands.
+- **Clawd AI Action Tools**: Agentic loop via Anthropic Claude with 14 tools (8 lookup + 6 action). Includes SMS classification for intents like sick calls and client requests, triggering smart auto-responses. Lookup tools: workers, shifts, workplaces, shift requests, SMS logs, Discord alerts, available workers, Discord members. Action tools: send SMS, notify GM Lilee, send Discord, internal message, create shift request, generate Replit prompt.
+- **Clawd AI SMS Intelligence Engine**: Structured SMS classification pipeline with 6 intent categories and entity extraction. Features a fail-open design for unknown senders and full audit logging.
+- **Clawd AI Chat Continuity**: Sticky action mode for continuous conversations, pending shift draft state persistence, fuzzy worker name lookup, and phone-number lookup.
+- **Two-Way Discord Integration**: Outbound alerts via webhook and inbound command processing via Discord bot. Supports natural language and slash commands, `@mention` Oscar for free-form queries, and logs all actions with an audit trail.
+- **Toronto Timezone Utility**: Provides `nowToronto()`, `toToronto()`, `formatToronto()` for consistent timezone handling.
+- **AI Follow-Up SMS Service**: Logs AI-sent SMS messages and sends human-like follow-ups after 2 hours if no reply, cancelled upon recipient response.
+- **Applicant Portal**: Public form and admin screen for managing job applications, including status management and document downloads.
+- **Applicants Admin Web Portal**: Password-protected HTML page for admin/HR to manage applicants with stats, searchable table, and document downloads.
+- **System Settings UI**: Admin screen to configure app-wide settings (e.g., Discord webhook URL).
+- **Clawd AI Web Chat (PWA)**: Standalone, session-authenticated HTML page for admin/HR, offering full markdown rendering and PWA installability.
+- **CRM Timezone Fix**: `crmToLocal()` in `server/services/crm-sync.ts` correctly handles CRM ISO date strings without erroneous timezone conversion.
+- **Consolidated Lilee Shift Reminder SMS**: Sends one consolidated report SMS to GM Lilee for all newly-reminded workers, preventing individual CC texts.
 
 ## External Dependencies
 
@@ -68,33 +59,18 @@ Key features include:
 - **TanStack Query**: For data fetching, caching, and synchronization.
 - **date-fns/date-fns-tz**: Libraries for date manipulation and timezone handling.
 - **react-native-maps**: For displaying maps and location-based features.
-- **react-native-qrcode-svg**: For generating QR codes.
 
 ### Cloud Services & APIs
-- **OpenPhone API**: For sending and receiving SMS messages, including shift offer blasts and replies.
+- **OpenPhone API**: For sending and receiving SMS messages.
 - **Anthropic API**: Integrated for Clawd AI's large language model capabilities (Claude-Sonnet-4-6).
-- **SendGrid**: Used for sending emails, such as timesheet CSVs.
-- **Google Places API**: For location-based services (not explicitly detailed in usage but listed in env vars).
+- **SendGrid**: Used for sending emails.
+- **Google Places API**: For location-based services.
 
 ### Third-Party Integrations
-- **Weekdays CRM**: Custom integration for syncing workplaces, shifts, and hotel requests, providing a pull-only sync engine with audit logging and admin UI for control.
+- **Weekdays CRM**: Custom integration for syncing workplaces, shifts, and hotel requests.
 
 ### Development & Deployment Tools
 - **TypeScript**: Used for type-safe code.
 - **ESLint + Prettier**: For code quality and formatting.
 - **esbuild**: For server bundling.
 - **EAS Build**: Expo Application Services for building and deploying mobile apps.
-
-### Environment Variables
-- `DATABASE_URL`
-- `EXPO_PUBLIC_DOMAIN`
-- `REPLIT_DEV_DOMAIN`
-- `DEMO_MODE`
-- `GOOGLE_PLACES_API_KEY`
-- `SESSION_SECRET`
-- `OPENPHONE_API_KEY`
-- `WEEKDAYS_API_KEY`
-- `WEEKDAYS_TEAM_ID`
-- `AI_INTEGRATIONS_ANTHROPIC_API_KEY`
-- `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`
-- `DISCORD_BOT_TOKEN` (optional — enables two-way Discord bot for operational commands)

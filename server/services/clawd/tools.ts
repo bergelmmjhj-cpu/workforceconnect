@@ -14,6 +14,7 @@ import {
 import { eq, and, ilike, or, desc, gte, lte, sql } from "drizzle-orm";
 import { sendSMS, logSMS } from "../openphone";
 import { sendDiscordNotification } from "../discord";
+import { getGuildMembers } from "../discord-bot";
 
 const GM_LILEE_PHONE = "+14166028038";
 
@@ -187,6 +188,16 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "lookup_discord_members",
+    description: "Look up members of the WFConnect Discord server. Use to find who is in the Discord channel, check team availability, or identify Discord users.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Name or partial name to search for (optional — omit to list all members)" },
+      },
+    },
+  },
+  {
     name: "generate_replit_prompt",
     description: "When you cannot fulfill a user's request with the available tools, use this to generate a detailed, copy-ready prompt for Replit AI that describes the problem and solution needed. Always use this as a fallback when stuck.",
     input_schema: {
@@ -233,6 +244,8 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       return sendWorkerInternalMessage(input, callerUserId);
     case "create_shift_request":
       return toolCreateShiftRequest(input);
+    case "lookup_discord_members":
+      return lookupDiscordMembers(input);
     case "generate_replit_prompt":
       return generateReplitPrompt(input);
     default:
@@ -770,6 +783,29 @@ async function toolCreateShiftRequest(input: Record<string, unknown>) {
     }
     return { success: false, error: `Shift creation failed: ${msg}. Try again or use generate_replit_prompt to escalate.` };
   }
+}
+
+function lookupDiscordMembers(input: Record<string, unknown>) {
+  const query = input.query as string | undefined;
+  const members = getGuildMembers(query);
+
+  if (members.length === 0) {
+    return {
+      members: [],
+      count: 0,
+      message: query
+        ? `No Discord members found matching "${query}". The bot may not have the Server Members intent enabled, or the member list hasn't been cached yet.`
+        : "No Discord members found. The bot may not be connected or the Server Members intent may not be enabled in the Discord Developer Portal.",
+    };
+  }
+
+  const nonBotMembers = members.filter(m => !m.isBot);
+  return {
+    members: nonBotMembers.slice(0, 50),
+    count: nonBotMembers.length,
+    botMembers: members.filter(m => m.isBot).length,
+    searchedBy: query ? "name" : "all",
+  };
 }
 
 function generateReplitPrompt(input: Record<string, unknown>) {

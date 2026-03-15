@@ -1,13 +1,49 @@
-import { Client, GatewayIntentBits, PresenceUpdateStatus, type Message } from "discord.js";
+import { Client, GatewayIntentBits, PresenceUpdateStatus, type Message, type GuildMember } from "discord.js";
 import { db } from "../db";
 import { discordAlerts, discordActionLogs, appConfig } from "../../shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { executeDiscordAction, type DiscordActionContext } from "./discord-actions";
+import { orchestrate } from "./clawd/orchestrator";
 
 let botClient: Client | null = null;
 
 export function getDiscordBot(): Client | null {
   return botClient;
+}
+
+export interface DiscordMemberInfo {
+  discordId: string;
+  username: string;
+  displayName: string;
+  roles: string[];
+  joinedAt: string | null;
+  isBot: boolean;
+}
+
+export function getGuildMembers(query?: string): DiscordMemberInfo[] {
+  if (!botClient) return [];
+  const guild = botClient.guilds.cache.first();
+  if (!guild) return [];
+
+  let members = Array.from(guild.members.cache.values());
+
+  if (query) {
+    const q = query.toLowerCase();
+    members = members.filter(m =>
+      m.user.username.toLowerCase().includes(q) ||
+      m.displayName.toLowerCase().includes(q) ||
+      m.nickname?.toLowerCase().includes(q)
+    );
+  }
+
+  return members.map(m => ({
+    discordId: m.user.id,
+    username: m.user.username,
+    displayName: m.displayName,
+    roles: m.roles.cache.filter(r => r.name !== "@everyone").map(r => r.name),
+    joinedAt: m.joinedAt?.toISOString() || null,
+    isBot: m.user.bot,
+  }));
 }
 
 const INTENT_PATTERNS: { intent: string; patterns: RegExp[]; extractArgs?: (msg: string) => Record<string, string> }[] = [
@@ -328,12 +364,13 @@ async function handleMessage(message: Message) {
   if (!message.content.trim()) return;
 
   const content = message.content.trim();
+  const isMention = botClient?.user ? message.mentions.users.has(botClient.user.id) : false;
   const isClawdCommand = content.startsWith("/clawd") || !!message.reference?.messageId;
 
   const hasAlertId = /WFC-[A-Z0-9]+/i.test(content);
   const hasKnownCommand = INTENT_PATTERNS.some(ip => ip.patterns.some(p => p.test(content)));
 
-  if (!isClawdCommand && !hasAlertId && !hasKnownCommand) return;
+  if (!isClawdCommand && !hasAlertId && !hasKnownCommand && !isMention) return;
 
   const openToAll = await isOpenToAll();
   if (!openToAll) {
@@ -346,6 +383,33 @@ async function handleMessage(message: Message) {
   }
 
   const parsed = await parseCommand(message);
+
+  if (isMention && parsed.intent === "unknown") {
+    const cleanContent = content.replace(/<@!?\d+>/g, "").trim();
+    if (!cleanContent) {
+      await message.reply("Hey! I'm Oscar, WFConnect's AI assistant. Ask me anything — shifts, workers, availability, operations. Or type `/clawd help` for the command list.");
+      await logAction(null, message.author.id, message.author.username, "mention_empty", content, "mention", "greeting sent", true);
+      return;
+    }
+
+    try {
+      console.log(`[DISCORD BOT] @mention from ${message.author.username}: "${cleanContent.slice(0, 80)}"`);
+      const response = await orchestrate({
+        userMessage: cleanContent,
+        conversationHistory: [],
+        userId: `discord-${message.author.id}`,
+      });
+
+      const reply = response.response || "I couldn't process that right now. Try `/clawd help` for available commands.";
+      await message.reply(reply.slice(0, 2000));
+      await logAction(null, message.author.id, message.author.username, "mention_ai", content, "mention_ai", reply.slice(0, 500), true);
+    } catch (err: any) {
+      console.error("[DISCORD BOT] Clawd AI error on mention:", err?.message);
+      await message.reply("Something went wrong processing that. Try again or use `/clawd help` for commands.");
+      await logAction(null, message.author.id, message.author.username, "mention_ai", content, "mention_ai", err?.message || "error", false, err?.message);
+    }
+    return;
+  }
 
   if (parsed.intent === "help") {
     await message.reply(HELP_MESSAGE);
@@ -421,6 +485,7 @@ export async function startDiscordBot(): Promise<boolean> {
           GatewayIntentBits.Guilds,
           GatewayIntentBits.GuildMessages,
           GatewayIntentBits.MessageContent,
+          GatewayIntentBits.GuildMembers,
         ],
       });
 

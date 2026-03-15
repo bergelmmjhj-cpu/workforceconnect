@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, type Message } from "discord.js";
+import { Client, GatewayIntentBits, PresenceUpdateStatus, type Message } from "discord.js";
 import { db } from "../db";
 import { discordAlerts, discordActionLogs, appConfig } from "../../shared/schema";
 import { eq, desc } from "drizzle-orm";
@@ -392,6 +392,18 @@ async function handleMessage(message: Message) {
   }
 }
 
+function setOnlinePresence(client: Client) {
+  try {
+    client.user?.setPresence({
+      status: PresenceUpdateStatus.Online,
+      activities: [{ name: "WFConnect Ops", type: 3 }],
+    });
+    console.log("[DISCORD BOT] Presence set to online");
+  } catch (err: any) {
+    console.error("[DISCORD BOT] Failed to set presence:", err?.message);
+  }
+}
+
 export async function startDiscordBot(): Promise<boolean> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) {
@@ -399,33 +411,62 @@ export async function startDiscordBot(): Promise<boolean> {
     return false;
   }
 
-  try {
-    const client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-      ],
-    });
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 5000;
 
-    client.on("ready", () => {
-      console.log(`[DISCORD BOT] Logged in as ${client.user?.tag}`);
-    });
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const client = new Client({
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.MessageContent,
+        ],
+      });
 
-    client.on("messageCreate", handleMessage);
+      client.on("ready", () => {
+        console.log(`[DISCORD BOT] Logged in as ${client.user?.tag}`);
+        setOnlinePresence(client);
+      });
 
-    client.on("error", (error) => {
-      console.error("[DISCORD BOT] Client error:", error.message);
-    });
+      client.on("messageCreate", handleMessage);
 
-    await client.login(token);
-    botClient = client;
-    console.log("[DISCORD BOT] Bot started successfully");
-    return true;
-  } catch (err: any) {
-    console.error("[DISCORD BOT] Failed to start:", err?.message);
-    return false;
+      client.on("error", (error) => {
+        console.error("[DISCORD BOT] Client error:", error.message);
+      });
+
+      client.on("shardDisconnect", (event, shardId) => {
+        console.warn(`[DISCORD BOT] Shard ${shardId} disconnected (code ${event.code}). Will auto-reconnect.`);
+      });
+
+      client.on("shardReconnecting", (shardId) => {
+        console.log(`[DISCORD BOT] Shard ${shardId} reconnecting...`);
+      });
+
+      client.on("shardResume", (shardId, replayedEvents) => {
+        console.log(`[DISCORD BOT] Shard ${shardId} resumed (replayed ${replayedEvents} events)`);
+        setOnlinePresence(client);
+      });
+
+      client.on("shardError", (error, shardId) => {
+        console.error(`[DISCORD BOT] Shard ${shardId} error:`, error.message);
+      });
+
+      await client.login(token);
+      botClient = client;
+      console.log("[DISCORD BOT] Bot started successfully");
+      return true;
+    } catch (err: any) {
+      console.error(`[DISCORD BOT] Login attempt ${attempt}/${MAX_RETRIES} failed:`, err?.message);
+      if (attempt < MAX_RETRIES) {
+        console.log(`[DISCORD BOT] Retrying in ${RETRY_DELAY_MS / 1000}s...`);
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+      }
+    }
   }
+
+  console.error("[DISCORD BOT] All login attempts failed");
+  return false;
 }
 
 export { parseSlashCommand, parseNaturalLanguage, INTENT_PATTERNS };

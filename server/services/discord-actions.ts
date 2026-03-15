@@ -55,7 +55,7 @@ async function handleAcknowledge(ctx: DiscordActionContext): Promise<ActionResul
 
   const success = await acknowledgeAlert(ctx.alertId, ctx.discordUsername, `Acknowledged via Discord by ${ctx.discordUsername}`);
   if (success) {
-    return { success: true, message: `**Understood:** Acknowledge alert ${ctx.alertId}\n**Action:** Status updated to acknowledged\n**Result:** Alert ${ctx.alertId} acknowledged by ${ctx.discordUsername}` };
+    return { success: true, message: `**Understood:** Acknowledge alert ${ctx.alertId}\n**Action:** Status updated to acknowledged\n**Result:** Alert ${ctx.alertId} acknowledged by ${ctx.discordUsername}\n**Still needed:** Review and take action on the underlying issue` };
   }
   return { success: false, message: `**Understood:** Acknowledge alert ${ctx.alertId}\n**Blocked:** Alert not found in system\n**Fallback:** No action taken\n**Still needed:** Verify the alert ID is correct` };
 }
@@ -155,7 +155,7 @@ async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionRes
     }).from(users).where(and(eq(users.role, "worker"), eq(users.isActive, true))).limit(15);
 
     if (allWorkers.length === 0) {
-      return { success: true, message: "**Understood:** List available workers\n**Result:** No active workers found in the system" };
+      return { success: true, message: "**Understood:** List available workers\n**Action:** Searched active worker roster\n**Result:** No active workers found in the system\n**Still needed:** Check admin panel for worker roster" };
     }
 
     const busyRows = await db.select({ workerUserId: shifts.workerUserId }).from(shifts)
@@ -165,7 +165,7 @@ async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionRes
     const busy = allWorkers.filter(w => busyIds.has(w.id));
 
     const list = available.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
-    return { success: true, message: `**Understood:** List available workers for ${today}\n**Result:** ${available.length} available (${busy.length} already scheduled):\n${list}` };
+    return { success: true, message: `**Understood:** List available workers for ${today}\n**Action:** Checked schedules against active roster\n**Result:** ${available.length} available (${busy.length} already scheduled):\n${list}\n**Still needed:** Assign workers as needed` };
   }
 
   const assignments = await db.select({
@@ -176,7 +176,7 @@ async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionRes
   ));
 
   if (assignments.length === 0) {
-    return { success: true, message: `**Understood:** List available workers for workplace\n**Result:** No workers assigned to this workplace` };
+    return { success: true, message: `**Understood:** List available workers for workplace\n**Action:** Checked workplace assignments\n**Result:** No workers assigned to this workplace\n**Still needed:** Assign workers to the workplace first` };
   }
 
   const assignedIds = assignments.map(a => a.workerUserId);
@@ -196,7 +196,7 @@ async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionRes
   }).from(users).where(and(eq(users.isActive, true), sql`${users.id} = ANY(${availableIds})`));
 
   const list = workerDetails.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
-  return { success: true, message: `**Understood:** List available workers for workplace on ${today}\n**Result:** ${workerDetails.length} available (${busyIds.size} already scheduled):\n${list}` };
+  return { success: true, message: `**Understood:** List available workers for workplace on ${today}\n**Action:** Checked schedules against workplace roster\n**Result:** ${workerDetails.length} available (${busyIds.size} already scheduled):\n${list}\n**Still needed:** Assign workers as needed` };
 }
 
 async function handleResendSms(ctx: DiscordActionContext): Promise<ActionResult> {
@@ -213,7 +213,7 @@ async function handleResendSms(ctx: DiscordActionContext): Promise<ActionResult>
   try {
     await sendSMS(phone, body);
     await logSMS(phone, body, "outbound", ctx.alert.sourceWorkerId || undefined, "clawd_discord_resend");
-    return { success: true, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Action:** SMS sent to ${phone}\n**Result:** Acknowledgment message sent` };
+    return { success: true, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Action:** SMS sent to ${phone}\n**Result:** Acknowledgment message sent\n**Still needed:** Await reply from recipient` };
   } catch (err: any) {
     return { success: false, message: `**Understood:** Resend SMS for ${ctx.alertId}\n**Blocked:** SMS send failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Check OpenPhone configuration` };
   }
@@ -226,7 +226,7 @@ async function handleNotifyGmLilee(ctx: DiscordActionContext): Promise<ActionRes
   try {
     await sendSMS(GM_LILEE_PHONE, smsBody);
     await logSMS(GM_LILEE_PHONE, smsBody, "outbound", undefined, "clawd_discord_lilee");
-    return { success: true, message: `**Understood:** Notify GM Lilee\n**Action:** SMS sent to GM Lilee (+14166028038)\n**Result:** Alert forwarded successfully` };
+    return { success: true, message: `**Understood:** Notify GM Lilee\n**Action:** SMS sent to GM Lilee (+14166028038)\n**Result:** Alert forwarded successfully\n**Still needed:** Await GM Lilee response` };
   } catch (err: any) {
     return { success: false, message: `**Understood:** Notify GM Lilee\n**Blocked:** SMS failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Check OpenPhone configuration` };
   }
@@ -279,14 +279,14 @@ async function handleNotifyClient(ctx: DiscordActionContext): Promise<ActionResu
       .set({ lastMessageAt: new Date(), lastMessagePreview: messageBody.slice(0, 100) })
       .where(eq(conversations.id, conversation.id));
 
-    return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal message sent to ${client.fullName} via WFConnect messaging\n**Result:** Client has been notified through the app` };
+    return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal message sent to ${client.fullName} via WFConnect messaging\n**Result:** Client has been notified through the app\n**Still needed:** Await client response` };
   } catch (err: any) {
     if (client.phone) {
       try {
         const smsBody = `[WFConnect] ${messageBody}`;
         await sendSMS(client.phone, smsBody);
         await logSMS(client.phone, smsBody, "outbound", clientId, "clawd_discord_notify_client");
-        return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal messaging failed, sent SMS to ${client.fullName} (${client.phone}) as fallback\n**Result:** Client has been notified via SMS` };
+        return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal messaging failed, sent SMS to ${client.fullName} (${client.phone}) as fallback\n**Result:** Client has been notified via SMS\n**Still needed:** Await client response` };
       } catch {}
     }
     return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Failed to send message: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Notify client manually via the app` };
@@ -302,7 +302,7 @@ async function handleMarkResolved(ctx: DiscordActionContext): Promise<ActionResu
     await db.update(discordAlerts)
       .set({ status: "resolved", acknowledgedBy: ctx.discordUsername, acknowledgedAt: new Date(), responseNote: `Resolved via Discord by ${ctx.discordUsername}` })
       .where(eq(discordAlerts.alertId, ctx.alertId));
-    return { success: true, message: `**Understood:** Mark ${ctx.alertId} resolved\n**Action:** Status updated\n**Result:** Alert ${ctx.alertId} marked as resolved by ${ctx.discordUsername}` };
+    return { success: true, message: `**Understood:** Mark ${ctx.alertId} resolved\n**Action:** Status updated\n**Result:** Alert ${ctx.alertId} marked as resolved by ${ctx.discordUsername}\n**Still needed:** None — issue closed` };
   } catch (err: any) {
     return { success: false, message: `**Understood:** Mark resolved\n**Blocked:** Database update failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Try again or resolve manually in app` };
   }
@@ -317,7 +317,7 @@ async function handleMarkUnresolved(ctx: DiscordActionContext): Promise<ActionRe
     await db.update(discordAlerts)
       .set({ status: "pending", responseNote: `Reopened via Discord by ${ctx.discordUsername}` })
       .where(eq(discordAlerts.alertId, ctx.alertId));
-    return { success: true, message: `**Understood:** Reopen ${ctx.alertId}\n**Action:** Status updated to pending\n**Result:** Alert ${ctx.alertId} reopened` };
+    return { success: true, message: `**Understood:** Reopen ${ctx.alertId}\n**Action:** Status updated to pending\n**Result:** Alert ${ctx.alertId} reopened\n**Still needed:** Investigate and take action on the reopened issue` };
   } catch (err: any) {
     return { success: false, message: `**Understood:** Mark unresolved\n**Blocked:** Database update failed: ${err?.message}\n**Fallback:** No action taken\n**Still needed:** Try again` };
   }

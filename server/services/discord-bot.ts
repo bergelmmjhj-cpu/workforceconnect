@@ -374,7 +374,7 @@ async function handleMessage(message: Message) {
       result.success ? undefined : result.message,
     );
   } catch (err: any) {
-    const errorMsg = `**Understood:** ${parsed.intent}\n**Blocked:** ${err?.message || "Unknown error"}\n**Fallback:** None available\n**Need:** Manual intervention required`;
+    const errorMsg = `**Understood:** ${parsed.intent}\n**Blocked:** ${err?.message || "Unknown error"}\n**Fallback:** No action taken\n**Still needed:** Manual intervention required`;
     await message.reply(errorMsg);
     await logAction(parsed.alertId, message.author.id, message.author.username, parsed.intent, content, parsed.intent, err?.message || "error", false, err?.message);
   }

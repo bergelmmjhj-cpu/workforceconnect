@@ -140,7 +140,7 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "send_discord_notification",
-    description: "Send a notification to the Discord channel for the team. Use for important operational events that the team should be aware of.",
+    description: "Send a notification to the Discord channel for the team. Use for important operational events that the team should be aware of. Include context IDs when available so replies can link back to the relevant worker/client/workplace/shift.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -148,6 +148,10 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
         message: { type: "string", description: "The notification body" },
         urgency: { type: "string", description: "Urgency level: urgent (red), warning (amber), info (blue), success (green)" },
         type: { type: "string", description: "Alert type: sick_call, client_request, urgent_shift, auto_coverage, general" },
+        workerId: { type: "number", description: "The worker user ID related to this alert (if applicable)" },
+        clientId: { type: "number", description: "The client user ID related to this alert (if applicable)" },
+        workplaceId: { type: "number", description: "The workplace ID related to this alert (if applicable)" },
+        shiftId: { type: "number", description: "The shift ID related to this alert (if applicable)" },
       },
       required: ["title", "message"],
     },
@@ -637,6 +641,10 @@ async function toolSendDiscord(input: Record<string, unknown>) {
     message: input.message as string,
     color,
     type: input.type as string | undefined,
+    workerId: input.workerId != null ? String(input.workerId) : undefined,
+    clientId: input.clientId != null ? String(input.clientId) : undefined,
+    workplaceId: input.workplaceId != null ? String(input.workplaceId) : undefined,
+    shiftId: input.shiftId != null ? String(input.shiftId) : undefined,
   });
 
   return { success: result.success, alertId: result.alertId, error: result.error };

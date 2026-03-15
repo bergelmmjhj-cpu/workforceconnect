@@ -188,6 +188,7 @@ Please handle this ${senderMatched ? "sick call" : "possible calloff"} now. Foll
         type: "sick_call",
         sourcePhone: params.workerPhone,
         sourceWorkerId: params.workerId || undefined,
+        workerId: params.workerId || undefined,
       });
     } catch (fe: any) {
       console.error("[AutoResponder] Fallback notification failed:", fe?.message);

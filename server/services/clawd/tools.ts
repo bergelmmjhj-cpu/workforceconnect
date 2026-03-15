@@ -1068,7 +1068,7 @@ async function toolCreateWorkplace(input: Record<string, unknown>) {
         crmNote = `Created in mobile app and CRM (CRM ID: ${crmResult.id}).`;
         console.log(`[CRM-SYNC] Workplace "${name}" linked: local=${newWorkplace.id} → CRM=${crmResult.id}`);
       } catch (crmErr: any) {
-        crmNote = `Created in mobile app only — CRM sync failed: ${crmErr?.message}. Use /api/admin/workplaces/sync-to-crm to retry.`;
+        crmNote = `Created in mobile app only — CRM sync pending: ${crmErr?.message}. Use /api/admin/workplaces/sync-to-crm to retry.`;
         console.error(`[CRM-SYNC] Failed to push workplace "${name}" to CRM:`, crmErr?.message);
       }
     } else {

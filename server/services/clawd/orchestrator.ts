@@ -140,14 +140,16 @@ export function clearPendingDraft(userId: string) {
 function isUselessOutput(output: AssistantOutput): boolean {
   const emptyFindings = output.keyFindings.length === 0 && output.risks.length === 0 && output.recommendedActions.length === 0;
   const fallbackSummary = output.summary === "Analysis unavailable." || output.summary === "" || output.confidenceScore <= 0.3;
-  return emptyFindings && fallbackSummary;
+  const outOfScopePattern = /outside\s+(the\s+)?scope|out\s+of\s+scope|not\s+designed\s+for\s+this|scoped\s+exclusively|cannot\s+(help|assist|answer)\s+(with\s+)?(this|that)|not\s+within\s+(my|the)\s+scope|beyond\s+(my|the)\s+scope|falls?\s+outside/i;
+  const outOfScope = outOfScopePattern.test(output.summary);
+  return (emptyFindings && fallbackSummary) || outOfScope;
 }
 
 function formatAssistantOutputs(outputs: AssistantOutput[]): string {
   const usefulOutputs = outputs.filter(o => !isUselessOutput(o));
 
   if (usefulOutputs.length === 0) {
-    return "No significant issues found at this time.";
+    return "That's outside what my analytics tools can see. Try asking me to check internal messages, Discord alerts, or SMS logs instead.";
   }
 
   const parts: string[] = [];
@@ -281,6 +283,12 @@ const ACTION_INTENT_PATTERNS: RegExp[] = [
   /\bneed .+ (for|at) (tomorrow|tonight|today)\b/i,
   // Worker/workplace lookup
   /\b(find|look up|search for)\s+(a\s+)?(worker|staff|workplace|hotel)\b/i,
+  // Follow-up / update queries (route to action for message/Discord checks)
+  /\b(any|get|check|ask\s+for)\b.*(update|reply|response|feedback)\b.*(from|about|on)\b/i,
+  /\bany\b.*\breply\b/i,
+  /\bfollow[\s\-]?up\b/i,
+  /\bupdate\s+on\b/i,
+  /\bcheck\s+(if|whether|for)\b.*\b(replied|responded|got\s+back)\b/i,
 ];
 
 // Signals in the last assistant message that indicate an active action conversation

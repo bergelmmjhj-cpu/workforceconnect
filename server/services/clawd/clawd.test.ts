@@ -490,6 +490,242 @@ describe("Chat Continuity — Pending Draft Lifecycle", () => {
 
 });
 
+// ─── Discord Command Parser Tests ────────────────────────────────────────────
+
+describe("Discord Command Parser — Slash Commands", () => {
+  function parseSlash(content: string): { intent: string; args: Record<string, string> } | null {
+    const m = content.match(/^\/clawd\s+(\w+)\s*(.*)?$/i);
+    if (!m) return null;
+    const cmd = m[1].toLowerCase();
+    const rest = (m[2] || "").trim();
+    const cmdMap: Record<string, string> = {
+      assign: "assign_worker", resolve: "mark_resolved", resolved: "mark_resolved",
+      unresolve: "mark_unresolved", escalate: "escalate", whoisavailable: "list_available",
+      available: "list_available", options: "list_available", summary: "summarize",
+      summarize: "summarize", help: "help", ack: "acknowledge", notify: "notify_client",
+      notifyclient: "notify_client", notifylilee: "notify_gm_lilee", lilee: "notify_gm_lilee",
+      resend: "resend_sms",
+    };
+    const intent = cmdMap[cmd];
+    if (!intent) return null;
+    const args: Record<string, string> = {};
+    if (intent === "assign_worker" && rest) args.workerQuery = rest;
+    return { intent, args };
+  }
+
+  it("Test 40: /clawd assign Bergel", () => {
+    const r = parseSlash("/clawd assign Bergel");
+    assert(r !== null, "parsed successfully");
+    assert(r?.intent === "assign_worker", `intent=assign_worker (got ${r?.intent})`);
+    assert(r?.args.workerQuery === "Bergel", `workerQuery=Bergel (got ${r?.args.workerQuery})`);
+  });
+
+  it("Test 41: /clawd resolve", () => {
+    const r = parseSlash("/clawd resolve");
+    assert(r !== null, "parsed successfully");
+    assert(r?.intent === "mark_resolved", `intent=mark_resolved (got ${r?.intent})`);
+  });
+
+  it("Test 42: /clawd whoisavailable", () => {
+    const r = parseSlash("/clawd whoisavailable");
+    assert(r !== null, "parsed successfully");
+    assert(r?.intent === "list_available", `intent=list_available (got ${r?.intent})`);
+  });
+
+  it("Test 43: /clawd help", () => {
+    const r = parseSlash("/clawd help");
+    assert(r !== null, "parsed successfully");
+    assert(r?.intent === "help", `intent=help (got ${r?.intent})`);
+  });
+
+  it("Test 44: /clawd notifylilee", () => {
+    const r = parseSlash("/clawd notifylilee");
+    assert(r !== null, "parsed successfully");
+    assert(r?.intent === "notify_gm_lilee", `intent=notify_gm_lilee (got ${r?.intent})`);
+  });
+
+  it("Test 45: /clawd escalate", () => {
+    const r = parseSlash("/clawd escalate");
+    assert(r !== null, "parsed successfully");
+    assert(r?.intent === "escalate", `intent=escalate (got ${r?.intent})`);
+  });
+
+  it("Test 46: Unknown /clawd command returns null", () => {
+    const r = parseSlash("/clawd foobar");
+    assert(r === null, "unknown command returns null");
+  });
+
+  it("Test 47: Non-slash message returns null", () => {
+    const r = parseSlash("assign Bergel");
+    assert(r === null, "non-slash returns null");
+  });
+});
+
+describe("Discord Command Parser — Natural Language Intents", () => {
+  const NL_PATTERNS: { intent: string; patterns: RegExp[] }[] = [
+    { intent: "acknowledge", patterns: [/^\s*(ack|acknowledged?|got\s*it|noted|roger|copy)\s*$/i] },
+    { intent: "assign_worker", patterns: [/\b(assign|send|put|give|book)\s+(\w[\w\s]*?)$/i] },
+    { intent: "list_available", patterns: [/\bwho\s+is\s+available/i, /\bwho\s+can\s+cover/i, /\boptions\b/i] },
+    { intent: "mark_resolved", patterns: [/\bmark\s+resolved\b/i, /\bresolve(?:d)?\s*$/i, /\bdone\s*$/i, /\bcovered\s*$/i, /\bhandled\s*$/i] },
+    { intent: "mark_unresolved", patterns: [/\bmark\s+unresolved\b/i, /\breopen\b/i, /\bno\s+coverage\s+found\b/i] },
+    { intent: "escalate", patterns: [/\bescalate\b/i] },
+    { intent: "notify_gm_lilee", patterns: [/\bnotify\s+(?:gm\s+)?lilee\b/i, /\blilee\b/i] },
+    { intent: "notify_client", patterns: [/\bnotify\s+(?:the\s+)?client\b/i, /\bmessage\s+(?:the\s+)?client\b/i] },
+    { intent: "resend_sms", patterns: [/\bresend\s+(sms|text|message)/i] },
+    { intent: "summarize", patterns: [/\bsummar(?:y|ize)\b/i, /\bwho\s+called\s+off\b/i, /\bdetails?\b/i] },
+  ];
+
+  function detectNL(msg: string): string | null {
+    for (const { intent, patterns } of NL_PATTERNS) {
+      for (const p of patterns) {
+        if (p.test(msg)) return intent;
+      }
+    }
+    return null;
+  }
+
+  it("Test 48: 'assign Nino' → assign_worker", () => {
+    assert(detectNL("assign Nino") === "assign_worker", "assign Nino → assign_worker");
+  });
+
+  it("Test 49: 'who is available?' → list_available", () => {
+    assert(detectNL("who is available?") === "list_available", "who is available → list_available");
+  });
+
+  it("Test 50: 'mark resolved' → mark_resolved", () => {
+    assert(detectNL("mark resolved") === "mark_resolved", "mark resolved → mark_resolved");
+  });
+
+  it("Test 51: 'done' → mark_resolved", () => {
+    assert(detectNL("done") === "mark_resolved", "done → mark_resolved");
+  });
+
+  it("Test 52: 'escalate' → escalate", () => {
+    assert(detectNL("escalate") === "escalate", "escalate → escalate");
+  });
+
+  it("Test 53: 'notify client' → notify_client", () => {
+    assert(detectNL("notify client") === "notify_client", "notify client → notify_client");
+  });
+
+  it("Test 54: 'acknowledged' → acknowledge", () => {
+    assert(detectNL("acknowledged") === "acknowledge", "acknowledged → acknowledge");
+  });
+
+  it("Test 55: 'no coverage found' → mark_unresolved", () => {
+    assert(detectNL("no coverage found") === "mark_unresolved", "no coverage found → mark_unresolved");
+  });
+
+  it("Test 56: 'who called off?' → summarize", () => {
+    assert(detectNL("who called off?") === "summarize", "who called off → summarize");
+  });
+
+  it("Test 57: 'resend sms' → resend_sms", () => {
+    assert(detectNL("resend sms") === "resend_sms", "resend sms → resend_sms");
+  });
+
+  it("Test 58: Regular text doesn't match any intent", () => {
+    assert(detectNL("What is the weather like?") === null, "random question → null");
+  });
+});
+
+describe("Discord Authorization", () => {
+  it("Test 59: Empty authorized list allows all (no restriction)", () => {
+    const authorizedIds = new Set<string>();
+    const userId = "123456789";
+    const allowed = authorizedIds.size === 0 || authorizedIds.has(userId);
+    assert(allowed === true, "empty set allows all users");
+  });
+
+  it("Test 60: Authorized user is allowed", () => {
+    const authorizedIds = new Set(["111111", "222222", "333333"]);
+    assert(authorizedIds.has("222222") === true, "user in list is allowed");
+  });
+
+  it("Test 61: Unauthorized user is rejected", () => {
+    const authorizedIds = new Set(["111111", "222222"]);
+    assert(authorizedIds.has("999999") === false, "user not in list is rejected");
+  });
+});
+
+describe("isUselessOutput — Out of Scope Filtering", () => {
+  function testIsUseless(summary: string, hasFindings: boolean): boolean {
+    const emptyFindings = !hasFindings;
+    const fallbackSummary = summary === "Analysis unavailable." || summary === "" || false;
+    const outOfScopePattern = /outside\s+(the\s+)?scope|out\s+of\s+scope|not\s+designed\s+for\s+this|scoped\s+exclusively|cannot\s+(help|assist|answer)\s+(with\s+)?(this|that)|not\s+within\s+(my|the)\s+scope|beyond\s+(my|the)\s+scope|falls?\s+outside/i;
+    const outOfScope = outOfScopePattern.test(summary);
+    return (emptyFindings && fallbackSummary) || outOfScope;
+  }
+
+  it("Test 62: 'This question falls outside the scope of staffing analytics' is useless", () => {
+    assert(testIsUseless("This question falls outside the scope of staffing analytics and workforce data.", true) === true,
+      "out of scope summary is filtered even with findings");
+  });
+
+  it("Test 63: 'The requested topic is out of scope' is useless", () => {
+    assert(testIsUseless("The requested topic is out of scope for this analytics tool.", true) === true,
+      "out of scope keyword detected");
+  });
+
+  it("Test 64: 'I cannot help with this request' is useless", () => {
+    assert(testIsUseless("I cannot help with this request as it relates to weather data.", true) === true,
+      "cannot help detected");
+  });
+
+  it("Test 65: 'The query is beyond the scope of our tools' is useless", () => {
+    assert(testIsUseless("The query is beyond the scope of our staffing tools.", true) === true,
+      "beyond the scope detected");
+  });
+
+  it("Test 66: Normal analysis summary is NOT useless", () => {
+    assert(testIsUseless("3 shifts are currently understaffed for tomorrow.", true) === false,
+      "normal summary with findings is useful");
+  });
+
+  it("Test 67: Empty findings + 'Analysis unavailable' is useless", () => {
+    assert(testIsUseless("Analysis unavailable.", false) === true,
+      "classic fallback is useless");
+  });
+});
+
+describe("Action Routing — Follow-up / Update Patterns", () => {
+  const EXTRA_ACTION_PATTERNS: RegExp[] = [
+    /\b(any|get|check|ask\s+for)\b.*(update|reply|response|feedback)\b.*(from|about|on)\b/i,
+    /\bany\b.*\breply\b/i,
+    /\bfollow[\s\-]?up\b/i,
+    /\bupdate\s+on\b/i,
+    /\bcheck\s+(if|whether|for)\b.*\b(replied|responded|got\s+back)\b/i,
+  ];
+
+  function matchesFollowUp(msg: string): boolean {
+    return EXTRA_ACTION_PATTERNS.some(p => p.test(msg));
+  }
+
+  it("Test 68: 'any reply from HR about my announcement?' → action", () => {
+    assert(matchesFollowUp("any reply from HR about my announcement?") === true, "any reply from → action");
+  });
+
+  it("Test 69: 'check if they got back to us' → action", () => {
+    assert(matchesFollowUp("check if they got back to us") === true, "check if got back → action");
+  });
+
+  it("Test 70: 'follow up on that shift request' → action", () => {
+    assert(matchesFollowUp("follow up on that shift request") === true, "follow up → action");
+  });
+
+  it("Test 71: 'update on the sick call situation' → action", () => {
+    assert(matchesFollowUp("update on the sick call situation") === true, "update on → action");
+  });
+
+  it("Test 72: 'get update from the client about coverage' → action", () => {
+    assert(matchesFollowUp("get update from the client about coverage") === true, "get update from → action");
+  });
+
+  it("Test 73: 'What is the weather?' does NOT match follow-up", () => {
+    assert(matchesFollowUp("What is the weather?") === false, "unrelated → no match");
+  });
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"═".repeat(50)}`);

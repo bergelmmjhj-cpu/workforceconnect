@@ -1018,6 +1018,16 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
           log("[AI FOLLOWUP] Startup failed (non-blocking):", err.message);
         }
       })();
+
+      // Discord Bot (two-way operations, non-blocking)
+      (async () => {
+        try {
+          const discordBot = await import("./services/discord-bot");
+          await discordBot.startDiscordBot();
+        } catch (err: any) {
+          log("[DISCORD BOT] Startup failed (non-blocking):", err.message);
+        }
+      })();
     },
   );
 })();

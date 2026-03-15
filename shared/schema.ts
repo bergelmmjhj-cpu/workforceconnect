@@ -971,22 +971,46 @@ export const discordAlerts = pgTable("discord_alerts", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  alertId: text("alert_id").notNull().unique(), // WFC-XXXX tracking ID
-  type: text("type").notNull().default("general"), // sick_call, client_request, urgent_shift, auto_coverage, general
+  alertId: text("alert_id").notNull().unique(),
+  type: text("type").notNull().default("general"),
   title: text("title").notNull(),
   message: text("message").notNull(),
   sourcePhone: text("source_phone"),
   sourceWorkerId: varchar("source_worker_id"),
-  status: text("status").notNull().default("pending"), // pending, acknowledged, resolved
+  workerId: varchar("worker_id"),
+  clientId: varchar("client_id"),
+  workplaceId: varchar("workplace_id"),
+  shiftId: varchar("shift_id"),
+  discordChannelId: text("discord_channel_id"),
+  originalMessage: text("original_message"),
+  status: text("status").notNull().default("pending"),
   acknowledgedBy: text("acknowledged_by"),
   acknowledgedAt: timestamp("acknowledged_at"),
   responseNote: text("response_note"),
   discordMessageId: text("discord_message_id"),
-  actionsTaken: text("actions_taken"), // JSON log of auto-actions taken
+  actionsTaken: text("actions_taken"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export type DiscordAlert = typeof discordAlerts.$inferSelect;
+
+export const discordActionLogs = pgTable("discord_action_logs", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  alertId: text("alert_id"),
+  discordUserId: text("discord_user_id").notNull(),
+  discordUsername: text("discord_username").notNull(),
+  actionType: text("action_type").notNull(),
+  rawMessage: text("raw_message").notNull(),
+  parsedIntent: text("parsed_intent"),
+  result: text("result"),
+  success: boolean("success").notNull().default(true),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DiscordActionLog = typeof discordActionLogs.$inferSelect;
 
 export const crmSyncLogs = pgTable("crm_sync_logs", {
   id: varchar("id")

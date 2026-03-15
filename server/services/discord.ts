@@ -34,6 +34,11 @@ interface SendDiscordNotificationOpts {
   sourcePhone?: string;
   sourceWorkerId?: string;
   actionsTaken?: string;
+  workerId?: string;
+  clientId?: string;
+  workplaceId?: string;
+  shiftId?: string;
+  originalMessage?: string;
 }
 
 export async function sendDiscordNotification(opts: SendDiscordNotificationOpts): Promise<{
@@ -59,7 +64,8 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
       timestamp: new Date().toISOString(),
     };
 
-    const response = await fetch(webhookUrl, {
+    const fetchUrl = webhookUrl.includes("?") ? `${webhookUrl}&wait=true` : `${webhookUrl}?wait=true`;
+    const response = await fetch(fetchUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -74,6 +80,12 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
       return { success: false, alertId, error: `HTTP ${response.status}` };
     }
 
+    let discordMessageId: string | null = null;
+    try {
+      const resJson = await response.clone().json();
+      discordMessageId = resJson?.id || null;
+    } catch {}
+
     try {
       await db.insert(discordAlerts).values({
         alertId,
@@ -82,6 +94,12 @@ export async function sendDiscordNotification(opts: SendDiscordNotificationOpts)
         message: opts.message,
         sourcePhone: opts.sourcePhone || null,
         sourceWorkerId: opts.sourceWorkerId || null,
+        workerId: opts.workerId || null,
+        clientId: opts.clientId || null,
+        workplaceId: opts.workplaceId || null,
+        shiftId: opts.shiftId || null,
+        originalMessage: opts.originalMessage || null,
+        discordMessageId,
         status: "pending",
         actionsTaken: opts.actionsTaken || null,
       });

@@ -418,46 +418,48 @@ export default function CrmSyncScreen() {
             ) : null}
           </View>
           {status?.pushQueue ? (
-            <View style={styles.categoryStats}>
-              <View style={styles.statItem}>
-                <ThemedText style={[styles.statValue, { color: "#34C759" }]}>
-                  {status.pushQueue.completedToday}
-                </ThemedText>
-                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                  Today
-                </ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={[styles.statValue, { color: "#FF9500" }]}>
-                  {status.pushQueue.pending}
-                </ThemedText>
-                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                  Pending
-                </ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={[styles.statValue, { color: status.pushQueue.failed > 0 ? "#FF3B30" : theme.textSecondary }]}>
-                  {status.pushQueue.failed}
-                </ThemedText>
-                <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
-                  Failed
-                </ThemedText>
-              </View>
-            </View>
-            {status.pushQueue.lastSyncAt || status.pushQueue.lastPushAt ? (
-              <View style={{ marginTop: 8 }}>
-                {status.pushQueue.lastSyncAt ? (
-                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary, fontSize: 12 }]}>
-                    Last sync: {new Date(status.pushQueue.lastSyncAt).toLocaleString()}
+            <>
+              <View style={styles.categoryStats}>
+                <View style={styles.statItem}>
+                  <ThemedText style={[styles.statValue, { color: "#34C759" }]}>
+                    {status.pushQueue.completedToday}
                   </ThemedText>
-                ) : null}
-                {status.pushQueue.lastPushAt ? (
-                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary, fontSize: 12 }]}>
-                    Last push: {new Date(status.pushQueue.lastPushAt).toLocaleString()}
+                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                    Today
                   </ThemedText>
-                ) : null}
+                </View>
+                <View style={styles.statItem}>
+                  <ThemedText style={[styles.statValue, { color: "#FF9500" }]}>
+                    {status.pushQueue.pending}
+                  </ThemedText>
+                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                    Pending
+                  </ThemedText>
+                </View>
+                <View style={styles.statItem}>
+                  <ThemedText style={[styles.statValue, { color: status.pushQueue.failed > 0 ? "#FF3B30" : theme.textSecondary }]}>
+                    {status.pushQueue.failed}
+                  </ThemedText>
+                  <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+                    Failed
+                  </ThemedText>
+                </View>
               </View>
-            ) : null}
+              {status.pushQueue.lastSyncAt || status.pushQueue.lastPushAt ? (
+                <View style={{ marginTop: 8 }}>
+                  {status.pushQueue.lastSyncAt ? (
+                    <ThemedText style={[styles.statLabel, { color: theme.textSecondary, fontSize: 12 }]}>
+                      Last sync: {new Date(status.pushQueue.lastSyncAt).toLocaleString()}
+                    </ThemedText>
+                  ) : null}
+                  {status.pushQueue.lastPushAt ? (
+                    <ThemedText style={[styles.statLabel, { color: theme.textSecondary, fontSize: 12 }]}>
+                      Last push: {new Date(status.pushQueue.lastPushAt).toLocaleString()}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ) : null}
+            </>
           ) : null}
         </Card>
 

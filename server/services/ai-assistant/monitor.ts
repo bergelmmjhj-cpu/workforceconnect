@@ -581,7 +581,7 @@ async function checkWeeklyReport(): Promise<void> {
 
 async function checkCrmSyncHealth(): Promise<void> {
   try {
-    const { getCrmPushQueueStats, getLastSyncCompletedAt } = await import("../crm-sync");
+    const { getCrmPushQueueStats, getLastSyncCompletedAtFromDb } = await import("../crm-sync");
     const stats = await getCrmPushQueueStats();
 
     if (stats.failed >= 5) {
@@ -615,36 +615,24 @@ async function checkCrmSyncHealth(): Promise<void> {
         });
       }
     } else if (stats.failed > 0) {
-      const msg = `CRM Push Queue Alert: ${stats.failed} failed item(s) in push queue, ${stats.pending} pending`;
-      console.warn(`[AI] ${msg}`);
-
-      try {
-        const { sendDiscordNotification } = await import("../discord");
-        await sendDiscordNotification({
-          title: "CRM Sync Health Warning",
-          description: msg,
-          color: 0xff9500,
-        });
-      } catch {}
-
-      await logAction({
-        monitorType: "crm_sync_health",
-        signalSummary: msg,
-        actionTaken: "alert_sent",
-        alertSentTo: "discord",
-      });
+      console.warn(`[AI] CRM push queue has ${stats.failed} failed item(s) (below alert threshold of 5)`);
     }
 
     if (stats.pending > 10) {
-      console.warn(`[AI] CRM push queue backlog: ${stats.pending} pending items`);
-      await logAction({
-        monitorType: "crm_sync_health",
-        signalSummary: `Push queue backlog: ${stats.pending} pending`,
-        actionTaken: "logged",
-      });
+      const backlogKey = `crm_backlog_${Math.floor(stats.pending / 10) * 10}`;
+      const alreadyAlerted = await isAlreadyAlerted("crm_sync", backlogKey, "backlog");
+      if (!alreadyAlerted) {
+        console.warn(`[AI] CRM push queue backlog: ${stats.pending} pending items`);
+        await markAlerted("crm_sync", backlogKey, "backlog");
+        await logAction({
+          monitorType: "crm_sync_health",
+          signalSummary: `Push queue backlog: ${stats.pending} pending`,
+          actionTaken: "logged",
+        });
+      }
     }
 
-    const lastSync = getLastSyncCompletedAt();
+    const lastSync = await getLastSyncCompletedAtFromDb();
     if (lastSync) {
       const minutesSinceSync = (Date.now() - lastSync.getTime()) / 60000;
       if (minutesSinceSync > 10) {

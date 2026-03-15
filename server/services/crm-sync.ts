@@ -44,6 +44,23 @@ export function getLastSyncCompletedAt(): Date | null {
   return lastSyncCompletedAt;
 }
 
+export async function getLastSyncCompletedAtFromDb(): Promise<Date | null> {
+  if (lastSyncCompletedAt) return lastSyncCompletedAt;
+  try {
+    const [lastLog] = await db
+      .select({ completedAt: crmSyncLogs.completedAt })
+      .from(crmSyncLogs)
+      .where(eq(crmSyncLogs.status, "completed"))
+      .orderBy(sql`${crmSyncLogs.completedAt} DESC`)
+      .limit(1);
+    if (lastLog?.completedAt) {
+      lastSyncCompletedAt = lastLog.completedAt;
+      return lastLog.completedAt;
+    }
+  } catch {}
+  return null;
+}
+
 export function getLastPushCompletedAt(): Date | null {
   return lastPushCompletedAt;
 }

@@ -29,7 +29,9 @@ export const users = pgTable("users", {
   passwordResetExpiry: timestamp("password_reset_expiry"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  phoneUnique: uniqueIndex("users_phone_unique").on(table.phone).where(table.phone !== null),
+}));
 
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,

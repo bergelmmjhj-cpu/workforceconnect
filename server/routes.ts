@@ -1821,6 +1821,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .where(eq(users.id, existingUser.id));
             console.log(`[APPROVAL] Updated existing user ${updatedApplication.email} to AGREEMENT_PENDING`);
           } else {
+            if (updatedApplication.phone) {
+              const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.phone, updatedApplication.phone)).limit(1);
+              if (phoneDuplicate) {
+                res.status(409).json({ error: `A worker with phone ${updatedApplication.phone} already exists.` });
+                return;
+              }
+            }
+
             const firstName = (updatedApplication.fullName || "worker").split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
             const phoneLast4 = (updatedApplication.phone || "0000").replace(/\D/g, "").slice(-4);
             const tempPassword = `${firstName}${phoneLast4}`;
@@ -7245,12 +7253,12 @@ Respond with exactly:
             if (filledReq?.crmRequestId) {
               try {
                 const { enqueueCrmPush } = await import("./services/crm-sync");
-                await enqueueCrmPush({
-                  entityType: "hotel_request",
-                  action: "update",
-                  entityId: shift.requestId,
-                  payload: { crmExternalId: filledReq.crmRequestId, status: "CONFIRMED" },
-                });
+                await enqueueCrmPush(
+                  "hotel_request",
+                  shift.requestId,
+                  "update",
+                  { crmExternalId: filledReq.crmRequestId, status: "CONFIRMED" }
+                );
               } catch (crmErr: any) {
                 console.error("[CRM] Failed to enqueue hotel request update:", crmErr?.message);
               }
@@ -8990,6 +8998,14 @@ Respond with exactly:
           error: `An ${statusLabel} ${roleLabel} account already exists with this email. ${hint}`,
         });
         return;
+      }
+
+      if (phone) {
+        const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).limit(1);
+        if (phoneDuplicate) {
+          res.status(409).json({ error: `A user with phone ${phone} already exists.` });
+          return;
+        }
       }
 
       // Generate temp password: firstName + 4 random digits

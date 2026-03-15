@@ -80,8 +80,8 @@ async function sendCrmNewRequestAlerts(crmReq: crmClient.CrmHotelRequest): Promi
     const { sendDiscordNotification } = await import("./discord");
     await sendDiscordNotification({
       title: "New CRM Hotel Request (Sync)",
-      description: alertMsg,
-      color: 0x00bcd4,
+      message: alertMsg,
+      color: "blue",
     });
   } catch (err: any) {
     console.error("[CRM-SYNC] Discord alert failed:", err?.message);

@@ -595,8 +595,8 @@ async function checkCrmSyncHealth(): Promise<void> {
           const { sendDiscordNotification } = await import("../discord");
           await sendDiscordNotification({
             title: "CRM Sync Health Critical",
-            description: msg,
-            color: 0xff0000,
+            message: msg,
+            color: "red",
           });
         } catch {}
 
@@ -610,7 +610,7 @@ async function checkCrmSyncHealth(): Promise<void> {
         await logAction({
           monitorType: "crm_sync_health",
           signalSummary: msg,
-          actionTaken: "critical_alert_sent",
+          actionTaken: "alert_sent",
           alertSentTo: "discord,sms",
         });
       }
@@ -627,7 +627,7 @@ async function checkCrmSyncHealth(): Promise<void> {
         await logAction({
           monitorType: "crm_sync_health",
           signalSummary: `Push queue backlog: ${stats.pending} pending`,
-          actionTaken: "logged",
+          actionTaken: "alert_sent",
         });
       }
     }
@@ -646,8 +646,8 @@ async function checkCrmSyncHealth(): Promise<void> {
             const { sendDiscordNotification } = await import("../discord");
             await sendDiscordNotification({
               title: "CRM Sync Stale Warning",
-              description: msg,
-              color: 0xff9500,
+              message: msg,
+              color: "amber",
             });
           } catch {}
 
@@ -655,7 +655,7 @@ async function checkCrmSyncHealth(): Promise<void> {
           await logAction({
             monitorType: "crm_sync_health",
             signalSummary: msg,
-            actionTaken: "stale_alert_sent",
+            actionTaken: "alert_sent",
             alertSentTo: "discord",
           });
         }

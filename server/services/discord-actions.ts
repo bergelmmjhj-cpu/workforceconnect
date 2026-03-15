@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { discordAlerts, users, workplaces, workplaceAssignments } from "../../shared/schema";
-import { eq, and, ilike } from "drizzle-orm";
+import { discordAlerts, users, workplaces, workplaceAssignments, shifts, conversations, messages } from "../../shared/schema";
+import { eq, and, ilike, sql } from "drizzle-orm";
 import { sendSMS, logSMS } from "./openphone";
 import { sendDiscordNotification, acknowledgeAlert } from "./discord";
 
@@ -115,6 +115,7 @@ async function handleAssignWorker(ctx: DiscordActionContext): Promise<ActionResu
 
 async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionResult> {
   const workplaceId = ctx.alert?.workplaceId;
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
 
   if (!workplaceId) {
     const allWorkers = await db.select({
@@ -126,8 +127,15 @@ async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionRes
     if (allWorkers.length === 0) {
       return { success: true, message: "**Understood:** List available workers\n**Result:** No active workers found in the system" };
     }
-    const list = allWorkers.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
-    return { success: true, message: `**Understood:** List available workers\n**Result:** ${allWorkers.length} active workers:\n${list}` };
+
+    const busyRows = await db.select({ workerUserId: shifts.workerUserId }).from(shifts)
+      .where(and(eq(shifts.date, today), sql`${shifts.status} != 'cancelled'`));
+    const busyIds = new Set(busyRows.map(r => r.workerUserId).filter(Boolean));
+    const available = allWorkers.filter(w => !busyIds.has(w.id));
+    const busy = allWorkers.filter(w => busyIds.has(w.id));
+
+    const list = available.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
+    return { success: true, message: `**Understood:** List available workers for ${today}\n**Result:** ${available.length} available (${busy.length} already scheduled):\n${list}` };
   }
 
   const assignments = await db.select({
@@ -141,23 +149,24 @@ async function handleListAvailable(ctx: DiscordActionContext): Promise<ActionRes
     return { success: true, message: `**Understood:** List available workers for workplace\n**Result:** No workers assigned to this workplace` };
   }
 
-  const workerIds = assignments.map(a => a.workerUserId);
+  const assignedIds = assignments.map(a => a.workerUserId);
+  const busyRows = await db.select({ workerUserId: shifts.workerUserId }).from(shifts)
+    .where(and(eq(shifts.date, today), sql`${shifts.workerUserId} = ANY(${assignedIds})`, sql`${shifts.status} != 'cancelled'`));
+  const busyIds = new Set(busyRows.map(r => r.workerUserId).filter(Boolean));
+  const availableIds = assignedIds.filter(id => !busyIds.has(id));
+
+  if (availableIds.length === 0) {
+    return { success: true, message: `**Understood:** List available workers\n**Result:** All ${assignedIds.length} assigned worker(s) are already scheduled on ${today}\n**Still needed:** Consider checking other dates or sending a shift offer blast` };
+  }
+
   const workerDetails = await db.select({
     id: users.id,
     fullName: users.fullName,
     phone: users.phone,
-  }).from(users).where(and(
-    eq(users.role, "worker"),
-    eq(users.isActive, true),
-  ));
+  }).from(users).where(and(eq(users.isActive, true), sql`${users.id} = ANY(${availableIds})`));
 
-  const assignedWorkers = workerDetails.filter(w => workerIds.includes(w.id));
-  if (assignedWorkers.length === 0) {
-    return { success: true, message: "**Understood:** List available workers\n**Result:** No active workers found for this workplace" };
-  }
-
-  const list = assignedWorkers.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
-  return { success: true, message: `**Understood:** List available workers\n**Result:** ${assignedWorkers.length} workers assigned:\n${list}` };
+  const list = workerDetails.map(w => `- ${w.fullName} (${w.phone || "no phone"})`).join("\n");
+  return { success: true, message: `**Understood:** List available workers for workplace on ${today}\n**Result:** ${workerDetails.length} available (${busyIds.size} already scheduled):\n${list}` };
 }
 
 async function handleResendSms(ctx: DiscordActionContext): Promise<ActionResult> {
@@ -200,23 +209,53 @@ async function handleNotifyClient(ctx: DiscordActionContext): Promise<ActionResu
 
   const clientId = ctx.alert.clientId;
   if (!clientId) {
-    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** No client ID linked to this alert\n**Fallback:** Try sending a manual message through the app\n**Need:** Alert doesn't have client context` };
+    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** No client ID linked to this alert\n**Still needed:** Send a manual message through the WFConnect app instead` };
   }
 
-  const [client] = await db.select({ fullName: users.fullName, phone: users.phone }).from(users).where(eq(users.id, clientId)).limit(1);
+  const [client] = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone }).from(users).where(eq(users.id, clientId)).limit(1);
   if (!client) {
-    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Client user not found in system\n**Need:** Verify client data` };
+    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Client user not found in system\n**Still needed:** Verify client data in admin panel` };
   }
 
-  if (client.phone) {
-    const body = `[WFConnect] Update regarding your staffing request: We are working on coverage for you. We'll confirm details shortly. — WFConnect Team`;
-    try {
-      await sendSMS(client.phone, body);
-      await logSMS(client.phone, body, "outbound", clientId, "clawd_discord_notify_client");
-    } catch {}
-  }
+  const messageBody = `Update regarding your staffing request: We are working on coverage for you. We'll confirm details shortly. — WFConnect Team`;
 
-  return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Notified ${client.fullName}${client.phone ? " via SMS" : " (no phone on file)"}\n**Result:** Client has been updated` };
+  try {
+    let [conversation] = await db.select().from(conversations)
+      .where(and(eq(conversations.workerUserId, clientId), eq(conversations.isArchived, false)))
+      .limit(1);
+
+    if (!conversation) {
+      const [newConv] = await db.insert(conversations)
+        .values({ workerUserId: clientId, hrUserId: ctx.discordUserId || clientId, lastMessageAt: new Date(), lastMessagePreview: messageBody.slice(0, 100) })
+        .returning();
+      conversation = newConv;
+    }
+
+    await db.insert(messages).values({
+      conversationId: conversation.id,
+      senderUserId: ctx.discordUserId || clientId,
+      recipientUserId: clientId,
+      body: messageBody,
+      messageType: "text",
+      status: "delivered",
+    });
+
+    await db.update(conversations)
+      .set({ lastMessageAt: new Date(), lastMessagePreview: messageBody.slice(0, 100) })
+      .where(eq(conversations.id, conversation.id));
+
+    return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal message sent to ${client.fullName} via WFConnect messaging\n**Result:** Client has been notified through the app` };
+  } catch (err: any) {
+    if (client.phone) {
+      try {
+        const smsBody = `[WFConnect] ${messageBody}`;
+        await sendSMS(client.phone, smsBody);
+        await logSMS(client.phone, smsBody, "outbound", clientId, "clawd_discord_notify_client");
+        return { success: true, message: `**Understood:** Notify client for ${ctx.alertId}\n**Action:** Internal messaging failed, sent SMS to ${client.fullName} (${client.phone}) as fallback\n**Result:** Client has been notified via SMS` };
+      } catch {}
+    }
+    return { success: false, message: `**Understood:** Notify client for ${ctx.alertId}\n**Blocked:** Failed to send message: ${err?.message}\n**Still needed:** Notify client manually via the app` };
+  }
 }
 
 async function handleMarkResolved(ctx: DiscordActionContext): Promise<ActionResult> {

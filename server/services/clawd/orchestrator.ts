@@ -137,7 +137,7 @@ export function clearPendingDraft(userId: string) {
 
 // ─── Routing ─────────────────────────────────────────────────────────────────
 
-function isUselessOutput(output: AssistantOutput): boolean {
+export function isUselessOutput(output: AssistantOutput): boolean {
   const emptyFindings = output.keyFindings.length === 0 && output.risks.length === 0 && output.recommendedActions.length === 0;
   const fallbackSummary = output.summary === "Analysis unavailable." || output.summary === "" || output.confidenceScore <= 0.3;
   const outOfScopePattern = /outside\s+(the\s+)?scope|out\s+of\s+scope|not\s+designed\s+for\s+this|scoped\s+exclusively|cannot\s+(help|assist|answer)\s+(with\s+)?(this|that)|not\s+within\s+(my|the)\s+scope|beyond\s+(my|the)\s+scope|falls?\s+outside/i;

@@ -4,11 +4,16 @@
  * Tests for:
  * - SMS classification and entity extraction
  * - Orchestrator routing logic (sticky action mode, pending draft detection)
+ * - Discord command parsing (slash + natural language)
+ * - Discord authorization and action handling
+ * - isUselessOutput filtering and follow-up routing
  *
  * Run with: npx tsx server/services/clawd/clawd.test.ts
  */
 
 import { classifySms } from "./sms-classifier";
+import { parseSlashCommand, parseNaturalLanguage, INTENT_PATTERNS } from "../discord-bot";
+import { isUselessOutput } from "./orchestrator";
 
 // ─── Minimal test runner ──────────────────────────────────────────────────────
 
@@ -492,26 +497,8 @@ describe("Chat Continuity — Pending Draft Lifecycle", () => {
 
 // ─── Discord Command Parser Tests ────────────────────────────────────────────
 
-describe("Discord Command Parser — Slash Commands", () => {
-  function parseSlash(content: string): { intent: string; args: Record<string, string> } | null {
-    const m = content.match(/^\/clawd\s+(\w+)\s*(.*)?$/i);
-    if (!m) return null;
-    const cmd = m[1].toLowerCase();
-    const rest = (m[2] || "").trim();
-    const cmdMap: Record<string, string> = {
-      assign: "assign_worker", resolve: "mark_resolved", resolved: "mark_resolved",
-      unresolve: "mark_unresolved", escalate: "escalate", whoisavailable: "list_available",
-      available: "list_available", options: "list_available", summary: "summarize",
-      summarize: "summarize", help: "help", ack: "acknowledge", notify: "notify_client",
-      notifyclient: "notify_client", notifylilee: "notify_gm_lilee", lilee: "notify_gm_lilee",
-      resend: "resend_sms",
-    };
-    const intent = cmdMap[cmd];
-    if (!intent) return null;
-    const args: Record<string, string> = {};
-    if (intent === "assign_worker" && rest) args.workerQuery = rest;
-    return { intent, args };
-  }
+describe("Discord Command Parser — Slash Commands (uses real parseSlashCommand)", () => {
+  const parseSlash = parseSlashCommand;
 
   it("Test 40: /clawd assign Bergel", () => {
     const r = parseSlash("/clawd assign Bergel");
@@ -561,27 +548,10 @@ describe("Discord Command Parser — Slash Commands", () => {
   });
 });
 
-describe("Discord Command Parser — Natural Language Intents", () => {
-  const NL_PATTERNS: { intent: string; patterns: RegExp[] }[] = [
-    { intent: "acknowledge", patterns: [/^\s*(ack|acknowledged?|got\s*it|noted|roger|copy)\s*$/i] },
-    { intent: "assign_worker", patterns: [/\b(assign|send|put|give|book)\s+(\w[\w\s]*?)$/i] },
-    { intent: "list_available", patterns: [/\bwho\s+is\s+available/i, /\bwho\s+can\s+cover/i, /\boptions\b/i] },
-    { intent: "mark_resolved", patterns: [/\bmark\s+resolved\b/i, /\bresolve(?:d)?\s*$/i, /\bdone\s*$/i, /\bcovered\s*$/i, /\bhandled\s*$/i] },
-    { intent: "mark_unresolved", patterns: [/\bmark\s+unresolved\b/i, /\breopen\b/i, /\bno\s+coverage\s+found\b/i] },
-    { intent: "escalate", patterns: [/\bescalate\b/i] },
-    { intent: "notify_gm_lilee", patterns: [/\bnotify\s+(?:gm\s+)?lilee\b/i, /\blilee\b/i] },
-    { intent: "notify_client", patterns: [/\bnotify\s+(?:the\s+)?client\b/i, /\bmessage\s+(?:the\s+)?client\b/i] },
-    { intent: "resend_sms", patterns: [/\bresend\s+(sms|text|message)/i] },
-    { intent: "summarize", patterns: [/\bsummar(?:y|ize)\b/i, /\bwho\s+called\s+off\b/i, /\bdetails?\b/i] },
-  ];
-
+describe("Discord Command Parser — Natural Language Intents (uses real parseNaturalLanguage)", () => {
   function detectNL(msg: string): string | null {
-    for (const { intent, patterns } of NL_PATTERNS) {
-      for (const p of patterns) {
-        if (p.test(msg)) return intent;
-      }
-    }
-    return null;
+    const result = parseNaturalLanguage(msg);
+    return result ? result.intent : null;
   }
 
   it("Test 48: 'assign Nino' → assign_worker", () => {
@@ -629,32 +599,36 @@ describe("Discord Command Parser — Natural Language Intents", () => {
   });
 });
 
-describe("Discord Authorization", () => {
-  it("Test 59: Empty authorized list allows all (no restriction)", () => {
-    const authorizedIds = new Set<string>();
-    const userId = "123456789";
-    const allowed = authorizedIds.size === 0 || authorizedIds.has(userId);
-    assert(allowed === true, "empty set allows all users");
+describe("Discord Authorization (default-deny)", () => {
+  function isAuthorized(authorizedIds: Set<string>, userId: string): boolean {
+    return authorizedIds.size > 0 && authorizedIds.has(userId);
+  }
+
+  it("Test 59: Empty authorized list rejects all (default-deny)", () => {
+    assert(isAuthorized(new Set<string>(), "123456789") === false, "empty set rejects all users");
   });
 
   it("Test 60: Authorized user is allowed", () => {
-    const authorizedIds = new Set(["111111", "222222", "333333"]);
-    assert(authorizedIds.has("222222") === true, "user in list is allowed");
+    assert(isAuthorized(new Set(["111111", "222222", "333333"]), "222222") === true, "user in list is allowed");
   });
 
   it("Test 61: Unauthorized user is rejected", () => {
-    const authorizedIds = new Set(["111111", "222222"]);
-    assert(authorizedIds.has("999999") === false, "user not in list is rejected");
+    assert(isAuthorized(new Set(["111111", "222222"]), "999999") === false, "user not in list is rejected");
   });
 });
 
-describe("isUselessOutput — Out of Scope Filtering", () => {
+describe("isUselessOutput — Out of Scope Filtering (uses real isUselessOutput)", () => {
   function testIsUseless(summary: string, hasFindings: boolean): boolean {
-    const emptyFindings = !hasFindings;
-    const fallbackSummary = summary === "Analysis unavailable." || summary === "" || false;
-    const outOfScopePattern = /outside\s+(the\s+)?scope|out\s+of\s+scope|not\s+designed\s+for\s+this|scoped\s+exclusively|cannot\s+(help|assist|answer)\s+(with\s+)?(this|that)|not\s+within\s+(my|the)\s+scope|beyond\s+(my|the)\s+scope|falls?\s+outside/i;
-    const outOfScope = outOfScopePattern.test(summary);
-    return (emptyFindings && fallbackSummary) || outOfScope;
+    return isUselessOutput({
+      assistantType: "staffing" as any,
+      summary,
+      keyFindings: hasFindings ? [{ title: "test", detail: "test", severity: "medium" as any }] : [],
+      risks: [],
+      recommendedActions: [],
+      confidenceScore: 0.5,
+      severityScore: 3,
+      dataPoints: 0,
+    });
   }
 
   it("Test 62: 'This question falls outside the scope of staffing analytics' is useless", () => {

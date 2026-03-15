@@ -536,6 +536,14 @@ export async function syncAll(dryRun = false): Promise<FullSyncResult> {
   }
 
   try {
+    if (!dryRun) {
+      try {
+        await processCrmPushQueue();
+      } catch (pushErr: any) {
+        console.error("[CRM-SYNC] Push queue processing failed during syncAll:", pushErr?.message);
+      }
+    }
+
     const wpResult = await syncWorkplaces(dryRun, true);
     const shiftResult = await syncConfirmedShifts(dryRun, true);
     const hrResult = await syncHotelRequests(dryRun, true);

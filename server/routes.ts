@@ -4005,10 +4005,10 @@ Respond with exactly:
         (async () => {
           try {
             const [shiftForCrm] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
-            if (shiftForCrm?.crmExternalId) {
+            if (shiftForCrm?.crmShiftId) {
               const { enqueueCrmPush } = await import("./services/crm-sync");
               await enqueueCrmPush("confirmed_shift", shiftId, "update", {
-                crmExternalId: shiftForCrm.crmExternalId,
+                crmExternalId: shiftForCrm.crmShiftId,
                 checkedInAt: titoLog.timeIn.toISOString(),
                 confirmStatus: "CONFIRMED",
               });
@@ -4396,10 +4396,10 @@ Respond with exactly:
         (async () => {
           try {
             const [shiftForCrm] = await db.select().from(shifts).where(eq(shifts.id, titoLog.shiftId!));
-            if (shiftForCrm?.crmExternalId) {
+            if (shiftForCrm?.crmShiftId) {
               const { enqueueCrmPush } = await import("./services/crm-sync");
               await enqueueCrmPush("confirmed_shift", titoLog.shiftId!, "update", {
-                crmExternalId: shiftForCrm.crmExternalId,
+                crmExternalId: shiftForCrm.crmShiftId,
                 completedAt: clockOutTime.toISOString(),
                 confirmStatus: "COMPLETED",
                 notes: `Clock-out: ${totalHours}h, GPS verified: ${isWithinRadius}`,

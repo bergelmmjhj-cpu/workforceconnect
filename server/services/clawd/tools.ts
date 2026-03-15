@@ -1308,7 +1308,7 @@ async function lookupCrmWorkplaces(input: Record<string, unknown>) {
     return { success: false, error: "CRM is not configured. WEEKDAYS_API_KEY and WEEKDAYS_TEAM_ID are required." };
   }
   try {
-    const allWorkplaces = await crmClient.fetchCrmWorkplaces();
+    const allWorkplaces = await crmClient.getWorkplaces();
     let results = allWorkplaces;
     const searchTerm = (input.searchTerm as string)?.toLowerCase();
     if (searchTerm) {
@@ -1343,7 +1343,7 @@ async function lookupCrmShifts(input: Record<string, unknown>) {
     return { success: false, error: "CRM is not configured." };
   }
   try {
-    const allShifts = await crmClient.fetchCrmConfirmedShifts();
+    const allShifts = await crmClient.getConfirmedShifts();
     let results = allShifts;
     const workplaceName = (input.workplaceName as string)?.toLowerCase();
     const workerName = (input.workerName as string)?.toLowerCase();
@@ -1393,7 +1393,7 @@ async function lookupCrmHotelRequests(input: Record<string, unknown>) {
     return { success: false, error: "CRM is not configured." };
   }
   try {
-    const allRequests = await crmClient.fetchCrmHotelRequests();
+    const allRequests = await crmClient.getHotelRequests();
     let results = allRequests;
     const hotelName = (input.hotelName as string)?.toLowerCase();
     const status = (input.status as string)?.toUpperCase();

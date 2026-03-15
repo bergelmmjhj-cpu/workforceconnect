@@ -238,6 +238,7 @@ async function getDiscordConfig(): Promise<{ openToAll: boolean; authorizedIds: 
     _configCache = { openToAll, authorizedIds, lastFetched: now };
     return _configCache;
   } catch {
+    if (_configCache) return _configCache;
     return { openToAll: true, authorizedIds: new Set() };
   }
 }

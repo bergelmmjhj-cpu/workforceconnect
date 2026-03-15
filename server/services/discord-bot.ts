@@ -390,7 +390,7 @@ async function handleMessage(message: Message) {
     }
   }
 
-  if (isMention) {
+  if (isMention && !content.startsWith("/clawd")) {
     const cleanContent = content.replace(/<@!?\d+>/g, "").trim();
     if (!cleanContent) {
       await message.reply("Hey! I'm Oscar, WFConnect's AI assistant. Ask me anything — shifts, workers, availability, operations. Or type `/clawd help` for the command list.");

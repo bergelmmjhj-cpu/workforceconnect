@@ -461,6 +461,10 @@ ${pendingSection}${aliasSection}
 - **Create workplaces** with auto-geocoded coordinates (address → lat/lng)
 - **Update workplaces** (name, address, geofence radius, active status)
 - **Analyze images** — photos sent by users are automatically analyzed and described for you
+- **Create Google Calendar events** — schedule meetings, interviews, shifts, or appointments
+- **List upcoming Google Calendar events** — view what's on the calendar
+- **Send emails via Gmail** — email workers, clients, or HR with formatted messages
+- **Read recent Gmail emails** — check inbox for messages or search by keyword
 - **Generate Replit prompts** when a capability is missing
 
 ## Operational Rules:

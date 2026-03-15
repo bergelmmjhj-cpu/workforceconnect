@@ -15,6 +15,8 @@ import { eq, and, ilike, or, desc, gte, lte, sql } from "drizzle-orm";
 import { sendSMS, logSMS } from "../openphone";
 import { sendDiscordNotification } from "../discord";
 import { getGuildMembers } from "../discord-bot";
+import { createCalendarEvent, listCalendarEvents } from "../google-calendar";
+import { sendGmail, readRecentGmailEmails } from "../google-gmail";
 
 const GM_LILEE_PHONE = "+14166028038";
 

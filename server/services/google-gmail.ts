@@ -1,5 +1,4 @@
 import { google } from "googleapis";
-import fetch from "node-fetch";
 
 let cachedAccessToken: string | null = null;
 let cachedExpiresAt: number = 0;
@@ -21,7 +20,7 @@ async function getAccessToken(): Promise<string> {
   }
 
   try {
-    const url = `https://${hostname}/api/connectors/get?connector_names=google-calendar`;
+    const url = `https://${hostname}/api/connectors/get?connector_names=google-mail`;
     const res = await fetch(url, {
       headers: { "X-Replit-Token": xReplitToken },
     });
@@ -33,103 +32,126 @@ async function getAccessToken(): Promise<string> {
     const data: any = await res.json();
     const connection = data?.connections?.[0];
     if (!connection) {
-      throw new Error("No Google Calendar connection found");
+      throw new Error("No Gmail connection found");
     }
 
     const credentials = connection.settings?.oauth?.credentials || connection.settings;
     const accessToken = credentials?.access_token;
     if (!accessToken) {
-      throw new Error("No access token in Calendar credentials");
+      throw new Error("No access token in Gmail credentials");
     }
 
     cachedAccessToken = accessToken;
     cachedExpiresAt = Date.now() + (3500 * 1000);
     return accessToken;
   } catch (err: any) {
-    console.error("[GOOGLE-CALENDAR] Token fetch error:", err?.message);
+    console.error("[GOOGLE-GMAIL] Token fetch error:", err?.message);
     throw err;
   }
 }
 
-export async function getUncachableGoogleCalendarClient() {
+export async function getUncachableGmailClient() {
   const accessToken = await getAccessToken();
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
-  return google.calendar({ version: "v3", auth: oauth2Client });
+  return google.gmail({ version: "v1", auth: oauth2Client });
 }
 
-export interface CreateEventInput {
-  summary: string;
-  startDateTime: string;
-  endDateTime: string;
-  description?: string;
-  attendees?: string[];
+export interface SendGmailInput {
+  to: string;
+  subject: string;
+  body: string;
+  isHtml?: boolean;
 }
 
-export async function createCalendarEvent(input: CreateEventInput): Promise<{ eventId: string; htmlLink: string }> {
+export async function sendGmail(input: SendGmailInput): Promise<{ messageId: string; success: boolean }> {
   try {
-    const calendar = await getUncachableGoogleCalendarClient();
+    const gmail = await getUncachableGmailClient();
 
-    const event = {
-      summary: input.summary,
-      description: input.description || "",
-      start: { dateTime: input.startDateTime },
-      end: { dateTime: input.endDateTime },
-      attendees: (input.attendees || []).map(email => ({ email })),
-    };
+    const contentType = input.isHtml ? "text/html" : "text/plain";
+    const message = [
+      `To: ${input.to}`,
+      `Subject: ${input.subject}`,
+      `Content-Type: ${contentType}; charset=utf-8`,
+      "",
+      input.body,
+    ].join("\n");
 
-    const res = await calendar.events.insert({
-      calendarId: "primary",
-      requestBody: event,
+    const encodedMessage = Buffer.from(message)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+
+    const res = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw: encodedMessage },
     });
 
-    console.log(`[GOOGLE-CALENDAR] Event created: ${res.data.id} — ${input.summary}`);
+    console.log(`[GOOGLE-GMAIL] Email sent to ${input.to} — ${input.subject}`);
     return {
-      eventId: res.data.id || "",
-      htmlLink: res.data.htmlLink || "",
+      messageId: res.data.id || "",
+      success: true,
     };
   } catch (err: any) {
-    console.error("[GOOGLE-CALENDAR] Create event failed:", err?.message);
+    console.error("[GOOGLE-GMAIL] Send email failed:", err?.message);
     throw err;
   }
 }
 
-export interface CalendarEventResult {
+export interface GmailEmailResult {
   id: string;
-  summary: string;
-  start: string;
-  end: string;
-  htmlLink: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  date: string;
 }
 
-export async function listCalendarEvents(maxResults: number = 10, timeMin?: string): Promise<CalendarEventResult[]> {
+export async function readRecentGmailEmails(maxResults: number = 10, query?: string): Promise<GmailEmailResult[]> {
   try {
-    const calendar = await getUncachableGoogleCalendarClient();
+    const gmail = await getUncachableGmailClient();
 
-    const now = new Date();
-    const queryTimeMin = timeMin || now.toISOString();
-
-    const res = await calendar.events.list({
-      calendarId: "primary",
-      timeMin: queryTimeMin,
-      singleEvents: true,
-      orderBy: "startTime",
+    const listRes = await gmail.users.messages.list({
+      userId: "me",
       maxResults,
+      q: query || "is:unread",
     });
 
-    const events = res.data.items || [];
-    const results = events.map((e: any) => ({
-      id: e.id || "",
-      summary: e.summary || "(No title)",
-      start: e.start?.dateTime || e.start?.date || "",
-      end: e.end?.dateTime || e.end?.date || "",
-      htmlLink: e.htmlLink || "",
-    }));
+    const messageIds = listRes.data.messages || [];
+    if (messageIds.length === 0) {
+      console.log("[GOOGLE-GMAIL] No emails found");
+      return [];
+    }
 
-    console.log(`[GOOGLE-CALENDAR] Listed ${results.length} events`);
+    const messages = await Promise.all(
+      messageIds.map((m: any) =>
+        gmail.users.messages.get({
+          userId: "me",
+          id: m.id,
+          format: "metadata",
+          metadataHeaders: ["From", "Subject", "Date"],
+        })
+      )
+    );
+
+    const results = messages.map((res: any) => {
+      const headers = res.data.payload?.headers || [];
+      const from = headers.find((h: any) => h.name === "From")?.value || "Unknown";
+      const subject = headers.find((h: any) => h.name === "Subject")?.value || "(No subject)";
+      const date = headers.find((h: any) => h.name === "Date")?.value || "";
+      return {
+        id: res.data.id || "",
+        from,
+        subject,
+        snippet: res.data.snippet || "",
+        date,
+      };
+    });
+
+    console.log(`[GOOGLE-GMAIL] Read ${results.length} emails`);
     return results;
   } catch (err: any) {
-    console.error("[GOOGLE-CALENDAR] List events failed:", err?.message);
+    console.error("[GOOGLE-GMAIL] Read emails failed:", err?.message);
     throw err;
   }
 }

@@ -984,6 +984,14 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
           } catch (syncErr: any) {
             log("[CRM] Initial sync failed:", syncErr.message);
           }
+          try {
+            const backfill = await crmSync.backfillWorkplacesToCrm();
+            if (backfill.pushed > 0 || backfill.matched > 0) {
+              log(`[CRM] Backfill: ${backfill.pushed} pushed, ${backfill.matched} matched, ${backfill.failed} failed`);
+            }
+          } catch (backfillErr: any) {
+            log("[CRM] Backfill failed (non-blocking):", backfillErr.message);
+          }
           setInterval(async () => {
             try {
               if (crmSync.isSyncRunning()) return;

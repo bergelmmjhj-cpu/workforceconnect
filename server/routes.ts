@@ -2119,6 +2119,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/workplaces/sync-to-crm", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+
+      const { backfillWorkplacesToCrm } = await import("./services/crm-sync");
+      const result = await backfillWorkplacesToCrm();
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("Error running workplace CRM backfill:", error);
+      res.status(500).json({ error: error.message || "Failed to run workplace CRM backfill" });
+    }
+  });
+
   // AI Operations Assistant routes
   app.get("/api/admin/ai-assistant/status", async (req: Request, res: Response) => {
     try {

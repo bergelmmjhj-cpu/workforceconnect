@@ -17,6 +17,7 @@ import { sendDiscordNotification } from "../discord";
 import { getGuildMembers } from "../discord-bot";
 import { createCalendarEvent, listCalendarEvents } from "../google-calendar";
 import { sendGmail, readRecentGmailEmails } from "../google-gmail";
+import * as crmClient from "../weekdays-crm";
 
 const GM_LILEE_PHONE = "+14166028038";
 
@@ -1027,6 +1028,36 @@ async function toolCreateWorkplace(input: Record<string, unknown>) {
       geofenceRadiusMeters: geofenceRadius || 150,
     }).returning();
 
+    let crmSynced = false;
+    let crmNote = "";
+    if (crmClient.isConfigured()) {
+      try {
+        const fullAddress = [address, city, province, postalCode].filter(Boolean).join(", ");
+        const crmResult = await crmClient.createCrmWorkplace({
+          name,
+          address: fullAddress,
+          location: city,
+          province,
+          latitude: geo?.lat,
+          longitude: geo?.lng,
+          isActive: true,
+        });
+        await db.update(workplaces)
+          .set({ crmExternalId: crmResult.id, updatedAt: new Date() })
+          .where(eq(workplaces.id, newWorkplace.id));
+        crmSynced = true;
+        crmNote = `Created in mobile app and CRM (CRM ID: ${crmResult.id}).`;
+        console.log(`[CRM-SYNC] Workplace "${name}" linked: local=${newWorkplace.id} → CRM=${crmResult.id}`);
+      } catch (crmErr: any) {
+        crmNote = `Created in mobile app only — CRM sync failed: ${crmErr?.message}. Use /api/admin/workplaces/sync-to-crm to retry.`;
+        console.error(`[CRM-SYNC] Failed to push workplace "${name}" to CRM:`, crmErr?.message);
+      }
+    } else {
+      crmNote = "Created in mobile app only — CRM not configured.";
+    }
+
+    const geoNote = geo ? `Coordinates resolved: ${geo.lat}, ${geo.lng}.` : "Address could not be geocoded — coordinates not set.";
+
     return {
       success: true,
       workplaceId: newWorkplace.id,
@@ -1042,7 +1073,8 @@ async function toolCreateWorkplace(input: Record<string, unknown>) {
         geofenceRadiusMeters: newWorkplace.geofenceRadiusMeters,
       },
       geocoded: !!geo,
-      note: geo ? `Coordinates resolved: ${geo.lat}, ${geo.lng}` : "Address could not be geocoded — coordinates not set. You can update them later.",
+      crmSynced,
+      note: `${geoNote} ${crmNote}`,
     };
   } catch (err: any) {
     return { success: false, error: `Failed to create workplace: ${err?.message}` };
@@ -1092,6 +1124,40 @@ async function toolUpdateWorkplace(input: Record<string, unknown>) {
       .where(eq(workplaces.id, workplaceId))
       .returning();
 
+    let crmSyncNote = "";
+    if (updated.crmExternalId && crmClient.isConfigured()) {
+      try {
+        const crmUpdates: Record<string, unknown> = {};
+        if (input.name) crmUpdates.name = input.name;
+        if (addressChanged) {
+          const fullAddress = [
+            updated.addressLine1, updated.city, updated.province, updated.postalCode,
+          ].filter(Boolean).join(", ");
+          crmUpdates.address = fullAddress;
+          crmUpdates.location = updated.city;
+          crmUpdates.province = updated.province;
+        }
+        if (geocoded) {
+          crmUpdates.latitude = updated.latitude;
+          crmUpdates.longitude = updated.longitude;
+        }
+        if (input.isActive !== undefined) crmUpdates.isActive = input.isActive;
+
+        if (Object.keys(crmUpdates).length > 0) {
+          await crmClient.updateCrmWorkplace(updated.crmExternalId, crmUpdates as any);
+          crmSyncNote = " CRM record updated.";
+          console.log(`[CRM-SYNC] Workplace "${updated.name}" synced to CRM (${updated.crmExternalId})`);
+        }
+      } catch (crmErr: any) {
+        crmSyncNote = ` CRM sync failed: ${crmErr?.message}.`;
+        console.error(`[CRM-SYNC] Failed to update workplace "${updated.name}" in CRM:`, crmErr?.message);
+      }
+    }
+
+    const baseNote = addressChanged
+      ? (geocoded ? `Coordinates updated: ${updated.latitude}, ${updated.longitude}.` : "Address changed but geocoding failed — coordinates not updated.")
+      : "Updated successfully.";
+
     return {
       success: true,
       workplace: {
@@ -1107,9 +1173,7 @@ async function toolUpdateWorkplace(input: Record<string, unknown>) {
         isActive: updated.isActive,
       },
       geocoded,
-      note: addressChanged
-        ? (geocoded ? `Coordinates updated: ${updated.latitude}, ${updated.longitude}` : "Address changed but geocoding failed — coordinates not updated.")
-        : "Updated successfully.",
+      note: baseNote + crmSyncNote,
     };
   } catch (err: any) {
     return { success: false, error: `Failed to update workplace: ${err?.message}` };

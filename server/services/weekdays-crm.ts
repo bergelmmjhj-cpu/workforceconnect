@@ -258,3 +258,72 @@ export async function getBoard(boardId: string): Promise<CrmBoard> {
     `/api/teams/${teamId}/boards/${boardId}`
   );
 }
+
+export interface CreateCrmWorkplaceInput {
+  name: string;
+  address?: string;
+  location?: string;
+  province?: string;
+  latitude?: number;
+  longitude?: number;
+  contactPerson?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
+export async function createCrmWorkplace(input: CreateCrmWorkplaceInput): Promise<CrmWorkplace> {
+  const teamId = getTeamId();
+  const body = {
+    name: input.name,
+    address: input.address || "",
+    location: input.location || "",
+    province: input.province || "",
+    latitude: input.latitude,
+    longitude: input.longitude,
+    contactPerson: input.contactPerson || "",
+    notes: input.notes || "",
+    isActive: input.isActive !== false,
+  };
+
+  console.log(`[CRM-SYNC] Creating workplace in CRM: "${input.name}"`);
+  const result = await fetchWithRetry<CrmWorkplace>(
+    `/api/teams/${teamId}/workplaces`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Workplace created in CRM: "${input.name}" → ID ${result.id}`);
+  return result;
+}
+
+export interface UpdateCrmWorkplaceInput {
+  name?: string;
+  address?: string;
+  location?: string;
+  province?: string;
+  latitude?: number;
+  longitude?: number;
+  contactPerson?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
+export async function updateCrmWorkplace(crmId: string, input: UpdateCrmWorkplaceInput): Promise<CrmWorkplace> {
+  const teamId = getTeamId();
+  const body: Record<string, unknown> = {};
+  if (input.name !== undefined) body.name = input.name;
+  if (input.address !== undefined) body.address = input.address;
+  if (input.location !== undefined) body.location = input.location;
+  if (input.province !== undefined) body.province = input.province;
+  if (input.latitude !== undefined) body.latitude = input.latitude;
+  if (input.longitude !== undefined) body.longitude = input.longitude;
+  if (input.contactPerson !== undefined) body.contactPerson = input.contactPerson;
+  if (input.notes !== undefined) body.notes = input.notes;
+  if (input.isActive !== undefined) body.isActive = input.isActive;
+
+  console.log(`[CRM-SYNC] Updating workplace in CRM: ID ${crmId}`);
+  const result = await fetchWithRetry<CrmWorkplace>(
+    `/api/teams/${teamId}/workplaces/${crmId}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Workplace updated in CRM: ID ${crmId}`);
+  return result;
+}

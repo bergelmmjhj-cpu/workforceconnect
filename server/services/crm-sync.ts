@@ -615,3 +615,91 @@ export async function getSyncLogs(limit = 50): Promise<any[]> {
     .orderBy(sql`${crmSyncLogs.startedAt} DESC`)
     .limit(limit);
 }
+
+export async function backfillWorkplacesToCrm(): Promise<{ pushed: number; matched: number; failed: number; details: string[] }> {
+  const result = { pushed: 0, matched: 0, failed: 0, details: [] as string[] };
+
+  if (!crmClient.isConfigured()) {
+    result.details.push("CRM not configured — skipping backfill");
+    return result;
+  }
+
+  try {
+    const unlinked = await db.select().from(workplaces).where(
+      and(
+        isNull(workplaces.crmExternalId),
+        eq(workplaces.crmSource, false)
+      )
+    );
+
+    if (unlinked.length === 0) {
+      result.details.push("No unlinked workplaces found — nothing to backfill");
+      console.log("[CRM-SYNC] Backfill: no unlinked workplaces");
+      return result;
+    }
+
+    console.log(`[CRM-SYNC] Backfill: found ${unlinked.length} unlinked workplace(s)`);
+
+    let crmWorkplaces: crmClient.CrmWorkplace[];
+    try {
+      crmWorkplaces = await crmClient.getWorkplaces();
+    } catch (err: any) {
+      result.details.push(`Failed to fetch CRM workplaces: ${err.message}`);
+      result.failed = unlinked.length;
+      return result;
+    }
+
+    const crmByName = new Map(
+      crmWorkplaces.map(w => [normalizeString(w.name), w])
+    );
+
+    for (const wp of unlinked) {
+      const normalizedName = normalizeString(wp.name);
+      const existingCrm = crmByName.get(normalizedName);
+
+      if (existingCrm) {
+        try {
+          await db.update(workplaces)
+            .set({ crmExternalId: existingCrm.id, updatedAt: new Date() })
+            .where(eq(workplaces.id, wp.id));
+          result.matched++;
+          result.details.push(`Matched "${wp.name}" → CRM ID ${existingCrm.id}`);
+          console.log(`[CRM-SYNC] Backfill matched: "${wp.name}" → CRM ${existingCrm.id}`);
+        } catch (err: any) {
+          result.failed++;
+          result.details.push(`Failed to link "${wp.name}": ${err.message}`);
+        }
+      } else {
+        try {
+          const fullAddress = [wp.addressLine1, wp.city, wp.province, wp.postalCode].filter(Boolean).join(", ");
+          const crmResult = await crmClient.createCrmWorkplace({
+            name: wp.name,
+            address: fullAddress,
+            location: wp.city || "",
+            province: wp.province || "",
+            latitude: wp.latitude ? Number(wp.latitude) : undefined,
+            longitude: wp.longitude ? Number(wp.longitude) : undefined,
+            isActive: wp.isActive !== false,
+          });
+          await db.update(workplaces)
+            .set({ crmExternalId: crmResult.id, updatedAt: new Date() })
+            .where(eq(workplaces.id, wp.id));
+          result.pushed++;
+          result.details.push(`Pushed "${wp.name}" → CRM ID ${crmResult.id}`);
+          console.log(`[CRM-SYNC] Backfill pushed: "${wp.name}" → CRM ${crmResult.id}`);
+        } catch (err: any) {
+          result.failed++;
+          result.details.push(`Failed to push "${wp.name}" to CRM: ${err.message}`);
+          console.error(`[CRM-SYNC] Backfill failed for "${wp.name}":`, err.message);
+        }
+      }
+    }
+
+    console.log(`[CRM-SYNC] Backfill complete: ${result.pushed} pushed, ${result.matched} matched, ${result.failed} failed`);
+    return result;
+  } catch (err: any) {
+    result.details.push(`Backfill error: ${err.message}`);
+    console.error("[CRM-SYNC] Backfill error:", err.message);
+    return result;
+  }
+}

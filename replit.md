@@ -69,7 +69,7 @@ Key features include:
 - **Google Places API**: For location-based services.
 
 ### Third-Party Integrations
-- **Weekdays CRM**: Custom integration for syncing workplaces, shifts, and hotel requests.
+- **Weekdays CRM**: Custom integration for two-way syncing workplaces, shifts, and hotel requests. Workplace create/update via Oscar pushes to CRM automatically. Backfill runs on startup for unlinked workplaces. Admin route: `POST /api/admin/workplaces/sync-to-crm`.
 
 ### Development & Deployment Tools
 - **TypeScript**: Used for type-safe code.

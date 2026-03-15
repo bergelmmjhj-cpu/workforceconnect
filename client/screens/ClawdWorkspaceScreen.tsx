@@ -125,6 +125,8 @@ const TOOL_ICONS: Record<string, React.ComponentProps<typeof Feather>["name"]> =
   assign_worker_to_shift: "user-check",
   blast_shift_to_workers: "radio",
   create_shift_request: "plus-circle",
+  create_workplace: "plus-square",
+  update_workplace: "edit-3",
   generate_replit_prompt: "code",
   find_available_workers: "users",
   lookup_workers: "search",
@@ -138,7 +140,8 @@ const TOOL_ICONS: Record<string, React.ComponentProps<typeof Feather>["name"]> =
 const ACTION_TOOL_NAMES = new Set([
   "send_sms", "notify_gm_lilee", "send_discord_notification",
   "send_worker_internal_message", "assign_worker_to_shift",
-  "blast_shift_to_workers", "create_shift_request", "generate_replit_prompt",
+  "blast_shift_to_workers", "create_shift_request", "create_workplace",
+  "update_workplace", "generate_replit_prompt",
 ]);
 
 function formatTimeAgo(dateString: string | null | undefined): string {

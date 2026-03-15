@@ -199,6 +199,42 @@ export const CLAWD_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "create_workplace",
+    description: "Create a new workplace/location in the system. This CREATES a real workplace record in the database. The address is automatically geocoded to get latitude/longitude coordinates for GPS verification.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "The workplace name (e.g. 'Four Points Oakville')" },
+        address: { type: "string", description: "Street address (e.g. '1340 Speers Rd')" },
+        city: { type: "string", description: "City (e.g. 'Oakville')" },
+        province: { type: "string", description: "Province/state (e.g. 'Ontario' or 'ON')" },
+        postalCode: { type: "string", description: "Postal code (e.g. 'L6L 5V3')" },
+        country: { type: "string", description: "Country (default: Canada)" },
+        geofenceRadiusMeters: { type: "number", description: "Geofence radius in meters for TITO (default: 150)" },
+      },
+      required: ["name", "address", "city", "province"],
+    },
+  },
+  {
+    name: "update_workplace",
+    description: "Update an existing workplace's details. Only provide fields you want to change. If address fields change, coordinates will be re-geocoded automatically.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        workplaceId: { type: "string", description: "The workplace ID to update (use lookup_workplaces to find it)" },
+        name: { type: "string", description: "New name (optional)" },
+        address: { type: "string", description: "New street address (optional)" },
+        city: { type: "string", description: "New city (optional)" },
+        province: { type: "string", description: "New province (optional)" },
+        postalCode: { type: "string", description: "New postal code (optional)" },
+        country: { type: "string", description: "New country (optional)" },
+        geofenceRadiusMeters: { type: "number", description: "New geofence radius in meters (optional)" },
+        isActive: { type: "boolean", description: "Set active/inactive status (optional)" },
+      },
+      required: ["workplaceId"],
+    },
+  },
+  {
     name: "generate_replit_prompt",
     description: "When you cannot fulfill a user's request with the available tools, use this to generate a detailed, copy-ready prompt for Replit AI that describes the problem and solution needed. Always use this as a fallback when stuck.",
     input_schema: {
@@ -245,6 +281,10 @@ export async function executeTool(toolName: string, input: Record<string, unknow
       return sendWorkerInternalMessage(input, callerUserId);
     case "create_shift_request":
       return toolCreateShiftRequest(input);
+    case "create_workplace":
+      return toolCreateWorkplace(input);
+    case "update_workplace":
+      return toolUpdateWorkplace(input);
     case "lookup_discord_members":
       return lookupDiscordMembers(input);
     case "generate_replit_prompt":
@@ -808,6 +848,168 @@ async function lookupDiscordMembers(input: Record<string, unknown>) {
     botMembers: members.filter(m => m.isBot).length,
     searchedBy: query ? "name" : "all",
   };
+}
+
+async function geocodeAddress(address: string, city: string, province: string, postalCode?: string, country?: string): Promise<{ lat: number; lng: number } | null> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) {
+    console.log("[tools] No GOOGLE_PLACES_API_KEY set, skipping geocoding");
+    return null;
+  }
+  const parts = [address, city, province, postalCode, country || "Canada"].filter(Boolean);
+  const fullAddress = parts.join(", ");
+  try {
+    const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+    url.searchParams.set("address", fullAddress);
+    url.searchParams.set("key", apiKey);
+    const res = await fetch(url.toString());
+    const data = await res.json() as { status: string; results: Array<{ geometry: { location: { lat: number; lng: number } } }> };
+    if (data.status === "OK" && data.results.length > 0) {
+      const loc = data.results[0].geometry.location;
+      console.log(`[tools] Geocoded "${fullAddress}" → ${loc.lat}, ${loc.lng}`);
+      return { lat: loc.lat, lng: loc.lng };
+    }
+    console.log(`[tools] Geocoding returned ${data.status} for "${fullAddress}"`);
+    return null;
+  } catch (err: any) {
+    console.error("[tools] Geocoding error:", err?.message);
+    return null;
+  }
+}
+
+async function toolCreateWorkplace(input: Record<string, unknown>) {
+  const name = input.name as string;
+  const address = input.address as string;
+  const city = input.city as string;
+  const province = input.province as string;
+  const postalCode = input.postalCode as string | undefined;
+  const country = (input.country as string) || "Canada";
+  const geofenceRadius = input.geofenceRadiusMeters as number | undefined;
+
+  if (!name || !address || !city || !province) {
+    const missing = [];
+    if (!name) missing.push("name");
+    if (!address) missing.push("address");
+    if (!city) missing.push("city");
+    if (!province) missing.push("province");
+    return { success: false, error: `Missing required fields: ${missing.join(", ")}` };
+  }
+
+  try {
+    const existing = await db.select({ id: workplaces.id, name: workplaces.name })
+      .from(workplaces)
+      .where(ilike(workplaces.name, name))
+      .limit(1);
+    if (existing.length > 0) {
+      return {
+        success: false,
+        duplicate: true,
+        error: `A workplace named "${existing[0].name}" already exists (ID: ${existing[0].id}). Use update_workplace to modify it.`,
+        existingWorkplaceId: existing[0].id,
+      };
+    }
+
+    const geo = await geocodeAddress(address, city, province, postalCode, country);
+
+    const [newWorkplace] = await db.insert(workplaces).values({
+      name,
+      addressLine1: address,
+      city,
+      province,
+      postalCode: postalCode || null,
+      country,
+      latitude: geo?.lat ?? null,
+      longitude: geo?.lng ?? null,
+      geofenceRadiusMeters: geofenceRadius || 150,
+    }).returning();
+
+    return {
+      success: true,
+      workplaceId: newWorkplace.id,
+      workplace: {
+        id: newWorkplace.id,
+        name: newWorkplace.name,
+        address: newWorkplace.addressLine1,
+        city: newWorkplace.city,
+        province: newWorkplace.province,
+        postalCode: newWorkplace.postalCode,
+        latitude: newWorkplace.latitude,
+        longitude: newWorkplace.longitude,
+        geofenceRadiusMeters: newWorkplace.geofenceRadiusMeters,
+      },
+      geocoded: !!geo,
+      note: geo ? `Coordinates resolved: ${geo.lat}, ${geo.lng}` : "Address could not be geocoded — coordinates not set. You can update them later.",
+    };
+  } catch (err: any) {
+    return { success: false, error: `Failed to create workplace: ${err?.message}` };
+  }
+}
+
+async function toolUpdateWorkplace(input: Record<string, unknown>) {
+  const workplaceId = input.workplaceId as string;
+  if (!workplaceId) {
+    return { success: false, error: "Missing required field: workplaceId. Use lookup_workplaces to find the ID." };
+  }
+
+  try {
+    const [existing] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
+    if (!existing) {
+      return { success: false, error: `Workplace "${workplaceId}" not found. Use lookup_workplaces to find valid IDs.` };
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.name) updates.name = input.name;
+    if (input.address) updates.addressLine1 = input.address;
+    if (input.city) updates.city = input.city;
+    if (input.province) updates.province = input.province;
+    if (input.postalCode) updates.postalCode = input.postalCode;
+    if (input.country) updates.country = input.country;
+    if (input.geofenceRadiusMeters !== undefined) updates.geofenceRadiusMeters = input.geofenceRadiusMeters;
+    if (input.isActive !== undefined) updates.isActive = input.isActive;
+
+    const addressChanged = input.address || input.city || input.province || input.postalCode;
+    let geocoded = false;
+    if (addressChanged) {
+      const addr = (input.address as string) || existing.addressLine1 || "";
+      const city = (input.city as string) || existing.city || "";
+      const prov = (input.province as string) || existing.province || "";
+      const postal = (input.postalCode as string) || existing.postalCode || "";
+      const country = (input.country as string) || existing.country || "Canada";
+      const geo = await geocodeAddress(addr, city, prov, postal, country);
+      if (geo) {
+        updates.latitude = geo.lat;
+        updates.longitude = geo.lng;
+        geocoded = true;
+      }
+    }
+
+    const [updated] = await db.update(workplaces)
+      .set(updates)
+      .where(eq(workplaces.id, workplaceId))
+      .returning();
+
+    return {
+      success: true,
+      workplace: {
+        id: updated.id,
+        name: updated.name,
+        address: updated.addressLine1,
+        city: updated.city,
+        province: updated.province,
+        postalCode: updated.postalCode,
+        latitude: updated.latitude,
+        longitude: updated.longitude,
+        geofenceRadiusMeters: updated.geofenceRadiusMeters,
+        isActive: updated.isActive,
+      },
+      geocoded,
+      note: addressChanged
+        ? (geocoded ? `Coordinates updated: ${updated.latitude}, ${updated.longitude}` : "Address changed but geocoding failed — coordinates not updated.")
+        : "Updated successfully.",
+    };
+  } catch (err: any) {
+    return { success: false, error: `Failed to update workplace: ${err?.message}` };
+  }
 }
 
 function generateReplitPrompt(input: Record<string, unknown>) {

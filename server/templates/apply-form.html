@@ -293,26 +293,16 @@ async function selectPlace(placeId, description) {
   try {
     const resp = await fetch(`/api/places/details/${placeId}`);
     const data = await resp.json();
-    const comps = data.result?.address_components || [];
-    let street_number = '', route = '', city = '', province = '', postal = '', country = '';
-    comps.forEach(c => {
-      if (c.types.includes('street_number')) street_number = c.long_name;
-      if (c.types.includes('route')) route = c.long_name;
-      if (c.types.includes('locality') || c.types.includes('sublocality_level_1')) city = city || c.long_name;
-      if (c.types.includes('administrative_area_level_1')) province = c.short_name;
-      if (c.types.includes('postal_code')) postal = c.long_name;
-      if (c.types.includes('country')) country = c.long_name;
-    });
-    if (country !== 'Canada') {
+    if (data.country !== 'Canada') {
       showError('address_full', 'Only Canadian addresses are accepted');
       addressInput.value = '';
       addressValidated = false;
       return;
     }
-    document.getElementById('address_street').value = [street_number, route].filter(Boolean).join(' ');
-    document.getElementById('address_city').value = city;
-    document.getElementById('address_province').value = province;
-    document.getElementById('address_postal_code').value = postal;
+    document.getElementById('address_street').value = data.addressLine1 || '';
+    document.getElementById('address_city').value = data.city || '';
+    document.getElementById('address_province').value = data.province || '';
+    document.getElementById('address_postal_code').value = data.postalCode || '';
     document.getElementById('address_country').value = 'Canada';
     clearError('address_full');
     addressValidated = true;

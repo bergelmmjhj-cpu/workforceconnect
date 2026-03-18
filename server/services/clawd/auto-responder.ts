@@ -12,12 +12,49 @@ import { callClaudeWithTools, MODEL_FAST } from "./anthropic-client";
 import { CLAWD_TOOLS, executeTool } from "./tools";
 import { sendDiscordNotification } from "../discord";
 import { sendSMS, logSMS } from "../openphone";
+import { logAiMessage } from "../aiFollowupService";
 import { db } from "../../db";
 import { smsLogs, discordAlerts } from "../../../shared/schema";
 import { eq } from "drizzle-orm";
 import type { SmsClassification } from "./sms-classifier";
 
 const GM_LILEE_PHONE = "+14166028038";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * After an auto-responder run, find any send_sms tool calls that went to
+ * workers (not Lilee) and register them in ai_message_log with followupEnabled=true
+ * so the follow-up scheduler can send a 2-hour nudge if no reply comes.
+ */
+async function logWorkerOutreachForFollowup(
+  toolCalls: { toolName: string; input: Record<string, unknown>; success: boolean }[],
+  triggeredBy: string
+): Promise<void> {
+  const outreachCalls = toolCalls.filter(
+    (tc) =>
+      tc.success &&
+      tc.toolName === "send_sms" &&
+      (tc.input?.phoneNumber as string) !== GM_LILEE_PHONE
+  );
+
+  for (const tc of outreachCalls) {
+    const phone = tc.input?.phoneNumber as string;
+    const msg = tc.input?.message as string;
+    if (!phone || !msg) continue;
+    try {
+      await logAiMessage({
+        recipientPhone: phone,
+        message: msg,
+        triggeredBy,
+        contextNote: "shift_request_outreach",
+        followupEnabled: true,
+      });
+    } catch (e: any) {
+      console.error("[AutoResponder] logAiMessage for follow-up failed:", e?.message);
+    }
+  }
+}
 
 // ─── System Prompts ───────────────────────────────────────────────────────────
 
@@ -161,6 +198,8 @@ Please handle this ${senderMatched ? "sick call" : "possible calloff"} now. Foll
 
     console.log(`[AutoResponder] Sick call handled. Tools: ${actionsSummary}`);
 
+    await logWorkerOutreachForFollowup(toolCalls, "auto_responder_sick_call");
+
     const discordCall = toolCalls.find(tc => tc.toolName === "send_discord_notification" && tc.success);
     if (discordCall) {
       const alertId = (discordCall.result as any)?.alertId;
@@ -237,6 +276,9 @@ Please handle this staffing request now. Follow ALL steps in your instructions.`
     );
 
     console.log(`[AutoResponder] Client request handled. Tools: ${toolCalls.map(tc => tc.toolName).join(", ")}`);
+
+    await logWorkerOutreachForFollowup(toolCalls, "auto_responder_client_request");
+
     return { success: true, toolCalls, summary: finalResponse };
   } catch (err: any) {
     console.error("[AutoResponder] Client request handling failed:", err?.message);

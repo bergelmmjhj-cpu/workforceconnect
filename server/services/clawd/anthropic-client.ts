@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = "claude-sonnet-4-6";
+const MODEL_FAST = "claude-haiku-4-5"; // Cheaper model for background/automated tasks
 const MAX_TOKENS = 2048;
 const MAX_TOOL_ITERATIONS = 8;
 
@@ -47,10 +48,11 @@ export async function callClaudeWithTools(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   tools: Anthropic.Tool[],
   toolExecutor: (toolName: string, input: Record<string, unknown>) => Promise<unknown>,
-  options?: { maxTokens?: number; temperature?: number }
+  options?: { maxTokens?: number; temperature?: number; model?: string }
 ): Promise<ToolUseResult> {
   const client = getAnthropicClient();
   const toolCalls: ToolCallLog[] = [];
+  const resolvedModel = options?.model ?? MODEL;
 
   // Build the initial messages array in Anthropic format
   let apiMessages: Anthropic.MessageParam[] = messages.map((m) => ({
@@ -64,7 +66,7 @@ export async function callClaudeWithTools(
     iterations++;
 
     const response = await client.messages.create({
-      model: MODEL,
+      model: resolvedModel,
       max_tokens: options?.maxTokens ?? MAX_TOKENS,
       temperature: options?.temperature ?? 0.3,
       system: systemPrompt,
@@ -139,4 +141,4 @@ export async function callClaudeWithTools(
   return { finalResponse: finalText, toolCalls };
 }
 
-export { MODEL, MAX_TOKENS };
+export { MODEL, MODEL_FAST, MAX_TOKENS };

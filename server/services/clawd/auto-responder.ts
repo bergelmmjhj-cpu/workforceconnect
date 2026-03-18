@@ -8,7 +8,7 @@
  * Fail-open design: unknown senders still generate operational alerts.
  */
 
-import { callClaudeWithTools } from "./anthropic-client";
+import { callClaudeWithTools, MODEL_FAST } from "./anthropic-client";
 import { CLAWD_TOOLS, executeTool } from "./tools";
 import { sendDiscordNotification } from "../discord";
 import { sendSMS, logSMS } from "../openphone";
@@ -151,7 +151,7 @@ Please handle this ${senderMatched ? "sick call" : "possible calloff"} now. Foll
       [{ role: "user", content: userMessage }],
       CLAWD_TOOLS,
       (toolName, input) => executeTool(toolName, input, undefined),
-      { maxTokens: 2048 }
+      { maxTokens: 2048, model: MODEL_FAST }
     );
 
     const actionsSummary = toolCalls
@@ -233,7 +233,7 @@ Please handle this staffing request now. Follow ALL steps in your instructions.`
       [{ role: "user", content: userMessage }],
       CLAWD_TOOLS,
       (toolName, input) => executeTool(toolName, input, undefined),
-      { maxTokens: 2048 }
+      { maxTokens: 2048, model: MODEL_FAST }
     );
 
     console.log(`[AutoResponder] Client request handled. Tools: ${toolCalls.map(tc => tc.toolName).join(", ")}`);
@@ -297,7 +297,7 @@ Current time (Toronto): ${new Date().toLocaleTimeString("en-CA", { timeZone: "Am
       [{ role: "user", content: userMessage }],
       CLAWD_TOOLS,
       (toolName, input) => executeTool(toolName, input, undefined),
-      { maxTokens: 1024 }
+      { maxTokens: 1024, model: MODEL_FAST }
     );
 
     console.log(`[AutoResponder] Late arrival handled. Tools: ${toolCalls.map(tc => tc.toolName).join(", ")}`);

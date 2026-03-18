@@ -1197,6 +1197,7 @@ export const aiMessageLog = pgTable("ai_message_log", {
   followupMessage: text("followup_message"),
   triggeredBy: text("triggered_by").default("clawd"), // clawd, auto_responder, manual
   contextNote: text("context_note"),
+  followupEnabled: boolean("followup_enabled").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

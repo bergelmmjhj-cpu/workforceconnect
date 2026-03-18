@@ -34,6 +34,7 @@ export async function logAiMessage(opts: {
   message: string;
   triggeredBy?: string;
   contextNote?: string;
+  followupEnabled?: boolean;
 }): Promise<string> {
   const now = nowToronto();
 
@@ -46,6 +47,7 @@ export async function logAiMessage(opts: {
     followupSent: false,
     triggeredBy: opts.triggeredBy || "clawd",
     contextNote: opts.contextNote,
+    followupEnabled: opts.followupEnabled ?? false,
   }).returning({ id: aiMessageLog.id });
 
   console.log(`[AI MESSAGE] Logged message to ${opts.recipientPhone} | id=${record.id} | at=${formatToronto(now)}`);
@@ -83,6 +85,7 @@ export async function runFollowupCheck(): Promise<void> {
     .from(aiMessageLog)
     .where(
       and(
+        eq(aiMessageLog.followupEnabled, true),
         eq(aiMessageLog.responseReceived, false),
         eq(aiMessageLog.followupSent, false),
         lt(aiMessageLog.sentAt, twoHoursAgo)

@@ -1,7 +1,7 @@
 import { runMonitorCycle } from "./monitor";
 import { logAction } from "./logger";
 
-const CYCLE_INTERVAL_MS = 5 * 60 * 1000;
+const CYCLE_INTERVAL_MS = 120 * 60 * 1000; // 2 hours
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 let isPaused = false;

@@ -59,6 +59,11 @@ export function getApiUrl(): string {
 
   const hostWithoutDevPort = host.replace(/:5000$/, "");
 
+  // If we're somehow using a Replit dev domain, redirect to production
+  if (hostWithoutDevPort.includes("janeway.replit.dev") || hostWithoutDevPort.includes("replit.dev")) {
+    return "https://app.wfconnect.org";
+  }
+
   let url = new URL(`https://${hostWithoutDevPort}`);
 
   return url.href;

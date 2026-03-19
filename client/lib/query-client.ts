@@ -54,7 +54,7 @@ export function getApiUrl(): string {
   let host = process.env.EXPO_PUBLIC_DOMAIN;
 
   if (!host) {
-    host = "wfconnect.org";
+    host = "app.wfconnect.org";
   }
 
   const hostWithoutDevPort = host.replace(/:5000$/, "");

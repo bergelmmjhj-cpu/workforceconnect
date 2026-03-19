@@ -8534,11 +8534,23 @@ Respond with exactly:
     }
   }
 
-  setInterval(processMissedShiftDetection, 5 * 60 * 1000);
-  processMissedShiftDetection();
+  setInterval(() => {
+    processMissedShiftDetection().catch(err => {
+      console.error("[SHIFT DETECTION] Error in periodic check:", err?.message || err);
+    });
+  }, 5 * 60 * 1000);
+  processMissedShiftDetection().catch(err => {
+    console.error("[SHIFT DETECTION] Error in initial check:", err?.message || err);
+  });
 
-  processShiftReminders();
-  setInterval(processShiftReminders, 15 * 60 * 1000);
+  processShiftReminders().catch(err => {
+    console.error("[SHIFT REMINDERS] Error in initial reminder:", err?.message || err);
+  });
+  setInterval(() => {
+    processShiftReminders().catch(err => {
+      console.error("[SHIFT REMINDERS] Error in periodic reminder:", err?.message || err);
+    });
+  }, 15 * 60 * 1000);
 
   // ========================================
   // OPENPHONE WEBHOOK - Incoming SMS Replies

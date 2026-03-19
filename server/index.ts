@@ -13,6 +13,16 @@ import { eq, and, isNull } from "drizzle-orm";
 const app = express();
 const log = console.log;
 
+// Global unhandledRejection handler - prevents crashing from async background jobs
+process.on("unhandledRejection", (reason: any) => {
+  console.error("[FATAL] Unhandled Promise Rejection:", reason?.message || reason);
+});
+
+// Global uncaughtException handler - safety net for sync errors
+process.on("uncaughtException", (error: any) => {
+  console.error("[FATAL] Uncaught Exception:", error?.message || error);
+});
+
 const DEMO_USERS = [
   {
     id: "client-1",

@@ -31,7 +31,6 @@ pg_dump "$DATABASE_URL" \
   --no-owner \
   --no-acl \
   --no-privileges \
-  --disable-triggers \
   --format=plain \
   > /tmp/wfconnect_fresh.sql
 

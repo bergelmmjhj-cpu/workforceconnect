@@ -887,6 +887,7 @@
           }
         } catch (error) {
           console.error('Error loading applications:', error);
+          document.getElementById('applicationsTable').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error loading data:</strong> ' + escapeHtml(error.message) + '</td></tr>';
         }
       }
 
@@ -905,23 +906,37 @@
           return;
         }
         
-        tbody.innerHTML = data.map(function(app) {
-          var roles = [];
-          try {
-            roles = JSON.parse(app.preferredRoles || '[]');
-          } catch(e) {}
-          
-          return '<tr>' +
-            '<td><strong>' + escapeHtml(app.fullName) + '</strong></td>' +
-            '<td>' + escapeHtml(app.email) + '</td>' +
-            '<td>' + escapeHtml(app.phone) + '</td>' +
-            '<td>' + escapeHtml(app.city) + ', ' + escapeHtml(app.province) + '</td>' +
-            '<td>' + roles.slice(0, 2).join(', ') + (roles.length > 2 ? '...' : '') + '</td>' +
-            '<td><span class="status-badge ' + app.status + '">' + app.status + '</span>' + (!app.paymentMethod ? ' <span class="status-badge" style="background: #FEF3C7; color: #92400E; font-size: 11px;">No Payment Info</span>' : '') + '</td>' +
-            '<td>' + new Date(app.createdAt).toLocaleDateString() + '</td>' +
-            '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="pdf-btn" onclick="downloadAgreementPdf(\'' + app.id + '\')">PDF</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(app.fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
-          '</tr>';
-        }).join('');
+        try {
+          tbody.innerHTML = data.map(function(app) {
+            var roles = [];
+            try {
+              roles = JSON.parse(app.preferred_roles || '[]');
+            } catch(e) {}
+            
+            var fullName = app.full_name || app.fullName || '';
+            var email = app.email || '';
+            var phone = app.phone || '';
+            var city = app.city || '';
+            var province = app.province || '';
+            var status = app.status || 'unknown';
+            var createdAt = app.created_at || app.createdAt || '';
+            var hasPayment = app.payment_method || app.paymentMethod;
+            
+            return '<tr>' +
+              '<td><strong>' + escapeHtml(fullName) + '</strong></td>' +
+              '<td>' + escapeHtml(email) + '</td>' +
+              '<td>' + escapeHtml(phone) + '</td>' +
+              '<td>' + escapeHtml(city) + ', ' + escapeHtml(province) + '</td>' +
+              '<td>' + roles.slice(0, 2).join(', ') + (roles.length > 2 ? '...' : '') + '</td>' +
+              '<td><span class="status-badge ' + status + '">' + status + '</span>' + (!hasPayment ? ' <span class="status-badge" style="background: #FEF3C7; color: #92400E; font-size: 11px;">No Payment Info</span>' : '') + '</td>' +
+              '<td>' + (new Date(createdAt).toLocaleDateString ? new Date(createdAt).toLocaleDateString() : createdAt) + '</td>' +
+              '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="pdf-btn" onclick="downloadAgreementPdf(\'' + app.id + '\')">PDF</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
+            '</tr>';
+          }).join('');
+        } catch (error) {
+          console.error('Error rendering table:', error);
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error rendering applications:</strong> ' + escapeHtml(error.message) + '</td></tr>';
+        }
       }
 
       function escapeHtml(text) {
@@ -938,15 +953,21 @@
         
         var filtered = applications.filter(function(app) {
           var roles = [];
-          try { roles = JSON.parse(app.preferredRoles || '[]'); } catch(e) {}
+          try { roles = JSON.parse(app.preferred_roles || app.preferredRoles || '[]'); } catch(e) {}
           var rolesStr = roles.join(' ').toLowerCase();
-          var locationStr = ((app.city || '') + ' ' + (app.province || '') + ' ' + (app.address || '') + ' ' + (app.postalCode || '')).toLowerCase();
-          var skillsStr = (app.skills || '').toLowerCase();
+          var fullName = app.full_name || app.fullName || '';
+          var email = app.email || '';
+          var phone = app.phone || '';
+          var address = app.address || '';
+          var postalCode = app.postal_code || app.postalCode || '';
+          var skills = app.skills || '';
+          var locationStr = ((app.city || '') + ' ' + (app.province || '') + ' ' + address + ' ' + postalCode).toLowerCase();
+          var skillsStr = skills.toLowerCase();
           
           var matchesQuery = !query ||
-            app.fullName.toLowerCase().includes(query) ||
-            app.email.toLowerCase().includes(query) ||
-            (app.phone && app.phone.includes(query)) ||
+            fullName.toLowerCase().includes(query) ||
+            email.toLowerCase().includes(query) ||
+            (phone && phone.includes(query)) ||
             rolesStr.includes(query) ||
             locationStr.includes(query) ||
             skillsStr.includes(query);
@@ -971,9 +992,9 @@
         var days = [];
         var shifts = [];
         try {
-          roles = JSON.parse(app.preferredRoles || '[]');
-          days = JSON.parse(app.availableDays || '[]');
-          shifts = JSON.parse(app.preferredShifts || '[]');
+          roles = JSON.parse(app.preferred_roles || app.preferredRoles || '[]');
+          days = JSON.parse(app.available_days || app.availableDays || '[]');
+          shifts = JSON.parse(app.preferred_shifts || app.preferredShifts || '[]');
         } catch(e) {}
         
         var html = '';
@@ -982,30 +1003,31 @@
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Personal Details</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.fullName) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">' + (app.dateOfBirth || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.full_name || app.fullName || '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">' + (app.date_of_birth || app.dateOfBirth || 'Not provided') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone) + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Address</div><div class="detail-value">' + escapeHtml(app.address) + ', ' + escapeHtml(app.city) + ', ' + escapeHtml(app.province) + ' ' + escapeHtml(app.postalCode) + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Address</div><div class="detail-value">' + escapeHtml(app.address || '') + ', ' + escapeHtml(app.city || '') + ', ' + escapeHtml(app.province || '') + ' ' + escapeHtml(app.postal_code || app.postalCode || '') + '</div></div>';
         html += '</div></div>';
         
         // Work Eligibility
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Work Eligibility</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Work Status</div><div class="detail-value">' + formatWorkStatus(app.workStatus) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Background Check Consent</div><div class="detail-value">' + (app.backgroundCheckConsent ? 'Yes' : 'No') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Work Status</div><div class="detail-value">' + formatWorkStatus(app.work_status || app.workStatus || '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Background Check Consent</div><div class="detail-value">' + ((app.background_check_consent || app.backgroundCheckConsent) ? 'Yes' : 'No') + '</div></div>';
         html += '</div></div>';
         
         // Roles & Availability
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Roles & Availability</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + roles.join(', ') + (app.otherRole ? ' (' + app.otherRole + ')' : '') + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + roles.join(', ') + ((app.other_role || app.otherRole) ? ' (' + (app.other_role || app.otherRole) + ')' : '') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Available Days</div><div class="detail-value">' + days.join(', ') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Preferred Shifts</div><div class="detail-value">' + shifts.join(', ') + '</div></div>';
-        if (app.unavailablePeriods) {
-          html += '<div class="detail-item full"><div class="detail-label">Unavailable Periods</div><div class="detail-value">' + escapeHtml(app.unavailablePeriods) + '</div></div>';
+        var unavail = app.unavailable_periods || app.unavailablePeriods;
+        if (unavail) {
+          html += '<div class="detail-item full"><div class="detail-label">Unavailable Periods</div><div class="detail-value">' + escapeHtml(unavail) + '</div></div>';
         }
         html += '</div></div>';
         
@@ -1013,10 +1035,12 @@
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Experience</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Years of Experience</div><div class="detail-value">' + (app.yearsExperience || 'Not specified') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Shift Length Preference</div><div class="detail-value">' + (app.desiredShiftLength ? app.desiredShiftLength + ' hours' : 'Not specified') + '</div></div>';
-        if (app.experienceSummary) {
-          html += '<div class="detail-item full"><div class="detail-label">Experience Summary</div><div class="detail-value">' + escapeHtml(app.experienceSummary) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Years of Experience</div><div class="detail-value">' + (app.years_experience || app.yearsExperience || 'Not specified') + '</div></div>';
+        var shiftLen = app.desired_shift_length || app.desiredShiftLength;
+        html += '<div class="detail-item"><div class="detail-label">Shift Length Preference</div><div class="detail-value">' + (shiftLen ? shiftLen + ' hours' : 'Not specified') + '</div></div>';
+        var expSum = app.experience_summary || app.experienceSummary;
+        if (expSum) {
+          html += '<div class="detail-item full"><div class="detail-label">Experience Summary</div><div class="detail-value">' + escapeHtml(expSum) + '</div></div>';
         }
         if (app.skills) {
           html += '<div class="detail-item full"><div class="detail-label">Skills & Certifications</div><div class="detail-value">' + escapeHtml(app.skills) + '</div></div>';
@@ -1027,34 +1051,40 @@
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Emergency Contact</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">' + escapeHtml(app.emergencyContactName) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Relationship</div><div class="detail-value">' + escapeHtml(app.emergencyContactRelationship) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.emergencyContactPhone) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">' + escapeHtml(app.emergency_contact_name || app.emergencyContactName || '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Relationship</div><div class="detail-value">' + escapeHtml(app.emergency_contact_relationship || app.emergencyContactRelationship || '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.emergency_contact_phone || app.emergencyContactPhone || '') + '</div></div>';
         html += '</div></div>';
         
         // Payment Information
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Payment Information</h3>';
         html += '<div class="detail-grid">';
-        if (app.paymentMethod) {
-          html += '<div class="detail-item"><div class="detail-label">Payment Method</div><div class="detail-value">' + (app.paymentMethod === 'direct_deposit' ? 'Direct Deposit' : 'Interac E-Transfer') + '</div></div>';
+        var payMethod = app.payment_method || app.paymentMethod;
+        if (payMethod) {
+          html += '<div class="detail-item"><div class="detail-label">Payment Method</div><div class="detail-value">' + (payMethod === 'direct_deposit' || payMethod === 'both' ? 'Direct Deposit' : 'Interac E-Transfer') + '</div></div>';
         }
-        if (app.bankName) {
-          html += '<div class="detail-item"><div class="detail-label">Bank Name</div><div class="detail-value">' + escapeHtml(app.bankName) + '</div></div>';
+        var bankName = app.bank_name || app.bankName;
+        if (bankName) {
+          html += '<div class="detail-item"><div class="detail-label">Bank Name</div><div class="detail-value">' + escapeHtml(bankName) + '</div></div>';
         }
-        if (app.bankInstitution) {
-          html += '<div class="detail-item"><div class="detail-label">Institution #</div><div class="detail-value">' + escapeHtml(app.bankInstitution) + '</div></div>';
+        var bankInst = app.bank_institution || app.bankInstitution;
+        if (bankInst) {
+          html += '<div class="detail-item"><div class="detail-label">Institution #</div><div class="detail-value">' + escapeHtml(bankInst) + '</div></div>';
         }
-        if (app.bankTransit) {
-          html += '<div class="detail-item"><div class="detail-label">Transit #</div><div class="detail-value">' + escapeHtml(app.bankTransit) + '</div></div>';
+        var bankTran = app.bank_transit || app.bankTransit;
+        if (bankTran) {
+          html += '<div class="detail-item"><div class="detail-label">Transit #</div><div class="detail-value">' + escapeHtml(bankTran) + '</div></div>';
         }
-        if (app.bankAccount) {
-          html += '<div class="detail-item"><div class="detail-label">Account #</div><div class="detail-value">' + escapeHtml(app.bankAccount) + '</div></div>';
+        var bankAcct = app.bank_account || app.bankAccount;
+        if (bankAcct) {
+          html += '<div class="detail-item"><div class="detail-label">Account #</div><div class="detail-value">' + escapeHtml(bankAcct) + '</div></div>';
         }
-        if (app.etransferEmail) {
-          html += '<div class="detail-item"><div class="detail-label">E-Transfer Email</div><div class="detail-value">' + escapeHtml(app.etransferEmail) + '</div></div>';
+        var etEmail = app.etransfer_email || app.etransferEmail;
+        if (etEmail) {
+          html += '<div class="detail-item"><div class="detail-label">E-Transfer Email</div><div class="detail-value">' + escapeHtml(etEmail) + '</div></div>';
         }
-        if (!app.paymentMethod) {
+        if (!payMethod) {
           html += '<div class="detail-item full"><div class="detail-label">Status</div><div class="detail-value" style="color: var(--warning); font-weight: 600;">Payment information not provided</div></div>';
         }
         html += '</div></div>';
@@ -1063,19 +1093,19 @@
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Acknowledgments</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">TITO Acknowledgment</div><div class="detail-value">' + (app.titoAcknowledgment ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Site Rules</div><div class="detail-value">' + (app.siteRulesAcknowledgment ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Worker Agreement</div><div class="detail-value">' + (app.workerAgreementConsent ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Privacy Policy</div><div class="detail-value">' + (app.privacyConsent ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Marketing Consent</div><div class="detail-value">' + (app.marketingConsent ? 'Yes' : 'No') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">TITO Acknowledgment</div><div class="detail-value">' + ((app.tito_acknowledgment || app.titoAcknowledgment) ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Site Rules</div><div class="detail-value">' + ((app.site_rules_acknowledgment || app.siteRulesAcknowledgment) ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Worker Agreement</div><div class="detail-value">' + ((app.worker_agreement_consent || app.workerAgreementConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Privacy Policy</div><div class="detail-value">' + ((app.privacy_consent || app.privacyConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Marketing Consent</div><div class="detail-value">' + ((app.marketing_consent || app.marketingConsent) ? 'Yes' : 'No') + '</div></div>';
         html += '</div></div>';
         
         // Signature
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Electronic Signature</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Signature</div><div class="detail-value" style="font-style: italic;">' + escapeHtml(app.signature) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Signed Date</div><div class="detail-value">' + escapeHtml(app.signatureDate) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Signature</div><div class="detail-value" style="font-style: italic;">' + escapeHtml(app.signature || '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Signed Date</div><div class="detail-value">' + escapeHtml(app.signature_date || app.signatureDate || '') + '</div></div>';
         html += '</div></div>';
         
         // Metadata
@@ -1083,14 +1113,16 @@
         html += '<h3 class="detail-section-title">Application Info</h3>';
         html += '<div class="detail-grid">';
         html += '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="status-badge ' + app.status + '">' + app.status + '</span></div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Submitted</div><div class="detail-value">' + new Date(app.createdAt).toLocaleString() + '</div></div>';
-        if (app.notes) {
-          html += '<div class="detail-item full"><div class="detail-label">Notes</div><div class="detail-value">' + escapeHtml(app.notes) + '</div></div>';
+        var createdAt = app.created_at || app.createdAt;
+        html += '<div class="detail-item"><div class="detail-label">Submitted</div><div class="detail-value">' + (createdAt && new Date(createdAt).toLocaleString ? new Date(createdAt).toLocaleString() : createdAt) + '</div></div>';
+        var notes = app.notes || '';
+        if (notes) {
+          html += '<div class="detail-item full"><div class="detail-label">Notes</div><div class="detail-value">' + escapeHtml(notes) + '</div></div>';
         }
         html += '</div></div>';
         
         document.getElementById('modalBody').innerHTML = html;
-        document.getElementById('notesInput').value = app.notes || '';
+        document.getElementById('notesInput').value = notes;
         document.getElementById('detailModal').classList.add('show');
       }
 

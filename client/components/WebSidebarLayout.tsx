@@ -183,26 +183,6 @@ function Sidebar() {
         })}
       </View>
 
-      {(role === "admin" || role === "hr") ? (
-        <View style={[sidebarStyles.quickAccessSection, { borderTopColor: theme.border }]}>
-          <Pressable
-            onPress={() => rootNavigate("ClawdWorkspace")}
-            style={({ pressed }) => [
-              sidebarStyles.navItem,
-              {
-                backgroundColor: pressed ? theme.primary + "08" : "transparent",
-              },
-            ]}
-          >
-            <Feather name="zap" size={18} color={theme.primary} />
-            <ThemedText
-              style={[sidebarStyles.navLabel, { color: theme.primary, fontWeight: "600" }]}
-            >
-              Clawd AI
-            </ThemedText>
-          </Pressable>
-        </View>
-      ) : null}
 
       <View
         style={[

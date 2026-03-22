@@ -25,7 +25,6 @@ import AssignToWorkplaceScreen from "@/screens/AssignToWorkplaceScreen";
 import TitoLogsAdminScreen from "@/screens/TitoLogsAdminScreen";
 import ApplicationsAdminScreen from "@/screens/ApplicationsAdminScreen";
 import CrmSyncScreen from "@/screens/CrmSyncScreen";
-import AiAssistantScreen from "@/screens/AiAssistantScreen";
 import DiagnosticsScreen from "@/screens/DiagnosticsScreen";
 import RosterScreen from "@/screens/RosterScreen";
 import TwoFactorVerifyScreen from "@/screens/TwoFactorVerifyScreen";
@@ -33,7 +32,6 @@ import ChangePasswordScreen from "@/screens/ChangePasswordScreen";
 import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "@/screens/ResetPasswordScreen";
 import UserManagementScreen from "@/screens/UserManagementScreen";
-import ClawdWorkspaceScreen from "@/screens/ClawdWorkspaceScreen";
 import AppointmentsScreen from "@/screens/AppointmentsScreen";
 import SystemSettingsScreen from "@/screens/SystemSettingsScreen";
 import ApplicantsAdminScreen from "@/screens/ApplicantsAdminScreen";
@@ -70,13 +68,11 @@ export type RootStackParamList = {
   TitoLogsAdmin: undefined;
   ApplicationsAdmin: undefined;
   CrmSync: undefined;
-  AiAssistant: undefined;
   Diagnostics: undefined;
   ChangePassword: undefined;
   ForgotPassword: undefined;
   ResetPassword: { token: string };
   UserManagement: undefined;
-  ClawdWorkspace: undefined;
   Appointments: undefined;
   SystemSettings: undefined;
   ApplicantsAdmin: undefined;
@@ -299,13 +295,6 @@ export default function RootStackNavigator() {
             }}
           />
           <Stack.Screen
-            name="AiAssistant"
-            component={AiAssistantScreen}
-            options={{
-              headerTitle: "AI Operations Assistant",
-            }}
-          />
-          <Stack.Screen
             name="Diagnostics"
             component={DiagnosticsScreen}
             options={{
@@ -317,13 +306,6 @@ export default function RootStackNavigator() {
             component={UserManagementScreen}
             options={{
               headerTitle: "User Management",
-            }}
-          />
-          <Stack.Screen
-            name="ClawdWorkspace"
-            component={ClawdWorkspaceScreen}
-            options={{
-              headerTitle: "Clawd AI",
             }}
           />
           <Stack.Screen

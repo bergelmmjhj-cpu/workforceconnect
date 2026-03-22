@@ -42,7 +42,6 @@ import {
   userPhotos,
   smsLogs,
   titoCorrections,
-  aiActionLogs,
 } from "../shared/schema";
 import type { ShiftRequest, ShiftOffer, AppNotification } from "../shared/schema";
 import { getPayPeriodsForYear, getPayPeriod, getCurrentPayPeriod } from "../shared/payPeriods2026";
@@ -52,12 +51,8 @@ import crypto from "crypto";
 import { eq, and, or, desc, isNull, sql, inArray, ne, gte, lte, not, asc } from "drizzle-orm";
 import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, logSMS } from "./services/openphone";
 import { sendCSVEmail, sendEmail } from "./services/email";
-import { orchestrate, generateBriefing } from "./services/clawd";
-import { clawdChatMessages, clawdAssistantRuns, discordAlerts, appConfig, applicants, aiMessageLog } from "../shared/schema";
+import { discordAlerts, appConfig, applicants } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
-import { handleSickCall, handleClientRequest, handleLateArrival } from "./services/clawd/auto-responder";
-import { classifySms } from "./services/clawd/sms-classifier";
-import { logAiMessage, markResponseReceived } from "./services/aiFollowupService";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -2170,239 +2165,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // AI Operations Assistant routes
-  app.get("/api/admin/ai-assistant/status", async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      const userRole = req.headers["x-user-role"] as string;
-      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
-        res.status(403).json({ error: "Admin or HR access required" });
-        return;
-      }
-      const { getStatus } = await import("./services/ai-assistant/index");
-      res.json(getStatus());
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to get AI assistant status" });
-    }
-  });
-
-  app.get("/api/admin/ai-assistant/logs", async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      const userRole = req.headers["x-user-role"] as string;
-      if (!userId || (userRole !== "admin" && userRole !== "hr")) {
-        res.status(403).json({ error: "Admin or HR access required" });
-        return;
-      }
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-      const logs = await db
-        .select()
-        .from(aiActionLogs)
-        .orderBy(desc(aiActionLogs.createdAt))
-        .limit(limit);
-      res.json(logs);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to get AI assistant logs" });
-    }
-  });
-
-  app.post("/api/admin/ai-assistant/trigger", async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      const userRole = req.headers["x-user-role"] as string;
-      if (!userId || userRole !== "admin") {
-        res.status(403).json({ error: "Admin access required" });
-        return;
-      }
-      const { triggerManualCycle } = await import("./services/ai-assistant/index");
-      await triggerManualCycle();
-      res.json({ success: true, message: "Monitor cycle completed" });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to trigger monitor cycle" });
-    }
-  });
-
-  app.post("/api/admin/ai-assistant/pause", async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      const userRole = req.headers["x-user-role"] as string;
-      if (!userId || userRole !== "admin") {
-        res.status(403).json({ error: "Admin access required" });
-        return;
-      }
-      const aiModule = await import("./services/ai-assistant/index");
-      const loggerModule = await import("./services/ai-assistant/logger");
-      aiModule.pause();
-      await loggerModule.logAction({ monitorType: "system", signalSummary: "Assistant paused by admin", actionTaken: "paused", alertSentTo: userId });
-      res.json({ success: true, message: "Assistant paused" });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to pause assistant" });
-    }
-  });
-
-  app.post("/api/admin/ai-assistant/resume", async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      const userRole = req.headers["x-user-role"] as string;
-      if (!userId || userRole !== "admin") {
-        res.status(403).json({ error: "Admin access required" });
-        return;
-      }
-      const aiModule = await import("./services/ai-assistant/index");
-      const loggerModule = await import("./services/ai-assistant/logger");
-      aiModule.resume();
-      await loggerModule.logAction({ monitorType: "system", signalSummary: "Assistant resumed by admin", actionTaken: "resumed", alertSentTo: userId });
-      res.json({ success: true, message: "Assistant resumed" });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to resume assistant" });
-    }
-  });
-
   // ========================================
-  // Clawd AI API Endpoints
-  // ========================================
-
-  app.post("/api/clawd/chat", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      if (!userId) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-      const { message, imageBase64 } = req.body;
-      if (!message || typeof message !== "string" || message.trim().length === 0) {
-        res.status(400).json({ error: "message is required" });
-        return;
-      }
-
-      const history = await db.select()
-        .from(clawdChatMessages)
-        .where(eq(clawdChatMessages.userId, userId))
-        .orderBy(asc(clawdChatMessages.createdAt));
-
-      const conversationHistory = history.map(h => ({ role: h.role, content: h.content }));
-
-      const MAX_IMAGES = 4;
-      const MAX_BASE64_SIZE = 5 * 1024 * 1024;
-      let images: string[] | undefined = Array.isArray(imageBase64)
-        ? imageBase64.filter((s: unknown) => typeof s === "string" && (s as string).length <= MAX_BASE64_SIZE).slice(0, MAX_IMAGES)
-        : undefined;
-
-      const result = await orchestrate({
-        userMessage: message.trim(),
-        conversationHistory,
-        userId,
-        imageBase64: images && images.length > 0 ? images : undefined,
-      });
-
-      const userContent = images && images.length > 0
-        ? `[User sent ${images.length} image(s)]\n${message.trim()}`
-        : message.trim();
-
-      await db.insert(clawdChatMessages).values({
-        userId,
-        role: "user",
-        content: userContent,
-      });
-
-      await db.insert(clawdChatMessages).values({
-        userId,
-        role: "assistant",
-        content: result.response,
-        metadata: JSON.stringify({
-          assistantsInvoked: result.assistantsInvoked,
-          overallSeverity: result.overallSeverity,
-          isActionMode: result.isActionMode || false,
-          toolCalls: result.toolCalls || [],
-          metadata: result.metadata,
-        }),
-      });
-
-      res.json(result);
-    } catch (error: any) {
-      console.error("[CLAWD] Chat error:", error);
-      res.status(500).json({ error: error.message || "Failed to process chat message" });
-    }
-  });
-
-  app.get("/api/clawd/history", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      if (!userId) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const messages = await db.select()
-        .from(clawdChatMessages)
-        .where(eq(clawdChatMessages.userId, userId))
-        .orderBy(asc(clawdChatMessages.createdAt));
-
-      res.json(messages);
-    } catch (error: any) {
-      console.error("[CLAWD] History error:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch chat history" });
-    }
-  });
-
-  app.delete("/api/clawd/history", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      if (!userId) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      await db.delete(clawdChatMessages)
-        .where(eq(clawdChatMessages.userId, userId));
-
-      res.json({ success: true, message: "Chat history cleared" });
-    } catch (error: any) {
-      console.error("[CLAWD] Delete history error:", error);
-      res.status(500).json({ error: error.message || "Failed to delete chat history" });
-    }
-  });
-
-  app.get("/api/clawd/briefing", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      if (!userId) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const briefing = await generateBriefing(userId);
-      res.json(briefing);
-    } catch (error: any) {
-      console.error("[CLAWD] Briefing error:", error);
-      res.status(500).json({ error: error.message || "Failed to generate briefing" });
-    }
-  });
-
-  app.get("/api/clawd/runs", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
-    try {
-      const assistantType = req.query.assistantType as string | undefined;
-
-      const conditions = [];
-      if (assistantType) {
-        conditions.push(eq(clawdAssistantRuns.assistantType, assistantType));
-      }
-
-      const runs = await db.select()
-        .from(clawdAssistantRuns)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(clawdAssistantRuns.createdAt))
-        .limit(50);
-
-      res.json(runs);
-    } catch (error: any) {
-      console.error("[CLAWD] Runs error:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch assistant runs" });
-    }
-  });
-
-  // ========================================
-  // Discord Announcements (Claude-polished)
+  // Discord Announcements
   // ========================================
 
   app.post("/api/discord/preview-announcement", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
@@ -2412,38 +2176,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(400).json({ error: "rawText is required" });
         return;
       }
-
-      const { callClaude } = await import("./services/clawd/anthropic-client");
-
-      const systemPrompt = `You are a professional communications assistant for WFConnect, a workforce management platform.
-Your job is to take rough announcement drafts and polish them into clear, professional Discord announcements.
-
-RULES:
-- Keep it concise (2-4 sentences max for the body)
-- Professional but warm in tone — avoid corporate jargon
-- Choose a color that fits the tone: "blue" (info/general), "green" (success/positive news), "amber" (heads-up/reminder), "red" (urgent), "purple" (milestone/celebration)
-- Return ONLY valid JSON, no extra text
-
-Respond with exactly:
-{"title":"Short headline (max 8 words)","body":"Polished announcement text here.","color":"blue"}`;
-
-      const response = await callClaude(systemPrompt, [
-        { role: "user", content: `Polish this announcement draft:\n\n${rawText.trim()}` },
-      ], { maxTokens: 400, temperature: 0.5 });
-
-      let parsed: { title: string; body: string; color: string };
-      try {
-        const cleaned = response.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        const firstBrace = cleaned.indexOf("{");
-        const lastBrace = cleaned.lastIndexOf("}");
-        parsed = JSON.parse(firstBrace !== -1 ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned);
-      } catch {
-        parsed = { title: "Announcement", body: response.slice(0, 500), color: "blue" };
-      }
-
-      res.json({ title: parsed.title || "Announcement", body: parsed.body || rawText, color: parsed.color || "blue" });
+      res.json({ title: "Announcement", body: rawText.trim(), color: "blue" });
     } catch (error: any) {
-      console.error("[DISCORD ANNOUNCE] Preview error:", error);
       res.status(500).json({ error: error.message || "Failed to preview announcement" });
     }
   });
@@ -3058,17 +2792,6 @@ Respond with exactly:
       res.send(buffer);
     } catch (error: any) {
       res.status(500).json({ error: "Failed to download resume" });
-    }
-  });
-
-  // AI Message Log API
-  app.get("/api/ai-message-log", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
-    try {
-      const logs = await db.select().from(aiMessageLog)
-        .orderBy(desc(aiMessageLog.sentAt)).limit(100);
-      res.json(logs);
-    } catch (error: any) {
-      res.status(500).json({ error: "Failed to fetch AI message log" });
     }
   });
 
@@ -8608,28 +8331,8 @@ Respond with exactly:
       console.log(`[OPENPHONE WEBHOOK] From: ${senderPhone}, Body: "${messageBody}"${mediaUrls.length > 0 ? `, Media: ${mediaUrls.length} file(s)` : ""}`);
 
       if (mediaUrls.length > 0) {
-        const imageUrls = mediaUrls.filter(u => /\.(jpg|jpeg|png|gif|webp)/i.test(u) || u.includes("image"));
-        if (imageUrls.length > 0) {
-          console.log(`[OPENPHONE WEBHOOK] Processing ${imageUrls.length} MMS image(s) via Clawd vision`);
-          setImmediate(async () => {
-            try {
-              const result = await orchestrate({
-                userMessage: messageBody || "Analyze this image sent via SMS",
-                conversationHistory: [],
-                userId: `sms-${senderPhone}`,
-                imageUrls,
-                forceActionMode: true,
-              });
-              console.log(`[OPENPHONE WEBHOOK] Vision analysis complete: ${result.response?.slice(0, 120)}`);
-            } catch (err: any) {
-              console.error("[OPENPHONE WEBHOOK] Vision analysis failed:", err?.message);
-            }
-          });
-        }
+        console.log(`[OPENPHONE WEBHOOK] Received ${mediaUrls.length} media attachment(s) from ${senderPhone}`);
       }
-
-      // Mark any pending AI follow-up messages as responded
-      markResponseReceived(senderPhone).catch(() => {});
 
       const normalizedPhone = senderPhone.replace(/[^\d]/g, "");
       const phoneVariants = [
@@ -8682,96 +8385,7 @@ Respond with exactly:
       const isShiftKeyword = ["ACCEPT SHIFT", "ACCEPT", "DECLINE SHIFT", "DECLINE"].includes(upperBody);
 
       if (!isShiftKeyword) {
-        // ── Structured SMS Classification ─────────────────────────────────────
-        const classif = classifySms(messageBody);
-        const senderMatched = !!worker;
-        const senderLabel = senderMatched ? worker!.fullName : `Unmatched(${senderPhone})`;
-
-        // Map intent to DB classification string
-        const dbClassification =
-          classif.intent === "staff_absence" ? "sick_call" :
-          classif.intent === "late_arrival" ? "late_arrival" :
-          classif.intent === "emergency" ? "sick_call" :
-          classif.intent === "client_request" ? "client_request" :
-          classif.intent === "unknown_staffing" ? "unknown_staffing" :
-          "general";
-
-        console.log(
-          `[OPENPHONE WEBHOOK] intent=${classif.intent} confidence=${classif.confidence} urgency=${classif.urgency} ` +
-          `sender=${senderLabel} matched=${senderMatched} ` +
-          `entities={role:${classif.role_requested},qty:${classif.quantity_requested},date:${classif.shift_date},time:${classif.shift_time}} ` +
-          `msg="${messageBody.slice(0, 80)}"`
-        );
-
-        // Update SMS log with classification — target specific message by openphoneMessageId
-        try {
-          if (openphoneMessageId) {
-            await db.update(smsLogs)
-              .set({ classification: dbClassification })
-              .where(eq(smsLogs.openphoneMessageId, openphoneMessageId));
-          }
-        } catch (_e) { /* non-critical */ }
-
-        // ── Automation Rules (fail-open) ──────────────────────────────────────
-        if (classif.intent === "staff_absence" || classif.intent === "emergency") {
-          // Always trigger — even for unknown senders
-          setImmediate(() => {
-            handleSickCall({
-              workerId: worker?.id || null,
-              workerName: senderMatched ? worker!.fullName : `Unmatched number ${senderPhone}`,
-              workerPhone: senderPhone,
-              smsMessage: messageBody,
-              senderMatched,
-              classification: classif,
-            }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleSickCall error:", err?.message));
-          });
-        } else if (classif.intent === "late_arrival") {
-          setImmediate(() => {
-            handleLateArrival({
-              workerId: worker?.id || null,
-              workerName: senderMatched ? worker!.fullName : `Unmatched number ${senderPhone}`,
-              workerPhone: senderPhone,
-              smsMessage: messageBody,
-              classification: classif,
-            }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleLateArrival error:", err?.message));
-          });
-        } else if (classif.intent === "client_request") {
-          // Always trigger — even for unknown senders
-          setImmediate(() => {
-            handleClientRequest({
-              phoneNumber: senderPhone,
-              smsMessage: messageBody,
-              senderMatched,
-              classification: classif,
-            }).catch((err) => console.error("[OPENPHONE WEBHOOK] handleClientRequest error:", err?.message));
-          });
-        } else if (classif.intent === "unknown_staffing" && !senderMatched) {
-          // Unknown sender + staffing-related content → always alert, never drop
-          setImmediate(async () => {
-            try {
-              const { sendDiscordNotification: notifyDiscord } = await import("./services/discord");
-              const { sendSMS: sendAlert, logSMS: logAlert } = await import("./services/openphone");
-              const GM_LILEE = "+14166028038";
-
-              await notifyDiscord({
-                title: "Possible Staffing Message — Unmatched Sender",
-                message: `🟠 POSSIBLE STAFFING MESSAGE\nSender: Unmatched number ${senderPhone}\nMessage: "${messageBody}"\nConfidence: ${classif.confidence}\nAction: Manual review needed — sender not in system`,
-                color: "amber",
-                type: "general",
-                sourcePhone: senderPhone,
-              });
-
-              const gmMsg = `[WFConnect] Possible staffing message from unmatched number ${senderPhone}: "${messageBody.slice(0,120)}". Manual review needed.`;
-              await sendAlert(GM_LILEE, gmMsg);
-              await logAlert({ phoneNumber: GM_LILEE, direction: "outbound", message: gmMsg, status: "sent" });
-            } catch (err: any) {
-              console.error("[OPENPHONE WEBHOOK] unknown_staffing alert failed:", err?.message);
-            }
-          });
-        } else {
-          console.log(`[OPENPHONE WEBHOOK] General message from ${senderLabel} — no action triggered`);
-        }
-
+        console.log(`[OPENPHONE WEBHOOK] Non-shift-keyword message from ${senderPhone} — logged only`);
         return;
       }
 

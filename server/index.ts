@@ -648,6 +648,11 @@ function configureExpoAndLanding(app: express.Application) {
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
   const contractorGuideTemplate = fs.readFileSync(contractorGuidePath, "utf-8");
   
+  // Root path handler - redirect to /guide
+  app.get("/", (_req: Request, res: Response) => {
+    res.redirect("/guide");
+  });
+
   // Serve guide at /guide path
   app.get("/guide", (_req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");

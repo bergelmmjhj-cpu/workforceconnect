@@ -647,11 +647,6 @@ function configureExpoAndLanding(app: express.Application) {
   // Serve Contractor Payment & Processing Guide
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
   const contractorGuideTemplate = fs.readFileSync(contractorGuidePath, "utf-8");
-
-  // Root route → redirect to /guide
-app.get("/", (_req: Request, res: Response) => {
-  res.redirect("/guide");
-});
   
   // Serve guide at /guide path
   app.get("/guide", (_req: Request, res: Response) => {
@@ -697,10 +692,6 @@ app.get("/account-deletion", (_req: Request, res: Response) => {
   res.status(200).send(accountDeletionTemplate);
 });
 
-// ✅ ROOT ROUTE FIX (THIS WAS MISSING)
-app.get("/", (_req: Request, res: Response) => {
-  res.redirect("/guide");
-});
 
 // Serve Worker Application Form (full form, used by guide.wfconnect.org)
 const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
@@ -725,13 +716,6 @@ app.get("/contractor-apply", (_req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=3600");
   return res.status(200).send(applyTemplate);
-});
-
-// Serve guide at /guide path
-app.get("/guide", (_req: Request, res: Response) => {
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=3600");
-  res.status(200).send(contractorGuideTemplate);
 });
 
   // Serve Payment Information Page

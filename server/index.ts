@@ -662,6 +662,11 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(contractorGuideTemplate);
   });
 
+  // Root path handler - redirect to /guide
+  app.get("/", (_req: Request, res: Response) => {
+    res.redirect("/guide");
+  });
+
   // Serve Support page
   const supportPath = path.resolve(process.cwd(), "server", "templates", "support.html");
   const supportTemplate = fs.readFileSync(supportPath, "utf-8");
@@ -682,41 +687,40 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(privacyTemplate);
   });
 
-// Serve Account Deletion Request page
-const accountDeletionPath = path.resolve(process.cwd(), "server", "templates", "account-deletion.html");
-const accountDeletionTemplate = fs.readFileSync(accountDeletionPath, "utf-8");
+  // Serve Account Deletion Request page
+  const accountDeletionPath = path.resolve(process.cwd(), "server", "templates", "account-deletion.html");
+  const accountDeletionTemplate = fs.readFileSync(accountDeletionPath, "utf-8");
 
-app.get("/account-deletion", (_req: Request, res: Response) => {
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=3600");
-  res.status(200).send(accountDeletionTemplate);
-});
+  app.get("/account-deletion", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(accountDeletionTemplate);
+  });
 
+  // Serve Worker Application Form (full form, used by guide.wfconnect.org)
+  const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
+  const applyTemplate = fs.readFileSync(applyPath, "utf-8");
 
-// Serve Worker Application Form (full form, used by guide.wfconnect.org)
-const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
-const applyTemplate = fs.readFileSync(applyPath, "utf-8");
+  // Single subdomain-aware /apply route:
+  //   apply.wfconnect.org → apply-form.html (standalone lead capture)
+  //   everywhere else     → apply.html      (full worker registration form)
+  app.get("/apply", (req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    if (isApplySubdomain(req) && applyFormTemplate) {
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applyFormTemplate);
+    }
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return res.status(200).send(applyTemplate);
+  });
 
-// Single subdomain-aware /apply route:
-//   apply.wfconnect.org → apply-form.html (standalone lead capture)
-//   everywhere else     → apply.html      (full worker registration form)
-app.get("/apply", (req: Request, res: Response) => {
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  if (isApplySubdomain(req) && applyFormTemplate) {
-    res.setHeader("Cache-Control", "no-cache");
-    return res.status(200).send(applyFormTemplate);
-  }
-  res.setHeader("Cache-Control", "public, max-age=3600");
-  return res.status(200).send(applyTemplate);
-});
-
-// /contractor-apply — unconditionally serves the full worker registration form
-// (no hostname detection — works reliably regardless of how the proxy sets Host headers)
-app.get("/contractor-apply", (_req: Request, res: Response) => {
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=3600");
-  return res.status(200).send(applyTemplate);
-});
+  // /contractor-apply — unconditionally serves the full worker registration form
+  // (no hostname detection — works reliably regardless of how the proxy sets Host headers)
+  app.get("/contractor-apply", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return res.status(200).send(applyTemplate);
+  });
 
   // Serve Payment Information Page
   const paymentInfoPath = path.resolve(process.cwd(), "server", "templates", "payment-info.html");

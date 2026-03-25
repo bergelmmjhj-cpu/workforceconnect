@@ -1906,6 +1906,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Backward-compatible sync endpoint for integrations that call /api/sync/workers
+  app.post("/api/sync/workers", checkApplicationsApiKey, async (req: Request, res: Response) => {
+    try {
+      const statusFilter = typeof req.body?.status === "string"
+        ? req.body.status.trim().toLowerCase()
+        : "approved";
+
+      if (statusFilter && !WORKER_APPLICATION_STATUSES.has(statusFilter)) {
+        res.status(400).json({ error: "Invalid status filter" });
+        return;
+      }
+
+      const applications = await db.select()
+        .from(workerApplications)
+        .where(eq(workerApplications.status, statusFilter))
+        .orderBy(desc(workerApplications.createdAt));
+
+      const workers = applications.map((application) => {
+        const normalizedFullName = (application.fullName || "").trim();
+        const [firstNamePart = "", ...lastNameParts] = normalizedFullName
+          .split(/\s+/)
+          .filter(Boolean);
+        const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
+        const isActive = application.status === "approved";
+
+        return {
+          id: application.id,
+          status: application.status,
+          full_name: normalizedFullName || null,
+          first_name: firstNamePart || null,
+          last_name: lastNameParts.join(" ") || null,
+          email: application.email,
+          phone: application.phone,
+          address: application.address,
+          city: application.city,
+          province: application.province,
+          province_code: application.province,
+          worker_type: workerType,
+          applying_for: workerType,
+          is_active: isActive,
+          active: isActive,
+          notes: application.notes,
+        };
+      });
+
+      res.type("application/json").json({
+        success: true,
+        status: statusFilter,
+        total: workers.length,
+        workers,
+      });
+    } catch (error) {
+      console.error("Error syncing workers for API integration:", error);
+      res.status(500).json({ error: "Failed to sync workers" });
+    }
+  });
+
+  app.get("/api/sync/workers", checkApplicationsApiKey, async (req: Request, res: Response) => {
+    try {
+      const statusFilter = typeof req.query.status === "string"
+        ? req.query.status.trim().toLowerCase()
+        : "approved";
+
+      if (statusFilter && !WORKER_APPLICATION_STATUSES.has(statusFilter)) {
+        res.status(400).json({ error: "Invalid status filter" });
+        return;
+      }
+
+      const applications = await db.select()
+        .from(workerApplications)
+        .where(eq(workerApplications.status, statusFilter))
+        .orderBy(desc(workerApplications.createdAt));
+
+      const workers = applications.map((application) => {
+        const normalizedFullName = (application.fullName || "").trim();
+        const [firstNamePart = "", ...lastNameParts] = normalizedFullName
+          .split(/\s+/)
+          .filter(Boolean);
+        const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
+        const isActive = application.status === "approved";
+
+        return {
+          id: application.id,
+          status: application.status,
+          full_name: normalizedFullName || null,
+          first_name: firstNamePart || null,
+          last_name: lastNameParts.join(" ") || null,
+          email: application.email,
+          phone: application.phone,
+          address: application.address,
+          city: application.city,
+          province: application.province,
+          province_code: application.province,
+          worker_type: workerType,
+          applying_for: workerType,
+          is_active: isActive,
+          active: isActive,
+          notes: application.notes,
+        };
+      });
+
+      res.type("application/json").json({
+        success: true,
+        status: statusFilter,
+        total: workers.length,
+        workers,
+      });
+    } catch (error) {
+      console.error("Error fetching worker sync payload:", error);
+      res.status(500).json({ error: "Failed to fetch worker sync payload" });
+    }
+  });
+
   // Get all worker applications (admin only with basic auth)
   app.get("/api/admin/applications", async (req: Request, res: Response) => {
     try {

@@ -420,7 +420,7 @@ async function saveManagedApiKeys(keys: any[]): Promise<void> {
   if (existing) {
     await db
       .update(appConfig)
-      .set({ value: JSON.stringify(keys), updatedAt: now, updatedBy: "system" })
+      .set({ value: JSON.stringify(keys), updatedAt: now })
       .where(eq(appConfig.key, "api_keys_managed"));
   } else {
     await db.insert(appConfig).values({
@@ -428,7 +428,6 @@ async function saveManagedApiKeys(keys: any[]): Promise<void> {
       value: JSON.stringify(keys),
       description: "Managed API keys for Payroll sync",
       updatedAt: now,
-      updatedBy: "system",
     });
   }
 }

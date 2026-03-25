@@ -319,6 +319,65 @@ function clearSessionCookie(res: Response): void {
   res.setHeader("Set-Cookie", "wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
 }
 
+const WORKER_APPLICATION_STATUSES = new Set(["pending", "reviewed", "approved", "rejected"]);
+
+function getConfiguredApiKeys(): string[] {
+  const keys: string[] = [];
+  const singleKey = process.env.WFCONNECT_API_KEY?.trim();
+  const keyList = process.env.WFCONNECT_API_KEYS;
+
+  if (singleKey) {
+    keys.push(singleKey);
+  }
+
+  if (keyList) {
+    const parsed = keyList
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean);
+    keys.push(...parsed);
+  }
+
+  return Array.from(new Set(keys));
+}
+
+function parsePreferredWorkerType(preferredRoles: string | null, workStatus: string | null): string | null {
+  if (preferredRoles) {
+    try {
+      const parsed = JSON.parse(preferredRoles);
+      if (Array.isArray(parsed)) {
+        const roles = parsed.filter((role) => typeof role === "string").join(", ");
+        if (roles) return roles;
+      } else if (typeof parsed === "string" && parsed.trim()) {
+        return parsed.trim();
+      }
+    } catch {
+      if (preferredRoles.trim()) return preferredRoles.trim();
+    }
+  }
+  return workStatus?.trim() || null;
+}
+
+function checkApplicationsApiKey(req: Request, res: Response, next: () => void): void {
+  res.type("application/json");
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const apiKey = authHeader.slice("Bearer ".length).trim();
+  const configuredKeys = getConfiguredApiKeys();
+
+  if (!apiKey || configuredKeys.length === 0 || !configuredKeys.includes(apiKey)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  next();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({
@@ -1717,6 +1776,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error saving worker application:", error);
       res.status(500).json({ error: "Failed to submit application. Please try again." });
+    }
+  });
+
+  // Applications sync API (Bearer key, JSON-only)
+  app.get("/api/applications", checkApplicationsApiKey, async (req: Request, res: Response) => {
+    try {
+      const statusFilter = typeof req.query.status === "string"
+        ? req.query.status.trim().toLowerCase()
+        : "";
+
+      if (statusFilter && !WORKER_APPLICATION_STATUSES.has(statusFilter)) {
+        res.status(400).json({ error: "Invalid status filter" });
+        return;
+      }
+
+      const applications = statusFilter
+        ? await db.select()
+          .from(workerApplications)
+          .where(eq(workerApplications.status, statusFilter))
+          .orderBy(desc(workerApplications.createdAt))
+        : await db.select()
+          .from(workerApplications)
+          .orderBy(desc(workerApplications.createdAt));
+
+      const data = applications.map((application) => {
+        const normalizedFullName = (application.fullName || "").trim();
+        const [firstNamePart = "", ...lastNameParts] = normalizedFullName
+          .split(/\s+/)
+          .filter(Boolean);
+        const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
+        const isActive = application.status === "approved";
+
+        return {
+          id: application.id,
+          status: application.status,
+          full_name: normalizedFullName || null,
+          first_name: firstNamePart || null,
+          last_name: lastNameParts.join(" ") || null,
+          email: application.email,
+          phone: application.phone,
+          address: application.address,
+          city: application.city,
+          province: application.province,
+          province_code: application.province,
+          worker_type: workerType,
+          applying_for: workerType,
+          is_active: isActive,
+          active: isActive,
+          notes: application.notes,
+        };
+      });
+
+      res.type("application/json").json({ data });
+    } catch (error) {
+      console.error("Error fetching applications for API sync:", error);
+      res.status(500).json({ error: "Failed to fetch applications" });
     }
   });
 

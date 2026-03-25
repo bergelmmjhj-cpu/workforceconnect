@@ -378,6 +378,80 @@ function checkApplicationsApiKey(req: Request, res: Response, next: () => void):
   next();
 }
 
+// API Key Manager Helpers
+function hashApiKey(key: string): string {
+  return crypto.createHash("sha256").update(key).digest("hex");
+}
+
+function generateApiKeyPrefix(): string {
+  const timestamp = Date.now().toString(36);
+  const random = crypto.randomBytes(4).toString("hex");
+  return `wfc_${timestamp}_${random}`.substring(0, 32);
+}
+
+async function getManagedApiKeys(): Promise<Array<{
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  createdBy: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  revokedBy: string | null;
+}>> {
+  try {
+    const config = await db.query.appConfig.findFirst({
+      where: eq(appConfig.key, "api_keys_managed"),
+    });
+    if (!config || !config.value) return [];
+    const parsed = JSON.parse(config.value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveManagedApiKeys(keys: any[]): Promise<void> {
+  const existing = await db.query.appConfig.findFirst({
+    where: eq(appConfig.key, "api_keys_managed"),
+  });
+
+  const now = new Date().toISOString();
+  if (existing) {
+    await db
+      .update(appConfig)
+      .set({ value: JSON.stringify(keys), updatedAt: now, updatedBy: "system" })
+      .where(eq(appConfig.key, "api_keys_managed"));
+  } else {
+    await db.insert(appConfig).values({
+      key: "api_keys_managed",
+      value: JSON.stringify(keys),
+      description: "Managed API keys for Payroll sync",
+      updatedAt: now,
+      updatedBy: "system",
+    });
+  }
+}
+
+function checkBasicAuthAdmin(req: Request, res: Response): boolean {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Basic ")) {
+    res.status(401).json({ error: "Authentication required" });
+    return false;
+  }
+
+  const base64Credentials = authHeader.split(" ")[1];
+  const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+  const [username, password] = credentials.split(":");
+
+  if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+    res.status(401).json({ error: "Invalid credentials" });
+    return false;
+  }
+
+  return true;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({
@@ -2037,6 +2111,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting application:", error);
       res.status(500).json({ error: "Failed to delete application" });
+    }
+  });
+
+  // API Key Management endpoints
+  app.get("/api/admin/applications/api-keys", async (req: Request, res: Response) => {
+    try {
+      if (!checkBasicAuthAdmin(req, res)) return;
+
+      const keys = await getManagedApiKeys();
+      const nonSensitive = keys.map((key) => ({
+        id: key.id,
+        name: key.name,
+        prefix: key.prefix,
+        createdAt: key.createdAt,
+        createdBy: key.createdBy,
+        lastUsedAt: key.lastUsedAt,
+        revokedAt: key.revokedAt,
+        revokedBy: key.revokedBy,
+      }));
+
+      res.json({ data: nonSensitive });
+    } catch (error) {
+      console.error("Error fetching API keys:", error);
+      res.status(500).json({ error: "Failed to fetch API keys" });
+    }
+  });
+
+  app.post("/api/admin/applications/api-keys", async (req: Request, res: Response) => {
+    try {
+      if (!checkBasicAuthAdmin(req, res)) return;
+
+      const { name } = req.body;
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        res.status(400).json({ error: "Key name is required" });
+        return;
+      }
+
+      const keys = await getManagedApiKeys();
+      if (keys.some((k) => k.name === name.trim())) {
+        res.status(409).json({ error: "Key name already exists" });
+        return;
+      }
+
+      const keyId = crypto.randomUUID();
+      const plaintextKey = `${generateApiKeyPrefix()}_${crypto.randomBytes(8).toString("hex")}`;
+      const hashedKey = hashApiKey(plaintextKey);
+      const now = new Date().toISOString();
+
+      const newKey = {
+        id: keyId,
+        name: name.trim(),
+        prefix: plaintextKey.substring(0, 12),
+        hash: hashedKey,
+        createdAt: now,
+        createdBy: "admin",
+        lastUsedAt: null,
+        revokedAt: null,
+        revokedBy: null,
+      };
+
+      keys.push(newKey);
+      await saveManagedApiKeys(keys);
+
+      res.status(201).json({
+        id: keyId,
+        name: newKey.name,
+        prefix: newKey.prefix,
+        plaintext: plaintextKey,
+        createdAt: now,
+        message: "Save this key securely. You won't be able to see it again.",
+      });
+    } catch (error) {
+      console.error("Error creating API key:", error);
+      res.status(500).json({ error: "Failed to create API key" });
+    }
+  });
+
+  app.post("/api/admin/applications/api-keys/:id/rotate", async (req: Request, res: Response) => {
+    try {
+      if (!checkBasicAuthAdmin(req, res)) return;
+
+      const keyId = req.params.id;
+      const keys = await getManagedApiKeys();
+      const keyIndex = keys.findIndex((k) => k.id === keyId);
+
+      if (keyIndex === -1) {
+        res.status(404).json({ error: "Key not found" });
+        return;
+      }
+
+      const oldKey = keys[keyIndex];
+      const now = new Date().toISOString();
+
+      // Revoke old key
+      oldKey.revokedAt = now;
+      oldKey.revokedBy = "admin";
+
+      // Create new key with same name
+      const newKeyId = crypto.randomUUID();
+      const plaintextKey = `${generateApiKeyPrefix()}_${crypto.randomBytes(8).toString("hex")}`;
+      const hashedKey = hashApiKey(plaintextKey);
+
+      const newKey = {
+        id: newKeyId,
+        name: oldKey.name,
+        prefix: plaintextKey.substring(0, 12),
+        hash: hashedKey,
+        createdAt: now,
+        createdBy: "admin",
+        lastUsedAt: null,
+        revokedAt: null,
+        revokedBy: null,
+      };
+
+      keys[keyIndex] = oldKey;
+      keys.push(newKey);
+      await saveManagedApiKeys(keys);
+
+      res.json({
+        id: newKeyId,
+        name: newKey.name,
+        prefix: newKey.prefix,
+        plaintext: plaintextKey,
+        createdAt: now,
+        message: "Key rotated successfully. Save the new key securely.",
+      });
+    } catch (error) {
+      console.error("Error rotating API key:", error);
+      res.status(500).json({ error: "Failed to rotate API key" });
+    }
+  });
+
+  app.delete("/api/admin/applications/api-keys/:id", async (req: Request, res: Response) => {
+    try {
+      if (!checkBasicAuthAdmin(req, res)) return;
+
+      const keyId = req.params.id;
+      const keys = await getManagedApiKeys();
+      const keyIndex = keys.findIndex((k) => k.id === keyId);
+
+      if (keyIndex === -1) {
+        res.status(404).json({ error: "Key not found" });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      keys[keyIndex].revokedAt = now;
+      keys[keyIndex].revokedBy = "admin";
+
+      await saveManagedApiKeys(keys);
+
+      res.json({ success: true, message: "Key revoked successfully" });
+    } catch (error) {
+      console.error("Error revoking API key:", error);
+      res.status(500).json({ error: "Failed to revoke API key" });
     }
   });
 

@@ -359,18 +359,7 @@ function parsePreferredWorkerType(preferredRoles: string | null, workStatus: str
 }
 
 // API Key Manager Helpers
-function hashApiKey(key: string): string {
-  return crypto.createHash("sha256").update(key).digest("hex");
-}
-
-function generateApiKeyPrefix(): string {
-  const timestamp = Date.now().toString(36);
-  const random = crypto.randomBytes(4).toString("hex");
-  return `wfc_${timestamp}_${random}`.substring(0, 32);
-}
-
-// Internal: returns full records including hash and scopes
-async function getManagedApiKeysRaw(): Promise<Array<{
+type ManagedApiKeyRecord = {
   id: string;
   name: string;
   prefix: string;
@@ -381,16 +370,59 @@ async function getManagedApiKeysRaw(): Promise<Array<{
   lastUsedAt: string | null;
   revokedAt: string | null;
   revokedBy: string | null;
-}>> {
+};
+
+function hashApiKey(key: string): string {
+  return crypto.createHash("sha256").update(key).digest("hex");
+}
+
+function generateApiKeyPrefix(): string {
+  const timestamp = Date.now().toString(36);
+  const random = crypto.randomBytes(4).toString("hex");
+  return `wfc_${timestamp}_${random}`.substring(0, 32);
+}
+
+function ensureManagedKeyIntegrity(keys: ManagedApiKeyRecord[]): void {
+  for (const key of keys) {
+    const hasHash = typeof key.hash === "string" && key.hash.length > 0;
+    if (!key.revokedAt && !hasHash) {
+      throw new Error(`Managed key integrity check failed for active key ${key.id}`);
+    }
+  }
+}
+
+// Internal: returns full records including hash and scopes
+async function getManagedApiKeysRaw(options?: { suppressErrors?: boolean }): Promise<ManagedApiKeyRecord[]> {
   try {
     const config = await db.query.appConfig.findFirst({
       where: eq(appConfig.key, "api_keys_managed"),
     });
     if (!config || !config.value) return [];
     const parsed = JSON.parse(config.value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const normalized: ManagedApiKeyRecord[] = parsed.map((raw: any) => ({
+      id: String(raw.id ?? ""),
+      name: String(raw.name ?? ""),
+      prefix: String(raw.prefix ?? ""),
+      hash: typeof raw.hash === "string" ? raw.hash : "",
+      scopes: Array.isArray(raw.scopes) ? raw.scopes.filter((s: unknown) => typeof s === "string") : [],
+      createdAt: String(raw.createdAt ?? ""),
+      createdBy: String(raw.createdBy ?? "admin"),
+      lastUsedAt: raw.lastUsedAt ?? null,
+      revokedAt: raw.revokedAt ?? null,
+      revokedBy: raw.revokedBy ?? null,
+    }));
+
+    ensureManagedKeyIntegrity(normalized);
+    return normalized;
+  } catch (error) {
+    if (options?.suppressErrors) {
+      return [];
+    }
+    throw error;
   }
 }
 
@@ -409,7 +441,9 @@ async function getManagedApiKeys(): Promise<Array<{
   return raw.map(({ hash: _hash, ...rest }) => ({ ...rest, scopes: rest.scopes ?? [] }));
 }
 
-async function saveManagedApiKeys(keys: any[]): Promise<void> {
+async function saveManagedApiKeys(keys: ManagedApiKeyRecord[]): Promise<void> {
+  ensureManagedKeyIntegrity(keys);
+
   const existing = await db.query.appConfig.findFirst({
     where: eq(appConfig.key, "api_keys_managed"),
   });
@@ -431,7 +465,7 @@ async function saveManagedApiKeys(keys: any[]): Promise<void> {
 // Fire-and-forget: update lastUsedAt for a managed key after successful auth
 async function updateManagedKeyLastUsed(keyId: string): Promise<void> {
   try {
-    const keys = await getManagedApiKeysRaw();
+    const keys = await getManagedApiKeysRaw({ suppressErrors: true });
     const idx = keys.findIndex((k) => k.id === keyId);
     if (idx === -1) return;
     keys[idx].lastUsedAt = new Date().toISOString();
@@ -2226,7 +2260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!checkBasicAuthAdmin(req, res)) return;
 
       const keyId = req.params.id;
-      const keys = await getManagedApiKeys();
+      const keys = await getManagedApiKeysRaw();
       const keyIndex = keys.findIndex((k) => k.id === keyId);
 
       if (keyIndex === -1) {
@@ -2321,7 +2355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!checkBasicAuthAdmin(req, res)) return;
 
       const keyId = req.params.id;
-      const keys = await getManagedApiKeys();
+      const keys = await getManagedApiKeysRaw();
       const keyIndex = keys.findIndex((k) => k.id === keyId);
 
       if (keyIndex === -1) {

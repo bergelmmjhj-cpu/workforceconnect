@@ -57,16 +57,16 @@ function list_keys() {
     
     echo -e "${GREEN}✅ Found $count API key(s)${NC}\n"
     
-    echo "$response" | jq -r '.data[] | 
-      "  Name: \(.name)\n" +
-      "  ID: \(.id)\n" +
-      "  Status: \(if .revokedAt then "🚫 REVOKED" else "✅ ACTIVE" end)\n" +
-      "  Prefix: \(.prefix)\n" +
-      "  Scopes: \(if (.scopes | length) > 0 then .scopes | join(\", \") else \"(none)\" end)\n" +
-      "  Created: \(.createdAt)\n" +
-      (if .lastUsedAt then "  Last used: \(.lastUsedAt)\n" else "" end) +
-      (if .revokedAt then "  Revoked: \(.revokedAt)\n" else "" end) +
-      "---\n"'
+    echo "$response" | jq -r '.data[] |
+      "  Name: \(.name)",
+      "  ID: \(.id)",
+      "  Status: \((if .revokedAt then "REVOKED" else "ACTIVE" end))",
+      "  Prefix: \(.prefix)",
+      "  Scopes: \((if (.scopes | length) > 0 then (.scopes | join(", ")) else "(none)" end))",
+      "  Created: \(.createdAt)",
+      (if .lastUsedAt then "  Last used: \(.lastUsedAt)" else empty end),
+      (if .revokedAt then "  Revoked: \(.revokedAt)" else empty end),
+      "---"'
   else
     echo -e "${RED}❌ Error fetching keys:${NC}"
     echo "$response" | jq '.'
@@ -90,16 +90,28 @@ function grant_scope() {
     -u "$ADMIN_USER:$ADMIN_PASS" \
     "$API_BASE/api/admin/applications/api-keys")
   
-  # Find matching key
-  key_id=$(echo "$response" | jq -r ".data[] | select(.name == \"$key_name\") | .id" | head -1)
-  
-  if [ -z "$key_id" ]; then
+  local matches
+  matches=$(echo "$response" | jq -c --arg key_name "$key_name" '[.data[] | select(.name == $key_name and (.revokedAt | not))]')
+  local match_count
+  match_count=$(echo "$matches" | jq 'length')
+
+  if [ "$match_count" -eq 0 ]; then
     echo -e "${RED}❌ Key \"$key_name\" not found${NC}\n"
     echo "Available keys:"
     echo "$response" | jq -r '.data[] | "  - \(.name)"'
     echo
     return 1
   fi
+
+  if [ "$match_count" -gt 1 ]; then
+    echo -e "${RED}❌ Multiple active keys found with name \"$key_name\"${NC}"
+    echo "Use a unique key name before granting scope."
+    echo "$matches" | jq -r '.[] | "  - ID: \(.id) | Created: \(.createdAt)"'
+    echo
+    return 1
+  fi
+
+  key_id=$(echo "$matches" | jq -r '.[0].id')
   
   echo -e "${BLUE}💾 Granting scope \"$scope\" to key (ID: $key_id)...${NC}"
   
@@ -126,13 +138,13 @@ function grant_payroll() {
     -u "$ADMIN_USER:$ADMIN_PASS" \
     "$API_BASE/api/admin/applications/api-keys")
   
-  # Find Payroll key (case-insensitive, not revoked)
-  key=$(echo "$response" | jq '.data[] | select(
-    (.revokedAt | not) and 
+  # Find latest active Payroll key (case-insensitive, not revoked)
+  key=$(echo "$response" | jq -c '[.data[] | select(
+    (.revokedAt | not) and
     (.name | ascii_downcase | (contains("payroll") or contains("sync")))
-  ) | . ' | head -20)
-  
-  if [ -z "$key" ]; then
+  )] | sort_by(.createdAt) | last')
+
+  if [ -z "$key" ] || [ "$key" = "null" ]; then
     echo -e "${RED}❌ Could not find active Payroll key${NC}\n"
     echo "Available active keys:"
     echo "$response" | jq -r '.data[] | select(.revokedAt | not) | "  - \(.name)"'

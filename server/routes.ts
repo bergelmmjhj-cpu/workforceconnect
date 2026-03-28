@@ -408,6 +408,12 @@ function mapApplicationForSync(application: typeof workerApplications.$inferSele
       applying_for: workerType,
       is_active: isActive,
       active: isActive,
+      payment_method: application.paymentMethod,
+      bank_name: application.bankName,
+      bank_institution: application.bankInstitution,
+      bank_transit: application.bankTransit,
+      bank_account: application.bankAccount,
+      etransfer_email: application.etransferEmail,
       notes: application.notes,
     },
   };

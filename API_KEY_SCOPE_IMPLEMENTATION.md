@@ -115,6 +115,53 @@ Retrieve all worker applications (list view)
 }
 ```
 
+### GET /api/applications
+Retrieve integration-friendly worker payloads for sync consumers.
+
+**Auth supported:**
+1. **Bearer token** (configured API key)
+
+**Optional query params:**
+- `status`: `pending` | `reviewed` | `approved` | `rejected`
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "worker-app-123",
+      "status": "approved",
+      "full_name": "Jane Worker",
+      "first_name": "Jane",
+      "last_name": "Worker",
+      "email": "jane@example.com",
+      "phone": "+1-416-555-0101",
+      "address": "123 Main St",
+      "city": "Toronto",
+      "province": "ON",
+      "province_code": "ON",
+      "worker_type": "Housekeeper",
+      "applying_for": "Housekeeper",
+      "is_active": true,
+      "active": true,
+      "payment_method": "both",
+      "bank_name": "TD Canada Trust",
+      "bank_institution": "004",
+      "bank_transit": "12345",
+      "bank_account": "1234567",
+      "etransfer_email": "pay@example.com",
+      "notes": null
+    }
+  ],
+  "skipped_missing_identity": 0
+}
+```
+
+**Notes:**
+- Field names are snake_case for integration stability.
+- Payment fields are included when captured on the application record.
+- Missing optional fields are returned as `null`.
+
 ---
 
 ### Endpoint Reference

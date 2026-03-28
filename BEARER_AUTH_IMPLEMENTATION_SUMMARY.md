@@ -277,6 +277,53 @@ Response 401 (Invalid credentials):
 }
 ```
 
+#### Integration Sync Payload (Bearer auth)
+```http
+GET /api/applications
+
+Authorization: Bearer wfc_12345678_abc123def456
+```
+
+Optional query:
+- `status=pending|reviewed|approved|rejected`
+
+Response 200:
+```json
+{
+  "data": [
+    {
+      "id": "worker-app-123",
+      "status": "approved",
+      "full_name": "Jane Worker",
+      "first_name": "Jane",
+      "last_name": "Worker",
+      "email": "jane@example.com",
+      "phone": "+1-416-555-0101",
+      "address": "123 Main St",
+      "city": "Toronto",
+      "province": "ON",
+      "province_code": "ON",
+      "worker_type": "Housekeeper",
+      "applying_for": "Housekeeper",
+      "is_active": true,
+      "active": true,
+      "payment_method": "both",
+      "bank_name": "TD Canada Trust",
+      "bank_institution": "004",
+      "bank_transit": "12345",
+      "bank_account": "1234567",
+      "etransfer_email": "pay@example.com",
+      "notes": null
+    }
+  ],
+  "skipped_missing_identity": 0
+}
+```
+
+Endpoint behavior notes:
+- `/api/admin/applications` returns the full application row model (plus name aliases) and supports Bearer, Basic, or Session auth.
+- `/api/applications` returns a mapped integration payload with snake_case keys and supports Bearer auth.
+
 ## Deployment Instructions
 
 ### Prerequisites

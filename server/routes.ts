@@ -2140,184 +2140,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single worker application
-  app.get("/api/admin/applications/:id", async (req: Request, res: Response) => {
-    try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
-
-      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id));
-      
-      if (!application) {
-        res.status(404).json({ error: "Application not found" });
-        return;
-      }
-
-      res.json(application);
-    } catch (error) {
-      console.error("Error fetching application:", error);
-      res.status(500).json({ error: "Failed to fetch application" });
-    }
-  });
-
-  // Update application status
-  app.patch("/api/admin/applications/:id", async (req: Request, res: Response) => {
-    try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
-
-      const { status, notes } = req.body;
-
-      const [updatedApplication] = await db.update(workerApplications)
-        .set({
-          status,
-          notes,
-          reviewedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(workerApplications.id, req.params.id))
-        .returning();
-
-      if (!updatedApplication) {
-        res.status(404).json({ error: "Application not found" });
-        return;
-      }
-
-      if (status === "approved" && updatedApplication.email) {
-        try {
-          const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, updatedApplication.email.toLowerCase())).limit(1);
-
-          if (existingUser) {
-            const updateData: any = { 
-              onboardingStatus: "AGREEMENT_PENDING",
-              updatedAt: new Date()
-            };
-            if (updatedApplication.phone) {
-              updateData.phone = updatedApplication.phone;
-            }
-            await db.update(users)
-              .set(updateData)
-              .where(eq(users.id, existingUser.id));
-            console.log(`[APPROVAL] Updated existing user ${updatedApplication.email} to AGREEMENT_PENDING`);
-          } else {
-            if (updatedApplication.phone) {
-              const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.phone, updatedApplication.phone)).limit(1);
-              if (phoneDuplicate) {
-                res.status(409).json({ error: `A worker with phone ${updatedApplication.phone} already exists.` });
-                return;
-              }
-            }
-
-            const fullNameToUse = updatedApplication.fullName || "Worker";
-            const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.fullName, fullNameToUse)).limit(1);
-            if (fullNameDuplicate) {
-              res.status(409).json({ error: `A worker named "${fullNameToUse}" already exists.` });
-              return;
-            }
-
-            const firstName = fullNameToUse.split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
-            const phoneLast4 = (updatedApplication.phone || "0000").replace(/\D/g, "").slice(-4);
-            const tempPassword = `${firstName}${phoneLast4}`;
-            const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-            await db.insert(users).values({
-              id: crypto.randomUUID(),
-              email: updatedApplication.email.toLowerCase(),
-              password: hashedPassword,
-              fullName: fullNameToUse,
-              role: "worker",
-              phone: updatedApplication.phone || undefined,
-              isActive: true,
-              onboardingStatus: "AGREEMENT_PENDING",
-              workerRoles: updatedApplication.preferredRoles || undefined,
-              mustChangePassword: true,
-              timezone: "America/Toronto",
-            });
-            console.log(`[APPROVAL] Created user account for ${updatedApplication.email}`);
-
-            if (updatedApplication.phone) {
-              try {
-                const smsMessage = `Welcome to WFConnect! Your application has been approved. Download the app and log in with:\nEmail: ${updatedApplication.email}\nPassword: ${tempPassword}\nPlease change your password after first login.`;
-                await sendSMS(updatedApplication.phone, smsMessage);
-                console.log(`[APPROVAL] Welcome SMS sent to ${updatedApplication.phone}`);
-              } catch (smsError) {
-                console.error("[APPROVAL] Failed to send welcome SMS:", smsError);
-              }
-            }
-          }
-        } catch (linkError) {
-          console.error("Failed to create/update user on approval:", linkError);
-        }
-      }
-
-      res.json(updatedApplication);
-    } catch (error) {
-      console.error("Error updating application:", error);
-      res.status(500).json({ error: "Failed to update application" });
-    }
-  });
-
-  // Delete worker application
-  app.delete("/api/admin/applications/:id", async (req: Request, res: Response) => {
-    try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
-
-      const [deletedApplication] = await db.delete(workerApplications)
-        .where(eq(workerApplications.id, req.params.id))
-        .returning();
-
-      if (!deletedApplication) {
-        res.status(404).json({ error: "Application not found" });
-        return;
-      }
-
-      res.json({ success: true, message: "Application deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting application:", error);
-      res.status(500).json({ error: "Failed to delete application" });
-    }
-  });
-
   // API Key Management endpoints
   app.get("/api/admin/applications/api-keys", async (req: Request, res: Response) => {
     try {
@@ -2517,6 +2339,184 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error revoking API key:", error);
       res.status(500).json({ error: "Failed to revoke API key" });
+    }
+  });
+
+  // Get single worker application
+  app.get("/api/admin/applications/:id", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id));
+      
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      res.json(application);
+    } catch (error) {
+      console.error("Error fetching application:", error);
+      res.status(500).json({ error: "Failed to fetch application" });
+    }
+  });
+
+  // Update application status
+  app.patch("/api/admin/applications/:id", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const { status, notes } = req.body;
+
+      const [updatedApplication] = await db.update(workerApplications)
+        .set({
+          status,
+          notes,
+          reviewedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(workerApplications.id, req.params.id))
+        .returning();
+
+      if (!updatedApplication) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      if (status === "approved" && updatedApplication.email) {
+        try {
+          const [existingUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, updatedApplication.email.toLowerCase())).limit(1);
+
+          if (existingUser) {
+            const updateData: any = { 
+              onboardingStatus: "AGREEMENT_PENDING",
+              updatedAt: new Date()
+            };
+            if (updatedApplication.phone) {
+              updateData.phone = updatedApplication.phone;
+            }
+            await db.update(users)
+              .set(updateData)
+              .where(eq(users.id, existingUser.id));
+            console.log(`[APPROVAL] Updated existing user ${updatedApplication.email} to AGREEMENT_PENDING`);
+          } else {
+            if (updatedApplication.phone) {
+              const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.phone, updatedApplication.phone)).limit(1);
+              if (phoneDuplicate) {
+                res.status(409).json({ error: `A worker with phone ${updatedApplication.phone} already exists.` });
+                return;
+              }
+            }
+
+            const fullNameToUse = updatedApplication.fullName || "Worker";
+            const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq(users.fullName, fullNameToUse)).limit(1);
+            if (fullNameDuplicate) {
+              res.status(409).json({ error: `A worker named "${fullNameToUse}" already exists.` });
+              return;
+            }
+
+            const firstName = fullNameToUse.split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+            const phoneLast4 = (updatedApplication.phone || "0000").replace(/\D/g, "").slice(-4);
+            const tempPassword = `${firstName}${phoneLast4}`;
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+            await db.insert(users).values({
+              id: crypto.randomUUID(),
+              email: updatedApplication.email.toLowerCase(),
+              password: hashedPassword,
+              fullName: fullNameToUse,
+              role: "worker",
+              phone: updatedApplication.phone || undefined,
+              isActive: true,
+              onboardingStatus: "AGREEMENT_PENDING",
+              workerRoles: updatedApplication.preferredRoles || undefined,
+              mustChangePassword: true,
+              timezone: "America/Toronto",
+            });
+            console.log(`[APPROVAL] Created user account for ${updatedApplication.email}`);
+
+            if (updatedApplication.phone) {
+              try {
+                const smsMessage = `Welcome to WFConnect! Your application has been approved. Download the app and log in with:\nEmail: ${updatedApplication.email}\nPassword: ${tempPassword}\nPlease change your password after first login.`;
+                await sendSMS(updatedApplication.phone, smsMessage);
+                console.log(`[APPROVAL] Welcome SMS sent to ${updatedApplication.phone}`);
+              } catch (smsError) {
+                console.error("[APPROVAL] Failed to send welcome SMS:", smsError);
+              }
+            }
+          }
+        } catch (linkError) {
+          console.error("Failed to create/update user on approval:", linkError);
+        }
+      }
+
+      res.json(updatedApplication);
+    } catch (error) {
+      console.error("Error updating application:", error);
+      res.status(500).json({ error: "Failed to update application" });
+    }
+  });
+
+  // Delete worker application
+  app.delete("/api/admin/applications/:id", async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith("Basic ")) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const base64Credentials = authHeader.split(" ")[1];
+      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+      const [username, password] = credentials.split(":");
+
+      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+        res.status(401).json({ error: "Invalid credentials" });
+        return;
+      }
+
+      const [deletedApplication] = await db.delete(workerApplications)
+        .where(eq(workerApplications.id, req.params.id))
+        .returning();
+
+      if (!deletedApplication) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+
+      res.json({ success: true, message: "Application deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      res.status(500).json({ error: "Failed to delete application" });
     }
   });
 

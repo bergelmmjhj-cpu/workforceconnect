@@ -358,26 +358,6 @@ function parsePreferredWorkerType(preferredRoles: string | null, workStatus: str
   return workStatus?.trim() || null;
 }
 
-function checkApplicationsApiKey(req: Request, res: Response, next: () => void): void {
-  res.type("application/json");
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  const apiKey = authHeader.slice("Bearer ".length).trim();
-  const configuredKeys = getConfiguredApiKeys();
-
-  if (!apiKey || configuredKeys.length === 0 || !configuredKeys.includes(apiKey)) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  next();
-}
-
 // API Key Manager Helpers
 function hashApiKey(key: string): string {
   return crypto.createHash("sha256").update(key).digest("hex");
@@ -389,10 +369,13 @@ function generateApiKeyPrefix(): string {
   return `wfc_${timestamp}_${random}`.substring(0, 32);
 }
 
-async function getManagedApiKeys(): Promise<Array<{
+// Internal: returns full records including hash and scopes
+async function getManagedApiKeysRaw(): Promise<Array<{
   id: string;
   name: string;
   prefix: string;
+  hash: string;
+  scopes: string[];
   createdAt: string;
   createdBy: string;
   lastUsedAt: string | null;
@@ -409,6 +392,21 @@ async function getManagedApiKeys(): Promise<Array<{
   } catch {
     return [];
   }
+}
+
+async function getManagedApiKeys(): Promise<Array<{
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  createdAt: string;
+  createdBy: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  revokedBy: string | null;
+}>> {
+  const raw = await getManagedApiKeysRaw();
+  return raw.map(({ hash: _hash, ...rest }) => ({ ...rest, scopes: rest.scopes ?? [] }));
 }
 
 async function saveManagedApiKeys(keys: any[]): Promise<void> {
@@ -428,6 +426,83 @@ async function saveManagedApiKeys(keys: any[]): Promise<void> {
       description: "Managed API keys for Payroll sync",
     });
   }
+}
+
+// Fire-and-forget: update lastUsedAt for a managed key after successful auth
+async function updateManagedKeyLastUsed(keyId: string): Promise<void> {
+  try {
+    const keys = await getManagedApiKeysRaw();
+    const idx = keys.findIndex((k) => k.id === keyId);
+    if (idx === -1) return;
+    keys[idx].lastUsedAt = new Date().toISOString();
+    await saveManagedApiKeys(keys);
+  } catch {
+    // Non-critical
+  }
+}
+
+// Middleware: validates Bearer API key. Falls through to next() when no Bearer header is present.
+// Returns 401 immediately for invalid Bearer token. On success, sets req.apiKeyScopes and req.apiKeyId.
+async function tryBearerApiKey(req: Request, res: Response, next: () => void): Promise<void> {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.slice("Bearer ".length).trim();
+  if (!token) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  // 1. Env-var configured keys (plaintext compare, wildcard scopes)
+  const configuredKeys = getConfiguredApiKeys();
+  if (configuredKeys.includes(token)) {
+    (req as any).apiKeyScopes = ["*"];
+    return next();
+  }
+
+  // 2. Managed DB keys (SHA-256 hash compare)
+  try {
+    const tokenHash = hashApiKey(token);
+    const managedKeys = await getManagedApiKeysRaw();
+    const matched = managedKeys.find((k) => k.hash === tokenHash && !k.revokedAt);
+
+    if (!matched) {
+      res.status(401).json({ error: "Invalid or revoked API key" });
+      return;
+    }
+
+    (req as any).apiKeyId = matched.id;
+    (req as any).apiKeyScopes = matched.scopes ?? [];
+    updateManagedKeyLastUsed(matched.id).catch(() => {});
+    return next();
+  } catch (err) {
+    console.error("[tryBearerApiKey] DB error", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// Kept for existing routes that use it (env-var keys only)
+function checkApplicationsApiKey(req: Request, res: Response, next: () => void): void {
+  res.type("application/json");
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const apiKey = authHeader.slice("Bearer ".length).trim();
+  const configuredKeys = getConfiguredApiKeys();
+
+  if (!apiKey || configuredKeys.length === 0 || !configuredKeys.includes(apiKey)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  next();
 }
 
 function checkBasicAuthAdmin(req: Request, res: Response): boolean {
@@ -2019,27 +2094,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all worker applications (admin only with basic auth)
-  app.get("/api/admin/applications", async (req: Request, res: Response) => {
+  // Get all worker applications (supports Bearer API key, Basic auth, or session cookie)
+  app.get("/api/admin/applications", tryBearerApiKey, async (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
+      const apiKeyScopes: string[] | undefined = (req as any).apiKeyScopes;
 
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
+      if (apiKeyScopes !== undefined) {
+        // Path 1: Bearer API key — enforce scope
+        if (!apiKeyScopes.includes("applications:read") && !apiKeyScopes.includes("*")) {
+          res.status(403).json({
+            error: "API key missing required scope: applications:read",
+            required_scope: "applications:read",
+            your_scopes: apiKeyScopes,
+          });
+          return;
+        }
+      } else {
+        const authHeader = req.headers.authorization;
 
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
+        if (authHeader && authHeader.startsWith("Basic ")) {
+          // Path 2: Basic Auth (existing admin browser behaviour — unchanged)
+          const base64Credentials = authHeader.split(" ")[1];
+          const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+          const [username, password] = credentials.split(":");
+
+          if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+            res.status(401).json({ error: "Invalid credentials" });
+            return;
+          }
+        } else {
+          // Path 3: Session cookie (admin/hr roles)
+          const session = parseSessionCookie(req);
+          if (!session || !["admin", "hr"].includes(session.role)) {
+            res.status(401).json({ error: "Authentication required" });
+            return;
+          }
+        }
       }
 
       const applications = await db.select().from(workerApplications).orderBy(desc(workerApplications.createdAt));
-      res.json(applications);
+      res.setHeader("Content-Type", "application/json");
+      res.json({ data: applications, total: applications.length });
     } catch (error) {
       console.error("Error fetching applications:", error);
       res.status(500).json({ error: "Failed to fetch applications" });
@@ -2234,6 +2329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: key.id,
         name: key.name,
         prefix: key.prefix,
+        scopes: key.scopes ?? [],
         createdAt: key.createdAt,
         createdBy: key.createdBy,
         lastUsedAt: key.lastUsedAt,
@@ -2252,13 +2348,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!checkBasicAuthAdmin(req, res)) return;
 
-      const { name } = req.body;
+      const { name, scopes } = req.body;
       if (!name || typeof name !== "string" || name.trim().length === 0) {
         res.status(400).json({ error: "Key name is required" });
         return;
       }
 
-      const keys = await getManagedApiKeys();
+      const keyScopes: string[] = Array.isArray(scopes)
+        ? scopes.filter((s: unknown) => typeof s === "string")
+        : [];
+
+      const keys = await getManagedApiKeysRaw();
       if (keys.some((k) => k.name === name.trim())) {
         res.status(409).json({ error: "Key name already exists" });
         return;
@@ -2274,6 +2374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: name.trim(),
         prefix: plaintextKey.substring(0, 12),
         hash: hashedKey,
+        scopes: keyScopes,
         createdAt: now,
         createdBy: "admin",
         lastUsedAt: null,
@@ -2288,6 +2389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: keyId,
         name: newKey.name,
         prefix: newKey.prefix,
+        scopes: newKey.scopes,
         plaintext: plaintextKey,
         createdAt: now,
         message: "Save this key securely. You won't be able to see it again.",
@@ -2328,6 +2430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: oldKey.name,
         prefix: plaintextKey.substring(0, 12),
         hash: hashedKey,
+        scopes: (oldKey as any).scopes ?? [],
         createdAt: now,
         createdBy: "admin",
         lastUsedAt: null,
@@ -2350,6 +2453,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rotating API key:", error);
       res.status(500).json({ error: "Failed to rotate API key" });
+    }
+  });
+
+  app.patch("/api/admin/applications/api-keys/:id/scopes", async (req: Request, res: Response) => {
+    try {
+      if (!checkBasicAuthAdmin(req, res)) return;
+
+      const keyId = req.params.id;
+      const { scopes } = req.body;
+
+      if (!Array.isArray(scopes) || scopes.some((s: unknown) => typeof s !== "string")) {
+        res.status(400).json({ error: "scopes must be an array of strings" });
+        return;
+      }
+
+      const keys = await getManagedApiKeysRaw();
+      const keyIndex = keys.findIndex((k) => k.id === keyId);
+
+      if (keyIndex === -1) {
+        res.status(404).json({ error: "Key not found" });
+        return;
+      }
+
+      if (keys[keyIndex].revokedAt) {
+        res.status(409).json({ error: "Cannot update scopes on a revoked key" });
+        return;
+      }
+
+      keys[keyIndex].scopes = scopes;
+      await saveManagedApiKeys(keys);
+
+      res.json({
+        id: keyId,
+        scopes: keys[keyIndex].scopes,
+        message: "Scopes updated successfully",
+      });
+    } catch (error) {
+      console.error("Error updating API key scopes:", error);
+      res.status(500).json({ error: "Failed to update API key scopes" });
     }
   });
 

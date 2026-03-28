@@ -105,7 +105,7 @@ curl -s -X GET -u wfconnect:@2255Dundaswest \
 
 ```bash
 # 1. Get the plaintext key value (check from creation or contact admin)
-PAYROLL_KEY="wfckey_your_actual_key_here"
+PAYROLL_KEY="wfc_your_actual_key_here"
 
 # 2. Test Bearer auth - should get 200 with applications list
 curl -s -X GET \
@@ -137,7 +137,7 @@ curl -s -X GET \
 
 1. **Update Payroll Manager** to use the Bearer token:
    ```javascript
-   const payrollApiKey = 'wfckey_xxxxxxxxxxxxx';
+   const payrollApiKey = 'wfc_xxxxxxxxxxxxx';
    
    async function syncApplications() {
      const response = await fetch('https://guide.wfconnect.org/api/admin/applications', {
@@ -159,7 +159,7 @@ curl -s -X GET \
 2. **Store key securely** in Payroll Manager environment:
    ```env
    WORKFORCE_CONNECT_API=https://guide.wfconnect.org
-   PAYROLL_API_KEY=wfckey_xxxxxxxxxxxxx
+   PAYROLL_API_KEY=wfc_xxxxxxxxxxxxx
    ```
 
 3. **Test integrated sync** process
@@ -184,7 +184,7 @@ The Payroll API key is stored as a JSON object in the `app_config` table:
 {
   "id": "a1b2c3d4-e5f6-7g8h-9i0j-k1l2m3n4o5p6",
   "name": "Payroll Sync Manager",
-  "prefix": "wfckey_12345678",
+  "prefix": "wfc_12345678",
   "hash": "sha256(plaintext_key_here)",
   "scopes": ["applications:read"],
   "createdAt": "2024-12-14T08:00:00Z",
@@ -221,7 +221,7 @@ The Payroll API key is stored as a JSON object in the `app_config` table:
 
 ### Bearer token returns 401
 - **Cause:** Invalid token format
-- **Fix:** Verify plaintext key starts with `wfckey_`
+- **Fix:** Verify plaintext key starts with `wfc_`
 
 ## Reference Documentation
 

@@ -80,7 +80,7 @@ curl -s -X POST \
 **Test Bearer token authentication:**
 ```bash
 curl -s -X GET \
-  -H "Authorization: Bearer wfckey_xxxxxxxxxxxxxxxx" \
+  -H "Authorization: Bearer wfc_xxxxxxxxxxxxxxxx" \
   https://guide.wfconnect.org/api/admin/applications | jq '.[] | {id, status, createdAt}' | head -20
 ```
 
@@ -99,7 +99,7 @@ curl -s -X POST \
 
 # Try to use it (replace with plaintext from response)
 curl -s -X GET \
-  -H "Authorization: Bearer wfckey_zzzzzzzzzzzzzz" \
+  -H "Authorization: Bearer wfc_zzzzzzzzzzzzzz" \
   https://guide.wfconnect.org/api/admin/applications
 ```
 
@@ -180,7 +180,7 @@ Once scope is granted:
 
 2. **Configure in Environment:**
    ```
-   PAYROLL_API_KEY=wfckey_xxxxxxxxxxxxx
+   PAYROLL_API_KEY=wfc_xxxxxxxxxxxxx
    WORKFORCE_CONNECT_API=https://guide.wfconnect.org
    ```
 

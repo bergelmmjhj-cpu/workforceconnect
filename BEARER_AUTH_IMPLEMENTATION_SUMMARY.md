@@ -42,7 +42,7 @@ api_keys_managed (stored as JSON in app_config table):
   {
     id: "uuid",
     name: "Payroll Sync",
-    prefix: "wfckey_12345678",
+    prefix: "wfc_12345678",
     hash: "sha256_hash_of_plaintext_key",
     scopes: ["applications:read"],
     createdAt: "ISO8601",
@@ -159,7 +159,7 @@ Response 200:
     {
       "id": "uuid",
       "name": "Payroll Sync",
-      "prefix": "wfckey_12345678",
+      "prefix": "wfc_12345678",
       "scopes": ["applications:read"],
       "createdAt": "2024-12-14T10:00:00Z",
       "createdBy": "admin",
@@ -187,8 +187,8 @@ Response 201:
 {
   "id": "uuid",
   "name": "Payroll Sync",
-  "prefix": "wfckey_12345678",
-  "plaintext": "wfckey_12345678_abc123def456",
+  "prefix": "wfc_12345678",
+  "plaintext": "wfc_12345678_abc123def456",
   "scopes": ["applications:read"],
   "createdAt": "2024-12-14T10:00:00Z",
   "message": "Save this key securely. You won't be able to see it again."
@@ -224,8 +224,8 @@ Response 200:
 {
   "id": "new_uuid",
   "name": "Payroll Sync",
-  "prefix": "wfckey_87654321",
-  "plaintext": "wfckey_87654321_xyz789uvw012",
+  "prefix": "wfc_87654321",
+  "plaintext": "wfc_87654321_xyz789uvw012",
   "createdAt": "2024-12-14T10:05:00Z",
   "message": "Key rotated successfully. Save the new key securely."
 }
@@ -250,7 +250,7 @@ Response 200:
 ```http
 GET /api/admin/applications
 
-Authorization: Bearer wfckey_12345678_abc123def456
+Authorization: Bearer wfc_12345678_abc123def456
 (or) Authorization: Basic wfconnect:@2255Dundaswest
 (or) [Session cookie]
 
@@ -324,7 +324,7 @@ curl -X PATCH -u wfconnect:@2255Dundaswest \
 ### Step 4: Test Bearer Auth
 ```bash
 # Get Payroll key from step 3
-PAYROLL_KEY="wfckey_12345678_abc123def456"
+PAYROLL_KEY="wfc_12345678_abc123def456"
 
 # Should return 200 with applications list
 curl -H "Authorization: Bearer $PAYROLL_KEY" \
@@ -334,7 +334,7 @@ curl -H "Authorization: Bearer $PAYROLL_KEY" \
 ### Step 5: Configure Payroll Manager
 ```javascript
 // In Payroll Manager integration
-const PAYROLL_API_KEY = 'wfckey_12345678_abc123def456';
+const PAYROLL_API_KEY = 'wfc_12345678_abc123def456';
 const API_BASE = 'https://guide.wfconnect.org';
 
 // Fetch applications with Bearer auth

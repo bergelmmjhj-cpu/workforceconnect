@@ -400,7 +400,7 @@ async function getManagedApiKeysRaw(options?: { suppressErrors?: boolean }): Pro
     if (!config || !config.value) return [];
     const parsed = JSON.parse(config.value);
     if (!Array.isArray(parsed)) {
-      return [];
+      throw new Error("api_keys_managed is not an array");
     }
 
     const normalized: ManagedApiKeyRecord[] = parsed.map((raw: any) => ({
@@ -513,8 +513,8 @@ async function tryBearerApiKey(req: Request, res: Response, next: () => void): P
     updateManagedKeyLastUsed(matched.id).catch(() => {});
     return next();
   } catch (err) {
-    console.error("[tryBearerApiKey] DB error", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("[tryBearerApiKey] key-store error", err);
+    res.status(500).json({ error: "API key store unavailable" });
   }
 }
 

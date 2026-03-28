@@ -182,7 +182,7 @@ curl -s -X GET -u wfconnect:@2255Dundaswest \
   jq '.data[] | select(.name | contains("Payroll")) | {name, scopes}'
 
 # 4. Test Bearer auth
-PAYROLL_KEY="wfckey_your_actual_key"
+PAYROLL_KEY="wfc_your_actual_key"
 curl -H "Authorization: Bearer $PAYROLL_KEY" \
   https://guide.wfconnect.org/api/admin/applications | jq '.[0:2]'
 ```

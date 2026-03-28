@@ -321,6 +321,98 @@ function clearSessionCookie(res: Response): void {
 
 const WORKER_APPLICATION_STATUSES = new Set(["pending", "reviewed", "approved", "rejected"]);
 
+type WorkerIdentity = {
+  workerName: string | null;
+  fullName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  hasIdentity: boolean;
+};
+
+function normalizeText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function splitName(fullName: string): { firstName: string | null; lastName: string | null } {
+  const [firstName = "", ...lastNameParts] = fullName.split(/\s+/).filter(Boolean);
+  return {
+    firstName: firstName || null,
+    lastName: lastNameParts.join(" ") || null,
+  };
+}
+
+function resolveWorkerIdentity(input: {
+  fullName?: unknown;
+  firstName?: unknown;
+  lastName?: unknown;
+  email?: unknown;
+  phone?: unknown;
+}): WorkerIdentity {
+  const normalizedFullName = normalizeText(input.fullName);
+  const normalizedFirstName = normalizeText(input.firstName);
+  const normalizedLastName = normalizeText(input.lastName);
+  const structuredName = normalizeText(`${normalizedFirstName || ""} ${normalizedLastName || ""}`);
+  const fallbackEmail = normalizeText(input.email);
+  const fallbackPhone = normalizeText(input.phone);
+
+  const workerName = normalizedFullName || structuredName || fallbackEmail || fallbackPhone || null;
+
+  let firstName = normalizedFirstName;
+  let lastName = normalizedLastName;
+
+  if (workerName && (!firstName || !lastName)) {
+    const split = splitName(workerName);
+    firstName = firstName || split.firstName;
+    lastName = lastName || split.lastName;
+  }
+
+  return {
+    workerName,
+    fullName: workerName,
+    firstName,
+    lastName,
+    hasIdentity: Boolean(workerName),
+  };
+}
+
+function mapApplicationForSync(application: typeof workerApplications.$inferSelect): {
+  identityResolved: boolean;
+  payload: Record<string, unknown>;
+} {
+  const identity = resolveWorkerIdentity({
+    fullName: application.fullName,
+    email: application.email,
+    phone: application.phone,
+  });
+
+  const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
+  const isActive = application.status === "approved";
+
+  return {
+    identityResolved: identity.hasIdentity,
+    payload: {
+      id: application.id,
+      status: application.status,
+      full_name: identity.fullName,
+      first_name: identity.firstName,
+      last_name: identity.lastName,
+      email: application.email,
+      phone: application.phone,
+      address: application.address,
+      city: application.city,
+      province: application.province,
+      province_code: application.province,
+      worker_type: workerType,
+      applying_for: workerType,
+      is_active: isActive,
+      active: isActive,
+      notes: application.notes,
+    },
+  };
+}
+
 function getConfiguredApiKeys(): string[] {
   const keys: string[] = [];
   const singleKey = process.env.WFCONNECT_API_KEY?.trim();
@@ -1942,9 +2034,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const userAgent = req.headers["user-agent"] || null;
+      const resolvedIdentity = resolveWorkerIdentity({
+        fullName: req.body?.fullName ?? req.body?.full_name,
+        firstName: req.body?.firstName ?? req.body?.first_name,
+        lastName: req.body?.lastName ?? req.body?.last_name,
+        email: req.body?.email,
+        phone: req.body?.phone,
+      });
+
+      if (!resolvedIdentity.fullName) {
+        res.status(400).json({ error: "Worker name is required" });
+        return;
+      }
 
       const applicationData = {
         ...req.body,
+        fullName: resolvedIdentity.fullName,
         ip,
         userAgent,
       };
@@ -1980,35 +2085,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .from(workerApplications)
           .orderBy(desc(workerApplications.createdAt));
 
-      const data = applications.map((application) => {
-        const normalizedFullName = (application.fullName || "").trim();
-        const [firstNamePart = "", ...lastNameParts] = normalizedFullName
-          .split(/\s+/)
-          .filter(Boolean);
-        const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
-        const isActive = application.status === "approved";
+      const mapped = applications.map(mapApplicationForSync);
+      const data = mapped
+        .filter((row) => row.identityResolved)
+        .map((row) => row.payload);
+      const skippedMissingIdentity = mapped.length - data.length;
 
-        return {
-          id: application.id,
-          status: application.status,
-          full_name: normalizedFullName || null,
-          first_name: firstNamePart || null,
-          last_name: lastNameParts.join(" ") || null,
-          email: application.email,
-          phone: application.phone,
-          address: application.address,
-          city: application.city,
-          province: application.province,
-          province_code: application.province,
-          worker_type: workerType,
-          applying_for: workerType,
-          is_active: isActive,
-          active: isActive,
-          notes: application.notes,
-        };
+      res.type("application/json").json({
+        data,
+        skipped_missing_identity: skippedMissingIdentity,
       });
-
-      res.type("application/json").json({ data });
     } catch (error) {
       console.error("Error fetching applications for API sync:", error);
       res.status(500).json({ error: "Failed to fetch applications" });
@@ -2032,38 +2118,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(workerApplications.status, statusFilter))
         .orderBy(desc(workerApplications.createdAt));
 
-      const workers = applications.map((application) => {
-        const normalizedFullName = (application.fullName || "").trim();
-        const [firstNamePart = "", ...lastNameParts] = normalizedFullName
-          .split(/\s+/)
-          .filter(Boolean);
-        const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
-        const isActive = application.status === "approved";
-
-        return {
-          id: application.id,
-          status: application.status,
-          full_name: normalizedFullName || null,
-          first_name: firstNamePart || null,
-          last_name: lastNameParts.join(" ") || null,
-          email: application.email,
-          phone: application.phone,
-          address: application.address,
-          city: application.city,
-          province: application.province,
-          province_code: application.province,
-          worker_type: workerType,
-          applying_for: workerType,
-          is_active: isActive,
-          active: isActive,
-          notes: application.notes,
-        };
-      });
+      const mapped = applications.map(mapApplicationForSync);
+      const workers = mapped
+        .filter((row) => row.identityResolved)
+        .map((row) => row.payload);
+      const skippedMissingIdentity = mapped.length - workers.length;
 
       res.type("application/json").json({
         success: true,
         status: statusFilter,
         total: workers.length,
+        skipped_missing_identity: skippedMissingIdentity,
         workers,
       });
     } catch (error) {
@@ -2088,38 +2153,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(workerApplications.status, statusFilter))
         .orderBy(desc(workerApplications.createdAt));
 
-      const workers = applications.map((application) => {
-        const normalizedFullName = (application.fullName || "").trim();
-        const [firstNamePart = "", ...lastNameParts] = normalizedFullName
-          .split(/\s+/)
-          .filter(Boolean);
-        const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
-        const isActive = application.status === "approved";
-
-        return {
-          id: application.id,
-          status: application.status,
-          full_name: normalizedFullName || null,
-          first_name: firstNamePart || null,
-          last_name: lastNameParts.join(" ") || null,
-          email: application.email,
-          phone: application.phone,
-          address: application.address,
-          city: application.city,
-          province: application.province,
-          province_code: application.province,
-          worker_type: workerType,
-          applying_for: workerType,
-          is_active: isActive,
-          active: isActive,
-          notes: application.notes,
-        };
-      });
+      const mapped = applications.map(mapApplicationForSync);
+      const workers = mapped
+        .filter((row) => row.identityResolved)
+        .map((row) => row.payload);
+      const skippedMissingIdentity = mapped.length - workers.length;
 
       res.type("application/json").json({
         success: true,
         status: statusFilter,
         total: workers.length,
+        skipped_missing_identity: skippedMissingIdentity,
         workers,
       });
     } catch (error) {
@@ -2167,7 +2211,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const applications = await db.select().from(workerApplications).orderBy(desc(workerApplications.createdAt));
-      res.json(applications);
+      const mappedApplications = applications.map((application) => {
+        const identity = resolveWorkerIdentity({
+          fullName: application.fullName,
+          email: application.email,
+          phone: application.phone,
+        });
+
+        return {
+          ...application,
+          fullName: identity.fullName,
+          full_name: identity.fullName,
+          first_name: identity.firstName,
+          last_name: identity.lastName,
+        };
+      });
+
+      res.json(mappedApplications);
     } catch (error) {
       console.error("Error fetching applications:", error);
       res.status(500).json({ error: "Failed to fetch applications" });
@@ -3258,11 +3318,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/applicants", async (req: Request, res: Response) => {
     try {
       const {
-        fullName, phone, addressFull, addressStreet, addressCity, addressProvince,
+        fullName: fullNameIn, phone, addressFull, addressStreet, addressCity, addressProvince,
         addressPostalCode, addressCountry, applyingFor, jobPostingSource,
         photoData: photoDataIn, photoFilename, photoMimeType, photoFileSize,
         resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize,
       } = req.body;
+
+      const resolvedIdentity = resolveWorkerIdentity({
+        fullName: fullNameIn ?? req.body?.full_name,
+        firstName: req.body?.firstName ?? req.body?.first_name,
+        lastName: req.body?.lastName ?? req.body?.last_name,
+        email: req.body?.email,
+        phone,
+      });
+      const fullName = resolvedIdentity.fullName;
 
       if (!fullName?.trim()) return res.status(400).json({ error: "Full name required" });
       if (!phone?.trim()) return res.status(400).json({ error: "Phone required" });

@@ -2133,8 +2133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const applications = await db.select().from(workerApplications).orderBy(desc(workerApplications.createdAt));
-      res.setHeader("Content-Type", "application/json");
-      res.json({ data: applications, total: applications.length });
+      res.json(applications);
     } catch (error) {
       console.error("Error fetching applications:", error);
       res.status(500).json({ error: "Failed to fetch applications" });

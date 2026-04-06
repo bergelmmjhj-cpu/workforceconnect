@@ -28,6 +28,7 @@ import { AddressAutocomplete, type AddressData } from "@/components/AddressAutoc
 import type { WorkerApplicationAddress } from "@/types";
 import { WORKER_ROLES } from "@/types";
 import { getErrorMessage } from "@/utils/errorHandler";
+import { WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION } from "../../shared/contractor-guide-content";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -235,6 +236,8 @@ export default function WorkerApplicationFormScreen() {
       await createWorkerApplication({
         workerId: user.id,
         source: "mobile_app",
+        agreementVersion: WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+        nonSolicitationAcknowledged: false,
         legalFirstName: formData.legalFirstName,
         legalLastName: formData.legalLastName,
         preferredName: formData.preferredName || undefined,

@@ -245,6 +245,11 @@ export const workerApplications = pgTable("worker_applications", {
   titoAcknowledgment: boolean("tito_acknowledgment").default(false),
   siteRulesAcknowledgment: boolean("site_rules_acknowledgment").default(false),
   workerAgreementConsent: boolean("worker_agreement_consent").default(false),
+  agreementVersion: text("agreement_version"),
+  nonSolicitationAcknowledged: boolean("non_solicitation_acknowledged"),
+  nonSolicitationAcknowledgedAt: timestamp("non_solicitation_acknowledged_at"),
+  workerPdfGeneratedAt: timestamp("worker_pdf_generated_at"),
+  internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
   privacyConsent: boolean("privacy_consent").default(false),
   marketingConsent: boolean("marketing_consent").default(false),
   

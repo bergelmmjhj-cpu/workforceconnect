@@ -384,6 +384,106 @@
         text-align: center;
         padding: 32px 0;
       }
+
+      .form-progress {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .progress-step {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 14px 16px;
+      }
+
+      .progress-step.active {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.08);
+      }
+
+      .progress-step-label {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 4px;
+      }
+
+      .progress-step.active .progress-step-label {
+        color: var(--primary);
+      }
+
+      .progress-step-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+
+      .form-page {
+        display: none;
+      }
+
+      .form-page.is-active {
+        display: block;
+      }
+
+      .page-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .secondary-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        padding: 14px 24px;
+        cursor: pointer;
+      }
+
+      .secondary-btn:hover {
+        background: var(--background);
+      }
+
+      .clause-card {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      }
+
+      .clause-title {
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1.2;
+        margin-bottom: 12px;
+      }
+
+      .clause-intro {
+        color: var(--text-secondary);
+        font-size: 15px;
+        margin-bottom: 20px;
+      }
+
+      .clause-paragraph {
+        font-size: 15px;
+        line-height: 1.7;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+      }
+
+      .clause-acknowledgment {
+        margin-top: 24px;
+        padding: 18px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #ffffff;
+      }
       
       .submit-btn {
         display: inline-block;
@@ -575,7 +675,19 @@
         </p>
       </div>
 
+      <div class="form-progress" aria-label="Application progress">
+        <div class="progress-step active" id="progressStep1">
+          <div class="progress-step-label">Page 1 of 2</div>
+          <div class="progress-step-title">Contractor Application</div>
+        </div>
+        <div class="progress-step" id="progressStep2">
+          <div class="progress-step-label">Page 2 of 2</div>
+          <div class="progress-step-title">Non-Solicitation Clause</div>
+        </div>
+      </div>
+
       <form id="applicationForm" novalidate>
+        <div class="form-page is-active" id="formPage1">
         <!-- Section A: Personal Details -->
         <section class="form-section">
           <h2 class="section-title">A. Personal Details</h2>
@@ -1028,12 +1140,35 @@
           </div>
         </section>
 
-        <!-- Submit Section -->
         <div class="submit-section">
-          <button type="submit" class="submit-btn" id="submitBtn">
-            Submit Application
+          <button type="button" class="submit-btn" id="nextPageBtn">
+            Continue to Clause Review
           </button>
-          <p class="submit-note">Your application will be reviewed by our HR team. We will contact you within 2-3 business days.</p>
+          <p class="submit-note">You will review the Non-Solicitation / Direct Hiring Clause on the next page before final submission.</p>
+        </div>
+        </div>
+
+        <div class="form-page" id="formPage2">
+          <section class="form-section clause-card">
+            <h2 class="clause-title">__NON_SOLICITATION_TITLE__</h2>
+            <p class="clause-intro">Review this clause carefully. Final submission is blocked until you acknowledge it.</p>
+            __NON_SOLICITATION_BODY__
+
+            <div class="clause-acknowledgment">
+              <label class="checkbox-item">
+                <input type="checkbox" name="nonSolicitationAcknowledged" id="nonSolicitationAcknowledged">
+                <span class="checkbox-label bold">I have read and agree to the Non-Solicitation / Direct Hiring Clause.</span>
+              </label>
+            </div>
+          </section>
+
+          <div class="submit-section">
+            <div class="page-actions">
+              <button type="button" class="secondary-btn" id="prevPageBtn">Back to Application</button>
+              <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
+            </div>
+            <p class="submit-note">Your application will be reviewed by our HR team. We will contact you within 2-3 business days.</p>
+          </div>
         </div>
       </form>
     </main>
@@ -1072,6 +1207,82 @@
 
       
 
+
+            function setActivePage(pageNumber) {
+              var page1 = document.getElementById('formPage1');
+              var page2 = document.getElementById('formPage2');
+              var step1 = document.getElementById('progressStep1');
+              var step2 = document.getElementById('progressStep2');
+
+              page1.classList.toggle('is-active', pageNumber === 1);
+              page2.classList.toggle('is-active', pageNumber === 2);
+              step1.classList.toggle('active', pageNumber === 1);
+              step2.classList.toggle('active', pageNumber === 2);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            function validateApplicationPage(form) {
+              var isValid = true;
+
+              form.querySelectorAll('.form-group.error').forEach(function(group) {
+                group.classList.remove('error');
+              });
+
+              form.querySelectorAll('input[required], select[required]').forEach(function(input) {
+                if (!input.value.trim()) {
+                  var group = input.closest('.form-group');
+                  if (group) {
+                    group.classList.add('error');
+                  }
+                  isValid = false;
+                }
+              });
+
+              var emailInput = form.querySelector('input[name="email"]');
+              if (emailInput.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value)) {
+                emailInput.closest('.form-group').classList.add('error');
+                isValid = false;
+              }
+
+              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'privacyConsent'].forEach(function(name) {
+                var checkbox = form.querySelector('input[name="' + name + '"]');
+                if (checkbox && !checkbox.checked) {
+                  isValid = false;
+                }
+              });
+
+              if (form.querySelectorAll('input[name="preferredRoles"]:checked').length === 0) {
+                isValid = false;
+              }
+
+              if (form.querySelectorAll('input[name="availableDays"]:checked').length === 0) {
+                isValid = false;
+              }
+
+              if (form.querySelectorAll('input[name="preferredShifts"]:checked').length === 0) {
+                isValid = false;
+              }
+
+              if (!form.querySelector('input[name="workStatus"]:checked')) {
+                isValid = false;
+              }
+
+              return isValid;
+            }
+
+            document.getElementById('nextPageBtn').addEventListener('click', function() {
+              var form = document.getElementById('applicationForm');
+              if (!validateApplicationPage(form)) {
+                alert('Please fill in all required fields before continuing.');
+                return;
+              }
+              setActivePage(2);
+            });
+
+            document.getElementById('prevPageBtn').addEventListener('click', function() {
+              setActivePage(1);
+            });
+
       // Show/hide "Other" role input
       document.querySelectorAll('input[name="preferredRoles"]').forEach(function(checkbox) {
         checkbox.addEventListener('change', function() {
@@ -1085,63 +1296,14 @@
         e.preventDefault();
         
         var form = e.target;
-        var isValid = true;
-        
-        // Clear previous errors
-        form.querySelectorAll('.form-group.error').forEach(function(group) {
-          group.classList.remove('error');
-        });
-        
-        // Validate required text inputs
-        form.querySelectorAll('input[required], select[required]').forEach(function(input) {
-          if (!input.value.trim()) {
-            input.closest('.form-group').classList.add('error');
-            isValid = false;
-          }
-        });
-        
-        // Validate email format
-        var emailInput = form.querySelector('input[name="email"]');
-        if (emailInput.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value)) {
-          emailInput.closest('.form-group').classList.add('error');
+        var isValid = validateApplicationPage(form);
+
+        if (!form.nonSolicitationAcknowledged.checked) {
           isValid = false;
         }
-        
-        // Validate required checkboxes
-        var requiredCheckboxes = ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'privacyConsent'];
-        requiredCheckboxes.forEach(function(name) {
-          var checkbox = form.querySelector('input[name="' + name + '"]');
-          if (checkbox && !checkbox.checked) {
-            isValid = false;
-          }
-        });
-        
-        // Validate at least one role is selected
-        var roleChecked = form.querySelectorAll('input[name="preferredRoles"]:checked').length > 0;
-        if (!roleChecked) {
-          isValid = false;
-        }
-        
-        // Validate at least one day is selected
-        var dayChecked = form.querySelectorAll('input[name="availableDays"]:checked').length > 0;
-        if (!dayChecked) {
-          isValid = false;
-        }
-        
-        // Validate at least one shift is selected
-        var shiftChecked = form.querySelectorAll('input[name="preferredShifts"]:checked').length > 0;
-        if (!shiftChecked) {
-          isValid = false;
-        }
-        
-        // Validate work status is selected
-        var workStatusSelected = form.querySelector('input[name="workStatus"]:checked');
-        if (!workStatusSelected) {
-          isValid = false;
-        }
-        
+
         if (!isValid) {
-          alert('Please fill in all required fields before submitting.');
+          alert('Please complete Page 1 and acknowledge the Non-Solicitation / Direct Hiring Clause before submitting.');
           return;
         }
         
@@ -1179,6 +1341,9 @@
           titoAcknowledgment: form.titoAcknowledgment.checked,
           siteRulesAcknowledgment: form.siteRulesAcknowledgment.checked,
           workerAgreementConsent: form.workerAgreementConsent.checked,
+          agreementVersion: 'v3.0',
+          nonSolicitationAcknowledged: form.nonSolicitationAcknowledged.checked,
+          nonSolicitationAcknowledgedAt: new Date().toISOString(),
           privacyConsent: form.privacyConsent.checked,
           marketingConsent: form.marketingConsent.checked,
           signature: form.signature.value,

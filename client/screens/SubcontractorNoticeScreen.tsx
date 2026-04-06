@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
@@ -11,6 +11,15 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius } from "@/constants/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
+import { acknowledgeWorkerNonSolicitation } from "@/storage";
+import { apiRequest } from "@/lib/query-client";
+import {
+  NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS,
+  NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
+  WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+} from "../../shared/contractor-guide-content";
 
 interface SectionProps {
   title: string;
@@ -26,29 +35,6 @@ function Section({ title, children }: SectionProps) {
         {title}
       </ThemedText>
       {children}
-    </View>
-  );
-}
-
-interface BulletPointProps {
-  children: string;
-  bold?: boolean;
-}
-
-function BulletPoint({ children, bold }: BulletPointProps) {
-  const { theme } = useTheme();
-
-  return (
-    <View style={styles.bulletRow}>
-      <ThemedText style={styles.bullet}>•</ThemedText>
-      <ThemedText
-        style={[
-          styles.bulletText,
-          bold && { fontWeight: "600", color: theme.text },
-        ]}
-      >
-        {children}
-      </ThemedText>
     </View>
   );
 }
@@ -89,16 +75,36 @@ function CheckboxRow({ checked, onToggle, label }: CheckboxRowProps) {
 
 export default function SubcontractorNoticeScreen() {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const { refreshOnboardingData } = useWorkerOnboarding();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const [readTerms, setReadTerms] = useState(false);
-  const [agreeToSubcontractor, setAgreeToSubcontractor] = useState(false);
+  const [agreeToClause, setAgreeToClause] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const canProceed = readTerms && agreeToSubcontractor;
+  const canProceed = agreeToClause;
 
-  const handleProceed = () => {
-    if (canProceed) {
+  const handleProceed = async () => {
+    if (!canProceed || !user) {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await acknowledgeWorkerNonSolicitation(user.id, WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
+      await refreshOnboardingData();
+
+      try {
+        await apiRequest("PATCH", "/api/agreements/me/non-solicitation", {});
+      } catch (syncError) {
+        console.error("Failed to sync non-solicitation acknowledgment:", syncError);
+      }
+
       rootNavigate("AgreementSigning");
+    } catch (error) {
+      Alert.alert("Unable to continue", "The clause acknowledgment could not be saved. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -123,180 +129,52 @@ export default function SubcontractorNoticeScreen() {
                 { backgroundColor: theme.warning + "20" },
               ]}
             >
-              <Feather name="alert-triangle" size={24} color={theme.warning} />
+              <Feather name="shield" size={22} color={theme.warning} />
             </View>
-            <ThemedText style={[styles.warningTitle, { color: theme.warning }]}>
-              IMPORTANT NOTICE
-            </ThemedText>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={[styles.warningTitle, { color: theme.warning }]}> 
+                Clause Acknowledgment Required
+              </ThemedText>
+              <ThemedText style={styles.warningSubtitle}>
+                {NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE}
+              </ThemedText>
+            </View>
           </View>
-          <ThemedText style={styles.warningSubtitle}>
-            Subcontractor Status & Payment Notice
-          </ThemedText>
           <ThemedText style={styles.warningText}>
-            Please read this section carefully before proceeding.
+            This acknowledgment must be completed before you can finish signing your subcontractor agreement.
           </ThemedText>
         </Card>
 
         <ThemedText style={styles.introText}>
-          All individuals providing services through Workforce Connect do so
-          strictly as independent subcontractors, not as employees. By
-          continuing, you acknowledge and agree to the terms below regarding
-          your work status and payment.
+          Review the exact clause below. The worker-facing PDF, internal company copy, and public web flow all use the same wording.
         </ThemedText>
 
-        <Section title="1. Work Status (Independent Subcontractor)">
-          <ThemedText style={styles.sectionText}>
-            All individuals providing services through Workforce Connect do so
-            as independent subcontractors.
-          </ThemedText>
-          <ThemedText style={[styles.sectionText, styles.emphasizedText]}>
-            This means:
-          </ThemedText>
-          <BulletPoint bold>You are NOT an employee</BulletPoint>
-          <BulletPoint bold>You are NOT on payroll</BulletPoint>
-          <BulletPoint>
-            You invoice Workforce Connect based on completed and approved work
-          </BulletPoint>
-
-          <ThemedText style={[styles.sectionText, styles.emphasizedText]}>
-            Because of this:
-          </ThemedText>
-          <BulletPoint bold>NO CPP deductions</BulletPoint>
-          <BulletPoint bold>NO EI deductions</BulletPoint>
-          <BulletPoint bold>NO income tax deductions</BulletPoint>
-
-          <Card style={StyleSheet.flatten([styles.highlightCard, { backgroundColor: theme.warning + "15" }])}>
-            <ThemedText style={styles.highlightText}>
-              You are fully responsible for declaring your income and paying all
-              applicable taxes to the Canada Revenue Agency (CRA).
+        <Section title={NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE}>
+          {NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS.map((paragraph) => (
+            <ThemedText key={paragraph} style={styles.sectionText}>
+              {paragraph}
             </ThemedText>
-          </Card>
-        </Section>
-
-        <Section title="2. Pay Cycle & Release Timing">
-          <ThemedText style={styles.sectionText}>
-            Hotel-based work follows a bi-weekly reporting period.
-          </ThemedText>
-          <ThemedText style={[styles.sectionText, { fontWeight: "600" }]}>
-            However, payment is NOT released based on calendar dates.
-          </ThemedText>
-
-          <ThemedText style={[styles.sectionText, styles.emphasizedText]}>
-            Payments are issued only after:
-          </ThemedText>
-          <BulletPoint>
-            Workforce Connect receives payment from the hotel or janitorial
-            client
-          </BulletPoint>
-
-          <ThemedText style={styles.sectionText}>
-            Once client funds are received and cleared, your payment will be
-            processed and released immediately.
-          </ThemedText>
-
-          <ThemedText style={[styles.sectionText, styles.emphasizedText]}>
-            Payment timing may vary depending on:
-          </ThemedText>
-          <BulletPoint>Client accounting schedules</BulletPoint>
-          <BulletPoint>Bank settlement timelines</BulletPoint>
-          <BulletPoint>Holidays</BulletPoint>
-          <BulletPoint>System maintenance or operational delays</BulletPoint>
-
-          <ThemedText style={styles.sectionText}>
-            For transparency, proof of client payment may be requested for
-            verification.
-          </ThemedText>
-        </Section>
-
-        <Section title="3. How You Get Paid">
-          <ThemedText style={styles.sectionText}>
-            Workforce Connect supports ONLY the following payment methods:
-          </ThemedText>
-
-          <View style={styles.paymentMethod}>
-            <ThemedText style={styles.paymentMethodTitle}>
-              A. Direct Deposit (EFT)
-            </ThemedText>
-            <BulletPoint>Requires a valid void cheque</BulletPoint>
-          </View>
-
-          <View style={styles.paymentMethod}>
-            <ThemedText style={styles.paymentMethodTitle}>
-              B. Interac E-Transfer
-            </ThemedText>
-            <BulletPoint>Subject to bank-imposed sending limits</BulletPoint>
-          </View>
-
-          <View style={styles.paymentMethod}>
-            <ThemedText style={styles.paymentMethodTitle}>
-              C. Company Cheque
-            </ThemedText>
-            <BulletPoint>Available only to GTA-based subcontractors</BulletPoint>
-          </View>
-        </Section>
-
-        <Section title="4. Submitting Your Payment Information">
-          <ThemedText style={styles.sectionText}>
-            You cannot be paid until your payment details are properly
-            registered.
-          </ThemedText>
-          <ThemedText style={styles.sectionText}>
-            Please complete the official Payment Information Form provided by
-            Workforce Connect.
-          </ThemedText>
-
-          <Card style={StyleSheet.flatten([styles.highlightCard, { backgroundColor: theme.error + "15" }])}>
-            <View style={styles.warningRow}>
-              <Feather name="alert-circle" size={18} color={theme.error} />
-              <ThemedText style={[styles.highlightText, { color: theme.error, marginLeft: Spacing.sm }]}>
-                Incorrect or missing payment information will result in payment
-                delays.
-              </ThemedText>
-            </View>
-          </Card>
+          ))}
         </Section>
 
         <Card style={styles.acknowledgementCard}>
-          <ThemedText style={styles.acknowledgementTitle}>
-            ACKNOWLEDGEMENT & ACCEPTANCE
-          </ThemedText>
+          <ThemedText style={styles.acknowledgementTitle}>Acknowledgment</ThemedText>
           <ThemedText style={styles.acknowledgementText}>
-            By clicking "I Agree", you confirm that:
+            Final agreement signing remains locked until you accept this clause.
           </ThemedText>
-          <BulletPoint>
-            You have read and understood the information above
-          </BulletPoint>
-          <BulletPoint>
-            You acknowledge your independent subcontractor status
-          </BulletPoint>
-          <BulletPoint>
-            You accept the payment structure and release conditions described
-          </BulletPoint>
-          <BulletPoint>
-            You understand that no payroll deductions will be made
-          </BulletPoint>
-          <BulletPoint>
-            You accept responsibility for your own tax reporting and remittances
-          </BulletPoint>
-
           <View style={styles.checkboxContainer}>
             <CheckboxRow
-              checked={readTerms}
-              onToggle={() => setReadTerms(!readTerms)}
-              label="I have read and understand the above terms"
-            />
-            <CheckboxRow
-              checked={agreeToSubcontractor}
-              onToggle={() => setAgreeToSubcontractor(!agreeToSubcontractor)}
-              label="I agree to proceed as an independent subcontractor"
+              checked={agreeToClause}
+              onToggle={() => setAgreeToClause(!agreeToClause)}
+              label="I have read and agree to the Non-Solicitation / Direct Hiring Clause."
             />
           </View>
         </Card>
 
         <Button
-          title="I AGREE"
+          title={isSaving ? "Saving..." : "Continue to Agreement"}
           onPress={handleProceed}
-          disabled={!canProceed}
+          disabled={!canProceed || isSaving}
           style={styles.agreeButton}
         />
       </ScrollView>

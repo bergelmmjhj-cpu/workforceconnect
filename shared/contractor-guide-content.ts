@@ -36,6 +36,139 @@ export interface ContractorGuideContent {
   }[];
 }
 
+export interface AgreementSection {
+  id: string;
+  title: string;
+  paragraphs: string[];
+}
+
+export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.0";
+export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE = "2026-04-06";
+
+export const NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE = "Non-Solicitation / Direct Hiring Clause";
+
+export const NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS = [
+  "The Contractor agrees that during the term of this Agreement and for a period of twelve (12) months following the completion or termination of any assignment, they shall not, directly or indirectly, solicit or accept employment, contract work, or any other form of engagement with any client of the Company to whom the Contractor was introduced or for whom the Contractor performed services under this Agreement, without the prior written consent of the Company.",
+  "For greater certainty, this restriction applies only to clients with whom the Contractor had direct contact or to whom the Contractor was assigned during the course of their engagement with the Company.",
+  "This restriction applies regardless of whether such opportunity is initiated by the Contractor, the client, or any third party.",
+  "In the event that the Contractor accepts such employment or engagement without the Company’s prior written consent, the Contractor agrees to pay the Company a placement fee equivalent to three (3) months of full-time hours calculated at the Contractor’s most recent agreed hourly rate. The parties acknowledge and agree that this amount represents a genuine pre-estimate of damages and is not intended to be a penalty.",
+  "The Contractor acknowledges that the duration, scope, and nature of this clause are reasonable and necessary to protect the Company’s legitimate business interests, including its client relationships and investment in securing and maintaining such clients.",
+];
+
+export const workforceSubcontractorAgreementSections: AgreementSection[] = [
+  {
+    id: "parties",
+    title: "1. Parties",
+    paragraphs: [
+      "This Subcontractor Agreement is entered into between 1001328662 Ontario Inc. carrying on business as Workforce Connect (the \"Company\") and the worker identified in the signature section of this Agreement (the \"Contractor\").",
+      "The internal company copy may reference the Company’s legal entity and registered business address for administrative and legal record purposes, while the worker-facing copy may use Workforce Connect branding only.",
+    ],
+  },
+  {
+    id: "relationship",
+    title: "2. Independent Contractor Relationship",
+    paragraphs: [
+      "The Contractor performs services as an independent subcontractor and not as an employee, agent, partner, or representative of the Company unless required by applicable law.",
+      "The Contractor understands that they are not entitled to Employment Insurance, Canada Pension Plan contributions, vacation pay, overtime pay, benefits, or any similar employee entitlements unless expressly required by law.",
+      "The Contractor is solely responsible for filing and remitting all taxes, source deductions, premiums, and statutory contributions arising from amounts paid under this Agreement.",
+    ],
+  },
+  {
+    id: "scope",
+    title: "3. Scope of Services",
+    paragraphs: [
+      "The Company may offer assignments involving housekeeping, hotel cleaning, supervisor coverage, banquet and server roles, and other temporary hospitality staffing services requested by Company clients.",
+      "The Contractor agrees to perform only assignments they accept and to carry out accepted assignments in a professional, safe, and client-compliant manner.",
+    ],
+  },
+  {
+    id: "assignment-terms",
+    title: "4. Assignment Terms",
+    paragraphs: [
+      "The Contractor acknowledges that no minimum hours, recurring shifts, or ongoing assignments are guaranteed under this Agreement.",
+      "Assignments are based on client demand, may vary by location, role, and duration, and may be reassigned, rescheduled, shortened, or cancelled by the Company or the client.",
+    ],
+  },
+  {
+    id: "compensation",
+    title: "5. Compensation",
+    paragraphs: [
+      "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
+      "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company’s then-current payroll cycle and operational procedures.",
+    ],
+  },
+  {
+    id: "timekeeping",
+    title: "6. Timekeeping / TITO",
+    paragraphs: [
+      "The Contractor must accurately record all time in and time out events through the Company’s designated TITO or timekeeping tools.",
+      "GPS, geofence, device, or related location verification may be used for attendance validation. Buddy punching, fabricated timestamps, or any other false recordkeeping is prohibited.",
+      "Fraudulent or inaccurate timekeeping may result in assignment removal, termination of this Agreement, and non-payment for unverified or falsified hours where permitted by law.",
+    ],
+  },
+  {
+    id: "confidentiality",
+    title: "7. Confidentiality",
+    paragraphs: [
+      "The Contractor shall keep confidential all non-public information obtained through the Company or its clients, including hotel guest data, room information, schedules, client data, staff details, and Company operating processes.",
+      "The Contractor shall not use or disclose confidential information except as necessary to perform an assignment or as required by law.",
+    ],
+  },
+  {
+    id: "non-solicitation",
+    title: "8. Non-Solicitation / Direct Hiring Clause",
+    paragraphs: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS,
+  },
+  {
+    id: "conduct",
+    title: "9. Conduct and Site Compliance",
+    paragraphs: [
+      "The Contractor must comply with dress code standards, professionalism requirements, client policies, safety rules, anti-harassment obligations, and all reasonable directions relating to conduct at a site.",
+      "Photography, recording, or social posting regarding client premises, guest areas, staff, schedules, or operations is prohibited unless expressly authorized in writing.",
+    ],
+  },
+  {
+    id: "equipment",
+    title: "10. Equipment / Damages",
+    paragraphs: [
+      "The Contractor is responsible for exercising reasonable care with Company and client property, equipment, uniforms, keys, and keycards issued for an assignment.",
+      "The Contractor may be held responsible, to the extent permitted by law, for losses or damages caused by negligence, including lost keycards, access devices, or client property damage.",
+    ],
+  },
+  {
+    id: "termination",
+    title: "11. Termination",
+    paragraphs: [
+      "The Company may suspend or terminate assignments or this Agreement for misconduct, attendance issues, client complaints, falsified TITO records, breach of confidentiality, or breach of the Non-Solicitation / Direct Hiring Clause.",
+      "The Contractor may stop accepting new assignments at any time, subject to completing accepted work unless otherwise released by the Company or client.",
+    ],
+  },
+  {
+    id: "governing-law",
+    title: "12. Governing Law",
+    paragraphs: [
+      "This Agreement shall be governed by and interpreted in accordance with the laws of the Province of Ontario and the federal laws of Canada applicable therein.",
+    ],
+  },
+  {
+    id: "electronic-signature",
+    title: "13. Electronic Signature",
+    paragraphs: [
+      "The parties agree that an electronic signature, typed name, electronic acknowledgment, and electronically stored acceptance record are intended to be legally binding and enforceable to the same extent as an original handwritten signature.",
+    ],
+  },
+];
+
+export function getNonSolicitationDirectHiringClauseText(): string {
+  return [NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, "", ...NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS].join("\n\n");
+}
+
+export function getWorkforceSubcontractorAgreementBodyText(): string {
+  return workforceSubcontractorAgreementSections
+    .map((section) => [section.title, ...section.paragraphs].join("\n\n"))
+    .join("\n\n");
+}
+
 export const contractorGuideContent: ContractorGuideContent = {
   pageTitle: "Contractor Payment & Processing Guide",
   lastUpdated: "2026-01-24",

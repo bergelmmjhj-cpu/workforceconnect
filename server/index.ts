@@ -8,10 +8,33 @@ import * as path from "path";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { users, workplaces, workplaceAssignments, timesheets, timesheetEntries, workerApplications } from "../shared/schema";
+import {
+  NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS,
+  NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
+} from "../shared/contractor-guide-content";
 import { eq, and, isNull } from "drizzle-orm";
 
 const app = express();
 const log = console.log;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderApplyTemplate(template: string): string {
+  const clauseHtml = NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS
+    .map((paragraph) => `<p class="clause-paragraph">${escapeHtml(paragraph)}</p>`)
+    .join("\n");
+
+  return template
+    .replace(/__NON_SOLICITATION_TITLE__/g, escapeHtml(NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE))
+    .replace(/__NON_SOLICITATION_BODY__/g, clauseHtml);
+}
 
 // Global unhandledRejection handler - prevents crashing from async background jobs
 process.on("unhandledRejection", (reason: any) => {
@@ -706,7 +729,7 @@ function configureExpoAndLanding(app: express.Application) {
 
   // Serve Worker Application Form (full form, used by guide.wfconnect.org)
   const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
-  const applyTemplate = fs.readFileSync(applyPath, "utf-8");
+  const applyTemplate = renderApplyTemplate(fs.readFileSync(applyPath, "utf-8"));
 
   // Single subdomain-aware /apply route:
   //   apply.wfconnect.org → apply-form.html (standalone lead capture)

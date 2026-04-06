@@ -1,5 +1,5 @@
-import React from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { View, StyleSheet, ScrollView, Platform, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { rootNavigate } from "@/lib/navigation";
@@ -12,6 +12,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkerOnboarding } from "@/contexts/WorkerOnboardingContext";
 import { Spacing } from "@/constants/theme";
+import { apiRequest } from "@/lib/query-client";
 
 interface OnboardingStep {
   id: string;
@@ -24,10 +25,12 @@ interface OnboardingStep {
 export default function WorkerOnboardingScreen() {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
-  const { onboardingStatus, isLoading } = useWorkerOnboarding();
+  const { onboardingStatus, application } = useWorkerOnboarding();
   const insets = useSafeAreaInsets();
+  const [isDownloading, setIsDownloading] = useState(false);
   const getSteps = (): OnboardingStep[] => {
     const status = onboardingStatus;
+    const clauseCompleted = Boolean(application?.nonSolicitationAcknowledged) || ["AGREEMENT_ACCEPTED", "ONBOARDED"].includes(status);
 
     const applicationCompleted = [
       "APPLICATION_SUBMITTED",
@@ -44,7 +47,9 @@ export default function WorkerOnboardingScreen() {
       "ONBOARDED",
     ].includes(status);
 
+    const clauseIsCurrent = status === "AGREEMENT_PENDING" && !clauseCompleted;
     const agreementCompleted = ["AGREEMENT_ACCEPTED", "ONBOARDED"].includes(status);
+    const agreementIsCurrent = status === "AGREEMENT_PENDING" && clauseCompleted;
 
     return [
       {
@@ -72,13 +77,24 @@ export default function WorkerOnboardingScreen() {
           : "pending",
       },
       {
+        id: "clause",
+        title: "Review Clause",
+        description: "Acknowledge the Non-Solicitation / Direct Hiring Clause",
+        icon: "shield",
+        status: clauseCompleted
+          ? "completed"
+          : clauseIsCurrent
+          ? "current"
+          : "pending",
+      },
+      {
         id: "agreement",
         title: "Sign Agreement",
         description: "Review and sign the subcontractor agreement",
         icon: "edit-3",
         status: agreementCompleted
           ? "completed"
-          : status === "AGREEMENT_PENDING"
+          : agreementIsCurrent
           ? "current"
           : "pending",
       },
@@ -103,7 +119,9 @@ export default function WorkerOnboardingScreen() {
       case "APPLICATION_REJECTED":
         return "Unfortunately, your application was not approved. Please contact support for more information.";
       case "AGREEMENT_PENDING":
-        return "Great news! Your application was approved. Please sign the agreement to continue.";
+        return application?.nonSolicitationAcknowledged
+          ? "Your clause acknowledgment is complete. Finish signing the agreement to continue."
+          : "Great news! Your application was approved. Review and accept the Non-Solicitation / Direct Hiring Clause to continue.";
       case "AGREEMENT_ACCEPTED":
       case "ONBOARDED":
         return "You're all set! Welcome to the team.";
@@ -125,8 +143,8 @@ export default function WorkerOnboardingScreen() {
       case "AGREEMENT_PENDING":
         return (
           <Button
-            title="Sign Agreement"
-            onPress={() => rootNavigate("SubcontractorNotice")}
+            title={application?.nonSolicitationAcknowledged ? "Sign Agreement" : "Review Clause"}
+            onPress={() => rootNavigate(application?.nonSolicitationAcknowledged ? "AgreementSigning" : "SubcontractorNotice")}
             style={styles.actionButton}
           />
         );
@@ -141,6 +159,34 @@ export default function WorkerOnboardingScreen() {
         );
       default:
         return null;
+    }
+  };
+
+  const handleDownloadAgreement = async () => {
+    if (Platform.OS !== "web") {
+      Alert.alert("Download available on web", "Open your Workforce Connect web dashboard to download your signed agreement.");
+      return;
+    }
+
+    try {
+      setIsDownloading(true);
+      const response = await apiRequest("GET", "/api/agreements/me/download");
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="?([^\"]+)"?/i);
+      const filename = match?.[1] || "Workforce_Connect_Subcontractor_Agreement.pdf";
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      Alert.alert("Download failed", "Unable to download your signed agreement right now.");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -256,6 +302,15 @@ export default function WorkerOnboardingScreen() {
         </Card>
 
         {getActionButton()}
+
+        {(onboardingStatus === "AGREEMENT_ACCEPTED" || onboardingStatus === "ONBOARDED") ? (
+          <Button
+            title={isDownloading ? "Preparing Download..." : "Download My Signed Agreement"}
+            onPress={handleDownloadAgreement}
+            style={styles.actionButton}
+            variant="secondary"
+          />
+        ) : null}
 
         <Button
           title="Sign Out"

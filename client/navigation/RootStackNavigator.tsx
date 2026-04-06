@@ -163,7 +163,7 @@ export default function RootStackNavigator() {
             name="SubcontractorNotice"
             component={SubcontractorNoticeScreen}
             options={{
-              headerTitle: "Important Notice",
+              headerTitle: "Non-Solicitation Clause",
             }}
           />
           <Stack.Screen

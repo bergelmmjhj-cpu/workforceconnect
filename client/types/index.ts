@@ -113,6 +113,11 @@ export interface WorkerApplication {
   submittedAtUtc: string;
   source?: string;
   recruiterReferrerCode?: string;
+  agreementVersion?: string;
+  nonSolicitationAcknowledged?: boolean;
+  nonSolicitationAcknowledgedAt?: string;
+  workerPdfGeneratedAt?: string;
+  internalPdfGeneratedAt?: string;
   
   legalFirstName: string;
   legalLastName: string;

@@ -1104,6 +1104,8 @@
             var status = app.status || 'unknown';
             var createdAt = app.created_at || app.createdAt || '';
             var hasPayment = app.payment_method || app.paymentMethod;
+            var agreementVersion = app.agreement_version || app.agreementVersion || 'Legacy / Unknown';
+            var clauseAccepted = app.non_solicitation_acknowledged || app.nonSolicitationAcknowledged;
             
             return '<tr>' +
               '<td><strong>' + escapeHtml(fullName) + '</strong></td>' +
@@ -1111,9 +1113,9 @@
               '<td>' + escapeHtml(phone) + '</td>' +
               '<td>' + escapeHtml(city) + ', ' + escapeHtml(province) + '</td>' +
               '<td>' + roles.slice(0, 2).join(', ') + (roles.length > 2 ? '...' : '') + '</td>' +
-              '<td><span class="status-badge ' + status + '">' + status + '</span>' + (!hasPayment ? ' <span class="status-badge" style="background: #FEF3C7; color: #92400E; font-size: 11px;">No Payment Info</span>' : '') + '</td>' +
+              '<td><span class="status-badge ' + status + '">' + status + '</span>' + (!hasPayment ? ' <span class="status-badge" style="background: #FEF3C7; color: #92400E; font-size: 11px;">No Payment Info</span>' : '') + '<div style="margin-top:6px;font-size:12px;color:var(--text-secondary);">' + escapeHtml(agreementVersion) + ' • ' + (clauseAccepted ? 'Clause accepted' : 'Legacy / Unknown') + '</div></td>' +
               '<td>' + (new Date(createdAt).toLocaleDateString ? new Date(createdAt).toLocaleDateString() : createdAt) + '</td>' +
-              '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="pdf-btn" onclick="downloadAgreementPdf(\'' + app.id + '\')">PDF</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
+              '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Worker Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Internal Copy</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
             '</tr>';
           }).join('');
         } catch (error) {
@@ -1127,6 +1129,16 @@
         var div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      function formatLegacyValue(value) {
+        return value ? escapeHtml(String(value)) : 'Legacy / Unknown';
+      }
+
+      function formatDateValue(value) {
+        if (!value) return 'Legacy / Unknown';
+        var date = new Date(value);
+        return isNaN(date.getTime()) ? escapeHtml(String(value)) : date.toLocaleString();
       }
 
       // Search and filter functionality
@@ -1278,9 +1290,20 @@
         html += '<div class="detail-grid">';
         html += '<div class="detail-item"><div class="detail-label">TITO Acknowledgment</div><div class="detail-value">' + ((app.tito_acknowledgment || app.titoAcknowledgment) ? 'Agreed' : 'Not agreed') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Site Rules</div><div class="detail-value">' + ((app.site_rules_acknowledgment || app.siteRulesAcknowledgment) ? 'Agreed' : 'Not agreed') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Non-Solicitation Clause</div><div class="detail-value">' + ((app.non_solicitation_acknowledged || app.nonSolicitationAcknowledged) ? 'Accepted' : 'Legacy / Unknown') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Acknowledged At</div><div class="detail-value">' + formatDateValue(app.non_solicitation_acknowledged_at || app.nonSolicitationAcknowledgedAt) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Worker Agreement</div><div class="detail-value">' + ((app.worker_agreement_consent || app.workerAgreementConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Privacy Policy</div><div class="detail-value">' + ((app.privacy_consent || app.privacyConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Marketing Consent</div><div class="detail-value">' + ((app.marketing_consent || app.marketingConsent) ? 'Yes' : 'No') + '</div></div>';
+        html += '</div></div>';
+
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Agreement Files</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Agreement Version</div><div class="detail-value">' + formatLegacyValue(app.agreement_version || app.agreementVersion) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Worker PDF Generated</div><div class="detail-value">' + formatDateValue(app.worker_pdf_generated_at || app.workerPdfGeneratedAt) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Internal PDF Generated</div><div class="detail-value">' + formatDateValue(app.internal_pdf_generated_at || app.internalPdfGeneratedAt) + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Downloads</div><div class="detail-value"><div class="action-cell"><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Download Worker Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Download Internal Copy</button></div></div></div>';
         html += '</div></div>';
         
         // Signature
@@ -1374,18 +1397,18 @@
         }
       });
 
-      function downloadAgreementPdf(id) {
-        var link = document.createElement('a');
-        link.href = '/api/admin/applications/' + id + '/agreement-pdf';
-        link.setAttribute('download', '');
+      function downloadAgreementCopy(id, kind) {
+        var route = kind === 'internal'
+          ? '/api/admin/agreements/' + id + '/internal'
+          : '/api/admin/agreements/' + id + '/worker';
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/api/admin/applications/' + id + '/agreement-pdf', true);
+        xhr.open('GET', route, true);
         xhr.setRequestHeader('Authorization', 'Basic ' + authCredentials);
         xhr.responseType = 'blob';
         xhr.onload = function() {
           if (xhr.status === 200) {
             var disposition = xhr.getResponseHeader('Content-Disposition');
-            var filename = 'Subcontractor_Agreement.pdf';
+            var filename = kind === 'internal' ? 'Internal_Subcontractor_Agreement.pdf' : 'Workforce_Connect_Subcontractor_Agreement.pdf';
             if (disposition && disposition.indexOf('filename=') !== -1) {
               filename = disposition.split('filename=')[1].replace(/"/g, '');
             }
@@ -1398,11 +1421,11 @@
             window.URL.revokeObjectURL(url);
             a.remove();
           } else {
-            alert('Failed to download PDF. Please try again.');
+            alert('Failed to download agreement copy. Please try again.');
           }
         };
         xhr.onerror = function() {
-          alert('Failed to download PDF. Please try again.');
+          alert('Failed to download agreement copy. Please try again.');
         };
         xhr.send();
       }

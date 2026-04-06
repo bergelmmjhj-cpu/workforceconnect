@@ -1,5 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+  WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE,
+  WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+  getWorkforceSubcontractorAgreementBodyText,
+} from "../../shared/contractor-guide-content";
+import {
   User,
   WorkerRequest,
   Shift,
@@ -585,143 +590,15 @@ export async function clearStorage(): Promise<void> {
 
 // Default agreement template
 const defaultAgreementTemplate: SubcontractorAgreementTemplate = {
-  id: "template-v2",
-  version: "v2.0",
+  id: "template-v3",
+  version: WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
   title: "Subcontractor Agreement",
-  bodyText: `SUBCONTRACTOR AGREEMENT
-
-1. SUBCONTRACTOR STATUS (NOT EMPLOYMENT)
-
-1.1 The Subcontractor acknowledges and agrees that all individuals providing services through Workforce Connect do so strictly as INDEPENDENT SUBCONTRACTORS.
-
-1.2 This Agreement does NOT create an employer-employee relationship. The Subcontractor understands and agrees that:
-- You are NOT an employee
-- You are NOT on payroll
-- You do NOT receive employee benefits
-- There are NO deductions from your pay (NO CPP, NO EI, NO income tax)
-
-1.3 The Subcontractor is fully and solely responsible for:
-- Reporting all income to the Canada Revenue Agency (CRA)
-- Paying all applicable taxes, CPP, EI (if applicable), HST/GST/QST
-- Maintaining any required tax registrations or filings
-
-2. SCOPE OF SERVICES
-
-2.1 The Subcontractor provides housekeeping, janitorial, hospitality, or related services on a shift-based or project-based basis for Workforce Connect and/or its hotel and janitorial clients ("Clients").
-
-2.2 The Subcontractor agrees to:
-- Perform services professionally and safely
-- Follow all Client site rules, hotel policies, and safety procedures
-- Comply with all applicable laws and regulations
-
-2.3 The Subcontractor controls the manner and means of performing the services, subject only to Client site standards and agreed outcomes.
-
-3. PAY STRUCTURE & PAYMENT RELEASE
-
-3.1 Bi-Weekly Reporting Period (Hotel Workers Only)
-Work performed for hotel-based assignments follows a bi-weekly reporting cutoff period.
-
-3.2 Client-Dependent Payment Release
-Payment to the Subcontractor is released ONLY AFTER Workforce Connect receives payment from the hotel or janitorial Client.
-
-3.3 Once Client funds are received and cleared:
-- The Subcontractor's corresponding payment will be processed and released immediately
-
-3.4 Payment timing may vary due to:
-- Client accounting and approval schedules
-- Banking settlement timelines
-- Holidays
-- System maintenance or operational delays
-
-3.5 For transparency, proof of Client payment may be provided upon request via email.
-
-4. NO GUARANTEED PAYMENT DATE
-
-4.1 The Subcontractor understands and agrees that:
-- There is NO guaranteed pay date
-- Payment release depends entirely on Client remittance
-- Workforce Connect is not responsible for delays caused by Clients or banking institutions
-
-5. PAYMENT METHODS
-
-5.1 Workforce Connect supports ONLY the following payment methods:
-
-A. Direct Deposit (EFT)
-- Requires valid banking details or a void cheque
-
-B. Interac E-Transfer
-- Subject to bank-imposed sending limits
-
-C. Company Cheque
-- Available to GTA-based subcontractors only
-
-6. PAYMENT INFORMATION REQUIREMENT
-
-6.1 The Subcontractor understands that payment cannot be processed until valid payment details are submitted and approved.
-
-6.2 The Subcontractor must complete the official Payment Information Form provided by Workforce Connect.
-
-6.3 Incorrect, incomplete, or missing payment information will result in payment delays, for which Workforce Connect is not liable.
-
-7. TIMEKEEPING & VERIFICATION (TITO)
-
-7.1 The Subcontractor must accurately submit Time-In / Time-Out (TITO) records through the Workforce Connect platform.
-
-7.2 Server-recorded UTC timestamps are authoritative. Corrections require valid justification.
-
-7.3 Coarse location data or simple verification methods (checkbox or typed name) may be required for audit and client verification purposes.
-
-8. CONFIDENTIALITY & CONDUCT
-
-8.1 The Subcontractor agrees to maintain confidentiality of all non-public Company or Client information.
-
-8.2 Misconduct, falsification of records, safety violations, or breach of policies may result in immediate termination of access to the platform.
-
-9. TERMINATION
-
-9.1 Either Party may terminate this Agreement with written notice.
-
-9.2 Workforce Connect may immediately terminate access for:
-- Fraud or misrepresentation
-- Safety or policy violations
-- Breach of this Agreement
-
-9.3 Upon termination, the Subcontractor is entitled only to payment for approved and completed work up to the termination date, subject to Client payment.
-
-10. GOVERNING LAW
-
-10.1 This Agreement is governed by the laws of the Province of Ontario and the federal laws of Canada applicable therein.
-
-11. ELECTRONIC ACCEPTANCE
-
-11.1 The Subcontractor agrees that:
-- Clicking "I Agree"
-- Typing their full legal name
-- Submitting this Agreement electronically
-constitutes a legally binding electronic signature.
-
-REQUIRED INITIALS
-
-Please provide your initials to confirm your understanding and acceptance of the following key sections:
-
-A. Subcontractor Status (Section 1) - I understand that I am an independent subcontractor, NOT an employee, and I am responsible for my own taxes.
-
-B. Pay Structure (Section 3 & 4) - I understand that payment is released only after Workforce Connect receives payment from the Client, and there is no guaranteed pay date.
-
-C. TITO Accuracy (Section 7) - I agree to accurately submit all Time-In / Time-Out records and understand that falsification may result in termination.
-
-D. Confidentiality & Conduct (Section 8) - I agree to maintain confidentiality and understand that misconduct may result in immediate termination.
-
-E. Termination (Section 9) - I understand the termination terms and that payment upon termination is subject to Client payment.
-
-Version: v2.0
-Last Updated: 2026-01-24
-Effective Date: 2026-01-24`,
-  lastUpdated: "2026-01-24T00:00:00.000Z",
-  effectiveDate: "2026-01-24T00:00:00.000Z",
+  bodyText: getWorkforceSubcontractorAgreementBodyText(),
+  lastUpdated: `${WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE}T00:00:00.000Z`,
+  effectiveDate: `${WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE}T00:00:00.000Z`,
   isActive: true,
-  createdAt: "2026-01-24T00:00:00.000Z",
-  updatedAt: "2026-01-24T00:00:00.000Z",
+  createdAt: `${WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE}T00:00:00.000Z`,
+  updatedAt: `${WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE}T00:00:00.000Z`,
 };
 
 // Sample worker application for testing
@@ -730,6 +607,8 @@ const sampleWorkerApplication: WorkerApplication = {
   workerId: "worker-pending",
   submittedAtUtc: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   source: "website",
+  agreementVersion: WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+  nonSolicitationAcknowledged: false,
   legalFirstName: "Alex",
   legalLastName: "Johnson",
   preferredName: "Alex",
@@ -909,6 +788,27 @@ export async function createAgreementAcceptance(acceptance: Omit<SubcontractorAg
   acceptances.push(newAcceptance);
   await AsyncStorage.setItem(KEYS.AGREEMENT_ACCEPTANCES, JSON.stringify(acceptances));
   return newAcceptance;
+}
+
+export async function acknowledgeWorkerNonSolicitation(workerId: string, agreementVersion?: string): Promise<WorkerApplication | null> {
+  const apps = await getWorkerApplications();
+  const index = apps.findIndex((app) => app.workerId === workerId);
+
+  if (index === -1) {
+    return null;
+  }
+
+  const timestamp = new Date().toISOString();
+  apps[index] = {
+    ...apps[index],
+    agreementVersion: agreementVersion || apps[index].agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+    nonSolicitationAcknowledged: true,
+    nonSolicitationAcknowledgedAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  await AsyncStorage.setItem(KEYS.WORKER_APPLICATIONS, JSON.stringify(apps));
+  return apps[index];
 }
 
 // Agreement Submissions

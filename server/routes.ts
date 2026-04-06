@@ -53,6 +53,8 @@ import { sendShiftOfferSMS, sendShiftAssignedSMS, sendConfirmationSMS, sendSMS, 
 import { sendCSVEmail, sendEmail } from "./services/email";
 import { discordAlerts, appConfig, applicants } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
+import { WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION } from "../shared/contractor-guide-content";
+import { streamAgreementPdf } from "./lib/agreement-pdf";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -654,6 +656,35 @@ function checkBasicAuthAdmin(req: Request, res: Response): boolean {
   }
 
   return true;
+}
+
+function hasAdminAgreementAccess(req: Request, res: Response): boolean {
+  const role = req.headers["x-user-role"] as string | undefined;
+  if (role === "admin") {
+    return true;
+  }
+  return checkBasicAuthAdmin(req, res);
+}
+
+async function getWorkerApplicationForUser(userId: string) {
+  const [user] = await db
+    .select({ id: users.id, email: users.email, onboardingStatus: users.onboardingStatus, role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) {
+    return { user: null, application: null };
+  }
+
+  const [application] = await db
+    .select()
+    .from(workerApplications)
+    .where(sql`lower(${workerApplications.email}) = ${user.email.toLowerCase()}`)
+    .orderBy(desc(workerApplications.createdAt))
+    .limit(1);
+
+  return { user, application: application || null };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -2056,6 +2087,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const applicationData = {
         ...req.body,
         fullName: resolvedIdentity.fullName,
+        email: typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : req.body?.email,
+        agreementVersion: req.body?.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+        nonSolicitationAcknowledged: req.body?.nonSolicitationAcknowledged === true,
+        nonSolicitationAcknowledgedAt: req.body?.nonSolicitationAcknowledged ? new Date(req.body?.nonSolicitationAcknowledgedAt || Date.now()) : null,
         ip,
         userAgent,
       };
@@ -2067,6 +2102,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error saving worker application:", error);
       res.status(500).json({ error: "Failed to submit application. Please try again." });
+    }
+  });
+
+  app.patch("/api/agreements/me/non-solicitation", async (req: Request, res: Response) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as string;
+
+      if (!userId || role !== "worker") {
+        res.status(401).json({ error: "Authenticated worker required" });
+        return;
+      }
+
+      const { user, application } = await getWorkerApplicationForUser(userId);
+      if (!user || !application) {
+        res.status(404).json({ error: "Worker application not found" });
+        return;
+      }
+
+      const acknowledgedAt = new Date();
+      const [updatedApplication] = await db
+        .update(workerApplications)
+        .set({
+          agreementVersion: WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+          nonSolicitationAcknowledged: true,
+          nonSolicitationAcknowledgedAt: acknowledgedAt,
+          updatedAt: acknowledgedAt,
+        })
+        .where(eq(workerApplications.id, application.id))
+        .returning();
+
+      res.json({
+        ok: true,
+        id: updatedApplication.id,
+        agreementVersion: updatedApplication.agreementVersion,
+        nonSolicitationAcknowledged: updatedApplication.nonSolicitationAcknowledged,
+        nonSolicitationAcknowledgedAt: updatedApplication.nonSolicitationAcknowledgedAt,
+      });
+    } catch (error) {
+      console.error("Error acknowledging non-solicitation clause:", error);
+      res.status(500).json({ error: "Failed to save acknowledgment" });
     }
   });
 
@@ -3499,176 +3575,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Download subcontractor agreement PDF for an application
-  app.get("/api/admin/applications/:id/agreement-pdf", async (req: Request, res: Response) => {
+  app.get("/api/agreements/me/download", async (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
+      const userId = req.headers["x-user-id"] as string;
+      const role = req.headers["x-user-role"] as string;
+
+      if (!userId || role !== "worker") {
+        res.status(401).json({ error: "Authenticated worker required" });
         return;
       }
 
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
+      const { user, application } = await getWorkerApplicationForUser(userId);
+      if (!user || !application) {
+        res.status(404).json({ error: "Agreement not found" });
         return;
       }
 
-      const [application] = await db.select().from(workerApplications)
-        .where(eq(workerApplications.id, req.params.id));
+      if (!["AGREEMENT_ACCEPTED", "ONBOARDED"].includes(user.onboardingStatus || "")) {
+        res.status(403).json({ error: "Agreement is not available until onboarding is complete" });
+        return;
+      }
 
+      await db.update(workerApplications)
+        .set({ workerPdfGeneratedAt: new Date(), updatedAt: new Date() })
+        .where(eq(workerApplications.id, application.id));
+
+      streamAgreementPdf(res, application, "worker");
+    } catch (error) {
+      console.error("Error generating agreement PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
+
+  app.get("/api/admin/agreements/:id/internal", async (req: Request, res: Response) => {
+    try {
+      if (!hasAdminAgreementAccess(req, res)) {
+        return;
+      }
+
+      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id)).limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
       }
 
-      const PDFDocument = (await import("pdfkit")).default;
-      const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 60, right: 60 } });
+      await db.update(workerApplications)
+        .set({ internalPdfGeneratedAt: new Date(), updatedAt: new Date() })
+        .where(eq(workerApplications.id, application.id));
 
-      const fileName = `Subcontractor_Agreement_${application.fullName.replace(/\s+/g, "_")}.pdf`;
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      doc.pipe(res);
+      streamAgreementPdf(res, application, "internal");
+    } catch (error) {
+      console.error("Error generating internal agreement PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
 
-      const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  app.get("/api/admin/agreements/:id/worker", async (req: Request, res: Response) => {
+    try {
+      if (!hasAdminAgreementAccess(req, res)) {
+        return;
+      }
 
-      doc.fontSize(18).font("Helvetica-Bold").text("SUBCONTRACTOR AGREEMENT", { align: "center" });
-      doc.moveDown(0.3);
-      doc.fontSize(11).font("Helvetica").text("1001328662 Ontario Inc.", { align: "center" });
-      doc.moveDown(0.2);
-      doc.fontSize(9).fillColor("#666666").text("1900 Dundas St. West, Mississauga L5K 1P9", { align: "center" });
-      doc.fillColor("#000000");
-      doc.moveDown(1);
+      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id)).limit(1);
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
 
-      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
-      doc.moveDown(1);
+      await db.update(workerApplications)
+        .set({ workerPdfGeneratedAt: new Date(), updatedAt: new Date() })
+        .where(eq(workerApplications.id, application.id));
 
-      doc.fontSize(13).font("Helvetica-Bold").text("1. Contractor Information");
-      doc.moveDown(0.5);
+      streamAgreementPdf(res, application, "worker");
+    } catch (error) {
+      console.error("Error generating worker agreement PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
 
-      const addField = (label: string, value: string | null | undefined) => {
-        doc.fontSize(9).font("Helvetica-Bold").fillColor("#555555").text(label, { continued: true });
-        doc.font("Helvetica").fillColor("#000000").text(`  ${value || "N/A"}`);
-        doc.moveDown(0.2);
-      };
+  app.get("/api/admin/applications/:id/agreement-pdf", async (req: Request, res: Response) => {
+    try {
+      if (!hasAdminAgreementAccess(req, res)) {
+        return;
+      }
 
-      addField("Full Name:", application.fullName);
-      addField("Email:", application.email);
-      addField("Phone:", application.phone);
-      addField("Address:", `${application.address}, ${application.city}, ${application.province} ${application.postalCode}`);
-      if (application.dateOfBirth) addField("Date of Birth:", application.dateOfBirth);
+      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id)).limit(1);
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
 
-      const workStatusMap: Record<string, string> = {
-        citizen: "Canadian Citizen",
-        permanent_resident: "Permanent Resident",
-        work_permit: "Work Permit Holder"
-      };
-      addField("Work Status:", workStatusMap[application.workStatus] || application.workStatus);
-      doc.moveDown(0.5);
+      await db.update(workerApplications)
+        .set({ internalPdfGeneratedAt: new Date(), updatedAt: new Date() })
+        .where(eq(workerApplications.id, application.id));
 
-      doc.fontSize(13).font("Helvetica-Bold").fillColor("#000000").text("2. Scope of Work");
-      doc.moveDown(0.5);
-
-      let roles: string[] = [];
-      try { roles = JSON.parse(application.preferredRoles); } catch (e) { roles = [application.preferredRoles]; }
-      addField("Preferred Roles:", roles.join(", "));
-
-      let days: string[] = [];
-      try { days = JSON.parse(application.availableDays); } catch (e) { days = [application.availableDays]; }
-      addField("Available Days:", days.join(", "));
-
-      let shifts: string[] = [];
-      try { shifts = JSON.parse(application.preferredShifts); } catch (e) { shifts = [application.preferredShifts]; }
-      addField("Preferred Shifts:", shifts.join(", "));
-      doc.moveDown(0.5);
-
-      doc.fontSize(13).font("Helvetica-Bold").text("3. Terms and Conditions");
-      doc.moveDown(0.5);
-      doc.fontSize(9).font("Helvetica").text(
-        "This Subcontractor Agreement (the \"Agreement\") is entered into by and between 1001328662 Ontario Inc. (the \"Company\"), located at 1900 Dundas St. West, Mississauga L5K 1P9, and the above-named individual (the \"Contractor\"). The Contractor agrees to perform services as an independent subcontractor, NOT as an employee of the Company.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.3);
-      doc.text(
-        "The Contractor acknowledges that they are responsible for their own tax obligations, including but not limited to income tax and HST/GST remittances. The Company will not withhold taxes, provide benefits, or make contributions to employment insurance or the Canada Pension Plan on behalf of the Contractor.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.3);
-      doc.text(
-        "The Contractor agrees to comply with all applicable laws, regulations, and client site rules while performing services. The Contractor understands that failure to comply may result in immediate termination of this Agreement.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.3);
-      doc.text(
-        "Either party may terminate this Agreement at any time with or without cause. The Contractor will be compensated for all services performed up to the date of termination.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.5);
-
-      doc.fontSize(13).font("Helvetica-Bold").text("4. Time Tracking (TITO)");
-      doc.moveDown(0.5);
-      doc.fontSize(9).font("Helvetica").text(
-        "The Contractor acknowledges that they must accurately submit Time-In/Time-Out (TITO) records through the designated platform. GPS verification may be required to confirm presence at work sites. Falsification of time records may result in immediate termination of this Agreement and forfeiture of payment for the affected period.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.5);
-
-      doc.fontSize(13).font("Helvetica-Bold").text("5. Acknowledgments");
-      doc.moveDown(0.5);
-
-      const addCheckbox = (label: string, checked: boolean) => {
-        const checkmark = checked ? "[X]" : "[ ]";
-        doc.fontSize(9).font("Helvetica").text(`${checkmark}  ${label}`);
-        doc.moveDown(0.2);
-      };
-
-      addCheckbox("TITO System Acknowledgment - I understand that I must accurately submit Time-In/Time-Out records", application.titoAcknowledgment ?? false);
-      addCheckbox("Site Rules Agreement - I agree to adhere to client site-specific rules and regulations", application.siteRulesAcknowledgment ?? false);
-      addCheckbox("Worker Agreement - I understand I will be working as an independent subcontractor, NOT as an employee", application.workerAgreementConsent ?? false);
-      addCheckbox("Privacy Policy - I consent to the collection and use of my personal data (GDPR & PIPEDA compliant)", application.privacyConsent ?? false);
-      addCheckbox("Marketing Communications (optional)", application.marketingConsent ?? false);
-      doc.moveDown(0.5);
-
-      doc.fontSize(13).font("Helvetica-Bold").text("6. Emergency Contact");
-      doc.moveDown(0.5);
-      addField("Name:", application.emergencyContactName);
-      addField("Relationship:", application.emergencyContactRelationship);
-      addField("Phone:", application.emergencyContactPhone);
-      doc.moveDown(0.5);
-
-      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
-      doc.moveDown(1);
-
-      doc.fontSize(13).font("Helvetica-Bold").text("7. Electronic Signature");
-      doc.moveDown(0.5);
-      doc.fontSize(9).font("Helvetica").text(
-        "By signing below, the Contractor confirms that all information provided is true and accurate to the best of their knowledge. This electronic signature has the same legal effect as a handwritten signature.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.8);
-
-      doc.fontSize(11).font("Helvetica-Bold").text("Signed:");
-      doc.moveDown(0.3);
-      doc.fontSize(14).font("Helvetica-Oblique").fillColor("#1a3a5c").text(application.signature, { underline: true });
-      doc.fillColor("#000000");
-      doc.moveDown(0.5);
-      addField("Date Signed:", application.signatureDate);
-      addField("Application Status:", application.status.toUpperCase());
-      addField("Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" }));
-
-      doc.moveDown(1.5);
-      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
-      doc.moveDown(0.5);
-      doc.fontSize(8).font("Helvetica").fillColor("#999999").text(
-        "This document was generated by 1001328662 Ontario Inc., 1900 Dundas St. West, Mississauga L5K 1P9. For questions, contact admin@wfconnect.org",
-        { align: "center" }
-      );
-
-      doc.end();
+      streamAgreementPdf(res, application, "internal");
     } catch (error) {
       console.error("Error generating agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });

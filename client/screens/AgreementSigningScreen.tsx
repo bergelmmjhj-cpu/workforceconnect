@@ -46,7 +46,7 @@ const INITIAL_SECTIONS = [
 export default function AgreementSigningScreen() {
   const { theme } = useTheme();
   const { user, updateOnboardingStatus } = useAuth();
-  const { agreementTemplate, refreshOnboardingData } = useWorkerOnboarding();
+  const { agreementTemplate, application, refreshOnboardingData } = useWorkerOnboarding();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const navigation = useNavigation<NavigationProp>();
@@ -78,6 +78,11 @@ export default function AgreementSigningScreen() {
 
   const handleSubmit = async () => {
     if (!user || !agreementTemplate) return;
+
+    if (application && !application.nonSolicitationAcknowledged) {
+      setAlertModal({title: "Required", message: "Please acknowledge the Non-Solicitation / Direct Hiring Clause before signing the agreement."});
+      return;
+    }
 
     if (!hasScrolledToEnd) {
       setAlertModal({title: "Please Read", message: "Please scroll to the end of the agreement to continue."});
@@ -330,7 +335,7 @@ export default function AgreementSigningScreen() {
             <Button
               title={isSubmitting ? "Submitting..." : "Sign Agreement"}
               onPress={handleSubmit}
-              disabled={isSubmitting || submitSuccess}
+              disabled={isSubmitting || submitSuccess || Boolean(application && !application.nonSolicitationAcknowledged)}
               style={styles.submitButton}
             />
           </Card>

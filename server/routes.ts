@@ -55,8 +55,20 @@ import { discordAlerts, appConfig, applicants } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
 import { WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION } from "../shared/contractor-guide-content";
 import { streamAgreementPdf } from "./lib/agreement-pdf";
-
 type UserRole = "admin" | "hr" | "client" | "worker";
+
+type AdminPortalAuthResult = {
+  ok: boolean;
+  mode: "missing" | "invalid" | "legacy-basic" | "db-basic";
+  normalizedUsername: string | null;
+  userFound: boolean;
+  passwordMatched: boolean;
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+  };
+};
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371e3;
@@ -639,26 +651,164 @@ function checkApplicationsApiKey(req: Request, res: Response, next: () => void):
   next();
 }
 
-function checkBasicAuthAdmin(req: Request, res: Response): boolean {
+function parseBasicAuthCredentials(authHeader: string | undefined): { username: string; password: string } | null {
+  if (!authHeader || !authHeader.startsWith("Basic ")) {
+    return null;
+  }
+
+  const base64Credentials = authHeader.split(" ")[1];
+  if (!base64Credentials) {
+    return null;
+  }
+
+  const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+  const separatorIndex = credentials.indexOf(":");
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  return {
+    username: credentials.slice(0, separatorIndex),
+    password: credentials.slice(separatorIndex + 1),
+  };
+}
+
+function getAdminPortalCandidateEmails(username: string): string[] {
+  const normalizedUsername = username.trim().toLowerCase();
+  const candidates = new Set<string>();
+
+  if (normalizedUsername.includes("@")) {
+    candidates.add(normalizedUsername);
+  }
+
+  // Preserve the long-standing portal username while allowing it to resolve
+  // to the seeded admin account stored in the users table.
+  if (normalizedUsername === "wfconnect") {
+    candidates.add("admin@wfconnect.org");
+  }
+
+  return Array.from(candidates);
+}
+
+async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAuthResult> {
+  const credentials = parseBasicAuthCredentials(req.headers.authorization);
+  if (!credentials) {
+    return {
+      ok: false,
+      mode: "missing",
+      normalizedUsername: null,
+      userFound: false,
+      passwordMatched: false,
+    };
+  }
+
+  const normalizedUsername = credentials.username.trim().toLowerCase();
+
+  if (normalizedUsername === "wfconnect" && credentials.password === "@2255Dundaswest") {
+    return {
+      ok: true,
+      mode: "legacy-basic",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: true,
+    };
+  }
+
+  const candidateEmails = getAdminPortalCandidateEmails(credentials.username);
+  if (candidateEmails.length === 0) {
+    return {
+      ok: false,
+      mode: "invalid",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: false,
+    };
+  }
+
+  const candidateUsers = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      password: users.password,
+      isActive: users.isActive,
+    })
+    .from(users)
+    .where(
+      and(
+        inArray(users.email, candidateEmails),
+        inArray(users.role, ["admin", "hr"]),
+        eq(users.isActive, true),
+      ),
+    );
+
+  const user = candidateUsers[0];
+  if (!user || !user.password) {
+    return {
+      ok: false,
+      mode: "invalid",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: false,
+    };
+  }
+
+  const passwordMatched = await bcrypt.compare(credentials.password, user.password);
+  if (!passwordMatched) {
+    return {
+      ok: false,
+      mode: "invalid",
+      normalizedUsername,
+      userFound: true,
+      passwordMatched: false,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    mode: "db-basic",
+    normalizedUsername,
+    userFound: true,
+    passwordMatched: true,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    },
+  };
+}
+
+async function checkBasicAuthAdmin(req: Request, res: Response): Promise<boolean> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Basic ")) {
     res.status(401).json({ error: "Authentication required" });
     return false;
   }
 
-  const base64Credentials = authHeader.split(" ")[1];
-  const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-  const [username, password] = credentials.split(":");
+  const authResult = await validateAdminPortalBasicAuth(req);
+  console.info(
+    `[ADMIN_AUTH] username="${authResult.normalizedUsername || "missing"}" mode=${authResult.mode} userFound=${authResult.userFound} passwordMatched=${authResult.passwordMatched}`,
+  );
 
-  if (username !== "wfconnect" || password !== "@2255Dundaswest") {
+  if (!authResult.ok) {
     res.status(401).json({ error: "Invalid credentials" });
     return false;
+  }
+
+  if (authResult.user) {
+    req.headers["x-user-id"] = authResult.user.id;
+    req.headers["x-user-role"] = authResult.user.role;
   }
 
   return true;
 }
 
-function hasAdminAgreementAccess(req: Request, res: Response): boolean {
+async function hasAdminAgreementAccess(req: Request, res: Response): Promise<boolean> {
   const role = req.headers["x-user-role"] as string | undefined;
   if (role === "admin") {
     return true;
@@ -1260,9 +1410,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { email, password } = result.data;
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}"`);
 
       // Find user
       const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}" userFound=${Boolean(user)}`);
       if (!user) {
         res.status(401).json({ error: "Invalid email or password" });
         return;
@@ -1270,6 +1422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check password
       const validPassword = await bcrypt.compare(password, user.password);
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}" passwordMatched=${validPassword}`);
       if (!validPassword) {
         res.status(401).json({ error: "Invalid email or password" });
         return;
@@ -1288,6 +1441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
       setSessionCookie(res, user.id, user.role);
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}" sessionCreated=true userId=${user.id} role=${user.role}`);
       res.json({ user: { ...userWithoutSensitive, mustChangePassword: user.mustChangePassword || false } });
     } catch (error) {
       console.error("Error logging in:", error);
@@ -2273,15 +2427,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const authHeader = req.headers.authorization;
 
         if (authHeader && authHeader.startsWith("Basic ")) {
-          // Path 2: Basic Auth (existing admin browser behaviour — unchanged)
-          const base64Credentials = authHeader.split(" ")[1];
-          const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-          const [username, password] = credentials.split(":");
-
-          if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-            res.status(401).json({ error: "Invalid credentials" });
-            return;
-          }
+          // Path 2: Basic Auth (legacy credentials or DB-backed admin/hr users)
+          if (!(await checkBasicAuthAdmin(req, res))) return;
         } else {
           // Path 3: Session cookie (admin/hr roles)
           const session = parseSessionCookie(req);
@@ -2319,7 +2466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API Key Management endpoints
   app.get("/api/admin/applications/api-keys", async (req: Request, res: Response) => {
     try {
-      if (!checkBasicAuthAdmin(req, res)) return;
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const keys = await getManagedApiKeys();
       const nonSensitive = keys.map((key) => ({
@@ -2343,7 +2490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/applications/api-keys", async (req: Request, res: Response) => {
     try {
-      if (!checkBasicAuthAdmin(req, res)) return;
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const { name, scopes } = req.body;
       if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -2399,7 +2546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/applications/api-keys/:id/rotate", async (req: Request, res: Response) => {
     try {
-      if (!checkBasicAuthAdmin(req, res)) return;
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const keyId = req.params.id;
       const keys = await getManagedApiKeysRaw();
@@ -2455,7 +2602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/applications/api-keys/:id/scopes", async (req: Request, res: Response) => {
     try {
-      if (!checkBasicAuthAdmin(req, res)) return;
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const keyId = req.params.id;
       const { scopes } = req.body;
@@ -2494,7 +2641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/admin/applications/api-keys/:id", async (req: Request, res: Response) => {
     try {
-      if (!checkBasicAuthAdmin(req, res)) return;
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const keyId = req.params.id;
       const keys = await getManagedApiKeysRaw();
@@ -2521,21 +2668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get single worker application
   app.get("/api/admin/applications/:id", async (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id));
       
@@ -2554,21 +2687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update application status
   app.patch("/api/admin/applications/:id", async (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const { status, notes } = req.body;
 
@@ -2664,21 +2783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete worker application
   app.delete("/api/admin/applications/:id", async (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
-      
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const [deletedApplication] = await db.delete(workerApplications)
         .where(eq(workerApplications.id, req.params.id))
@@ -2698,24 +2803,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/send-app-instructions", async (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
       const userId = req.headers["x-user-id"] as string;
       const userRole = req.headers["x-user-role"] as string;
-      let authenticated = false;
-
-      if (userId && (userRole === "admin" || userRole === "hr")) {
-        authenticated = true;
-      } else if (authHeader && authHeader.startsWith("Basic ")) {
-        const base64Credentials = authHeader.split(" ")[1];
-        const creds = Buffer.from(base64Credentials, "base64").toString("utf-8");
-        const [username, password] = creds.split(":");
-        if (username === "wfconnect" && password === "@2255Dundaswest") {
-          authenticated = true;
-        }
-      }
-
-      if (!authenticated) {
-        res.status(401).json({ error: "Authentication required" });
+      const hasSessionAccess = Boolean(userId && (userRole === "admin" || userRole === "hr"));
+      if (!hasSessionAccess && !(await checkBasicAuthAdmin(req, res))) {
         return;
       }
 
@@ -3609,7 +3700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/agreements/:id/internal", async (req: Request, res: Response) => {
     try {
-      if (!hasAdminAgreementAccess(req, res)) {
+      if (!(await hasAdminAgreementAccess(req, res))) {
         return;
       }
 
@@ -3632,7 +3723,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/agreements/:id/worker", async (req: Request, res: Response) => {
     try {
-      if (!hasAdminAgreementAccess(req, res)) {
+      if (!(await hasAdminAgreementAccess(req, res))) {
         return;
       }
 
@@ -3655,7 +3746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/applications/:id/agreement-pdf", async (req: Request, res: Response) => {
     try {
-      if (!hasAdminAgreementAccess(req, res)) {
+      if (!(await hasAdminAgreementAccess(req, res))) {
         return;
       }
 
@@ -3824,18 +3915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin: Get all payment profiles
   app.get("/api/admin/payment-profiles", async (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
+      if (!(await checkBasicAuthAdmin(req, res))) return;
 
       const profiles = await db.select({
         id: paymentProfiles.id,

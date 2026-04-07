@@ -967,6 +967,8 @@ function setupErrorHandler(app: express.Application) {
 const isDemoMode = process.env.DEMO_MODE !== "false";
 
 (async () => {
+  await ensureWorkerApplicationsCompatibility();
+
   if (isDemoMode) {
     log("DEMO MODE enabled - seeding demo data...");
     await seedDemoUsers();
@@ -974,7 +976,6 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
     await seedTimesheets();
   } else {
     log("PRODUCTION MODE - skipping demo data seeding");
-    await ensureWorkerApplicationsCompatibility();
     await seedProductionAdmin();
     await backfillWorkerPhones();
     await backfillApprovedApplicationAccounts();

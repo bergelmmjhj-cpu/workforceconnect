@@ -12,7 +12,7 @@ import {
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS,
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
 } from "../shared/contractor-guide-content";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 
 const app = express();
 const log = console.log;
@@ -343,6 +343,19 @@ async function seedProductionAdmin() {
     }
   } catch (error) {
     log("Error seeding production admin:", error);
+  }
+}
+
+async function ensureWorkerApplicationsCompatibility() {
+  try {
+    await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "agreement_version" text`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged" boolean`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged_at" timestamp`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "worker_pdf_generated_at" timestamp`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "internal_pdf_generated_at" timestamp`);
+    log("Ensured worker_applications compatibility columns");
+  } catch (error) {
+    log("Error ensuring worker_applications compatibility:", error);
   }
 }
 
@@ -961,6 +974,7 @@ const isDemoMode = process.env.DEMO_MODE !== "false";
     await seedTimesheets();
   } else {
     log("PRODUCTION MODE - skipping demo data seeding");
+    await ensureWorkerApplicationsCompatibility();
     await seedProductionAdmin();
     await backfillWorkerPhones();
     await backfillApprovedApplicationAccounts();

@@ -60,8 +60,8 @@ export const workforceSubcontractorAgreementSections: AgreementSection[] = [
     id: "parties",
     title: "1. Parties",
     paragraphs: [
-      "This Subcontractor Agreement is entered into between 1001328662 Ontario Inc. carrying on business as Workforce Connect (the \"Company\") and the worker identified in the signature section of this Agreement (the \"Contractor\").",
-      "The internal company copy may reference the Company’s legal entity and registered business address for administrative and legal record purposes, while the worker-facing copy may use Workforce Connect branding only.",
+      "This Subcontractor Agreement is entered into between 1001328662 Ontario Inc. (the \"Company\") and the worker identified in the signature section of this Agreement (the \"Contractor\").",
+      "This Agreement applies to worker-facing and internal copies and references the Company’s legal entity for administrative and legal record purposes.",
     ],
   },
   {
@@ -174,14 +174,14 @@ export const contractorGuideContent: ContractorGuideContent = {
   lastUpdated: "2026-01-24",
   version: "v2.0",
   introText:
-    "All individuals providing services through Workforce Connect do so strictly as independent subcontractors, not as employees. This guide outlines your work status, payment structure, and important policies.",
+    "All individuals providing services through the Company do so strictly as independent subcontractors, not as employees. This guide outlines your work status, payment structure, and important policies.",
 
   sections: [
     {
       id: "work-status",
       title: "1. Work Status (Independent Subcontractor)",
       content: [
-        "All individuals providing services through Workforce Connect do so as independent subcontractors.",
+        "All individuals providing services through the Company do so as independent subcontractors.",
         "This means:",
       ],
       bullets: [
@@ -189,7 +189,7 @@ export const contractorGuideContent: ContractorGuideContent = {
         { text: "You are NOT on payroll", bold: true },
         { text: "You do NOT receive employee benefits", bold: true },
         {
-          text: "You invoice Workforce Connect based on completed and approved work",
+          text: "You invoice the Company based on completed and approved work",
           bold: false,
         },
       ],
@@ -218,7 +218,7 @@ export const contractorGuideContent: ContractorGuideContent = {
       ],
       bullets: [
         {
-          text: "Workforce Connect receives payment from the hotel or janitorial client",
+          text: "The Company receives payment from the hotel or janitorial client",
           bold: false,
         },
       ],
@@ -242,7 +242,7 @@ export const contractorGuideContent: ContractorGuideContent = {
       id: "payment-methods",
       title: "3. Payment Methods",
       content: [
-        "Workforce Connect supports ONLY the following payment methods:",
+        "The Company supports ONLY the following payment methods:",
       ],
       subSections: [
         {
@@ -268,7 +268,7 @@ export const contractorGuideContent: ContractorGuideContent = {
       title: "4. Payment Information Requirements",
       content: [
         "You cannot be paid until your payment details are properly registered.",
-        "Please complete the official Payment Information Form provided by Workforce Connect.",
+        "Please complete the official Payment Information Form provided by the Company.",
       ],
       highlight: {
         type: "error",
@@ -286,7 +286,7 @@ export const contractorGuideContent: ContractorGuideContent = {
           bold: false,
         },
         {
-          text: "Workforce Connect is not responsible for delays caused by Clients or banking institutions",
+          text: "The Company is not responsible for delays caused by Clients or banking institutions",
           bold: false,
         },
       ],
@@ -297,7 +297,7 @@ export const contractorGuideContent: ContractorGuideContent = {
       content: [],
       bullets: [
         {
-          text: "The Subcontractor must accurately submit Time-In / Time-Out (TITO) records through the Workforce Connect platform.",
+          text: "The Subcontractor must accurately submit Time-In / Time-Out (TITO) records through the designated platform.",
           bold: false,
         },
         {
@@ -346,9 +346,9 @@ export const contractorGuideContent: ContractorGuideContent = {
   ],
 
   contactInfo: {
-    email: "payroll@wfconnect.org",
+    email: "payroll@company.ca",
     phone: "(416) 555-0100",
-    website: "https://wfconnect.org",
+    website: "/",
   },
 
   departments: [

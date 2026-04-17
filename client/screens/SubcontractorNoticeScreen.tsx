@@ -141,7 +141,7 @@ export default function SubcontractorNoticeScreen() {
             </View>
           </View>
           <ThemedText style={styles.warningText}>
-            This acknowledgment must be completed before you can finish signing your subcontractor agreement.
+            This acknowledgment must be completed before you can finish signing your worker agreement.
           </ThemedText>
         </Card>
 

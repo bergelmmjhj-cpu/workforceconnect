@@ -229,7 +229,7 @@ export default function AgreementSigningScreen() {
             <ThemedText style={styles.signatureTitle}>Signature & Acceptance</ThemedText>
 
             {renderCheckbox(
-              "I have read and agree to the terms of this Subcontractor Agreement",
+              "I have read and agree to the terms of this Worker Agreement",
               iAgree,
               () => setIAgree(!iAgree)
             )}

@@ -156,14 +156,14 @@ export default function RootStackNavigator() {
             name="WorkerApplication"
             component={WorkerApplicationFormScreen}
             options={{
-              headerTitle: "Worker Application",
+              headerTitle: "Application",
             }}
           />
           <Stack.Screen
             name="SubcontractorNotice"
             component={SubcontractorNoticeScreen}
             options={{
-              headerTitle: "Non-Solicitation Clause",
+              headerTitle: "Agreement Terms",
             }}
           />
           <Stack.Screen

@@ -592,7 +592,7 @@ export async function clearStorage(): Promise<void> {
 const defaultAgreementTemplate: SubcontractorAgreementTemplate = {
   id: "template-v3",
   version: WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
-  title: "Subcontractor Agreement",
+  title: "Worker Agreement",
   bodyText: getWorkforceSubcontractorAgreementBodyText(),
   lastUpdated: `${WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE}T00:00:00.000Z`,
   effectiveDate: `${WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE}T00:00:00.000Z`,

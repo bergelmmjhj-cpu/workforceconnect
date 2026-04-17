@@ -54,7 +54,7 @@ export default function WorkerOnboardingScreen() {
     return [
       {
         id: "application",
-        title: "Complete Application",
+        title: "Application",
         description: "Fill out your worker application form",
         icon: "file-text",
         status: applicationCompleted
@@ -78,8 +78,8 @@ export default function WorkerOnboardingScreen() {
       },
       {
         id: "clause",
-        title: "Review Clause",
-        description: "Acknowledge the Non-Solicitation / Direct Hiring Clause",
+        title: "Agreement Terms",
+        description: "Review and acknowledge the agreement terms",
         icon: "shield",
         status: clauseCompleted
           ? "completed"
@@ -90,7 +90,7 @@ export default function WorkerOnboardingScreen() {
       {
         id: "agreement",
         title: "Sign Agreement",
-        description: "Review and sign the subcontractor agreement",
+        description: "Review and sign the worker agreement",
         icon: "edit-3",
         status: agreementCompleted
           ? "completed"
@@ -164,7 +164,7 @@ export default function WorkerOnboardingScreen() {
 
   const handleDownloadAgreement = async () => {
     if (Platform.OS !== "web") {
-      Alert.alert("Download available on web", "Open your Workforce Connect web dashboard to download your signed agreement.");
+      Alert.alert("Download available on web", "Open your web dashboard to download your signed agreement.");
       return;
     }
 
@@ -174,7 +174,7 @@ export default function WorkerOnboardingScreen() {
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";
       const match = disposition.match(/filename="?([^\"]+)"?/i);
-      const filename = match?.[1] || "Workforce_Connect_Subcontractor_Agreement.pdf";
+      const filename = match?.[1] || "Worker_Agreement.pdf";
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;

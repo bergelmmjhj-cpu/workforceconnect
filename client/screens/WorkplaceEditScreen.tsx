@@ -77,7 +77,7 @@ export default function WorkplaceEditScreen() {
         longitude: existingWorkplace.longitude?.toString() || "",
         geofenceRadiusMeters: existingWorkplace.geofenceRadiusMeters?.toString() || "150",
       });
-      if (existingWorkplace.addressLine1 && existingWorkplace.latitude && existingWorkplace.longitude) {
+      if (existingWorkplace.addressLine1) {
         const fullAddress = [
           existingWorkplace.addressLine1,
           existingWorkplace.city,
@@ -103,6 +103,7 @@ export default function WorkplaceEditScreen() {
       longitude: address.longitude?.toString() || "",
     }));
     setIsAddressSelected(true);
+    setAddressSearchValue(address.formattedAddress || address.addressLine1);
   };
 
   const handleAddressClear = () => {
@@ -126,8 +127,8 @@ export default function WorkplaceEditScreen() {
       return;
     }
 
-    if (!isAddressSelected || !formData.latitude || !formData.longitude) {
-      setAlertModal({title: "Address Required", message: "Please select an address from the suggested list to ensure accurate GPS coordinates for TITO validation."});
+    if (!formData.addressLine1.trim() || !formData.city.trim() || !formData.province.trim() || !formData.postalCode.trim()) {
+      setAlertModal({title: "Address Required", message: "Please complete the street, city, province, and postal code fields."});
       return;
     }
 
@@ -216,11 +217,21 @@ export default function WorkplaceEditScreen() {
             value={addressSearchValue}
             onAddressSelect={handleAddressSelect}
             onClear={handleAddressClear}
+            onInputChange={(text) => {
+              setAddressSearchValue(text);
+              setFormData((prev) => ({
+                ...prev,
+                addressLine1: text,
+                latitude: "",
+                longitude: "",
+              }));
+              setIsAddressSelected(Boolean(text.trim()));
+            }}
             placeholder="Start typing an address..."
             userRole={user?.role || ""}
             userId={user?.id || ""}
             isAddressSelected={isAddressSelected}
-            error={!isAddressSelected && formData.name.trim() ? "Please select an address from the suggestions" : undefined}
+            error={!formData.addressLine1.trim() && formData.name.trim() ? "Please enter an address" : undefined}
           />
 
           {isAddressSelected ? (
@@ -229,9 +240,11 @@ export default function WorkplaceEditScreen() {
                 <View style={[styles.inputGroup, { flex: 2 }]}>
                   <ThemedText style={styles.label}>Street Address</ThemedText>
                   <TextInput
-                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                     value={formData.addressLine1}
-                    editable={false}
+                    onChangeText={(v) => updateField("addressLine1", v)}
+                    placeholder="Street address"
+                    placeholderTextColor={theme.textSecondary}
                   />
                 </View>
               </View>
@@ -240,17 +253,22 @@ export default function WorkplaceEditScreen() {
                 <View style={[styles.inputGroup, { flex: 2 }]}>
                   <ThemedText style={styles.label}>City</ThemedText>
                   <TextInput
-                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                     value={formData.city}
-                    editable={false}
+                    onChangeText={(v) => updateField("city", v)}
+                    placeholder="City"
+                    placeholderTextColor={theme.textSecondary}
                   />
                 </View>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
                   <ThemedText style={styles.label}>Province</ThemedText>
                   <TextInput
-                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                     value={formData.province}
-                    editable={false}
+                    onChangeText={(v) => updateField("province", v.toUpperCase())}
+                    placeholder="ON"
+                    placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="characters"
                   />
                 </View>
               </View>
@@ -259,9 +277,12 @@ export default function WorkplaceEditScreen() {
                 <View style={[styles.inputGroup, { flex: 1 }]}>
                   <ThemedText style={styles.label}>Postal Code</ThemedText>
                   <TextInput
-                    style={[styles.input, styles.readOnlyInput, { color: theme.textSecondary, borderColor: theme.border }]}
+                    style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                     value={formData.postalCode}
-                    editable={false}
+                    onChangeText={(v) => updateField("postalCode", v.toUpperCase())}
+                    placeholder="M5V 1A1"
+                    placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="characters"
                   />
                 </View>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
@@ -281,7 +302,7 @@ export default function WorkplaceEditScreen() {
           <ThemedText style={styles.sectionTitle}>GPS Settings</ThemedText>
           
           <ThemedText style={styles.helpText}>
-            GPS coordinates are automatically populated when you select an address. These are required for workers to clock in/out at this location.
+            Simple local suggestions are available while typing. GPS coordinates are optional and can remain blank if you are not using geofenced TITO validation.
           </ThemedText>
 
           <View style={styles.row}>

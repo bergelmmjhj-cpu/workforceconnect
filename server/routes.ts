@@ -55,6 +55,7 @@ import { discordAlerts, appConfig, applicants } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
 import { WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION } from "../shared/contractor-guide-content";
 import { streamAgreementPdf } from "./lib/agreement-pdf";
+
 type UserRole = "admin" | "hr" | "client" | "worker";
 
 type AdminPortalAuthResult = {
@@ -69,6 +70,131 @@ type AdminPortalAuthResult = {
     role: string;
   };
 };
+
+const CANADIAN_PROVINCES: Record<string, string> = {
+  AB: "Alberta",
+  BC: "British Columbia",
+  MB: "Manitoba",
+  NB: "New Brunswick",
+  NL: "Newfoundland and Labrador",
+  NS: "Nova Scotia",
+  NT: "Northwest Territories",
+  NU: "Nunavut",
+  ON: "Ontario",
+  PE: "Prince Edward Island",
+  QC: "Quebec",
+  SK: "Saskatchewan",
+  YT: "Yukon",
+};
+
+const CANADIAN_POSTAL_CODE_REGEX = /\b([ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z])[ -]?(\d[ABCEGHJ-NPRSTV-Z]\d)\b/i;
+
+function normalizeAddressText(value: string): string {
+  return value.replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").trim().replace(/,+$/, "");
+}
+
+function normalizeProvince(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const upper = trimmed.toUpperCase();
+  if (CANADIAN_PROVINCES[upper]) {
+    return upper;
+  }
+
+  const entry = Object.entries(CANADIAN_PROVINCES).find(([, fullName]) => fullName.toLowerCase() === trimmed.toLowerCase());
+  return entry?.[0] || "";
+}
+
+function normalizePostalCode(value: string): string {
+  const match = value.match(CANADIAN_POSTAL_CODE_REGEX);
+  if (!match) return "";
+  return `${match[1].toUpperCase()} ${match[2].toUpperCase()}`;
+}
+
+function stripCountry(value: string): string {
+  return value.replace(/,?\s*canada\s*$/i, "").trim();
+}
+
+function parseLocalAddress(input: string) {
+  const normalizedInput = normalizeAddressText(input);
+  let working = stripCountry(normalizedInput);
+  const postalCode = normalizePostalCode(working);
+
+  if (postalCode) {
+    working = normalizeAddressText(working.replace(CANADIAN_POSTAL_CODE_REGEX, ""));
+  }
+
+  const segments = working.split(",").map((segment) => segment.trim()).filter(Boolean);
+  let addressLine1 = segments[0] || working;
+  let city = "";
+  let province = "";
+
+  if (segments.length >= 3) {
+    addressLine1 = segments.slice(0, -2).join(", ");
+    city = segments[segments.length - 2] || "";
+    province = normalizeProvince(segments[segments.length - 1] || "");
+  } else if (segments.length === 2) {
+    addressLine1 = segments[0];
+    const secondSegment = segments[1];
+    const provinceMatch = secondSegment.match(/\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT|Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland and Labrador|Nova Scotia|Northwest Territories|Nunavut|Ontario|Prince Edward Island|Quebec|Saskatchewan|Yukon)\b$/i);
+    if (provinceMatch) {
+      province = normalizeProvince(provinceMatch[0]);
+      city = secondSegment.slice(0, secondSegment.length - provinceMatch[0].length).trim().replace(/,$/, "");
+    } else {
+      city = secondSegment;
+    }
+  }
+
+  addressLine1 = normalizeAddressText(addressLine1);
+  city = normalizeAddressText(city);
+
+  const formattedParts = [addressLine1, city, province, postalCode, "Canada"].filter(Boolean);
+
+  return {
+    formattedAddress: formattedParts.join(", "),
+    addressLine1,
+    city,
+    province,
+    postalCode,
+    country: "Canada",
+    latitude: null,
+    longitude: null,
+  };
+}
+
+function buildLocalAddressPredictions(input: string) {
+  const trimmed = normalizeAddressText(input);
+  if (trimmed.length < 2) {
+    return [];
+  }
+
+  const parsed = parseLocalAddress(trimmed);
+  const candidates = new Set<string>();
+
+  if (parsed.formattedAddress) {
+    candidates.add(parsed.formattedAddress);
+  }
+  candidates.add(trimmed);
+  if (!/canada$/i.test(trimmed)) {
+    candidates.add(`${trimmed}, Canada`);
+  }
+  if (parsed.addressLine1 && parsed.city) {
+    candidates.add([parsed.addressLine1, parsed.city, parsed.province, "Canada"].filter(Boolean).join(", "));
+  }
+
+  return Array.from(candidates)
+    .filter(Boolean)
+    .slice(0, 5)
+    .map((description) => ({
+      place_id: Buffer.from(description, "utf-8").toString("base64url"),
+      description,
+      structured_formatting: {
+        main_text: description.split(",")[0]?.trim() || description,
+        secondary_text: description.split(",").slice(1).join(",").trim() || "Canada",
+      },
+    }));
+}
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371e3;
@@ -6940,7 +7066,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
-  // Google Places API Proxy (Address Autocomplete)
+  // Local Address Suggestion Helpers
   // ========================================
 
   app.get("/api/places/autocomplete", async (req: Request, res: Response) => {
@@ -6951,28 +7077,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ predictions: [] });
         return;
       }
-
-      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-      if (!apiKey) {
-        res.status(500).json({ error: "Google Places API key not configured" });
-        return;
-      }
-
-      const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
-      url.searchParams.set("input", input);
-      url.searchParams.set("key", apiKey);
-      url.searchParams.set("types", "address");
-      url.searchParams.set("components", "country:ca|country:us");
-
-      const response = await fetch(url.toString());
-      const data = await response.json();
-
-      if (data.status === "OK" || data.status === "ZERO_RESULTS") {
-        res.json({ predictions: data.predictions || [] });
-      } else {
-        console.error("Google Places API error:", data.status, data.error_message);
-        res.status(500).json({ error: "Failed to fetch address suggestions" });
-      }
+      res.json({ predictions: buildLocalAddressPredictions(input) });
     } catch (error) {
       console.error("Error in address autocomplete:", error);
       res.status(500).json({ error: "Failed to fetch address suggestions" });
@@ -6988,60 +7093,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-      if (!apiKey) {
-        res.status(500).json({ error: "Google Places API key not configured" });
-        return;
-      }
-
-      const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
-      url.searchParams.set("place_id", placeId);
-      url.searchParams.set("key", apiKey);
-      url.searchParams.set("fields", "formatted_address,address_components,geometry");
-
-      const response = await fetch(url.toString());
-      const data = await response.json();
-
-      if (data.status === "OK" && data.result) {
-        const result = data.result;
-        const components = result.address_components || [];
-        
-        const getComponent = (types: string[]): string => {
-          const comp = components.find((c: { types: string[] }) => 
-            types.some((t: string) => c.types.includes(t))
-          );
-          return comp?.long_name || "";
-        };
-
-        const getShortComponent = (types: string[]): string => {
-          const comp = components.find((c: { types: string[] }) => 
-            types.some((t: string) => c.types.includes(t))
-          );
-          return comp?.short_name || "";
-        };
-
-        const streetNumber = getComponent(["street_number"]);
-        const streetName = getComponent(["route"]);
-        const addressLine1 = streetNumber && streetName 
-          ? `${streetNumber} ${streetName}` 
-          : streetName || getComponent(["premise", "subpremise"]);
-
-        const addressData = {
-          formattedAddress: result.formatted_address,
-          addressLine1,
-          city: getComponent(["locality", "sublocality", "administrative_area_level_3"]),
-          province: getShortComponent(["administrative_area_level_1"]),
-          postalCode: getComponent(["postal_code"]),
-          country: getComponent(["country"]),
-          latitude: result.geometry?.location?.lat || null,
-          longitude: result.geometry?.location?.lng || null,
-        };
-
-        res.json(addressData);
-      } else {
-        console.error("Google Places Details API error:", data.status, data.error_message);
-        res.status(500).json({ error: "Failed to fetch address details" });
-      }
+      const decodedPlaceText = Buffer.from(placeId, "base64url").toString("utf-8");
+      res.json(parseLocalAddress(decodedPlaceText));
     } catch (error) {
       console.error("Error in address details:", error);
       res.status(500).json({ error: "Failed to fetch address details" });

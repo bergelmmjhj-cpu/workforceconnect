@@ -1,66 +1,35 @@
 var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// server/index.ts
-import express from "express";
-
-// server/routes.ts
-import { createServer } from "node:http";
-
-// server/websocket.ts
-import { WebSocketServer, WebSocket } from "ws";
-var clients = /* @__PURE__ */ new Set();
-var wss;
-function setupWebSocket(server) {
-  wss = new WebSocketServer({ server, path: "/ws" });
-  wss.on("connection", (ws) => {
-    clients.add(ws);
-    console.log(`[WS] Client connected (total: ${clients.size})`);
-    ws.on("close", () => {
-      clients.delete(ws);
-      console.log(`[WS] Client disconnected (total: ${clients.size})`);
-    });
-    ws.on("error", (err) => {
-      console.error("[WS] Error:", err.message);
-      clients.delete(ws);
-    });
-    ws.send(JSON.stringify({ type: "connected", timestamp: (/* @__PURE__ */ new Date()).toISOString() }));
-  });
-  console.log("[WS] WebSocket server ready on /ws");
-}
-function broadcast(event) {
-  const message = JSON.stringify({ ...event, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
-  let sent = 0;
-  clients.forEach((client2) => {
-    if (client2.readyState === WebSocket.OPEN) {
-      client2.send(message);
-      sent++;
-    }
-  });
-  if (sent > 0) {
-    console.log(`[WS] Broadcast ${event.type}:${event.entity} to ${sent} clients`);
-  }
-}
-function getConnectedClientsCount() {
-  return clients.size;
-}
-
-// server/db.ts
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-
 // shared/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
+  aiActionLogs: () => aiActionLogs,
+  aiAlertState: () => aiAlertState,
+  aiMessageLog: () => aiMessageLog,
+  appConfig: () => appConfig,
   appNotifications: () => appNotifications,
+  applicants: () => applicants,
+  appointments: () => appointments,
   auditLog: () => auditLog,
+  clawdAssistantRuns: () => clawdAssistantRuns,
+  clawdChatMessages: () => clawdChatMessages,
   contactLeads: () => contactLeads,
   conversations: () => conversations2,
+  crmPushQueue: () => crmPushQueue,
+  crmSyncLogs: () => crmSyncLogs,
+  discordActionLogs: () => discordActionLogs,
+  discordAlerts: () => discordAlerts,
   exportAuditLogs: () => exportAuditLogs,
   insertAppNotificationSchema: () => insertAppNotificationSchema,
+  insertAppointmentSchema: () => insertAppointmentSchema,
   insertContactLeadSchema: () => insertContactLeadSchema,
   insertConversationSchema: () => insertConversationSchema,
   insertExportAuditLogSchema: () => insertExportAuditLogSchema,
@@ -106,9 +75,11 @@ __export(schema_exports, {
   shiftSeries: () => shiftSeries,
   shiftStatusEnum: () => shiftStatusEnum,
   shifts: () => shifts,
+  smsLogs: () => smsLogs,
   timesheetEntries: () => timesheetEntries,
   timesheetStatusEnum: () => timesheetStatusEnum,
   timesheets: () => timesheets,
+  titoCorrections: () => titoCorrections,
   titoLogs: () => titoLogs,
   userPhotos: () => userPhotos,
   users: () => users,
@@ -118,600 +89,2190 @@ __export(schema_exports, {
   workplaces: () => workplaces
 });
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, doublePrecision, uniqueIndex, date, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, doublePrecision, uniqueIndex, index, date, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-var users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
-  fullName: text("full_name").notNull(),
-  role: text("role").notNull().default("worker"),
-  // admin, hr, client, worker
-  timezone: text("timezone").default("America/Toronto"),
-  onboardingStatus: text("onboarding_status"),
-  // For workers: NOT_APPLIED, APPLICATION_SUBMITTED, etc.
-  workerRoles: text("worker_roles"),
-  // JSON array of worker roles
-  businessName: text("business_name"),
-  // For clients
-  businessAddress: text("business_address"),
-  businessPhone: text("business_phone"),
-  profilePhotoUrl: text("profile_photo_url"),
-  totpSecret: text("totp_secret"),
-  totpEnabled: boolean("totp_enabled").default(false),
-  recoveryCodes: text("recovery_codes"),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertUserSchema = createInsertSchema(users).pick({
-  email: true,
-  password: true,
-  fullName: true,
-  role: true,
-  timezone: true,
-  onboardingStatus: true,
-  workerRoles: true,
-  businessName: true,
-  businessAddress: true,
-  businessPhone: true,
-  isActive: true
-});
-var registerUserSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  fullName: z.string().min(2),
-  role: z.enum(["admin", "hr", "client", "worker"])
-});
-var loginUserSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1)
-});
-var conversations2 = pgTable("conversations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  type: text("type").notNull().default("hr_worker"),
-  // Only "hr_worker" type
-  workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
-  hrUserId: varchar("hr_user_id").references(() => users.id),
-  // Optional - can be null if multiple HR
-  lastMessageAt: timestamp("last_message_at"),
-  lastMessagePreview: text("last_message_preview"),
-  isArchived: boolean("is_archived").default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var messages2 = pgTable("messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  conversationId: varchar("conversation_id").notNull().references(() => conversations2.id),
-  senderUserId: varchar("sender_user_id").notNull().references(() => users.id),
-  recipientUserId: varchar("recipient_user_id").notNull().references(() => users.id),
-  body: text("body").notNull(),
-  messageType: text("message_type").notNull().default("text"),
-  // "text" | "image" | "file"
-  mediaUrl: text("media_url"),
-  readAt: timestamp("read_at"),
-  status: text("status").notNull().default("delivered"),
-  // "sent" | "delivered" | "read"
-  deletedAt: timestamp("deleted_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var messageLogs = pgTable("message_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  messageId: varchar("message_id").notNull().references(() => messages2.id),
-  event: text("event").notNull(),
-  // "created" | "delivered" | "read" | "edited" | "deleted"
-  actorUserId: varchar("actor_user_id").notNull().references(() => users.id),
-  metadata: text("metadata"),
-  // JSON string for additional data
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var insertConversationSchema = createInsertSchema(conversations2);
-var insertMessageSchema = createInsertSchema(messages2);
-var insertMessageLogSchema = createInsertSchema(messageLogs);
-var pushTokens = pgTable("push_tokens", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  token: text("token").notNull(),
-  platform: text("platform").notNull().default("unknown"),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-}, (table) => [
-  uniqueIndex("push_tokens_token_idx").on(table.token)
-]);
-var contactLeads = pgTable("contact_leads", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  email: text("email").notNull(),
-  company: text("company"),
-  phone: text("phone"),
-  cityProvince: text("city_province"),
-  serviceNeeded: text("service_needed"),
-  message: text("message").notNull(),
-  ip: text("ip"),
-  userAgent: text("user_agent"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var insertContactLeadSchema = createInsertSchema(contactLeads).pick({
-  name: true,
-  email: true,
-  company: true,
-  phone: true,
-  cityProvince: true,
-  serviceNeeded: true,
-  message: true,
-  ip: true,
-  userAgent: true
-});
-var workerApplications = pgTable("worker_applications", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  // Personal Details
-  fullName: text("full_name").notNull(),
-  phone: text("phone").notNull(),
-  email: text("email").notNull(),
-  address: text("address").notNull(),
-  city: text("city").notNull(),
-  province: text("province").notNull(),
-  postalCode: text("postal_code").notNull(),
-  dateOfBirth: text("date_of_birth"),
-  // Work Eligibility
-  workStatus: text("work_status").notNull(),
-  // citizen, permanent_resident, work_permit
-  backgroundCheckConsent: boolean("background_check_consent").default(false),
-  // Role Interests
-  preferredRoles: text("preferred_roles").notNull(),
-  // JSON array
-  otherRole: text("other_role"),
-  // Availability
-  availableDays: text("available_days").notNull(),
-  // JSON array
-  preferredShifts: text("preferred_shifts").notNull(),
-  // JSON array (morning, afternoon, evening)
-  unavailablePeriods: text("unavailable_periods"),
-  // Experience
-  yearsExperience: text("years_experience"),
-  workHistory: text("work_history"),
-  // JSON array of job objects
-  experienceSummary: text("experience_summary"),
-  // Skills
-  skills: text("skills"),
-  // JSON array
-  certifications: text("certifications"),
-  // JSON array
-  // Shift Preferences
-  shiftTypePreference: text("shift_type_preference"),
-  // day, night, flexible
-  desiredShiftLength: text("desired_shift_length"),
-  // 4, 8, flexible
-  maxTravelDistance: text("max_travel_distance"),
-  // Emergency Contact
-  emergencyContactName: text("emergency_contact_name").notNull(),
-  emergencyContactRelationship: text("emergency_contact_relationship").notNull(),
-  emergencyContactPhone: text("emergency_contact_phone").notNull(),
-  // Payment Information
-  paymentMethod: text("payment_method"),
-  // direct_deposit, etransfer
-  bankName: text("bank_name"),
-  bankInstitution: text("bank_institution"),
-  bankTransit: text("bank_transit"),
-  bankAccount: text("bank_account"),
-  etransferEmail: text("etransfer_email"),
-  // Acknowledgments
-  titoAcknowledgment: boolean("tito_acknowledgment").default(false),
-  siteRulesAcknowledgment: boolean("site_rules_acknowledgment").default(false),
-  workerAgreementConsent: boolean("worker_agreement_consent").default(false),
-  privacyConsent: boolean("privacy_consent").default(false),
-  marketingConsent: boolean("marketing_consent").default(false),
-  // Electronic Signature
-  signature: text("signature").notNull(),
-  // Typed full name as signature
-  signatureDate: text("signature_date").notNull(),
-  // Status
-  status: text("status").notNull().default("pending"),
-  // pending, reviewed, approved, rejected
-  reviewedBy: varchar("reviewed_by"),
-  reviewedAt: timestamp("reviewed_at"),
-  notes: text("notes"),
-  // Metadata
-  ip: text("ip"),
-  userAgent: text("user_agent"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertWorkerApplicationSchema = createInsertSchema(workerApplications).omit({
-  id: true,
-  status: true,
-  reviewedBy: true,
-  reviewedAt: true,
-  notes: true,
-  createdAt: true,
-  updatedAt: true
-});
-var workplaces = pgTable("workplaces", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  addressLine1: text("address_line1"),
-  city: text("city"),
-  province: text("province"),
-  postalCode: text("postal_code"),
-  country: text("country").default("Canada"),
-  latitude: doublePrecision("latitude"),
-  longitude: doublePrecision("longitude"),
-  geofenceRadiusMeters: integer("geofence_radius_meters").default(150),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertWorkplaceSchema = createInsertSchema(workplaces).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var workplaceAssignmentStatusEnum = z.enum(["invited", "active", "suspended", "removed"]);
-var workplaceAssignments = pgTable("workplace_assignments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  workplaceId: varchar("workplace_id").notNull().references(() => workplaces.id),
-  workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
-  status: text("status").notNull().default("active"),
-  // invited, active, suspended, removed
-  invitedByUserId: varchar("invited_by_user_id").references(() => users.id),
-  invitedAt: timestamp("invited_at").defaultNow().notNull(),
-  acceptedAt: timestamp("accepted_at"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-}, (table) => ({
-  uniqueWorkerWorkplace: uniqueIndex("unique_worker_workplace").on(table.workplaceId, table.workerUserId)
-}));
-var insertWorkplaceAssignmentSchema = createInsertSchema(workplaceAssignments).omit({
-  id: true,
-  invitedAt: true,
-  createdAt: true,
-  updatedAt: true
-});
-var titoLogs = pgTable("tito_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  workerId: varchar("worker_id").notNull().references(() => users.id),
-  workplaceId: varchar("workplace_id").references(() => workplaces.id),
-  shiftId: varchar("shift_id"),
-  // Time tracking
-  timeIn: timestamp("time_in"),
-  timeOut: timestamp("time_out"),
-  // GPS verification - Time In
-  timeInGpsLat: doublePrecision("time_in_gps_lat"),
-  timeInGpsLng: doublePrecision("time_in_gps_lng"),
-  timeInDistanceMeters: doublePrecision("time_in_distance_meters"),
-  timeInGpsVerified: boolean("time_in_gps_verified").default(false),
-  timeInGpsFailureReason: text("time_in_gps_failure_reason"),
-  // GPS verification - Time Out
-  timeOutGpsLat: doublePrecision("time_out_gps_lat"),
-  timeOutGpsLng: doublePrecision("time_out_gps_lng"),
-  timeOutDistanceMeters: doublePrecision("time_out_distance_meters"),
-  timeOutGpsVerified: boolean("time_out_gps_verified").default(false),
-  timeOutGpsFailureReason: text("time_out_gps_failure_reason"),
-  // Approval
-  status: text("status").notNull().default("pending"),
-  // pending, approved, disputed
-  approvedBy: varchar("approved_by"),
-  approvedAt: timestamp("approved_at"),
-  disputedBy: varchar("disputed_by"),
-  disputedAt: timestamp("disputed_at"),
-  notes: text("notes"),
-  lateReason: text("late_reason"),
-  lateNote: text("late_note"),
-  flaggedLate: boolean("flagged_late").default(false),
-  lateMinutes: integer("late_minutes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertTitoLogSchema = createInsertSchema(titoLogs).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var timesheetStatusEnum = z.enum(["draft", "submitted", "approved", "disputed", "processed"]);
-var timesheets = pgTable("timesheets", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
-  periodYear: integer("period_year").notNull(),
-  periodNumber: integer("period_number").notNull(),
-  status: text("status").notNull().default("draft"),
-  // draft, submitted, approved, disputed, processed
-  submittedAt: timestamp("submitted_at"),
-  approvedByUserId: varchar("approved_by_user_id").references(() => users.id),
-  approvedAt: timestamp("approved_at"),
-  disputedByUserId: varchar("disputed_by_user_id").references(() => users.id),
-  disputedAt: timestamp("disputed_at"),
-  disputeReason: text("dispute_reason"),
-  totalHours: numeric("total_hours", { precision: 10, scale: 2 }).default("0"),
-  totalPay: numeric("total_pay", { precision: 12, scale: 2 }).default("0"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-}, (table) => ({
-  uniqueWorkerPeriod: uniqueIndex("unique_worker_period").on(table.workerUserId, table.periodYear, table.periodNumber)
-}));
-var insertTimesheetSchema = createInsertSchema(timesheets).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var timesheetEntries = pgTable("timesheet_entries", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  timesheetId: varchar("timesheet_id").notNull().references(() => timesheets.id, { onDelete: "cascade" }),
-  workplaceId: varchar("workplace_id").references(() => workplaces.id),
-  titoLogId: varchar("tito_log_id").references(() => titoLogs.id),
-  dateLocal: date("date_local").notNull(),
-  timeInUtc: timestamp("time_in_utc").notNull(),
-  timeOutUtc: timestamp("time_out_utc").notNull(),
-  breakMinutes: integer("break_minutes").default(0),
-  hours: numeric("hours", { precision: 5, scale: 2 }).notNull(),
-  payRate: numeric("pay_rate", { precision: 10, scale: 2 }).notNull(),
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-}, (table) => ({
-  uniqueTitoLog: uniqueIndex("unique_timesheet_tito_log").on(table.titoLogId)
-}));
-var insertTimesheetEntrySchema = createInsertSchema(timesheetEntries).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var payrollBatchStatusEnum = z.enum(["open", "finalized", "exported"]);
-var payrollBatches = pgTable("payroll_batches", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  periodYear: integer("period_year").notNull(),
-  periodNumber: integer("period_number").notNull(),
-  status: text("status").notNull().default("open"),
-  // open, finalized, exported
-  createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
-  finalizedByUserId: varchar("finalized_by_user_id").references(() => users.id),
-  finalizedAt: timestamp("finalized_at"),
-  totalWorkers: integer("total_workers").default(0),
-  totalHours: numeric("total_hours", { precision: 10, scale: 2 }).default("0"),
-  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).default("0"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-}, (table) => ({
-  uniquePeriodBatch: uniqueIndex("unique_period_batch").on(table.periodYear, table.periodNumber)
-}));
-var insertPayrollBatchSchema = createInsertSchema(payrollBatches).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var payrollBatchItemStatusEnum = z.enum(["included", "excluded"]);
-var payrollBatchItems = pgTable("payroll_batch_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  payrollBatchId: varchar("payroll_batch_id").notNull().references(() => payrollBatches.id, { onDelete: "cascade" }),
-  workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
-  timesheetId: varchar("timesheet_id").notNull().references(() => timesheets.id),
-  status: text("status").notNull().default("included"),
-  // included, excluded
-  hours: numeric("hours", { precision: 10, scale: 2 }).notNull(),
-  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertPayrollBatchItemSchema = createInsertSchema(payrollBatchItems).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var paymentProfiles = pgTable("payment_profiles", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  workerUserId: varchar("worker_user_id").notNull().references(() => users.id).unique(),
-  paymentMethod: text("payment_method"),
-  // direct_deposit, etransfer
-  bankName: text("bank_name"),
-  etransferEmail: text("etransfer_email"),
-  bankInstitution: text("bank_institution"),
-  bankTransit: text("bank_transit"),
-  bankAccount: text("bank_account"),
-  voidChequeFileId: text("void_cheque_file_id"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertPaymentProfileSchema = createInsertSchema(paymentProfiles).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var shiftStatusEnum = z.enum(["scheduled", "in_progress", "completed", "cancelled"]);
-var shiftFrequencyEnum = z.enum(["one-time", "recurring", "open-ended"]);
-var shiftCategoryEnum = z.enum(["hotel", "banquet", "janitorial"]);
-var seriesFrequencyEnum = z.enum(["daily", "weekly", "biweekly", "monthly"]);
-var seriesEndTypeEnum = z.enum(["date", "count", "never"]);
-var shiftSeries = pgTable("shift_series", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  workplaceId: varchar("workplace_id").notNull().references(() => workplaces.id),
-  workerUserId: varchar("worker_user_id").references(() => users.id),
-  title: text("title").notNull(),
-  roleType: text("role_type"),
-  startTime: text("start_time").notNull(),
-  endTime: text("end_time"),
-  notes: text("notes"),
-  category: text("category").notNull().default("janitorial"),
-  frequency: text("frequency").notNull().default("weekly"),
-  recurringDays: text("recurring_days"),
-  startDate: date("start_date").notNull(),
-  endType: text("end_type").notNull().default("never"),
-  endDate: date("end_date"),
-  endAfterCount: integer("end_after_count"),
-  status: text("status").notNull().default("active"),
-  createdByUserId: varchar("created_by_user_id").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertShiftSeriesSchema = createInsertSchema(shiftSeries).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var recurrenceExceptions = pgTable("recurrence_exceptions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  seriesId: varchar("series_id").notNull().references(() => shiftSeries.id),
-  date: date("date").notNull(),
-  type: text("type").notNull().default("cancelled"),
-  overrideStartTime: text("override_start_time"),
-  overrideEndTime: text("override_end_time"),
-  overrideWorkerUserId: varchar("override_worker_user_id").references(() => users.id),
-  overrideNotes: text("override_notes"),
-  reason: text("reason"),
-  cancelledByUserId: varchar("cancelled_by_user_id").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var auditLog = pgTable("audit_log", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id),
-  action: text("action").notNull(),
-  entityType: text("entity_type").notNull(),
-  entityId: varchar("entity_id"),
-  details: text("details"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var userPhotos = pgTable("user_photos", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  url: text("url").notNull(),
-  status: text("status").notNull().default("pending_review"),
-  reviewerId: varchar("reviewer_id").references(() => users.id),
-  reviewedAt: timestamp("reviewed_at"),
-  rejectionReason: text("rejection_reason"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var shifts = pgTable("shifts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  requestId: varchar("request_id"),
-  workplaceId: varchar("workplace_id").notNull().references(() => workplaces.id),
-  workerUserId: varchar("worker_user_id").references(() => users.id),
-  roleType: text("role_type"),
-  title: text("title").notNull(),
-  date: date("date").notNull(),
-  startTime: text("start_time").notNull(),
-  endTime: text("end_time"),
-  notes: text("notes"),
-  status: text("status").notNull().default("scheduled"),
-  frequencyType: text("frequency_type").notNull().default("one-time"),
-  category: text("category").notNull().default("janitorial"),
-  recurringDays: text("recurring_days"),
-  recurringEndDate: date("recurring_end_date"),
-  parentShiftId: varchar("parent_shift_id"),
-  workersNeeded: integer("workers_needed"),
-  createdByUserId: varchar("created_by_user_id").references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertShiftSchema = createInsertSchema(shifts).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var shiftRequestStatusEnum = z.enum(["draft", "submitted", "offered", "filled", "cancelled", "expired"]);
-var shiftRequests = pgTable("shift_requests", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  clientId: varchar("client_id").notNull().references(() => users.id),
-  workplaceId: varchar("workplace_id").references(() => workplaces.id),
-  roleType: text("role_type").notNull(),
-  date: date("date").notNull(),
-  startTime: text("start_time").notNull(),
-  endTime: text("end_time").notNull(),
-  notes: text("notes"),
-  requestedWorkerId: varchar("requested_worker_id").references(() => users.id),
-  status: text("status").notNull().default("draft"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-});
-var insertShiftRequestSchema = createInsertSchema(shiftRequests).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true
-});
-var shiftOfferStatusEnum = z.enum(["pending", "accepted", "declined", "expired", "cancelled"]);
-var shiftOffers = pgTable("shift_offers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  shiftId: varchar("shift_id").notNull().references(() => shifts.id),
-  workerId: varchar("worker_id").notNull().references(() => users.id),
-  status: text("status").notNull().default("pending"),
-  offeredAt: timestamp("offered_at").defaultNow().notNull(),
-  respondedAt: timestamp("responded_at"),
-  cancelledAt: timestamp("cancelled_at"),
-  cancelledBy: varchar("cancelled_by"),
-  cancelReason: text("cancel_reason"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-}, (table) => ({
-  uniqueShiftWorker: uniqueIndex("unique_shift_worker_offer").on(table.shiftId, table.workerId)
-}));
-var insertShiftOfferSchema = createInsertSchema(shiftOffers).omit({
-  id: true,
-  offeredAt: true,
-  createdAt: true
-});
-var appNotifications = pgTable("app_notifications", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  type: text("type").notNull(),
-  title: text("title").notNull(),
-  body: text("body").notNull(),
-  deepLink: text("deep_link"),
-  metadata: text("metadata"),
-  readAt: timestamp("read_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var insertAppNotificationSchema = createInsertSchema(appNotifications).omit({
-  id: true,
-  createdAt: true
-});
-var shiftCheckinStatusEnum = z.enum(["on_my_way", "issue", "checked_in", "checked_out"]);
-var shiftCheckins = pgTable("shift_checkins", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  shiftId: varchar("shift_id").notNull().references(() => shifts.id),
-  workerId: varchar("worker_id").notNull().references(() => users.id),
-  status: text("status").notNull(),
-  note: text("note"),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var insertShiftCheckinSchema = createInsertSchema(shiftCheckins).omit({
-  id: true,
-  createdAt: true
-});
-var sentReminders = pgTable("sent_reminders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  shiftId: varchar("shift_id").notNull().references(() => shifts.id),
-  workerId: varchar("worker_id").notNull().references(() => users.id),
-  reminderType: text("reminder_type").notNull(),
-  sentAt: timestamp("sent_at").defaultNow().notNull()
-}, (table) => ({
-  uniqueReminder: uniqueIndex("unique_shift_worker_reminder").on(table.shiftId, table.workerId, table.reminderType)
-}));
-var exportAuditLogs = pgTable("export_audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  adminUserId: varchar("admin_user_id").notNull().references(() => users.id),
-  exportType: text("export_type").notNull(),
-  // timesheet, paymentSummary, allHotels
-  fileFormat: text("file_format").notNull(),
-  // csv, xlsx, zip
-  periodYear: integer("period_year").notNull(),
-  periodNumber: integer("period_number").notNull(),
-  workplaceId: varchar("workplace_id").references(() => workplaces.id),
-  workplaceName: text("workplace_name"),
-  fileName: text("file_name").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull()
-});
-var insertExportAuditLogSchema = createInsertSchema(exportAuditLogs).omit({
-  id: true,
-  createdAt: true
+var users, insertUserSchema, registerUserSchema, loginUserSchema, conversations2, messages2, messageLogs, insertConversationSchema, insertMessageSchema, insertMessageLogSchema, pushTokens, contactLeads, insertContactLeadSchema, workerApplications, insertWorkerApplicationSchema, workplaces, insertWorkplaceSchema, workplaceAssignmentStatusEnum, workplaceAssignments, insertWorkplaceAssignmentSchema, titoLogs, insertTitoLogSchema, titoCorrections, timesheetStatusEnum, timesheets, insertTimesheetSchema, timesheetEntries, insertTimesheetEntrySchema, payrollBatchStatusEnum, payrollBatches, insertPayrollBatchSchema, payrollBatchItemStatusEnum, payrollBatchItems, insertPayrollBatchItemSchema, paymentProfiles, insertPaymentProfileSchema, shiftStatusEnum, shiftFrequencyEnum, shiftCategoryEnum, seriesFrequencyEnum, seriesEndTypeEnum, shiftSeries, insertShiftSeriesSchema, recurrenceExceptions, auditLog, userPhotos, shifts, insertShiftSchema, shiftRequestStatusEnum, shiftRequests, insertShiftRequestSchema, shiftOfferStatusEnum, shiftOffers, insertShiftOfferSchema, appNotifications, insertAppNotificationSchema, shiftCheckinStatusEnum, shiftCheckins, insertShiftCheckinSchema, sentReminders, exportAuditLogs, insertExportAuditLogSchema, smsLogs, discordAlerts, discordActionLogs, crmSyncLogs, crmPushQueue, aiActionLogs, aiAlertState, clawdChatMessages, clawdAssistantRuns, appointments, insertAppointmentSchema, appConfig, aiMessageLog, applicants;
+var init_schema = __esm({
+  "shared/schema.ts"() {
+    "use strict";
+    users = pgTable("users", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      email: text("email").notNull().unique(),
+      password: text("password"),
+      fullName: text("full_name").notNull(),
+      role: text("role").notNull().default("worker"),
+      // admin, hr, client, worker
+      timezone: text("timezone").default("America/Toronto"),
+      onboardingStatus: text("onboarding_status"),
+      // For workers: NOT_APPLIED, APPLICATION_SUBMITTED, etc.
+      workerRoles: text("worker_roles"),
+      // JSON array of worker roles
+      businessName: text("business_name"),
+      // For clients
+      businessAddress: text("business_address"),
+      businessPhone: text("business_phone"),
+      phone: text("phone"),
+      profilePhotoUrl: text("profile_photo_url"),
+      totpSecret: text("totp_secret"),
+      totpEnabled: boolean("totp_enabled").default(false),
+      recoveryCodes: text("recovery_codes"),
+      mustChangePassword: boolean("must_change_password").default(false),
+      isActive: boolean("is_active").default(true),
+      googleId: text("google_id"),
+      passwordResetToken: text("password_reset_token"),
+      passwordResetExpiry: timestamp("password_reset_expiry"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    }, (table) => ({
+      phoneUnique: uniqueIndex("users_phone_unique").on(table.phone).where(sql`${table.phone} IS NOT NULL`)
+    }));
+    insertUserSchema = createInsertSchema(users).pick({
+      email: true,
+      password: true,
+      fullName: true,
+      role: true,
+      timezone: true,
+      onboardingStatus: true,
+      workerRoles: true,
+      businessName: true,
+      businessAddress: true,
+      businessPhone: true,
+      phone: true,
+      isActive: true
+    });
+    registerUserSchema = z.object({
+      email: z.string().email(),
+      password: z.string().min(6),
+      fullName: z.string().min(2),
+      role: z.enum(["admin", "hr", "client", "worker"])
+    });
+    loginUserSchema = z.object({
+      email: z.string().email(),
+      password: z.string().min(1)
+    });
+    conversations2 = pgTable("conversations", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      type: text("type").notNull().default("hr_worker"),
+      // Only "hr_worker" type
+      workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
+      hrUserId: varchar("hr_user_id").references(() => users.id),
+      // Optional - can be null if multiple HR
+      lastMessageAt: timestamp("last_message_at"),
+      lastMessagePreview: text("last_message_preview"),
+      isArchived: boolean("is_archived").default(false),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    messages2 = pgTable("messages", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      conversationId: varchar("conversation_id").notNull().references(() => conversations2.id),
+      senderUserId: varchar("sender_user_id").notNull().references(() => users.id),
+      recipientUserId: varchar("recipient_user_id").notNull().references(() => users.id),
+      body: text("body").notNull(),
+      messageType: text("message_type").notNull().default("text"),
+      // "text" | "image" | "file"
+      mediaUrl: text("media_url"),
+      readAt: timestamp("read_at"),
+      status: text("status").notNull().default("delivered"),
+      // "sent" | "delivered" | "read"
+      deletedAt: timestamp("deleted_at"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    messageLogs = pgTable("message_logs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      messageId: varchar("message_id").notNull().references(() => messages2.id),
+      event: text("event").notNull(),
+      // "created" | "delivered" | "read" | "edited" | "deleted"
+      actorUserId: varchar("actor_user_id").notNull().references(() => users.id),
+      metadata: text("metadata"),
+      // JSON string for additional data
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    insertConversationSchema = createInsertSchema(conversations2);
+    insertMessageSchema = createInsertSchema(messages2);
+    insertMessageLogSchema = createInsertSchema(messageLogs);
+    pushTokens = pgTable("push_tokens", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull().references(() => users.id),
+      token: text("token").notNull(),
+      platform: text("platform").notNull().default("unknown"),
+      isActive: boolean("is_active").default(true),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    }, (table) => [
+      uniqueIndex("push_tokens_token_idx").on(table.token)
+    ]);
+    contactLeads = pgTable("contact_leads", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      name: text("name").notNull(),
+      email: text("email").notNull(),
+      company: text("company"),
+      phone: text("phone"),
+      cityProvince: text("city_province"),
+      serviceNeeded: text("service_needed"),
+      message: text("message").notNull(),
+      ip: text("ip"),
+      userAgent: text("user_agent"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    insertContactLeadSchema = createInsertSchema(contactLeads).pick({
+      name: true,
+      email: true,
+      company: true,
+      phone: true,
+      cityProvince: true,
+      serviceNeeded: true,
+      message: true,
+      ip: true,
+      userAgent: true
+    });
+    workerApplications = pgTable("worker_applications", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      // Personal Details
+      fullName: text("full_name").notNull(),
+      phone: text("phone").notNull(),
+      email: text("email").notNull(),
+      address: text("address").notNull(),
+      city: text("city").notNull(),
+      province: text("province").notNull(),
+      postalCode: text("postal_code").notNull(),
+      dateOfBirth: text("date_of_birth"),
+      // Work Eligibility
+      workStatus: text("work_status").notNull(),
+      // citizen, permanent_resident, work_permit
+      backgroundCheckConsent: boolean("background_check_consent").default(false),
+      // Role Interests
+      preferredRoles: text("preferred_roles").notNull(),
+      // JSON array
+      otherRole: text("other_role"),
+      // Availability
+      availableDays: text("available_days").notNull(),
+      // JSON array
+      preferredShifts: text("preferred_shifts").notNull(),
+      // JSON array (morning, afternoon, evening)
+      unavailablePeriods: text("unavailable_periods"),
+      // Experience
+      yearsExperience: text("years_experience"),
+      workHistory: text("work_history"),
+      // JSON array of job objects
+      experienceSummary: text("experience_summary"),
+      // Skills
+      skills: text("skills"),
+      // JSON array
+      certifications: text("certifications"),
+      // JSON array
+      // Shift Preferences
+      shiftTypePreference: text("shift_type_preference"),
+      // day, night, flexible
+      desiredShiftLength: text("desired_shift_length"),
+      // 4, 8, flexible
+      maxTravelDistance: text("max_travel_distance"),
+      // Emergency Contact
+      emergencyContactName: text("emergency_contact_name").notNull(),
+      emergencyContactRelationship: text("emergency_contact_relationship").notNull(),
+      emergencyContactPhone: text("emergency_contact_phone").notNull(),
+      // Payment Information
+      paymentMethod: text("payment_method"),
+      // direct_deposit, etransfer
+      bankName: text("bank_name"),
+      bankInstitution: text("bank_institution"),
+      bankTransit: text("bank_transit"),
+      bankAccount: text("bank_account"),
+      etransferEmail: text("etransfer_email"),
+      // Acknowledgments
+      titoAcknowledgment: boolean("tito_acknowledgment").default(false),
+      siteRulesAcknowledgment: boolean("site_rules_acknowledgment").default(false),
+      workerAgreementConsent: boolean("worker_agreement_consent").default(false),
+      agreementVersion: text("agreement_version"),
+      nonSolicitationAcknowledged: boolean("non_solicitation_acknowledged"),
+      nonSolicitationAcknowledgedAt: timestamp("non_solicitation_acknowledged_at"),
+      workerPdfGeneratedAt: timestamp("worker_pdf_generated_at"),
+      internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
+      privacyConsent: boolean("privacy_consent").default(false),
+      marketingConsent: boolean("marketing_consent").default(false),
+      // Electronic Signature
+      signature: text("signature").notNull(),
+      // Typed full name as signature
+      signatureDate: text("signature_date").notNull(),
+      // Status
+      status: text("status").notNull().default("pending"),
+      // pending, reviewed, approved, rejected
+      reviewedBy: varchar("reviewed_by"),
+      reviewedAt: timestamp("reviewed_at"),
+      notes: text("notes"),
+      // Metadata
+      ip: text("ip"),
+      userAgent: text("user_agent"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertWorkerApplicationSchema = createInsertSchema(workerApplications).omit({
+      id: true,
+      status: true,
+      reviewedBy: true,
+      reviewedAt: true,
+      notes: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    workplaces = pgTable("workplaces", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      name: text("name").notNull(),
+      addressLine1: text("address_line1"),
+      city: text("city"),
+      province: text("province"),
+      postalCode: text("postal_code"),
+      country: text("country").default("Canada"),
+      latitude: doublePrecision("latitude"),
+      longitude: doublePrecision("longitude"),
+      geofenceRadiusMeters: integer("geofence_radius_meters").default(150),
+      isActive: boolean("is_active").default(true),
+      crmExternalId: text("crm_external_id"),
+      crmSource: boolean("crm_source").default(false),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertWorkplaceSchema = createInsertSchema(workplaces).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    workplaceAssignmentStatusEnum = z.enum(["invited", "active", "suspended", "removed"]);
+    workplaceAssignments = pgTable("workplace_assignments", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      workplaceId: varchar("workplace_id").notNull().references(() => workplaces.id),
+      workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
+      status: text("status").notNull().default("active"),
+      // invited, active, suspended, removed
+      invitedByUserId: varchar("invited_by_user_id").references(() => users.id),
+      invitedAt: timestamp("invited_at").defaultNow().notNull(),
+      acceptedAt: timestamp("accepted_at"),
+      notes: text("notes"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    }, (table) => ({
+      uniqueWorkerWorkplace: uniqueIndex("unique_worker_workplace").on(table.workplaceId, table.workerUserId)
+    }));
+    insertWorkplaceAssignmentSchema = createInsertSchema(workplaceAssignments).omit({
+      id: true,
+      invitedAt: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    titoLogs = pgTable("tito_logs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      workerId: varchar("worker_id").notNull().references(() => users.id),
+      workplaceId: varchar("workplace_id").references(() => workplaces.id),
+      shiftId: varchar("shift_id"),
+      // Time tracking
+      timeIn: timestamp("time_in"),
+      timeOut: timestamp("time_out"),
+      // GPS verification - Time In
+      timeInGpsLat: doublePrecision("time_in_gps_lat"),
+      timeInGpsLng: doublePrecision("time_in_gps_lng"),
+      timeInDistanceMeters: doublePrecision("time_in_distance_meters"),
+      timeInGpsVerified: boolean("time_in_gps_verified").default(false),
+      timeInGpsFailureReason: text("time_in_gps_failure_reason"),
+      // GPS verification - Time Out
+      timeOutGpsLat: doublePrecision("time_out_gps_lat"),
+      timeOutGpsLng: doublePrecision("time_out_gps_lng"),
+      timeOutDistanceMeters: doublePrecision("time_out_distance_meters"),
+      timeOutGpsVerified: boolean("time_out_gps_verified").default(false),
+      timeOutGpsFailureReason: text("time_out_gps_failure_reason"),
+      // Approval
+      status: text("status").notNull().default("pending"),
+      // pending, approved, disputed
+      approvedBy: varchar("approved_by"),
+      approvedAt: timestamp("approved_at"),
+      disputedBy: varchar("disputed_by"),
+      disputedAt: timestamp("disputed_at"),
+      notes: text("notes"),
+      lateReason: text("late_reason"),
+      lateNote: text("late_note"),
+      flaggedLate: boolean("flagged_late").default(false),
+      lateMinutes: integer("late_minutes"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertTitoLogSchema = createInsertSchema(titoLogs).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    titoCorrections = pgTable("tito_corrections", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      titoLogId: varchar("tito_log_id").notNull().references(() => titoLogs.id),
+      requesterId: varchar("requester_id").notNull().references(() => users.id),
+      approverId: varchar("approver_id").references(() => users.id),
+      originalTimeIn: timestamp("original_time_in"),
+      originalTimeOut: timestamp("original_time_out"),
+      correctedTimeIn: timestamp("corrected_time_in"),
+      correctedTimeOut: timestamp("corrected_time_out"),
+      reason: text("reason").notNull(),
+      note: text("note"),
+      status: text("status").notNull().default("pending"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      reviewedAt: timestamp("reviewed_at")
+    });
+    timesheetStatusEnum = z.enum(["draft", "submitted", "approved", "disputed", "processed"]);
+    timesheets = pgTable("timesheets", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
+      periodYear: integer("period_year").notNull(),
+      periodNumber: integer("period_number").notNull(),
+      status: text("status").notNull().default("draft"),
+      // draft, submitted, approved, disputed, processed
+      submittedAt: timestamp("submitted_at"),
+      approvedByUserId: varchar("approved_by_user_id").references(() => users.id),
+      approvedAt: timestamp("approved_at"),
+      disputedByUserId: varchar("disputed_by_user_id").references(() => users.id),
+      disputedAt: timestamp("disputed_at"),
+      disputeReason: text("dispute_reason"),
+      totalHours: numeric("total_hours", { precision: 10, scale: 2 }).default("0"),
+      totalPay: numeric("total_pay", { precision: 12, scale: 2 }).default("0"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    }, (table) => ({
+      uniqueWorkerPeriod: uniqueIndex("unique_worker_period").on(table.workerUserId, table.periodYear, table.periodNumber)
+    }));
+    insertTimesheetSchema = createInsertSchema(timesheets).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    timesheetEntries = pgTable("timesheet_entries", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      timesheetId: varchar("timesheet_id").notNull().references(() => timesheets.id, { onDelete: "cascade" }),
+      workplaceId: varchar("workplace_id").references(() => workplaces.id),
+      titoLogId: varchar("tito_log_id").references(() => titoLogs.id),
+      dateLocal: date("date_local").notNull(),
+      timeInUtc: timestamp("time_in_utc").notNull(),
+      timeOutUtc: timestamp("time_out_utc").notNull(),
+      breakMinutes: integer("break_minutes").default(0),
+      hours: numeric("hours", { precision: 5, scale: 2 }).notNull(),
+      payRate: numeric("pay_rate", { precision: 10, scale: 2 }).notNull(),
+      amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+      notes: text("notes"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    }, (table) => ({
+      uniqueTitoLog: uniqueIndex("unique_timesheet_tito_log").on(table.titoLogId)
+    }));
+    insertTimesheetEntrySchema = createInsertSchema(timesheetEntries).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    payrollBatchStatusEnum = z.enum(["open", "finalized", "exported"]);
+    payrollBatches = pgTable("payroll_batches", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      periodYear: integer("period_year").notNull(),
+      periodNumber: integer("period_number").notNull(),
+      status: text("status").notNull().default("open"),
+      // open, finalized, exported
+      createdByUserId: varchar("created_by_user_id").notNull().references(() => users.id),
+      finalizedByUserId: varchar("finalized_by_user_id").references(() => users.id),
+      finalizedAt: timestamp("finalized_at"),
+      totalWorkers: integer("total_workers").default(0),
+      totalHours: numeric("total_hours", { precision: 10, scale: 2 }).default("0"),
+      totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).default("0"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    }, (table) => ({
+      uniquePeriodBatch: uniqueIndex("unique_period_batch").on(table.periodYear, table.periodNumber)
+    }));
+    insertPayrollBatchSchema = createInsertSchema(payrollBatches).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    payrollBatchItemStatusEnum = z.enum(["included", "excluded"]);
+    payrollBatchItems = pgTable("payroll_batch_items", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      payrollBatchId: varchar("payroll_batch_id").notNull().references(() => payrollBatches.id, { onDelete: "cascade" }),
+      workerUserId: varchar("worker_user_id").notNull().references(() => users.id),
+      timesheetId: varchar("timesheet_id").notNull().references(() => timesheets.id),
+      status: text("status").notNull().default("included"),
+      // included, excluded
+      hours: numeric("hours", { precision: 10, scale: 2 }).notNull(),
+      amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertPayrollBatchItemSchema = createInsertSchema(payrollBatchItems).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    paymentProfiles = pgTable("payment_profiles", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      workerUserId: varchar("worker_user_id").notNull().references(() => users.id).unique(),
+      paymentMethod: text("payment_method"),
+      // direct_deposit, etransfer
+      bankName: text("bank_name"),
+      etransferEmail: text("etransfer_email"),
+      bankInstitution: text("bank_institution"),
+      bankTransit: text("bank_transit"),
+      bankAccount: text("bank_account"),
+      voidChequeFileId: text("void_cheque_file_id"),
+      notes: text("notes"),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertPaymentProfileSchema = createInsertSchema(paymentProfiles).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    shiftStatusEnum = z.enum(["scheduled", "in_progress", "completed", "cancelled"]);
+    shiftFrequencyEnum = z.enum(["one-time", "recurring", "open-ended"]);
+    shiftCategoryEnum = z.enum(["hotel", "banquet", "janitorial", "airbnb"]);
+    seriesFrequencyEnum = z.enum(["daily", "weekly", "biweekly", "monthly"]);
+    seriesEndTypeEnum = z.enum(["date", "count", "never"]);
+    shiftSeries = pgTable("shift_series", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      workplaceId: varchar("workplace_id").notNull().references(() => workplaces.id),
+      workerUserId: varchar("worker_user_id").references(() => users.id),
+      title: text("title").notNull(),
+      roleType: text("role_type"),
+      startTime: text("start_time").notNull(),
+      endTime: text("end_time"),
+      notes: text("notes"),
+      category: text("category").notNull().default("janitorial"),
+      frequency: text("frequency").notNull().default("weekly"),
+      recurringDays: text("recurring_days"),
+      startDate: date("start_date").notNull(),
+      endType: text("end_type").notNull().default("never"),
+      endDate: date("end_date"),
+      endAfterCount: integer("end_after_count"),
+      status: text("status").notNull().default("active"),
+      createdByUserId: varchar("created_by_user_id").references(() => users.id),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertShiftSeriesSchema = createInsertSchema(shiftSeries).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    recurrenceExceptions = pgTable("recurrence_exceptions", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      seriesId: varchar("series_id").notNull().references(() => shiftSeries.id),
+      date: date("date").notNull(),
+      type: text("type").notNull().default("cancelled"),
+      overrideStartTime: text("override_start_time"),
+      overrideEndTime: text("override_end_time"),
+      overrideWorkerUserId: varchar("override_worker_user_id").references(() => users.id),
+      overrideNotes: text("override_notes"),
+      reason: text("reason"),
+      cancelledByUserId: varchar("cancelled_by_user_id").references(() => users.id),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    auditLog = pgTable("audit_log", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").references(() => users.id),
+      action: text("action").notNull(),
+      entityType: text("entity_type").notNull(),
+      entityId: varchar("entity_id"),
+      details: text("details"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    userPhotos = pgTable("user_photos", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull().references(() => users.id),
+      url: text("url").notNull(),
+      status: text("status").notNull().default("pending_review"),
+      reviewerId: varchar("reviewer_id").references(() => users.id),
+      reviewedAt: timestamp("reviewed_at"),
+      rejectionReason: text("rejection_reason"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    shifts = pgTable("shifts", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      requestId: varchar("request_id"),
+      workplaceId: varchar("workplace_id").notNull().references(() => workplaces.id),
+      workerUserId: varchar("worker_user_id").references(() => users.id),
+      roleType: text("role_type"),
+      title: text("title").notNull(),
+      date: date("date").notNull(),
+      startTime: text("start_time").notNull(),
+      endTime: text("end_time"),
+      notes: text("notes"),
+      status: text("status").notNull().default("scheduled"),
+      frequencyType: text("frequency_type").notNull().default("one-time"),
+      category: text("category").notNull().default("janitorial"),
+      recurringDays: text("recurring_days"),
+      recurringEndDate: date("recurring_end_date"),
+      parentShiftId: varchar("parent_shift_id"),
+      workersNeeded: integer("workers_needed"),
+      crmShiftId: text("crm_shift_id"),
+      crmSource: boolean("crm_source").default(false),
+      createdByUserId: varchar("created_by_user_id").references(() => users.id),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertShiftSchema = createInsertSchema(shifts).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    shiftRequestStatusEnum = z.enum(["draft", "submitted", "offered", "filled", "cancelled", "expired"]);
+    shiftRequests = pgTable("shift_requests", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      clientId: varchar("client_id").notNull().references(() => users.id),
+      workplaceId: varchar("workplace_id").references(() => workplaces.id),
+      roleType: text("role_type").notNull(),
+      date: date("date").notNull(),
+      startTime: text("start_time").notNull(),
+      endTime: text("end_time").notNull(),
+      notes: text("notes"),
+      requestedWorkerId: varchar("requested_worker_id").references(() => users.id),
+      status: text("status").notNull().default("draft"),
+      crmRequestId: text("crm_request_id"),
+      crmSource: boolean("crm_source").default(false),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertShiftRequestSchema = createInsertSchema(shiftRequests).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    shiftOfferStatusEnum = z.enum(["pending", "accepted", "declined", "expired", "cancelled"]);
+    shiftOffers = pgTable("shift_offers", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      shiftId: varchar("shift_id").notNull().references(() => shifts.id),
+      workerId: varchar("worker_id").notNull().references(() => users.id),
+      status: text("status").notNull().default("pending"),
+      offeredAt: timestamp("offered_at").defaultNow().notNull(),
+      respondedAt: timestamp("responded_at"),
+      cancelledAt: timestamp("cancelled_at"),
+      cancelledBy: varchar("cancelled_by"),
+      cancelReason: text("cancel_reason"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    }, (table) => ({
+      uniqueShiftWorker: uniqueIndex("unique_shift_worker_offer").on(table.shiftId, table.workerId)
+    }));
+    insertShiftOfferSchema = createInsertSchema(shiftOffers).omit({
+      id: true,
+      offeredAt: true,
+      createdAt: true
+    });
+    appNotifications = pgTable("app_notifications", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull().references(() => users.id),
+      type: text("type").notNull(),
+      title: text("title").notNull(),
+      body: text("body").notNull(),
+      deepLink: text("deep_link"),
+      metadata: text("metadata"),
+      readAt: timestamp("read_at"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    insertAppNotificationSchema = createInsertSchema(appNotifications).omit({
+      id: true,
+      createdAt: true
+    });
+    shiftCheckinStatusEnum = z.enum(["on_my_way", "issue", "checked_in", "checked_out"]);
+    shiftCheckins = pgTable("shift_checkins", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      shiftId: varchar("shift_id").notNull().references(() => shifts.id),
+      workerId: varchar("worker_id").notNull().references(() => users.id),
+      status: text("status").notNull(),
+      note: text("note"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    insertShiftCheckinSchema = createInsertSchema(shiftCheckins).omit({
+      id: true,
+      createdAt: true
+    });
+    sentReminders = pgTable("sent_reminders", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      shiftId: varchar("shift_id").notNull().references(() => shifts.id),
+      workerId: varchar("worker_id").notNull().references(() => users.id),
+      reminderType: text("reminder_type").notNull(),
+      sentAt: timestamp("sent_at").defaultNow().notNull()
+    }, (table) => ({
+      uniqueReminder: uniqueIndex("unique_shift_worker_reminder").on(table.shiftId, table.workerId, table.reminderType)
+    }));
+    exportAuditLogs = pgTable("export_audit_logs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      adminUserId: varchar("admin_user_id").notNull().references(() => users.id),
+      exportType: text("export_type").notNull(),
+      // timesheet, paymentSummary, allHotels
+      fileFormat: text("file_format").notNull(),
+      // csv, xlsx, zip
+      periodYear: integer("period_year").notNull(),
+      periodNumber: integer("period_number").notNull(),
+      workplaceId: varchar("workplace_id").references(() => workplaces.id),
+      workplaceName: text("workplace_name"),
+      fileName: text("file_name").notNull(),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    insertExportAuditLogSchema = createInsertSchema(exportAuditLogs).omit({
+      id: true,
+      createdAt: true
+    });
+    smsLogs = pgTable("sms_logs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      phoneNumber: text("phone_number").notNull(),
+      direction: text("direction").notNull(),
+      message: text("message").notNull(),
+      shiftOfferId: varchar("shift_offer_id"),
+      shiftId: varchar("shift_id"),
+      workerId: varchar("worker_id"),
+      status: text("status").notNull().default("sent"),
+      openphoneMessageId: text("openphone_message_id"),
+      classification: text("classification"),
+      // sick_call, client_request, shift_response, general
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    discordAlerts = pgTable("discord_alerts", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      alertId: text("alert_id").notNull().unique(),
+      type: text("type").notNull().default("general"),
+      title: text("title").notNull(),
+      message: text("message").notNull(),
+      sourcePhone: text("source_phone"),
+      sourceWorkerId: varchar("source_worker_id"),
+      workerId: varchar("worker_id"),
+      clientId: varchar("client_id"),
+      workplaceId: varchar("workplace_id"),
+      shiftId: varchar("shift_id"),
+      discordChannelId: text("discord_channel_id"),
+      originalMessage: text("original_message"),
+      status: text("status").notNull().default("pending"),
+      acknowledgedBy: text("acknowledged_by"),
+      acknowledgedAt: timestamp("acknowledged_at"),
+      responseNote: text("response_note"),
+      discordMessageId: text("discord_message_id"),
+      actionsTaken: text("actions_taken"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    discordActionLogs = pgTable("discord_action_logs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      alertId: text("alert_id"),
+      discordUserId: text("discord_user_id").notNull(),
+      discordUsername: text("discord_username").notNull(),
+      actionType: text("action_type").notNull(),
+      rawMessage: text("raw_message").notNull(),
+      parsedIntent: text("parsed_intent"),
+      result: text("result"),
+      success: boolean("success").notNull().default(true),
+      failureReason: text("failure_reason"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    crmSyncLogs = pgTable("crm_sync_logs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      syncType: text("sync_type").notNull(),
+      status: text("status").notNull().default("running"),
+      createdCount: integer("created_count").default(0),
+      updatedCount: integer("updated_count").default(0),
+      skippedCount: integer("skipped_count").default(0),
+      errorCount: integer("error_count").default(0),
+      errorMessages: text("error_messages"),
+      dryRun: boolean("dry_run").default(false),
+      startedAt: timestamp("started_at").defaultNow().notNull(),
+      completedAt: timestamp("completed_at")
+    });
+    crmPushQueue = pgTable("crm_push_queue", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      entityType: text("entity_type").notNull(),
+      entityId: text("entity_id").notNull(),
+      action: text("action").notNull(),
+      payload: text("payload").notNull(),
+      status: text("status").notNull().default("pending"),
+      attempts: integer("attempts").notNull().default(0),
+      maxAttempts: integer("max_attempts").notNull().default(5),
+      lastError: text("last_error"),
+      nextRetryAt: timestamp("next_retry_at").defaultNow().notNull(),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      completedAt: timestamp("completed_at")
+    }, (table) => ({
+      statusIdx: index("crm_push_queue_status_idx").on(table.status),
+      nextRetryIdx: index("crm_push_queue_next_retry_idx").on(table.nextRetryAt)
+    }));
+    aiActionLogs = pgTable("ai_action_logs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      monitorType: text("monitor_type").notNull(),
+      signalId: text("signal_id"),
+      signalSummary: text("signal_summary").notNull(),
+      actionTaken: text("action_taken").notNull(),
+      alertSentTo: text("alert_sent_to"),
+      errorMessage: text("error_message"),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    }, (table) => ({
+      createdAtIdx: index("ai_action_logs_created_at_idx").on(table.createdAt),
+      monitorTypeIdx: index("ai_action_logs_monitor_type_idx").on(table.monitorType)
+    }));
+    aiAlertState = pgTable("ai_alert_state", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      entityType: text("entity_type").notNull(),
+      entityId: text("entity_id").notNull(),
+      alertType: text("alert_type").notNull(),
+      alertedAt: timestamp("alerted_at").defaultNow().notNull(),
+      alertCount: integer("alert_count").notNull().default(1)
+    }, (table) => ({
+      dedupeIdx: uniqueIndex("ai_alert_state_dedupe_idx").on(table.entityType, table.entityId, table.alertType)
+    }));
+    clawdChatMessages = pgTable("clawd_chat_messages", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").notNull().references(() => users.id),
+      role: text("role").notNull(),
+      // "user" | "assistant" | "system"
+      content: text("content").notNull(),
+      metadata: text("metadata"),
+      // JSON: which assistants invoked, scores, etc.
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    clawdAssistantRuns = pgTable("clawd_assistant_runs", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      chatMessageId: varchar("chat_message_id"),
+      assistantType: text("assistant_type").notNull(),
+      // "executive"|"staffing"|"attendance"|"recruitment"|"payroll"|"client_risk"|"communication"
+      inputContext: text("input_context"),
+      // JSON: what data was fed in
+      outputFindings: text("output_findings"),
+      // JSON: structured AssistantOutput
+      durationMs: integer("duration_ms"),
+      userId: varchar("user_id").references(() => users.id),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    }, (table) => ({
+      createdAtIdx: index("clawd_runs_created_at_idx").on(table.createdAt),
+      assistantTypeIdx: index("clawd_runs_assistant_type_idx").on(table.assistantType)
+    }));
+    appointments = pgTable("appointments", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      title: text("title").notNull(),
+      companyName: text("company_name").notNull(),
+      contactName: text("contact_name").notNull(),
+      contactPhone: text("contact_phone"),
+      contactEmail: text("contact_email"),
+      appointmentDate: timestamp("appointment_date").notNull(),
+      location: text("location"),
+      address: text("address"),
+      latitude: doublePrecision("latitude"),
+      longitude: doublePrecision("longitude"),
+      leadSource: text("lead_source").notNull().default("other"),
+      // cold_call, lead_generation, referral, website, crm_sync, other
+      status: text("status").notNull().default("scheduled"),
+      // scheduled, completed, cancelled, rescheduled, no_show
+      assignedUserId: varchar("assigned_user_id").references(() => users.id),
+      notes: text("notes"),
+      outcome: text("outcome"),
+      crmAppointmentId: text("crm_appointment_id"),
+      crmSource: text("crm_source"),
+      createdBy: varchar("created_by").references(() => users.id),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+    insertAppointmentSchema = createInsertSchema(appointments).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
+    appConfig = pgTable("app_config", {
+      key: text("key").primaryKey(),
+      value: text("value").notNull(),
+      description: text("description"),
+      updatedAt: timestamp("updated_at").defaultNow().notNull(),
+      updatedBy: varchar("updated_by").references(() => users.id)
+    });
+    aiMessageLog = pgTable("ai_message_log", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      recipientPhone: text("recipient_phone").notNull(),
+      recipientName: text("recipient_name"),
+      message: text("message").notNull(),
+      sentAt: timestamp("sent_at").defaultNow().notNull(),
+      responseReceived: boolean("response_received").default(false).notNull(),
+      responseReceivedAt: timestamp("response_received_at"),
+      followupSent: boolean("followup_sent").default(false).notNull(),
+      followupSentAt: timestamp("followup_sent_at"),
+      followupMessage: text("followup_message"),
+      triggeredBy: text("triggered_by").default("clawd"),
+      // clawd, auto_responder, manual
+      contextNote: text("context_note"),
+      followupEnabled: boolean("followup_enabled").default(false).notNull(),
+      createdAt: timestamp("created_at").defaultNow().notNull()
+    });
+    applicants = pgTable("applicants", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      fullName: text("full_name").notNull(),
+      phone: text("phone").notNull(),
+      addressFull: text("address_full").notNull(),
+      addressStreet: text("address_street"),
+      addressCity: text("address_city"),
+      addressProvince: text("address_province"),
+      addressPostalCode: text("address_postal_code"),
+      addressCountry: text("address_country").default("Canada"),
+      applyingFor: text("applying_for").notNull(),
+      jobPostingSource: text("job_posting_source").notNull(),
+      photoData: text("photo_data"),
+      // base64 data URI
+      photoFilename: text("photo_filename"),
+      photoMimeType: text("photo_mime_type"),
+      photoFileSize: integer("photo_file_size"),
+      resumeData: text("resume_data"),
+      // base64 data URI
+      resumeFilename: text("resume_filename"),
+      resumeMimeType: text("resume_mime_type"),
+      resumeFileSize: integer("resume_file_size"),
+      status: text("status").notNull().default("new"),
+      // new, reviewing, interviewed, hired, rejected
+      adminNotes: text("admin_notes"),
+      submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+      createdAt: timestamp("created_at").defaultNow().notNull(),
+      updatedAt: timestamp("updated_at").defaultNow().notNull()
+    });
+  }
 });
 
 // server/db.ts
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is required");
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+var client, db;
+var init_db = __esm({
+  "server/db.ts"() {
+    "use strict";
+    init_schema();
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL environment variable is required");
+    }
+    client = postgres(process.env.DATABASE_URL);
+    db = drizzle(client, { schema: schema_exports });
+  }
+});
+
+// server/services/openphone.ts
+var openphone_exports = {};
+__export(openphone_exports, {
+  logSMS: () => logSMS,
+  sendConfirmationSMS: () => sendConfirmationSMS,
+  sendSMS: () => sendSMS,
+  sendShiftAssignedSMS: () => sendShiftAssignedSMS,
+  sendShiftOfferSMS: () => sendShiftOfferSMS
+});
+import { eq } from "drizzle-orm";
+async function sendSMS(toPhoneNumber, message) {
+  if (!OPENPHONE_API_KEY) {
+    console.error("[OPENPHONE] API key not configured");
+    return { success: false, error: "API key not configured" };
+  }
+  const cleaned = toPhoneNumber.replace(/[^\d+]/g, "");
+  const formatted = cleaned.startsWith("+") ? cleaned : `+1${cleaned}`;
+  try {
+    const response = await fetch("https://api.openphone.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Authorization": OPENPHONE_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: message,
+        from: OPENPHONE_PHONE_NUMBER_ID,
+        to: [formatted]
+      })
+    });
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`[OPENPHONE] SMS send failed (${response.status}):`, errorBody);
+      return { success: false, error: `HTTP ${response.status}: ${errorBody}` };
+    }
+    const data = await response.json();
+    console.log(`[OPENPHONE] SMS sent to ${formatted}`);
+    return { success: true, messageId: data?.data?.id || data?.id };
+  } catch (error) {
+    console.error("[OPENPHONE] SMS send error:", error?.message || error);
+    return { success: false, error: error?.message || "Unknown error" };
+  }
 }
-var client = postgres(process.env.DATABASE_URL);
-var db = drizzle(client, { schema: schema_exports });
+async function logSMS(params) {
+  try {
+    await db.insert(smsLogs).values({
+      phoneNumber: params.phoneNumber,
+      direction: params.direction,
+      message: params.message,
+      shiftOfferId: params.shiftOfferId || null,
+      shiftId: params.shiftId || null,
+      workerId: params.workerId || null,
+      status: params.status,
+      openphoneMessageId: params.openphoneMessageId || null
+    });
+  } catch (e) {
+    console.error("[OPENPHONE] Failed to log SMS:", e?.message);
+  }
+}
+async function sendShiftOfferSMS(worker, shift, offerId) {
+  if (!worker.phone) {
+    console.log(`[OPENPHONE] Worker ${worker.fullName} has no phone number, skipping SMS`);
+    return;
+  }
+  let workplaceName = "Unknown Location";
+  try {
+    const [wp] = await db.select({ name: workplaces.name }).from(workplaces).where(eq(workplaces.id, shift.workplaceId));
+    if (wp?.name) workplaceName = wp.name;
+  } catch {
+  }
+  const timeRange = shift.endTime ? `${shift.startTime} - ${shift.endTime}` : `${shift.startTime} (open-ended)`;
+  const message = `WFConnect Shift Available!
+
+${shift.title}
+Date: ${shift.date}
+Time: ${timeRange}
+Location: ${workplaceName}
+
+Reply ACCEPT SHIFT to accept or DECLINE SHIFT to decline.`;
+  const result = await sendSMS(worker.phone, message);
+  await logSMS({
+    phoneNumber: worker.phone,
+    direction: "outbound",
+    message,
+    shiftOfferId: offerId,
+    shiftId: shift.id,
+    workerId: worker.id,
+    status: result.success ? "sent" : "failed",
+    openphoneMessageId: result.messageId
+  });
+}
+async function sendShiftAssignedSMS(worker, shift) {
+  if (!worker.phone) {
+    console.log(`[OPENPHONE] Worker ${worker.fullName} has no phone number, skipping SMS`);
+    return;
+  }
+  let workplaceName = "Unknown Location";
+  try {
+    const [wp] = await db.select({ name: workplaces.name }).from(workplaces).where(eq(workplaces.id, shift.workplaceId));
+    if (wp?.name) workplaceName = wp.name;
+  } catch {
+  }
+  const timeRange = shift.endTime ? `${shift.startTime} - ${shift.endTime}` : `${shift.startTime} (open-ended)`;
+  const message = `WFConnect Shift Assigned!
+
+${shift.title}
+Date: ${shift.date}
+Time: ${timeRange}
+Location: ${workplaceName}
+
+You have been assigned to this shift. Please confirm your availability.`;
+  const result = await sendSMS(worker.phone, message);
+  await logSMS({
+    phoneNumber: worker.phone,
+    direction: "outbound",
+    message,
+    shiftId: shift.id,
+    workerId: worker.id,
+    status: result.success ? "sent" : "failed",
+    openphoneMessageId: result.messageId
+  });
+}
+async function sendConfirmationSMS(phoneNumber, message, workerId) {
+  const result = await sendSMS(phoneNumber, message);
+  await logSMS({
+    phoneNumber,
+    direction: "outbound",
+    message,
+    workerId,
+    status: result.success ? "sent" : "failed",
+    openphoneMessageId: result.messageId
+  });
+}
+var OPENPHONE_API_KEY, OPENPHONE_PHONE_NUMBER_ID;
+var init_openphone = __esm({
+  "server/services/openphone.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    OPENPHONE_API_KEY = process.env.OPENPHONE_API_KEY;
+    OPENPHONE_PHONE_NUMBER_ID = "PNo1n737XV";
+  }
+});
+
+// server/services/discord.ts
+var discord_exports = {};
+__export(discord_exports, {
+  acknowledgeAlert: () => acknowledgeAlert,
+  sendDiscordNotification: () => sendDiscordNotification
+});
+import { eq as eq2 } from "drizzle-orm";
+async function getWebhookUrl() {
+  try {
+    const [row] = await db.select().from(appConfig).where(eq2(appConfig.key, "discord_webhook_url"));
+    if (row?.value) return row.value;
+  } catch {
+  }
+  return process.env.DISCORD_WEBHOOK_URL || null;
+}
+async function sendDiscordNotification(opts) {
+  const alertId = `WFC-${Date.now().toString(36).toUpperCase()}`;
+  const webhookUrl = await getWebhookUrl();
+  if (!webhookUrl) {
+    console.log("[DISCORD] Webhook URL not configured, skipping notification");
+    return { success: false, error: "Webhook URL not configured" };
+  }
+  try {
+    const embed = {
+      title: opts.title,
+      description: opts.message,
+      color: COLOR_MAP[opts.color || "blue"] || COLOR_MAP.blue,
+      fields: opts.fields || [],
+      footer: { text: `Alert ID: ${alertId} | Reply "ACK ${alertId}" to acknowledge` },
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const fetchUrl = webhookUrl.includes("?") ? `${webhookUrl}&wait=true` : `${webhookUrl}?wait=true`;
+    const response = await fetch(fetchUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "Oscar \u2014 WFConnect AI",
+        embeds: [embed]
+      })
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[DISCORD] Send failed (${response.status}):`, errorText);
+      return { success: false, alertId, error: `HTTP ${response.status}` };
+    }
+    let discordMessageId = null;
+    let discordChannelId = null;
+    try {
+      const resJson = await response.clone().json();
+      discordMessageId = resJson?.id || null;
+      discordChannelId = resJson?.channel_id || null;
+    } catch {
+    }
+    try {
+      await db.insert(discordAlerts).values({
+        alertId,
+        type: opts.type || "general",
+        title: opts.title,
+        message: opts.message,
+        sourcePhone: opts.sourcePhone || null,
+        sourceWorkerId: opts.sourceWorkerId || null,
+        workerId: opts.workerId || null,
+        clientId: opts.clientId || null,
+        workplaceId: opts.workplaceId || null,
+        shiftId: opts.shiftId || null,
+        originalMessage: opts.originalMessage || null,
+        discordMessageId,
+        discordChannelId,
+        status: "pending",
+        actionsTaken: opts.actionsTaken || null
+      });
+    } catch (dbErr) {
+      console.error("[DISCORD] Failed to log alert:", dbErr?.message);
+    }
+    console.log(`[DISCORD] Notification sent: ${opts.title} (${alertId})`);
+    return { success: true, alertId };
+  } catch (error) {
+    console.error("[DISCORD] Send error:", error?.message || error);
+    return { success: false, alertId, error: error?.message || "Unknown error" };
+  }
+}
+async function acknowledgeAlert(alertId, acknowledgedBy, responseNote) {
+  try {
+    const [alert] = await db.select().from(discordAlerts).where(eq2(discordAlerts.alertId, alertId));
+    if (!alert) {
+      console.log(`[DISCORD] Alert ${alertId} not found`);
+      return false;
+    }
+    await db.update(discordAlerts).set({
+      status: "acknowledged",
+      acknowledgedBy,
+      acknowledgedAt: /* @__PURE__ */ new Date(),
+      responseNote: responseNote || null
+    }).where(eq2(discordAlerts.alertId, alertId));
+    console.log(`[DISCORD] Alert ${alertId} acknowledged by ${acknowledgedBy}`);
+    return true;
+  } catch (err) {
+    console.error("[DISCORD] Acknowledge error:", err?.message);
+    return false;
+  }
+}
+var COLOR_MAP;
+var init_discord = __esm({
+  "server/services/discord.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    COLOR_MAP = {
+      red: 15680580,
+      blue: 3900150,
+      green: 2278750,
+      amber: 16096779,
+      purple: 9133302
+    };
+  }
+});
+
+// server/services/weekdays-crm.ts
+var weekdays_crm_exports = {};
+__export(weekdays_crm_exports, {
+  createCrmHotelRequest: () => createCrmHotelRequest,
+  createCrmWorkplace: () => createCrmWorkplace,
+  getBoard: () => getBoard,
+  getBoards: () => getBoards,
+  getConfirmedShifts: () => getConfirmedShifts,
+  getDutyDays: () => getDutyDays,
+  getHotelRequests: () => getHotelRequests,
+  getWorkplaces: () => getWorkplaces,
+  isConfigured: () => isConfigured,
+  testConnection: () => testConnection,
+  updateCrmConfirmedShift: () => updateCrmConfirmedShift,
+  updateCrmHotelRequest: () => updateCrmHotelRequest,
+  updateCrmWorkplace: () => updateCrmWorkplace
+});
+function createCrmError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.isRetryable = statusCode !== void 0 && (statusCode >= 500 || statusCode === 408 || statusCode === 429);
+  return error;
+}
+function getApiKey() {
+  const key = process.env.WEEKDAYS_API_KEY;
+  if (!key) {
+    throw createCrmError("WEEKDAYS_API_KEY environment variable is not set");
+  }
+  return key;
+}
+function getTeamId() {
+  const teamId = process.env.WEEKDAYS_TEAM_ID;
+  if (!teamId) {
+    throw createCrmError("WEEKDAYS_TEAM_ID environment variable is not set");
+  }
+  return teamId;
+}
+function isConfigured() {
+  return !!(process.env.WEEKDAYS_API_KEY && process.env.WEEKDAYS_TEAM_ID);
+}
+async function sleep(ms) {
+  return new Promise((resolve2) => setTimeout(resolve2, ms));
+}
+async function fetchWithRetry(path2, options) {
+  const apiKey = getApiKey();
+  const url = new URL(path2, CRM_BASE_URL).toString();
+  let lastError = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3e4);
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          ...options?.headers || {}
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        const error = createCrmError(
+          `CRM API ${response.status}: ${body || response.statusText}`,
+          response.status
+        );
+        if (!error.isRetryable || attempt === MAX_RETRIES - 1) {
+          throw error;
+        }
+        lastError = error;
+        const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+        console.warn(`[CRM] Retryable error on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${backoff}ms: ${error.message}`);
+        await sleep(backoff);
+        continue;
+      }
+      return await response.json();
+    } catch (err) {
+      if (err.name === "AbortError") {
+        lastError = createCrmError("CRM API request timed out", 408);
+        lastError.isRetryable = true;
+      } else if (err.isRetryable !== void 0) {
+        lastError = err;
+      } else {
+        lastError = createCrmError(err.message || "Unknown network error");
+        lastError.isRetryable = true;
+      }
+      if (!lastError.isRetryable || attempt === MAX_RETRIES - 1) {
+        throw lastError;
+      }
+      const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+      console.warn(`[CRM] Error on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${backoff}ms: ${lastError.message}`);
+      await sleep(backoff);
+    }
+  }
+  throw lastError ?? createCrmError("All retry attempts exhausted");
+}
+async function testConnection() {
+  try {
+    if (!isConfigured()) {
+      return { connected: false, error: "CRM environment variables not configured" };
+    }
+    const teamId = getTeamId();
+    await fetchWithRetry(`/api/teams/${teamId}/workplaces?limit=1`);
+    return { connected: true };
+  } catch (err) {
+    console.error("[CRM] Connection test failed:", err.message);
+    return { connected: false, error: err.message };
+  }
+}
+async function getWorkplaces() {
+  const teamId = getTeamId();
+  const data = await fetchWithRetry(
+    `/api/teams/${teamId}/workplaces`
+  );
+  return Array.isArray(data) ? data : data.data || [];
+}
+async function getConfirmedShifts() {
+  const teamId = getTeamId();
+  const data = await fetchWithRetry(
+    `/api/teams/${teamId}/confirmed-shifts`
+  );
+  return Array.isArray(data) ? data : data.data || [];
+}
+async function getHotelRequests() {
+  const teamId = getTeamId();
+  const data = await fetchWithRetry(
+    `/api/teams/${teamId}/hotel-requests`
+  );
+  return Array.isArray(data) ? data : data.data || [];
+}
+async function getDutyDays() {
+  const teamId = getTeamId();
+  const data = await fetchWithRetry(
+    `/api/teams/${teamId}/duty-days`
+  );
+  return Array.isArray(data) ? data : data.data || [];
+}
+async function getBoards() {
+  const teamId = getTeamId();
+  const data = await fetchWithRetry(
+    `/api/teams/${teamId}/boards`
+  );
+  return Array.isArray(data) ? data : data.data || [];
+}
+async function getBoard(boardId) {
+  const teamId = getTeamId();
+  return await fetchWithRetry(
+    `/api/teams/${teamId}/boards/${boardId}`
+  );
+}
+async function createCrmWorkplace(input) {
+  const teamId = getTeamId();
+  const body = {
+    name: input.name,
+    address: input.address || "",
+    location: input.location || "",
+    province: input.province || "",
+    latitude: input.latitude,
+    longitude: input.longitude,
+    contactPerson: input.contactPerson || "",
+    notes: input.notes || "",
+    isActive: input.isActive !== false
+  };
+  console.log(`[CRM-SYNC] Creating workplace in CRM: "${input.name}"`);
+  const result = await fetchWithRetry(
+    `/api/teams/${teamId}/workplaces`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Workplace created in CRM: "${input.name}" \u2192 ID ${result.id}`);
+  return result;
+}
+async function updateCrmWorkplace(crmId, input) {
+  const teamId = getTeamId();
+  const body = {};
+  if (input.name !== void 0) body.name = input.name;
+  if (input.address !== void 0) body.address = input.address;
+  if (input.location !== void 0) body.location = input.location;
+  if (input.province !== void 0) body.province = input.province;
+  if (input.latitude !== void 0) body.latitude = input.latitude;
+  if (input.longitude !== void 0) body.longitude = input.longitude;
+  if (input.contactPerson !== void 0) body.contactPerson = input.contactPerson;
+  if (input.notes !== void 0) body.notes = input.notes;
+  if (input.isActive !== void 0) body.isActive = input.isActive;
+  console.log(`[CRM-SYNC] Updating workplace in CRM: ID ${crmId}`);
+  const result = await fetchWithRetry(
+    `/api/teams/${teamId}/workplaces/${crmId}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Workplace updated in CRM: ID ${crmId}`);
+  return result;
+}
+async function createCrmHotelRequest(input) {
+  const teamId = getTeamId();
+  const body = {
+    hotelName: input.hotelName,
+    location: input.location || "",
+    address: input.address || "",
+    roleNeeded: input.roleNeeded,
+    quantityNeeded: input.quantityNeeded || 1,
+    shiftStartAt: input.shiftStartAt,
+    shiftEndAt: input.shiftEndAt,
+    payRate: input.payRate,
+    notes: input.notes || ""
+  };
+  console.log(`[CRM-SYNC] Creating hotel request in CRM: "${input.hotelName}" - ${input.roleNeeded}`);
+  const result = await fetchWithRetry(
+    `/api/teams/${teamId}/hotel-requests`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Hotel request created in CRM: ID ${result.id}`);
+  return result;
+}
+async function updateCrmHotelRequest(crmId, input) {
+  const teamId = getTeamId();
+  const body = {};
+  if (input.hotelName !== void 0) body.hotelName = input.hotelName;
+  if (input.location !== void 0) body.location = input.location;
+  if (input.address !== void 0) body.address = input.address;
+  if (input.roleNeeded !== void 0) body.roleNeeded = input.roleNeeded;
+  if (input.quantityNeeded !== void 0) body.quantityNeeded = input.quantityNeeded;
+  if (input.shiftStartAt !== void 0) body.shiftStartAt = input.shiftStartAt;
+  if (input.shiftEndAt !== void 0) body.shiftEndAt = input.shiftEndAt;
+  if (input.payRate !== void 0) body.payRate = input.payRate;
+  if (input.notes !== void 0) body.notes = input.notes;
+  if (input.status !== void 0) body.status = input.status;
+  console.log(`[CRM-SYNC] Updating hotel request in CRM: ID ${crmId}`);
+  const result = await fetchWithRetry(
+    `/api/teams/${teamId}/hotel-requests/${crmId}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Hotel request updated in CRM: ID ${crmId}`);
+  return result;
+}
+async function updateCrmConfirmedShift(crmId, input) {
+  const teamId = getTeamId();
+  const body = {};
+  if (input.confirmStatus !== void 0) body.confirmStatus = input.confirmStatus;
+  if (input.checkedInAt !== void 0) body.checkedInAt = input.checkedInAt;
+  if (input.completedAt !== void 0) body.completedAt = input.completedAt;
+  if (input.notes !== void 0) body.notes = input.notes;
+  console.log(`[CRM-SYNC] Updating confirmed shift in CRM: ID ${crmId}`);
+  const result = await fetchWithRetry(
+    `/api/teams/${teamId}/confirmed-shifts/${crmId}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  console.log(`[CRM-SYNC] Confirmed shift updated in CRM: ID ${crmId}`);
+  return result;
+}
+var CRM_BASE_URL, MAX_RETRIES, INITIAL_BACKOFF_MS;
+var init_weekdays_crm = __esm({
+  "server/services/weekdays-crm.ts"() {
+    "use strict";
+    CRM_BASE_URL = "https://weekdays.wfconnect.org";
+    MAX_RETRIES = 3;
+    INITIAL_BACKOFF_MS = 1e3;
+  }
+});
+
+// server/services/crm-sync.ts
+var crm_sync_exports = {};
+__export(crm_sync_exports, {
+  backfillWorkplacesToCrm: () => backfillWorkplacesToCrm,
+  clearAutoSyncError: () => clearAutoSyncError,
+  enqueueCrmPush: () => enqueueCrmPush,
+  getCachedConnectionStatus: () => getCachedConnectionStatus,
+  getCrmPushQueueStats: () => getCrmPushQueueStats,
+  getLastAutoSyncError: () => getLastAutoSyncError,
+  getLastPushCompletedAt: () => getLastPushCompletedAt,
+  getLastSyncCompletedAt: () => getLastSyncCompletedAt,
+  getLastSyncCompletedAtFromDb: () => getLastSyncCompletedAtFromDb,
+  getSyncLogs: () => getSyncLogs,
+  getSyncStatus: () => getSyncStatus,
+  isSyncRunning: () => isSyncRunning,
+  markSyncCompleted: () => markSyncCompleted,
+  processCrmPushQueue: () => processCrmPushQueue,
+  syncAll: () => syncAll,
+  syncConfirmedShifts: () => syncConfirmedShifts,
+  syncHotelRequests: () => syncHotelRequests,
+  syncWorkplaces: () => syncWorkplaces
+});
+import { eq as eq3, and as and2, sql as sql2, isNull, ne, notInArray, lte, gte, count } from "drizzle-orm";
+function emptySyncResult() {
+  return { created: 0, updated: 0, skipped: 0, errors: 0, errorMessages: [] };
+}
+function acquireLock() {
+  if (syncRunning) return false;
+  syncRunning = true;
+  return true;
+}
+function releaseLock() {
+  syncRunning = false;
+}
+function isSyncRunning() {
+  return syncRunning;
+}
+function getLastAutoSyncError() {
+  return lastAutoSyncError;
+}
+function getLastSyncCompletedAt() {
+  return lastSyncCompletedAt;
+}
+async function getLastSyncCompletedAtFromDb() {
+  if (lastSyncCompletedAt) return lastSyncCompletedAt;
+  try {
+    const [lastLog] = await db.select({ completedAt: crmSyncLogs.completedAt }).from(crmSyncLogs).where(eq3(crmSyncLogs.status, "completed")).orderBy(sql2`${crmSyncLogs.completedAt} DESC`).limit(1);
+    if (lastLog?.completedAt) {
+      lastSyncCompletedAt = lastLog.completedAt;
+      return lastLog.completedAt;
+    }
+  } catch {
+  }
+  return null;
+}
+function getLastPushCompletedAt() {
+  return lastPushCompletedAt;
+}
+function markSyncCompleted() {
+  lastSyncCompletedAt = /* @__PURE__ */ new Date();
+}
+function clearAutoSyncError() {
+  lastAutoSyncError = null;
+}
+async function sendCrmNewRequestAlerts(crmReq) {
+  const alertMsg = `New CRM Hotel Request: ${crmReq.hotelName} needs ${crmReq.quantityNeeded || 1} ${crmReq.roleNeeded || "worker(s)"} \u2014 ${crmReq.shiftStartAt || "TBD"} to ${crmReq.shiftEndAt || "TBD"}`;
+  try {
+    const { sendDiscordNotification: sendDiscordNotification2 } = await Promise.resolve().then(() => (init_discord(), discord_exports));
+    await sendDiscordNotification2({
+      title: "New CRM Hotel Request (Sync)",
+      message: alertMsg,
+      color: "blue"
+    });
+  } catch (err) {
+    console.error("[CRM-SYNC] Discord alert failed:", err?.message);
+  }
+  try {
+    const GM_PHONE = "+14166028038";
+    const { sendSMS: sendSMS2, logSMS: logSMS2 } = await Promise.resolve().then(() => (init_openphone(), openphone_exports));
+    await sendSMS2(GM_PHONE, alertMsg);
+    await logSMS2({ phoneNumber: GM_PHONE, direction: "outbound", message: alertMsg, status: "sent" });
+  } catch (err) {
+    console.error("[CRM-SYNC] SMS alert failed:", err?.message);
+  }
+}
+async function getCachedConnectionStatus() {
+  const now = Date.now();
+  if (cachedConnectionStatus && now - cachedConnectionStatus.checkedAt < CONNECTION_CACHE_TTL) {
+    return { connected: cachedConnectionStatus.connected, error: cachedConnectionStatus.error };
+  }
+  const result = await testConnection();
+  cachedConnectionStatus = { connected: result.connected, error: result.error, checkedAt: now };
+  return result;
+}
+async function createSyncLog(syncType, dryRun) {
+  const [log2] = await db.insert(crmSyncLogs).values({
+    syncType,
+    status: "running",
+    dryRun,
+    startedAt: /* @__PURE__ */ new Date()
+  }).returning({ id: crmSyncLogs.id });
+  return log2.id;
+}
+async function completeSyncLog(logId, status, result) {
+  await db.update(crmSyncLogs).set({
+    status,
+    createdCount: result.created,
+    updatedCount: result.updated,
+    skippedCount: result.skipped,
+    errorCount: result.errors,
+    errorMessages: result.errorMessages.length > 0 ? result.errorMessages.join("\n") : null,
+    completedAt: /* @__PURE__ */ new Date()
+  }).where(eq3(crmSyncLogs.id, logId));
+}
+function normalizeString(s) {
+  return (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+function normalizePhone(phone) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  if (digits.length === 10) return digits;
+  return digits;
+}
+function crmToLocal(isoString) {
+  const raw = (isoString || "").replace(/Z$/, "").replace(/[+-]\d{2}:\d{2}$/, "");
+  const [datePart, timePart = ""] = raw.split("T");
+  return {
+    date: datePart || "",
+    time: timePart.substring(0, 5) || ""
+  };
+}
+async function syncWorkplaces(dryRun = false, _skipLock = false) {
+  if (!_skipLock && !acquireLock()) {
+    throw new Error("A sync is already running. Please wait for it to complete.");
+  }
+  const result = emptySyncResult();
+  const logId = await createSyncLog("workplaces", dryRun);
+  try {
+    const crmWorkplaces = await getWorkplaces();
+    const existingWorkplaces = await db.select().from(workplaces);
+    const byExternalId = new Map(
+      existingWorkplaces.filter((w) => w.crmExternalId).map((w) => [w.crmExternalId, w])
+    );
+    const byNameAddress = new Map(
+      existingWorkplaces.map((w) => [
+        `${normalizeString(w.name)}|${normalizeString(w.addressLine1)}`,
+        w
+      ])
+    );
+    for (const crmWp of crmWorkplaces) {
+      try {
+        let existing = byExternalId.get(crmWp.id);
+        if (!existing) {
+          const key = `${normalizeString(crmWp.name)}|${normalizeString(crmWp.address)}`;
+          existing = byNameAddress.get(key);
+        }
+        if (existing) {
+          const needsUpdate = existing.name !== crmWp.name || existing.addressLine1 !== (crmWp.address || null) || existing.latitude !== (crmWp.latitude || null) || existing.longitude !== (crmWp.longitude || null) || existing.isActive !== crmWp.isActive || existing.crmExternalId !== crmWp.id;
+          if (needsUpdate) {
+            if (!dryRun) {
+              await db.update(workplaces).set({
+                name: crmWp.name,
+                addressLine1: crmWp.address || existing.addressLine1,
+                city: crmWp.location || existing.city,
+                province: crmWp.province || existing.province,
+                latitude: crmWp.latitude ?? existing.latitude,
+                longitude: crmWp.longitude ?? existing.longitude,
+                isActive: crmWp.isActive,
+                crmExternalId: crmWp.id,
+                crmSource: existing.crmSource || true,
+                updatedAt: /* @__PURE__ */ new Date()
+              }).where(eq3(workplaces.id, existing.id));
+            }
+            result.updated++;
+          } else {
+            result.skipped++;
+          }
+        } else {
+          if (!dryRun) {
+            await db.insert(workplaces).values({
+              name: crmWp.name,
+              addressLine1: crmWp.address || null,
+              city: crmWp.location || null,
+              province: crmWp.province || null,
+              latitude: crmWp.latitude ?? null,
+              longitude: crmWp.longitude ?? null,
+              isActive: crmWp.isActive,
+              crmExternalId: crmWp.id,
+              crmSource: true
+            });
+          }
+          result.created++;
+        }
+      } catch (err) {
+        result.errors++;
+        result.errorMessages.push(`Workplace "${crmWp.name}": ${err.message}`);
+      }
+    }
+    await completeSyncLog(logId, "completed", result);
+    console.log(`[CRM-SYNC] Workplaces: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
+  } catch (err) {
+    result.errors++;
+    result.errorMessages.push(`Fatal: ${err.message}`);
+    await completeSyncLog(logId, "failed", result);
+    console.error("[CRM-SYNC] Workplaces sync failed:", err.message);
+  } finally {
+    if (!_skipLock) releaseLock();
+  }
+  return result;
+}
+async function syncConfirmedShifts(dryRun = false, _skipLock = false) {
+  if (!_skipLock && !acquireLock()) {
+    throw new Error("A sync is already running. Please wait for it to complete.");
+  }
+  const result = emptySyncResult();
+  const logId = await createSyncLog("shifts", dryRun);
+  try {
+    const crmShifts = await getConfirmedShifts();
+    const existingShifts = await db.select().from(shifts);
+    const existingWorkplacesList = await db.select().from(workplaces);
+    const allUsers = await db.select({ id: users.id, phone: users.phone, fullName: users.fullName }).from(users);
+    const shiftByCrmId = new Map(
+      existingShifts.filter((s) => s.crmShiftId).map((s) => [s.crmShiftId, s])
+    );
+    const workplaceByName = new Map(
+      existingWorkplacesList.map((w) => [normalizeString(w.name), w])
+    );
+    const workplaceByExternalId = new Map(
+      existingWorkplacesList.filter((w) => w.crmExternalId).map((w) => [w.crmExternalId, w])
+    );
+    const userByPhone = new Map(
+      allUsers.filter((u) => u.phone).map((u) => [normalizePhone(u.phone), u])
+    );
+    for (const crmShift of crmShifts) {
+      try {
+        let workplace = workplaceByName.get(normalizeString(crmShift.request.hotelName));
+        if (!workplace) {
+          for (const [, wp] of workplaceByExternalId) {
+            if (normalizeString(wp.name) === normalizeString(crmShift.request.hotelName)) {
+              workplace = wp;
+              break;
+            }
+          }
+        }
+        if (!workplace) {
+          if (!dryRun) {
+            const [newWp] = await db.insert(workplaces).values({
+              name: crmShift.request.hotelName,
+              addressLine1: crmShift.request.address || null,
+              city: crmShift.request.location || null,
+              crmSource: true
+            }).returning();
+            workplace = newWp;
+            workplaceByName.set(normalizeString(newWp.name), newWp);
+          } else {
+            result.created++;
+            continue;
+          }
+        }
+        const start = crmToLocal(crmShift.scheduledStartAt);
+        const end = crmToLocal(crmShift.scheduledEndAt);
+        let workerUserId = null;
+        if (crmShift.quoContactPhoneSnapshot) {
+          const normalizedPhone = normalizePhone(crmShift.quoContactPhoneSnapshot);
+          if (normalizedPhone) {
+            const matchedUser = userByPhone.get(normalizedPhone);
+            if (matchedUser) workerUserId = matchedUser.id;
+          }
+        }
+        const statusMap = {
+          CONFIRMED: "scheduled",
+          COMPLETED: "completed"
+        };
+        const mappedStatus = statusMap[crmShift.confirmStatus] || "scheduled";
+        const existing = shiftByCrmId.get(crmShift.id);
+        if (existing) {
+          if (!dryRun) {
+            await db.update(shifts).set({
+              title: crmShift.request.hotelName,
+              date: start.date,
+              startTime: start.time,
+              endTime: end.time,
+              roleType: crmShift.request.roleNeeded,
+              status: mappedStatus,
+              workplaceId: workplace.id,
+              workerUserId,
+              category: "hotel",
+              updatedAt: /* @__PURE__ */ new Date()
+            }).where(eq3(shifts.id, existing.id));
+          }
+          result.updated++;
+        } else {
+          if (!dryRun) {
+            await db.insert(shifts).values({
+              title: crmShift.request.hotelName,
+              date: start.date,
+              startTime: start.time,
+              endTime: end.time,
+              roleType: crmShift.request.roleNeeded,
+              status: mappedStatus,
+              workplaceId: workplace.id,
+              workerUserId,
+              category: "hotel",
+              crmShiftId: crmShift.id,
+              crmSource: true
+            });
+          }
+          result.created++;
+        }
+      } catch (err) {
+        result.errors++;
+        result.errorMessages.push(`Shift "${crmShift.request?.hotelName || crmShift.id}": ${err.message}`);
+      }
+    }
+    try {
+      const activeCrmShiftIds = crmShifts.map((s) => s.id);
+      const staleShifts = await db.select({ id: shifts.id, title: shifts.title }).from(shifts).where(
+        and2(
+          eq3(shifts.crmSource, true),
+          ne(shifts.status, "cancelled"),
+          ne(shifts.status, "completed"),
+          // crmShiftId must be set (non-null) and not in the active set
+          sql2`${shifts.crmShiftId} IS NOT NULL`,
+          activeCrmShiftIds.length > 0 ? notInArray(shifts.crmShiftId, activeCrmShiftIds) : sql2`true`
+        )
+      );
+      for (const stale of staleShifts) {
+        if (!dryRun) {
+          await db.update(shifts).set({ status: "cancelled", updatedAt: /* @__PURE__ */ new Date() }).where(eq3(shifts.id, stale.id));
+        }
+        result.updated++;
+        console.log(`[CRM-SYNC] Cancelled stale shift: "${stale.title}" (id=${stale.id})${dryRun ? " (dry run)" : ""}`);
+      }
+    } catch (err) {
+      result.errorMessages.push(`Stale shift cleanup: ${err.message}`);
+    }
+    await completeSyncLog(logId, "completed", result);
+    console.log(`[CRM-SYNC] Shifts: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
+  } catch (err) {
+    result.errors++;
+    result.errorMessages.push(`Fatal: ${err.message}`);
+    await completeSyncLog(logId, "failed", result);
+    console.error("[CRM-SYNC] Shifts sync failed:", err.message);
+  } finally {
+    if (!_skipLock) releaseLock();
+  }
+  return result;
+}
+async function syncHotelRequests(dryRun = false, _skipLock = false) {
+  if (!_skipLock && !acquireLock()) {
+    throw new Error("A sync is already running. Please wait for it to complete.");
+  }
+  const result = emptySyncResult();
+  const logId = await createSyncLog("hotel-requests", dryRun);
+  try {
+    const crmRequests = await getHotelRequests();
+    const existingRequests = await db.select().from(shiftRequests);
+    const existingWorkplacesList = await db.select().from(workplaces);
+    const adminUsers = await db.select({ id: users.id }).from(users).where(eq3(users.role, "admin")).limit(1);
+    const adminId = adminUsers[0]?.id;
+    if (!adminId) {
+      throw new Error("No admin user found to assign as client for CRM shift requests");
+    }
+    const requestByCrmId = new Map(
+      existingRequests.filter((r) => r.crmRequestId).map((r) => [r.crmRequestId, r])
+    );
+    const workplaceByName = new Map(
+      existingWorkplacesList.map((w) => [normalizeString(w.name), w])
+    );
+    const activeRequests = crmRequests.filter((r) => !r.isDeleted);
+    const deletedRequestIds = new Set(
+      crmRequests.filter((r) => r.isDeleted).map((r) => r.id)
+    );
+    for (const [crmId, existingReq] of requestByCrmId) {
+      if (deletedRequestIds.has(crmId) && existingReq.status !== "cancelled") {
+        if (!dryRun) {
+          await db.update(shiftRequests).set({ status: "cancelled", updatedAt: /* @__PURE__ */ new Date() }).where(eq3(shiftRequests.id, existingReq.id));
+        }
+        result.updated++;
+      }
+    }
+    for (const crmReq of activeRequests) {
+      try {
+        let workplace = workplaceByName.get(normalizeString(crmReq.hotelName));
+        if (!workplace) {
+          if (!dryRun) {
+            const [newWp] = await db.insert(workplaces).values({
+              name: crmReq.hotelName,
+              addressLine1: crmReq.address || null,
+              city: crmReq.location || null,
+              crmSource: true
+            }).returning();
+            workplace = newWp;
+            workplaceByName.set(normalizeString(newWp.name), newWp);
+          } else {
+            result.created++;
+            continue;
+          }
+        }
+        const start = crmToLocal(crmReq.shiftStartAt);
+        const end = crmToLocal(crmReq.shiftEndAt);
+        const statusMap = {
+          NEW: "submitted",
+          CONFIRMED: "filled"
+        };
+        const mappedStatus = statusMap[crmReq.status] || "submitted";
+        const existing = requestByCrmId.get(crmReq.id);
+        if (existing) {
+          const needsUpdate = existing.status !== mappedStatus || existing.roleType !== crmReq.roleNeeded;
+          if (needsUpdate) {
+            if (!dryRun) {
+              await db.update(shiftRequests).set({
+                roleType: crmReq.roleNeeded,
+                date: start.date,
+                startTime: start.time,
+                endTime: end.time,
+                status: mappedStatus,
+                notes: [crmReq.hotelName, crmReq.notes].filter(Boolean).join(" - "),
+                updatedAt: /* @__PURE__ */ new Date()
+              }).where(eq3(shiftRequests.id, existing.id));
+            }
+            result.updated++;
+          } else {
+            result.skipped++;
+          }
+        } else {
+          if (!dryRun) {
+            await db.insert(shiftRequests).values({
+              clientId: adminId,
+              workplaceId: workplace.id,
+              roleType: crmReq.roleNeeded,
+              date: start.date,
+              startTime: start.time,
+              endTime: end.time,
+              notes: [crmReq.hotelName, crmReq.notes].filter(Boolean).join(" - "),
+              status: mappedStatus,
+              crmRequestId: crmReq.id,
+              crmSource: true
+            });
+            sendCrmNewRequestAlerts(crmReq).catch(
+              (err) => console.error("[CRM-SYNC] Alert failed for new hotel request:", err?.message)
+            );
+          }
+          result.created++;
+        }
+      } catch (err) {
+        result.errors++;
+        result.errorMessages.push(`Hotel request "${crmReq.hotelName}": ${err.message}`);
+      }
+    }
+    await completeSyncLog(logId, "completed", result);
+    console.log(`[CRM-SYNC] Hotel requests: ${result.created} created, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors${dryRun ? " (dry run)" : ""}`);
+  } catch (err) {
+    result.errors++;
+    result.errorMessages.push(`Fatal: ${err.message}`);
+    await completeSyncLog(logId, "failed", result);
+    console.error("[CRM-SYNC] Hotel requests sync failed:", err.message);
+  } finally {
+    if (!_skipLock) releaseLock();
+  }
+  return result;
+}
+async function syncAll(dryRun = false) {
+  if (!acquireLock()) {
+    throw new Error("A sync is already running. Please wait for it to complete.");
+  }
+  try {
+    if (!dryRun) {
+      try {
+        await processCrmPushQueue();
+      } catch (pushErr) {
+        console.error("[CRM-SYNC] Push queue processing failed during syncAll:", pushErr?.message);
+      }
+    }
+    const wpResult = await syncWorkplaces(dryRun, true);
+    const shiftResult = await syncConfirmedShifts(dryRun, true);
+    const hrResult = await syncHotelRequests(dryRun, true);
+    const fullResult = {
+      workplaces: wpResult,
+      shifts: shiftResult,
+      hotelRequests: hrResult,
+      totalCreated: wpResult.created + shiftResult.created + hrResult.created,
+      totalUpdated: wpResult.updated + shiftResult.updated + hrResult.updated,
+      totalErrors: wpResult.errors + shiftResult.errors + hrResult.errors
+    };
+    if (fullResult.totalErrors > 0) {
+      lastAutoSyncError = [
+        ...wpResult.errorMessages,
+        ...shiftResult.errorMessages,
+        ...hrResult.errorMessages
+      ].join("; ");
+    } else {
+      lastAutoSyncError = null;
+    }
+    lastSyncCompletedAt = /* @__PURE__ */ new Date();
+    return fullResult;
+  } finally {
+    releaseLock();
+  }
+}
+async function getSyncStatus() {
+  const connectionTest = isConfigured() ? await getCachedConnectionStatus() : { connected: false, error: "Not configured" };
+  const recentLogs = await db.select().from(crmSyncLogs).orderBy(sql2`${crmSyncLogs.startedAt} DESC`).limit(10);
+  const lastSyncs = {};
+  for (const syncType of ["workplaces", "shifts", "hotel-requests", "all"]) {
+    const log2 = recentLogs.find((l) => l.syncType === syncType);
+    if (log2) {
+      lastSyncs[syncType] = {
+        status: log2.status,
+        startedAt: log2.startedAt,
+        completedAt: log2.completedAt,
+        created: log2.createdCount,
+        updated: log2.updatedCount,
+        skipped: log2.skippedCount,
+        errors: log2.errorCount,
+        dryRun: log2.dryRun
+      };
+    }
+  }
+  return {
+    configured: isConfigured(),
+    connected: connectionTest.connected,
+    connectionError: connectionTest.error,
+    lastSyncError: lastAutoSyncError,
+    syncRunning,
+    lastSyncs
+  };
+}
+async function getSyncLogs(limit = 50) {
+  return await db.select().from(crmSyncLogs).orderBy(sql2`${crmSyncLogs.startedAt} DESC`).limit(limit);
+}
+async function backfillWorkplacesToCrm() {
+  const result = { pushed: 0, matched: 0, failed: 0, details: [] };
+  if (!isConfigured()) {
+    result.details.push("CRM not configured \u2014 skipping backfill");
+    return result;
+  }
+  try {
+    const unlinked = await db.select().from(workplaces).where(
+      and2(
+        isNull(workplaces.crmExternalId),
+        eq3(workplaces.crmSource, false)
+      )
+    );
+    if (unlinked.length === 0) {
+      result.details.push("No unlinked workplaces found \u2014 nothing to backfill");
+      console.log("[CRM-SYNC] Backfill: no unlinked workplaces");
+      return result;
+    }
+    console.log(`[CRM-SYNC] Backfill: found ${unlinked.length} unlinked workplace(s)`);
+    let crmWorkplaces;
+    try {
+      crmWorkplaces = await getWorkplaces();
+    } catch (err) {
+      result.details.push(`Failed to fetch CRM workplaces: ${err.message}`);
+      result.failed = unlinked.length;
+      return result;
+    }
+    const crmByName = new Map(
+      crmWorkplaces.map((w) => [normalizeString(w.name), w])
+    );
+    for (const wp of unlinked) {
+      const normalizedName = normalizeString(wp.name);
+      const existingCrm = crmByName.get(normalizedName);
+      if (existingCrm) {
+        try {
+          await db.update(workplaces).set({ crmExternalId: existingCrm.id, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(workplaces.id, wp.id));
+          result.matched++;
+          result.details.push(`Matched "${wp.name}" \u2192 CRM ID ${existingCrm.id}`);
+          console.log(`[CRM-SYNC] Backfill matched: "${wp.name}" \u2192 CRM ${existingCrm.id}`);
+        } catch (err) {
+          result.failed++;
+          result.details.push(`Failed to link "${wp.name}": ${err.message}`);
+        }
+      } else {
+        try {
+          const fullAddress = [wp.addressLine1, wp.city, wp.province, wp.postalCode].filter(Boolean).join(", ");
+          const crmResult = await createCrmWorkplace({
+            name: wp.name,
+            address: fullAddress,
+            location: wp.city || "",
+            province: wp.province || "",
+            latitude: wp.latitude ? Number(wp.latitude) : void 0,
+            longitude: wp.longitude ? Number(wp.longitude) : void 0,
+            isActive: wp.isActive !== false
+          });
+          await db.update(workplaces).set({ crmExternalId: crmResult.id, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(workplaces.id, wp.id));
+          result.pushed++;
+          result.details.push(`Pushed "${wp.name}" \u2192 CRM ID ${crmResult.id}`);
+          console.log(`[CRM-SYNC] Backfill pushed: "${wp.name}" \u2192 CRM ${crmResult.id}`);
+        } catch (err) {
+          result.failed++;
+          result.details.push(`Failed to push "${wp.name}" to CRM: ${err.message}`);
+          console.error(`[CRM-SYNC] Backfill failed for "${wp.name}":`, err.message);
+        }
+      }
+    }
+    console.log(`[CRM-SYNC] Backfill complete: ${result.pushed} pushed, ${result.matched} matched, ${result.failed} failed`);
+    return result;
+  } catch (err) {
+    result.details.push(`Backfill error: ${err.message}`);
+    console.error("[CRM-SYNC] Backfill error:", err.message);
+    return result;
+  }
+}
+async function enqueueCrmPush(entityType, entityId, action, payload) {
+  try {
+    await db.insert(crmPushQueue).values({
+      entityType,
+      entityId,
+      action,
+      payload: JSON.stringify(payload),
+      status: "pending",
+      attempts: 0,
+      nextRetryAt: /* @__PURE__ */ new Date()
+    });
+    console.log(`[CRM-PUSH] Enqueued ${action} for ${entityType}/${entityId}`);
+  } catch (err) {
+    console.error(`[CRM-PUSH] Failed to enqueue ${action} for ${entityType}/${entityId}:`, err.message);
+  }
+}
+async function processCrmPushQueue() {
+  const result = { processed: 0, succeeded: 0, failed: 0 };
+  if (!isConfigured()) return result;
+  try {
+    const pending = await db.select().from(crmPushQueue).where(
+      and2(
+        eq3(crmPushQueue.status, "pending"),
+        lte(crmPushQueue.nextRetryAt, /* @__PURE__ */ new Date())
+      )
+    ).limit(20);
+    for (const item of pending) {
+      const [claimed] = await db.update(crmPushQueue).set({ status: "processing" }).where(and2(eq3(crmPushQueue.id, item.id), eq3(crmPushQueue.status, "pending"))).returning();
+      if (!claimed) continue;
+      result.processed++;
+      try {
+        const payload = JSON.parse(item.payload);
+        await executeCrmPushAction(item.entityType, item.action, item.entityId, payload);
+        await db.update(crmPushQueue).set({ status: "completed", completedAt: /* @__PURE__ */ new Date() }).where(eq3(crmPushQueue.id, item.id));
+        result.succeeded++;
+        console.log(`[CRM-PUSH] Completed ${item.action} for ${item.entityType}/${item.entityId}`);
+      } catch (err) {
+        const newAttempts = item.attempts + 1;
+        const backoffMs = Math.min(6e4 * Math.pow(2, newAttempts), 36e5);
+        const nextRetry = new Date(Date.now() + backoffMs);
+        if (newAttempts >= item.maxAttempts) {
+          await db.update(crmPushQueue).set({ status: "failed", attempts: newAttempts, lastError: err.message, completedAt: /* @__PURE__ */ new Date() }).where(eq3(crmPushQueue.id, item.id));
+          result.failed++;
+          console.error(`[CRM-PUSH] Permanently failed ${item.action} for ${item.entityType}/${item.entityId}: ${err.message}`);
+        } else {
+          await db.update(crmPushQueue).set({ status: "pending", attempts: newAttempts, lastError: err.message, nextRetryAt: nextRetry }).where(eq3(crmPushQueue.id, item.id));
+          console.warn(`[CRM-PUSH] Retry ${newAttempts}/${item.maxAttempts} for ${item.entityType}/${item.entityId}, next at ${nextRetry.toISOString()}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[CRM-PUSH] Queue processing error:", err.message);
+  }
+  if (result.processed > 0) {
+    lastPushCompletedAt = /* @__PURE__ */ new Date();
+  }
+  return result;
+}
+async function executeCrmPushAction(entityType, action, _entityId, payload) {
+  switch (`${entityType}:${action}`) {
+    case "confirmed_shift:update": {
+      const crmId = payload.crmExternalId;
+      if (!crmId) throw new Error("Missing crmExternalId");
+      const shiftUpdate = {};
+      if (payload.confirmStatus) shiftUpdate.confirmStatus = payload.confirmStatus;
+      if (payload.checkedInAt) shiftUpdate.checkedInAt = payload.checkedInAt;
+      if (payload.completedAt) shiftUpdate.completedAt = payload.completedAt;
+      if (payload.notes) shiftUpdate.notes = payload.notes;
+      await updateCrmConfirmedShift(crmId, shiftUpdate);
+      break;
+    }
+    case "hotel_request:create": {
+      const hrInput = {
+        hotelName: payload.hotelName,
+        roleNeeded: payload.roleNeeded,
+        shiftStartAt: payload.shiftStartAt,
+        shiftEndAt: payload.shiftEndAt,
+        location: payload.location,
+        address: payload.address,
+        quantityNeeded: payload.quantityNeeded,
+        payRate: payload.payRate,
+        notes: payload.notes
+      };
+      await createCrmHotelRequest(hrInput);
+      break;
+    }
+    case "hotel_request:update": {
+      const crmId = payload.crmExternalId;
+      if (!crmId) throw new Error("Missing crmExternalId");
+      const hrUpdate = {};
+      if (payload.hotelName) hrUpdate.hotelName = payload.hotelName;
+      if (payload.roleNeeded) hrUpdate.roleNeeded = payload.roleNeeded;
+      if (payload.quantityNeeded !== void 0) hrUpdate.quantityNeeded = payload.quantityNeeded;
+      if (payload.shiftStartAt) hrUpdate.shiftStartAt = payload.shiftStartAt;
+      if (payload.shiftEndAt) hrUpdate.shiftEndAt = payload.shiftEndAt;
+      if (payload.payRate !== void 0) hrUpdate.payRate = payload.payRate;
+      if (payload.notes) hrUpdate.notes = payload.notes;
+      if (payload.status) hrUpdate.status = payload.status;
+      await updateCrmHotelRequest(crmId, hrUpdate);
+      break;
+    }
+    case "workplace:update": {
+      const crmId = payload.crmExternalId;
+      if (!crmId) throw new Error("Missing crmExternalId");
+      const wpUpdate = {};
+      if (payload.name) wpUpdate.name = payload.name;
+      if (payload.address) wpUpdate.address = payload.address;
+      if (payload.location) wpUpdate.location = payload.location;
+      if (payload.province) wpUpdate.province = payload.province;
+      if (payload.isActive !== void 0) wpUpdate.isActive = payload.isActive;
+      await updateCrmWorkplace(crmId, wpUpdate);
+      break;
+    }
+    default:
+      throw new Error(`Unknown CRM push action: ${entityType}:${action}`);
+  }
+}
+async function getCrmPushQueueStats() {
+  try {
+    const todayStart = /* @__PURE__ */ new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const [pendingResult] = await db.select({ count: count() }).from(crmPushQueue).where(eq3(crmPushQueue.status, "pending"));
+    const [failedResult] = await db.select({ count: count() }).from(crmPushQueue).where(eq3(crmPushQueue.status, "failed"));
+    const [completedResult] = await db.select({ count: count() }).from(crmPushQueue).where(
+      and2(
+        eq3(crmPushQueue.status, "completed"),
+        gte(crmPushQueue.completedAt, todayStart)
+      )
+    );
+    return {
+      pending: pendingResult?.count ?? 0,
+      failed: failedResult?.count ?? 0,
+      completedToday: completedResult?.count ?? 0,
+      lastPushAt: lastPushCompletedAt?.toISOString() || null,
+      lastSyncAt: lastSyncCompletedAt?.toISOString() || null
+    };
+  } catch {
+    return { pending: 0, failed: 0, completedToday: 0, lastPushAt: null, lastSyncAt: null };
+  }
+}
+var syncRunning, lastAutoSyncError, lastSyncCompletedAt, lastPushCompletedAt, cachedConnectionStatus, CONNECTION_CACHE_TTL;
+var init_crm_sync = __esm({
+  "server/services/crm-sync.ts"() {
+    "use strict";
+    init_db();
+    init_schema();
+    init_weekdays_crm();
+    syncRunning = false;
+    lastAutoSyncError = null;
+    lastSyncCompletedAt = null;
+    lastPushCompletedAt = null;
+    cachedConnectionStatus = null;
+    CONNECTION_CACHE_TTL = 6e4;
+  }
+});
+
+// server/index.ts
+import express from "express";
+
+// server/routes.ts
+import { createServer } from "node:http";
+
+// server/websocket.ts
+import { WebSocketServer, WebSocket } from "ws";
+var clients = /* @__PURE__ */ new Set();
+var wss;
+function setupWebSocket(server) {
+  wss = new WebSocketServer({ server, path: "/ws" });
+  wss.on("connection", (ws) => {
+    clients.add(ws);
+    console.log(`[WS] Client connected (total: ${clients.size})`);
+    ws.on("close", () => {
+      clients.delete(ws);
+      console.log(`[WS] Client disconnected (total: ${clients.size})`);
+    });
+    ws.on("error", (err) => {
+      console.error("[WS] Error:", err.message);
+      clients.delete(ws);
+    });
+    ws.send(JSON.stringify({ type: "connected", timestamp: (/* @__PURE__ */ new Date()).toISOString() }));
+  });
+  console.log("[WS] WebSocket server ready on /ws");
+}
+function broadcast(event) {
+  const message = JSON.stringify({ ...event, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+  let sent = 0;
+  clients.forEach((client2) => {
+    if (client2.readyState === WebSocket.OPEN) {
+      client2.send(message);
+      sent++;
+    }
+  });
+  if (sent > 0) {
+    console.log(`[WS] Broadcast ${event.type}:${event.entity} to ${sent} clients`);
+  }
+}
+function getConnectedClientsCount() {
+  return clients.size;
+}
+
+// server/routes.ts
+init_db();
+init_schema();
 
 // shared/payPeriods2026.ts
 var PAY_PERIODS_2026 = [
@@ -768,10 +2329,436 @@ function getCurrentPayPeriod(date2 = /* @__PURE__ */ new Date()) {
 }
 
 // server/routes.ts
+init_openphone();
 import bcrypt from "bcryptjs";
 import * as OTPAuth from "otpauth";
 import crypto2 from "crypto";
-import { eq, and, or, desc, isNull, sql as sql2, inArray, ne, gte, lte, not } from "drizzle-orm";
+import { eq as eq4, and as and3, or, desc as desc2, isNull as isNull2, sql as sql3, inArray, ne as ne2, gte as gte2, lte as lte2, not, asc } from "drizzle-orm";
+
+// server/services/email.ts
+import sgMail from "@sendgrid/mail";
+var connectionSettings;
+async function getCredentials() {
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY ? "repl " + process.env.REPL_IDENTITY : process.env.WEB_REPL_RENEWAL ? "depl " + process.env.WEB_REPL_RENEWAL : null;
+  if (!xReplitToken) {
+    throw new Error("X-Replit-Token not found for repl/depl");
+  }
+  connectionSettings = await fetch(
+    "https://" + hostname + "/api/v2/connection?include_secrets=true&connector_names=sendgrid",
+    {
+      headers: {
+        "Accept": "application/json",
+        "X-Replit-Token": xReplitToken
+      }
+    }
+  ).then((res) => res.json()).then((data) => data.items?.[0]);
+  if (!connectionSettings || (!connectionSettings.settings.api_key || !connectionSettings.settings.from_email)) {
+    throw new Error("SendGrid not connected");
+  }
+  return { apiKey: connectionSettings.settings.api_key, email: connectionSettings.settings.from_email };
+}
+async function getUncachableSendGridClient() {
+  const { apiKey, email } = await getCredentials();
+  sgMail.setApiKey(apiKey);
+  return {
+    client: sgMail,
+    fromEmail: email
+  };
+}
+async function sendEmail(options) {
+  try {
+    const { client: client2, fromEmail } = await getUncachableSendGridClient();
+    const msg = {
+      to: options.to,
+      from: fromEmail,
+      subject: options.subject,
+      text: options.text
+    };
+    if (options.html) {
+      msg.html = options.html;
+    }
+    if (options.attachments && options.attachments.length > 0) {
+      msg.attachments = options.attachments.map((att) => ({
+        content: att.content,
+        filename: att.filename,
+        type: att.type,
+        disposition: att.disposition || "attachment"
+      }));
+    }
+    await client2.send(msg);
+    console.log(`[EMAIL] Sent to ${options.to}: ${options.subject}`);
+    return { success: true };
+  } catch (error) {
+    console.error("[EMAIL] Send error:", error?.message || error);
+    return { success: false, error: error?.message || "Failed to send email" };
+  }
+}
+async function sendCSVEmail(to, subject, bodyText, csvContent, filename) {
+  const base64Content = Buffer.from(csvContent).toString("base64");
+  return sendEmail({
+    to,
+    subject,
+    text: bodyText,
+    attachments: [{
+      content: base64Content,
+      filename,
+      type: "text/csv"
+    }]
+  });
+}
+async function sendXLSXEmail(to, subject, bodyText, xlsxBuffer, filename) {
+  const base64Content = xlsxBuffer.toString("base64");
+  return sendEmail({
+    to,
+    subject,
+    text: bodyText,
+    attachments: [{
+      content: base64Content,
+      filename,
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    }]
+  });
+}
+
+// server/routes.ts
+init_schema();
+init_discord();
+
+// shared/contractor-guide-content.ts
+var WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.0";
+var NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE = "Non-Solicitation / Direct Hiring Clause";
+var NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS = [
+  "The Contractor agrees that during the term of this Agreement and for a period of twelve (12) months following the completion or termination of any assignment, they shall not, directly or indirectly, solicit or accept employment, contract work, or any other form of engagement with any client of the Company to whom the Contractor was introduced or for whom the Contractor performed services under this Agreement, without the prior written consent of the Company.",
+  "For greater certainty, this restriction applies only to clients with whom the Contractor had direct contact or to whom the Contractor was assigned during the course of their engagement with the Company.",
+  "This restriction applies regardless of whether such opportunity is initiated by the Contractor, the client, or any third party.",
+  "In the event that the Contractor accepts such employment or engagement without the Company\u2019s prior written consent, the Contractor agrees to pay the Company a placement fee equivalent to three (3) months of full-time hours calculated at the Contractor\u2019s most recent agreed hourly rate. The parties acknowledge and agree that this amount represents a genuine pre-estimate of damages and is not intended to be a penalty.",
+  "The Contractor acknowledges that the duration, scope, and nature of this clause are reasonable and necessary to protect the Company\u2019s legitimate business interests, including its client relationships and investment in securing and maintaining such clients."
+];
+var workforceSubcontractorAgreementSections = [
+  {
+    id: "parties",
+    title: "1. Parties",
+    paragraphs: [
+      'This Subcontractor Agreement is entered into between 1001328662 Ontario Inc. (the "Company") and the worker identified in the signature section of this Agreement (the "Contractor").',
+      "This Agreement applies to worker-facing and internal copies and references the Company\u2019s legal entity for administrative and legal record purposes."
+    ]
+  },
+  {
+    id: "relationship",
+    title: "2. Independent Contractor Relationship",
+    paragraphs: [
+      "The Contractor performs services as an independent subcontractor and not as an employee, agent, partner, or representative of the Company unless required by applicable law.",
+      "The Contractor understands that they are not entitled to Employment Insurance, Canada Pension Plan contributions, vacation pay, overtime pay, benefits, or any similar employee entitlements unless expressly required by law.",
+      "The Contractor is solely responsible for filing and remitting all taxes, source deductions, premiums, and statutory contributions arising from amounts paid under this Agreement."
+    ]
+  },
+  {
+    id: "scope",
+    title: "3. Scope of Services",
+    paragraphs: [
+      "The Company may offer assignments involving housekeeping, hotel cleaning, supervisor coverage, banquet and server roles, and other temporary hospitality staffing services requested by Company clients.",
+      "The Contractor agrees to perform only assignments they accept and to carry out accepted assignments in a professional, safe, and client-compliant manner."
+    ]
+  },
+  {
+    id: "assignment-terms",
+    title: "4. Assignment Terms",
+    paragraphs: [
+      "The Contractor acknowledges that no minimum hours, recurring shifts, or ongoing assignments are guaranteed under this Agreement.",
+      "Assignments are based on client demand, may vary by location, role, and duration, and may be reassigned, rescheduled, shortened, or cancelled by the Company or the client."
+    ]
+  },
+  {
+    id: "compensation",
+    title: "5. Compensation",
+    paragraphs: [
+      "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
+      "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company\u2019s then-current payroll cycle and operational procedures."
+    ]
+  },
+  {
+    id: "timekeeping",
+    title: "6. Timekeeping / TITO",
+    paragraphs: [
+      "The Contractor must accurately record all time in and time out events through the Company\u2019s designated TITO or timekeeping tools.",
+      "GPS, geofence, device, or related location verification may be used for attendance validation. Buddy punching, fabricated timestamps, or any other false recordkeeping is prohibited.",
+      "Fraudulent or inaccurate timekeeping may result in assignment removal, termination of this Agreement, and non-payment for unverified or falsified hours where permitted by law."
+    ]
+  },
+  {
+    id: "confidentiality",
+    title: "7. Confidentiality",
+    paragraphs: [
+      "The Contractor shall keep confidential all non-public information obtained through the Company or its clients, including hotel guest data, room information, schedules, client data, staff details, and Company operating processes.",
+      "The Contractor shall not use or disclose confidential information except as necessary to perform an assignment or as required by law."
+    ]
+  },
+  {
+    id: "non-solicitation",
+    title: "8. Non-Solicitation / Direct Hiring Clause",
+    paragraphs: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS
+  },
+  {
+    id: "conduct",
+    title: "9. Conduct and Site Compliance",
+    paragraphs: [
+      "The Contractor must comply with dress code standards, professionalism requirements, client policies, safety rules, anti-harassment obligations, and all reasonable directions relating to conduct at a site.",
+      "Photography, recording, or social posting regarding client premises, guest areas, staff, schedules, or operations is prohibited unless expressly authorized in writing."
+    ]
+  },
+  {
+    id: "equipment",
+    title: "10. Equipment / Damages",
+    paragraphs: [
+      "The Contractor is responsible for exercising reasonable care with Company and client property, equipment, uniforms, keys, and keycards issued for an assignment.",
+      "The Contractor may be held responsible, to the extent permitted by law, for losses or damages caused by negligence, including lost keycards, access devices, or client property damage."
+    ]
+  },
+  {
+    id: "termination",
+    title: "11. Termination",
+    paragraphs: [
+      "The Company may suspend or terminate assignments or this Agreement for misconduct, attendance issues, client complaints, falsified TITO records, breach of confidentiality, or breach of the Non-Solicitation / Direct Hiring Clause.",
+      "The Contractor may stop accepting new assignments at any time, subject to completing accepted work unless otherwise released by the Company or client."
+    ]
+  },
+  {
+    id: "governing-law",
+    title: "12. Governing Law",
+    paragraphs: [
+      "This Agreement shall be governed by and interpreted in accordance with the laws of the Province of Ontario and the federal laws of Canada applicable therein."
+    ]
+  },
+  {
+    id: "electronic-signature",
+    title: "13. Electronic Signature",
+    paragraphs: [
+      "The parties agree that an electronic signature, typed name, electronic acknowledgment, and electronically stored acceptance record are intended to be legally binding and enforceable to the same extent as an original handwritten signature."
+    ]
+  }
+];
+
+// server/lib/agreement-pdf.ts
+import PDFDocument from "pdfkit";
+var INTERNAL_COMPANY_NAME = "1001328662 Ontario Inc.";
+var INTERNAL_COMPANY_ADDRESS = "Mississauga, Ontario";
+function safeParseList(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
+  } catch {
+    return [String(value)];
+  }
+}
+function sanitizeFileName(value) {
+  return value.trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_.-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "") || "Agreement";
+}
+function drawHeader(doc, variant) {
+  void variant;
+  doc.fontSize(18).font("Helvetica-Bold").text(INTERNAL_COMPANY_NAME, { align: "center" });
+  doc.moveDown(0.2);
+  doc.fontSize(10).font("Helvetica").fillColor("#555555").text(INTERNAL_COMPANY_ADDRESS, { align: "center" });
+  doc.fillColor("#000000");
+  doc.moveDown(1.2);
+  doc.fontSize(17).font("Helvetica-Bold").text("Subcontractor Agreement", { align: "center" });
+  doc.moveDown(0.25);
+  doc.fontSize(9).font("Helvetica").fillColor("#666666").text(`Agreement Version ${WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION}`, { align: "center" });
+  doc.fillColor("#000000");
+  doc.moveDown(1);
+}
+function addLabelValue(doc, label, value) {
+  doc.fontSize(9).font("Helvetica-Bold").fillColor("#444444").text(label, { continued: true });
+  doc.font("Helvetica").fillColor("#000000").text(` ${value || "N/A"}`);
+  doc.moveDown(0.2);
+}
+function addSection(doc, title, paragraphs) {
+  doc.fontSize(12).font("Helvetica-Bold").fillColor("#000000").text(title);
+  doc.moveDown(0.35);
+  paragraphs.forEach((paragraph) => {
+    doc.fontSize(9.5).font("Helvetica").text(paragraph, { lineGap: 2 });
+    doc.moveDown(0.35);
+  });
+}
+function addAcknowledgments(doc, _application) {
+  const items = [
+    "TITO System Acknowledgment",
+    "Site Rules Agreement",
+    NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
+    "Worker Agreement",
+    "Privacy Policy"
+  ];
+  doc.fontSize(12).font("Helvetica-Bold").text("Acknowledgments");
+  doc.moveDown(0.35);
+  items.forEach((label) => {
+    doc.fontSize(9.5).font("Helvetica").text(`[X] ${label}`);
+    doc.moveDown(0.2);
+  });
+}
+function addSignature(doc, application) {
+  doc.moveDown(0.5);
+  doc.fontSize(12).font("Helvetica-Bold").text("Signature");
+  doc.moveDown(0.4);
+  addLabelValue(doc, "Signed By:", application.signature);
+  addLabelValue(doc, "Signed Date:", application.signatureDate);
+  addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
+  addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
+  addLabelValue(doc, "Non-Solicitation Acknowledged:", "Yes");
+  addLabelValue(
+    doc,
+    "Acknowledged At:",
+    application.nonSolicitationAcknowledgedAt ? new Date(application.nonSolicitationAcknowledgedAt).toLocaleString("en-CA") : "Legacy / Unknown"
+  );
+}
+function createAgreementPdfFileName(application, variant) {
+  const date2 = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const name = sanitizeFileName(application.fullName || "Worker");
+  if (variant === "worker") {
+    return `Worker_Agreement_${name}_${date2}.pdf`;
+  }
+  return `Internal_Subcontractor_Agreement_${name}_${date2}.pdf`;
+}
+function streamAgreementPdf(res, application, variant) {
+  const fileName = createAgreementPdfFileName(application, variant);
+  const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 56, right: 56 } });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  doc.pipe(res);
+  drawHeader(doc, variant);
+  addSection(doc, "Worker Details", [
+    `Contractor: ${application.fullName}`,
+    `Email: ${application.email}`,
+    `Phone: ${application.phone}`,
+    `Address: ${application.address}, ${application.city}, ${application.province} ${application.postalCode}`
+  ]);
+  addSection(doc, "Assignment Profile", [
+    `Preferred Roles: ${safeParseList(application.preferredRoles).join(", ") || "Not specified"}`,
+    `Available Days: ${safeParseList(application.availableDays).join(", ") || "Not specified"}`,
+    `Preferred Shifts: ${safeParseList(application.preferredShifts).join(", ") || "Not specified"}`
+  ]);
+  workforceSubcontractorAgreementSections.forEach((section, index2) => {
+    if (doc.y > 690) {
+      doc.addPage();
+    }
+    addSection(doc, section.title, section.paragraphs);
+    if (index2 === 4) {
+      addSection(doc, "Compensation Details", [
+        `Most recent rate basis: ${application.yearsExperience || "Client-dependent hourly rate"}`,
+        "Approved hours only will be processed for payment."
+      ]);
+    }
+  });
+  addAcknowledgments(doc, application);
+  addSignature(doc, application);
+  void variant;
+  doc.end();
+}
+
+// server/routes.ts
+var CANADIAN_PROVINCES = {
+  AB: "Alberta",
+  BC: "British Columbia",
+  MB: "Manitoba",
+  NB: "New Brunswick",
+  NL: "Newfoundland and Labrador",
+  NS: "Nova Scotia",
+  NT: "Northwest Territories",
+  NU: "Nunavut",
+  ON: "Ontario",
+  PE: "Prince Edward Island",
+  QC: "Quebec",
+  SK: "Saskatchewan",
+  YT: "Yukon"
+};
+var CANADIAN_POSTAL_CODE_REGEX = /\b([ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z])[ -]?(\d[ABCEGHJ-NPRSTV-Z]\d)\b/i;
+function normalizeAddressText(value) {
+  return value.replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").trim().replace(/,+$/, "");
+}
+function normalizeProvince(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const upper = trimmed.toUpperCase();
+  if (CANADIAN_PROVINCES[upper]) {
+    return upper;
+  }
+  const entry = Object.entries(CANADIAN_PROVINCES).find(([, fullName]) => fullName.toLowerCase() === trimmed.toLowerCase());
+  return entry?.[0] || "";
+}
+function normalizePostalCode(value) {
+  const match = value.match(CANADIAN_POSTAL_CODE_REGEX);
+  if (!match) return "";
+  return `${match[1].toUpperCase()} ${match[2].toUpperCase()}`;
+}
+function stripCountry(value) {
+  return value.replace(/,?\s*canada\s*$/i, "").trim();
+}
+function parseLocalAddress(input) {
+  const normalizedInput = normalizeAddressText(input);
+  let working = stripCountry(normalizedInput);
+  const postalCode = normalizePostalCode(working);
+  if (postalCode) {
+    working = normalizeAddressText(working.replace(CANADIAN_POSTAL_CODE_REGEX, ""));
+  }
+  const segments = working.split(",").map((segment) => segment.trim()).filter(Boolean);
+  let addressLine1 = segments[0] || working;
+  let city = "";
+  let province = "";
+  if (segments.length >= 3) {
+    addressLine1 = segments.slice(0, -2).join(", ");
+    city = segments[segments.length - 2] || "";
+    province = normalizeProvince(segments[segments.length - 1] || "");
+  } else if (segments.length === 2) {
+    addressLine1 = segments[0];
+    const secondSegment = segments[1];
+    const provinceMatch = secondSegment.match(/\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT|Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland and Labrador|Nova Scotia|Northwest Territories|Nunavut|Ontario|Prince Edward Island|Quebec|Saskatchewan|Yukon)\b$/i);
+    if (provinceMatch) {
+      province = normalizeProvince(provinceMatch[0]);
+      city = secondSegment.slice(0, secondSegment.length - provinceMatch[0].length).trim().replace(/,$/, "");
+    } else {
+      city = secondSegment;
+    }
+  }
+  addressLine1 = normalizeAddressText(addressLine1);
+  city = normalizeAddressText(city);
+  const formattedParts = [addressLine1, city, province, postalCode, "Canada"].filter(Boolean);
+  return {
+    formattedAddress: formattedParts.join(", "),
+    addressLine1,
+    city,
+    province,
+    postalCode,
+    country: "Canada",
+    latitude: null,
+    longitude: null
+  };
+}
+function buildLocalAddressPredictions(input) {
+  const trimmed = normalizeAddressText(input);
+  if (trimmed.length < 2) {
+    return [];
+  }
+  const parsed = parseLocalAddress(trimmed);
+  const candidates = /* @__PURE__ */ new Set();
+  if (parsed.formattedAddress) {
+    candidates.add(parsed.formattedAddress);
+  }
+  candidates.add(trimmed);
+  if (!/canada$/i.test(trimmed)) {
+    candidates.add(`${trimmed}, Canada`);
+  }
+  if (parsed.addressLine1 && parsed.city) {
+    candidates.add([parsed.addressLine1, parsed.city, parsed.province, "Canada"].filter(Boolean).join(", "));
+  }
+  return Array.from(candidates).filter(Boolean).slice(0, 5).map((description) => ({
+    place_id: Buffer.from(description, "utf-8").toString("base64url"),
+    description,
+    structured_formatting: {
+      main_text: description.split(",")[0]?.trim() || description,
+      secondary_text: description.split(",").slice(1).join(",").trim() || "Canada"
+    }
+  }));
+}
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371e3;
   const phi1 = lat1 * Math.PI / 180;
@@ -784,9 +2771,9 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 }
 async function sendPushNotifications(userIds, title, body, data) {
   try {
-    const tokens = await db.select({ token: pushTokens.token }).from(pushTokens).where(and(
+    const tokens = await db.select({ token: pushTokens.token }).from(pushTokens).where(and3(
       inArray(pushTokens.userId, userIds),
-      eq(pushTokens.isActive, true)
+      eq4(pushTokens.isActive, true)
     ));
     if (tokens.length === 0) return;
     const messages3 = tokens.map((t) => ({
@@ -832,6 +2819,22 @@ async function sendPushNotifications(userIds, title, body, data) {
 var rateLimitMap = /* @__PURE__ */ new Map();
 var RATE_LIMIT_WINDOW = 6e4;
 var RATE_LIMIT_MAX = 5;
+var titoRateLimitMap = /* @__PURE__ */ new Map();
+var TITO_RATE_LIMIT_WINDOW = 6e4;
+var TITO_RATE_LIMIT_MAX = 10;
+function checkTitoRateLimit(userId) {
+  const now = Date.now();
+  const entry = titoRateLimitMap.get(userId);
+  if (!entry || now > entry.resetTime) {
+    titoRateLimitMap.set(userId, { count: 1, resetTime: now + TITO_RATE_LIMIT_WINDOW });
+    return true;
+  }
+  if (entry.count >= TITO_RATE_LIMIT_MAX) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
 function getClientIp(req) {
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string") {
@@ -854,8 +2857,17 @@ function checkRateLimit(ip) {
 }
 function checkRoles(...allowedRoles) {
   return (req, res, next) => {
-    const role = req.headers["x-user-role"];
-    const userId = req.headers["x-user-id"];
+    let role = req.headers["x-user-role"];
+    let userId = req.headers["x-user-id"];
+    if (!role || !userId) {
+      const session = parseSessionCookie(req);
+      if (session) {
+        role = session.role;
+        userId = session.userId;
+        req.headers["x-user-role"] = role;
+        req.headers["x-user-id"] = userId;
+      }
+    }
     if (!role || !allowedRoles.includes(role)) {
       console.log(`[AUTH REJECTED] ${req.method} ${req.path} - role="${role || "MISSING"}" userId="${userId || "MISSING"}" allowed=[${allowedRoles.join(",")}]`);
       res.status(403).json({ error: "Forbidden: Insufficient permissions" });
@@ -879,9 +2891,9 @@ function expandSeriesOccurrences(series, exceptions, rangeStart, rangeEnd) {
   const exceptionMap = /* @__PURE__ */ new Map();
   exceptions.forEach((ex) => exceptionMap.set(ex.date, ex));
   const current = new Date(startDate);
-  let count = 0;
+  let count2 = 0;
   const maxCount = series.endType === "count" ? series.endAfterCount || 999 : 999;
-  while (current <= endDate && count < maxCount) {
+  while (current <= endDate && count2 < maxCount) {
     const dateStr = current.toISOString().split("T")[0];
     let include = false;
     if (series.frequency === "daily") {
@@ -932,11 +2944,417 @@ function expandSeriesOccurrences(series, exceptions, rangeStart, rangeEnd) {
           isException: false
         });
       }
-      count++;
+      count2++;
     }
     current.setDate(current.getDate() + 1);
   }
   return occurrences;
+}
+var SESSION_SECRET = process.env.SESSION_SECRET || "wfc-default-secret";
+function createSessionToken(userId, role) {
+  const payload = JSON.stringify({ userId, role, iat: Date.now() });
+  const encoded = Buffer.from(payload).toString("base64url");
+  const sig = crypto2.createHmac("sha256", SESSION_SECRET).update(encoded).digest("base64url");
+  return `${encoded}.${sig}`;
+}
+function verifySessionToken(token) {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [encoded, sig] = parts;
+  const expectedSig = crypto2.createHmac("sha256", SESSION_SECRET).update(encoded).digest("base64url");
+  if (sig !== expectedSig) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString());
+    if (!payload.userId || !payload.role) return null;
+    return { userId: payload.userId, role: payload.role };
+  } catch {
+    return null;
+  }
+}
+function parseSessionCookie(req) {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(/(?:^|;\s*)wfc_session=([^;]+)/);
+  if (!match) return null;
+  return verifySessionToken(decodeURIComponent(match[1]));
+}
+function setSessionCookie(res, userId, role) {
+  const token = createSessionToken(userId, role);
+  res.setHeader("Set-Cookie", `wfc_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+}
+function clearSessionCookie(res) {
+  res.setHeader("Set-Cookie", "wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+}
+var WORKER_APPLICATION_STATUSES = /* @__PURE__ */ new Set(["pending", "reviewed", "approved", "rejected"]);
+function normalizeText(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > 0 ? normalized : null;
+}
+function splitName(fullName) {
+  const [firstName = "", ...lastNameParts] = fullName.split(/\s+/).filter(Boolean);
+  return {
+    firstName: firstName || null,
+    lastName: lastNameParts.join(" ") || null
+  };
+}
+function resolveWorkerIdentity(input) {
+  const normalizedFullName = normalizeText(input.fullName);
+  const normalizedFirstName = normalizeText(input.firstName);
+  const normalizedLastName = normalizeText(input.lastName);
+  const structuredName = normalizeText(`${normalizedFirstName || ""} ${normalizedLastName || ""}`);
+  const fallbackEmail = normalizeText(input.email);
+  const fallbackPhone = normalizeText(input.phone);
+  const workerName = normalizedFullName || structuredName || fallbackEmail || fallbackPhone || null;
+  let firstName = normalizedFirstName;
+  let lastName = normalizedLastName;
+  if (workerName && (!firstName || !lastName)) {
+    const split = splitName(workerName);
+    firstName = firstName || split.firstName;
+    lastName = lastName || split.lastName;
+  }
+  return {
+    workerName,
+    fullName: workerName,
+    firstName,
+    lastName,
+    hasIdentity: Boolean(workerName)
+  };
+}
+function mapApplicationForSync(application) {
+  const identity = resolveWorkerIdentity({
+    fullName: application.fullName,
+    email: application.email,
+    phone: application.phone
+  });
+  const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
+  const isActive = application.status === "approved";
+  return {
+    identityResolved: identity.hasIdentity,
+    payload: {
+      id: application.id,
+      status: application.status,
+      full_name: identity.fullName,
+      first_name: identity.firstName,
+      last_name: identity.lastName,
+      email: application.email,
+      phone: application.phone,
+      address: application.address,
+      city: application.city,
+      province: application.province,
+      province_code: application.province,
+      worker_type: workerType,
+      applying_for: workerType,
+      is_active: isActive,
+      active: isActive,
+      payment_method: application.paymentMethod,
+      bank_name: application.bankName,
+      bank_institution: application.bankInstitution,
+      bank_transit: application.bankTransit,
+      bank_account: application.bankAccount,
+      etransfer_email: application.etransferEmail,
+      notes: application.notes
+    }
+  };
+}
+function getConfiguredApiKeys() {
+  const keys = [];
+  const singleKey = process.env.WFCONNECT_API_KEY?.trim();
+  const keyList = process.env.WFCONNECT_API_KEYS;
+  if (singleKey) {
+    keys.push(singleKey);
+  }
+  if (keyList) {
+    const parsed = keyList.split(",").map((k) => k.trim()).filter(Boolean);
+    keys.push(...parsed);
+  }
+  return Array.from(new Set(keys));
+}
+function parsePreferredWorkerType(preferredRoles, workStatus) {
+  if (preferredRoles) {
+    try {
+      const parsed = JSON.parse(preferredRoles);
+      if (Array.isArray(parsed)) {
+        const roles = parsed.filter((role) => typeof role === "string").join(", ");
+        if (roles) return roles;
+      } else if (typeof parsed === "string" && parsed.trim()) {
+        return parsed.trim();
+      }
+    } catch {
+      if (preferredRoles.trim()) return preferredRoles.trim();
+    }
+  }
+  return workStatus?.trim() || null;
+}
+function hashApiKey(key) {
+  return crypto2.createHash("sha256").update(key).digest("hex");
+}
+function generateApiKeyPrefix() {
+  const timestamp2 = Date.now().toString(36);
+  const random = crypto2.randomBytes(4).toString("hex");
+  return `wfc_${timestamp2}_${random}`.substring(0, 32);
+}
+function ensureManagedKeyIntegrity(keys) {
+  for (const key of keys) {
+    const hasHash = typeof key.hash === "string" && key.hash.length > 0;
+    if (!key.revokedAt && !hasHash) {
+      throw new Error(`Managed key integrity check failed for active key ${key.id}`);
+    }
+  }
+}
+async function getManagedApiKeysRaw(options) {
+  try {
+    const config = await db.query.appConfig.findFirst({
+      where: eq4(appConfig.key, "api_keys_managed")
+    });
+    if (!config || !config.value) return [];
+    const parsed = JSON.parse(config.value);
+    if (!Array.isArray(parsed)) {
+      throw new Error("api_keys_managed is not an array");
+    }
+    const normalized = parsed.map((raw) => ({
+      id: String(raw.id ?? ""),
+      name: String(raw.name ?? ""),
+      prefix: String(raw.prefix ?? ""),
+      hash: typeof raw.hash === "string" ? raw.hash : "",
+      scopes: Array.isArray(raw.scopes) ? raw.scopes.filter((s) => typeof s === "string") : [],
+      createdAt: String(raw.createdAt ?? ""),
+      createdBy: String(raw.createdBy ?? "admin"),
+      lastUsedAt: raw.lastUsedAt ?? null,
+      revokedAt: raw.revokedAt ?? null,
+      revokedBy: raw.revokedBy ?? null
+    }));
+    ensureManagedKeyIntegrity(normalized);
+    return normalized;
+  } catch (error) {
+    if (options?.suppressErrors) {
+      return [];
+    }
+    throw error;
+  }
+}
+async function getManagedApiKeys() {
+  const raw = await getManagedApiKeysRaw();
+  return raw.map(({ hash: _hash, ...rest }) => ({ ...rest, scopes: rest.scopes ?? [] }));
+}
+async function saveManagedApiKeys(keys) {
+  ensureManagedKeyIntegrity(keys);
+  const existing = await db.query.appConfig.findFirst({
+    where: eq4(appConfig.key, "api_keys_managed")
+  });
+  if (existing) {
+    await db.update(appConfig).set({ value: JSON.stringify(keys) }).where(eq4(appConfig.key, "api_keys_managed"));
+  } else {
+    await db.insert(appConfig).values({
+      key: "api_keys_managed",
+      value: JSON.stringify(keys),
+      description: "Managed API keys for Payroll sync"
+    });
+  }
+}
+async function updateManagedKeyLastUsed(keyId) {
+  try {
+    const keys = await getManagedApiKeysRaw({ suppressErrors: true });
+    const idx = keys.findIndex((k) => k.id === keyId);
+    if (idx === -1) return;
+    keys[idx].lastUsedAt = (/* @__PURE__ */ new Date()).toISOString();
+    await saveManagedApiKeys(keys);
+  } catch {
+  }
+}
+async function tryBearerApiKey(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+  const token = authHeader.slice("Bearer ".length).trim();
+  if (!token) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  const configuredKeys = getConfiguredApiKeys();
+  if (configuredKeys.includes(token)) {
+    req.apiKeyScopes = ["*"];
+    return next();
+  }
+  try {
+    const tokenHash = hashApiKey(token);
+    const managedKeys = await getManagedApiKeysRaw();
+    const matched = managedKeys.find((k) => k.hash === tokenHash && !k.revokedAt);
+    if (!matched) {
+      res.status(401).json({ error: "Invalid or revoked API key" });
+      return;
+    }
+    req.apiKeyId = matched.id;
+    req.apiKeyScopes = matched.scopes ?? [];
+    updateManagedKeyLastUsed(matched.id).catch(() => {
+    });
+    return next();
+  } catch (err) {
+    console.error("[tryBearerApiKey] key-store error", err);
+    res.status(500).json({ error: "API key store unavailable" });
+  }
+}
+function checkApplicationsApiKey(req, res, next) {
+  res.type("application/json");
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const apiKey = authHeader.slice("Bearer ".length).trim();
+  const configuredKeys = getConfiguredApiKeys();
+  if (!apiKey || configuredKeys.length === 0 || !configuredKeys.includes(apiKey)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+function parseBasicAuthCredentials(authHeader) {
+  if (!authHeader || !authHeader.startsWith("Basic ")) {
+    return null;
+  }
+  const base64Credentials = authHeader.split(" ")[1];
+  if (!base64Credentials) {
+    return null;
+  }
+  const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+  const separatorIndex = credentials.indexOf(":");
+  if (separatorIndex === -1) {
+    return null;
+  }
+  return {
+    username: credentials.slice(0, separatorIndex),
+    password: credentials.slice(separatorIndex + 1)
+  };
+}
+function getAdminPortalCandidateEmails(username) {
+  const normalizedUsername = username.trim().toLowerCase();
+  const candidates = /* @__PURE__ */ new Set();
+  if (normalizedUsername.includes("@")) {
+    candidates.add(normalizedUsername);
+  }
+  if (normalizedUsername === "wfconnect") {
+    candidates.add("admin@wfconnect.org");
+  }
+  return Array.from(candidates);
+}
+async function validateAdminPortalBasicAuth(req) {
+  const credentials = parseBasicAuthCredentials(req.headers.authorization);
+  if (!credentials) {
+    return {
+      ok: false,
+      mode: "missing",
+      normalizedUsername: null,
+      userFound: false,
+      passwordMatched: false
+    };
+  }
+  const normalizedUsername = credentials.username.trim().toLowerCase();
+  if (normalizedUsername === "wfconnect" && credentials.password === "@2255Dundaswest") {
+    return {
+      ok: true,
+      mode: "legacy-basic",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: true
+    };
+  }
+  const candidateEmails = getAdminPortalCandidateEmails(credentials.username);
+  if (candidateEmails.length === 0) {
+    return {
+      ok: false,
+      mode: "invalid",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: false
+    };
+  }
+  const candidateUsers = await db.select({
+    id: users.id,
+    email: users.email,
+    role: users.role,
+    password: users.password,
+    isActive: users.isActive
+  }).from(users).where(
+    and3(
+      inArray(users.email, candidateEmails),
+      inArray(users.role, ["admin", "hr"]),
+      eq4(users.isActive, true)
+    )
+  );
+  const user = candidateUsers[0];
+  if (!user || !user.password) {
+    return {
+      ok: false,
+      mode: "invalid",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: false
+    };
+  }
+  const passwordMatched = await bcrypt.compare(credentials.password, user.password);
+  if (!passwordMatched) {
+    return {
+      ok: false,
+      mode: "invalid",
+      normalizedUsername,
+      userFound: true,
+      passwordMatched: false,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      }
+    };
+  }
+  return {
+    ok: true,
+    mode: "db-basic",
+    normalizedUsername,
+    userFound: true,
+    passwordMatched: true,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    }
+  };
+}
+async function checkBasicAuthAdmin(req, res) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Basic ")) {
+    res.status(401).json({ error: "Authentication required" });
+    return false;
+  }
+  const authResult = await validateAdminPortalBasicAuth(req);
+  console.info(
+    `[ADMIN_AUTH] username="${authResult.normalizedUsername || "missing"}" mode=${authResult.mode} userFound=${authResult.userFound} passwordMatched=${authResult.passwordMatched}`
+  );
+  if (!authResult.ok) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return false;
+  }
+  if (authResult.user) {
+    req.headers["x-user-id"] = authResult.user.id;
+    req.headers["x-user-role"] = authResult.user.role;
+  }
+  return true;
+}
+async function hasAdminAgreementAccess(req, res) {
+  const role = req.headers["x-user-role"];
+  if (role === "admin") {
+    return true;
+  }
+  return checkBasicAuthAdmin(req, res);
+}
+async function getWorkerApplicationForUser(userId) {
+  const [user] = await db.select({ id: users.id, email: users.email, onboardingStatus: users.onboardingStatus, role: users.role }).from(users).where(eq4(users.id, userId)).limit(1);
+  if (!user) {
+    return { user: null, application: null };
+  }
+  const [application] = await db.select().from(workerApplications).where(sql3`lower(${workerApplications.email}) = ${user.email.toLowerCase()}`).orderBy(desc2(workerApplications.createdAt)).limit(1);
+  return { user, application: application || null };
 }
 async function registerRoutes(app2) {
   app2.get("/api/health", (_req, res) => {
@@ -984,7 +3402,7 @@ async function registerRoutes(app2) {
           onboardingStatus: users.onboardingStatus,
           workerRoles: users.workerRoles,
           isActive: users.isActive
-        }).from(users).where(eq(users.role, "worker"));
+        }).from(users).where(eq4(users.role, "worker"));
         res.json(workers);
       } catch (error) {
         console.error("Error fetching workers:", error);
@@ -1003,7 +3421,7 @@ async function registerRoutes(app2) {
           res.status(400).json({ error: "workerUserId is required" });
           return;
         }
-        const existing = await db.select().from(conversations2).where(eq(conversations2.workerUserId, workerUserId)).limit(1);
+        const existing = await db.select().from(conversations2).where(eq4(conversations2.workerUserId, workerUserId)).limit(1);
         if (existing.length > 0) {
           res.json(existing[0]);
           return;
@@ -1044,7 +3462,7 @@ async function registerRoutes(app2) {
             updatedAt: conversations2.updatedAt,
             workerName: users.fullName,
             workerEmail: users.email
-          }).from(conversations2).leftJoin(users, eq(conversations2.workerUserId, users.id)).where(eq(conversations2.isArchived, false)).orderBy(desc(conversations2.lastMessageAt));
+          }).from(conversations2).leftJoin(users, eq4(conversations2.workerUserId, users.id)).where(eq4(conversations2.isArchived, false)).orderBy(desc2(conversations2.lastMessageAt));
         } else if (role === "worker") {
           const workerConvos = await db.select({
             id: conversations2.id,
@@ -1058,20 +3476,20 @@ async function registerRoutes(app2) {
             updatedAt: conversations2.updatedAt,
             hrName: users.fullName,
             hrEmail: users.email
-          }).from(conversations2).leftJoin(users, eq(conversations2.hrUserId, users.id)).where(and(
-            eq(conversations2.workerUserId, userId),
-            eq(conversations2.isArchived, false)
-          )).orderBy(desc(conversations2.lastMessageAt));
+          }).from(conversations2).leftJoin(users, eq4(conversations2.hrUserId, users.id)).where(and3(
+            eq4(conversations2.workerUserId, userId),
+            eq4(conversations2.isArchived, false)
+          )).orderBy(desc2(conversations2.lastMessageAt));
           convos = workerConvos;
         } else {
           res.status(403).json({ error: "Access denied" });
           return;
         }
         const convosWithUnread = await Promise.all(convos.map(async (c) => {
-          const unreadResult = await db.select({ count: sql2`count(*)` }).from(messages2).where(and(
-            eq(messages2.conversationId, c.id),
-            eq(messages2.recipientUserId, userId),
-            isNull(messages2.readAt)
+          const unreadResult = await db.select({ count: sql3`count(*)` }).from(messages2).where(and3(
+            eq4(messages2.conversationId, c.id),
+            eq4(messages2.recipientUserId, userId),
+            isNull2(messages2.readAt)
           ));
           return { ...c, unreadCount: Number(unreadResult[0]?.count || 0) };
         }));
@@ -1095,7 +3513,7 @@ async function registerRoutes(app2) {
           res.status(401).json({ error: "Authentication required" });
           return;
         }
-        const [convo] = await db.select().from(conversations2).where(eq(conversations2.id, conversationId));
+        const [convo] = await db.select().from(conversations2).where(eq4(conversations2.id, conversationId));
         if (!convo) {
           res.status(404).json({ error: "Conversation not found" });
           return;
@@ -1116,10 +3534,10 @@ async function registerRoutes(app2) {
           status: messages2.status,
           createdAt: messages2.createdAt,
           senderName: users.fullName
-        }).from(messages2).leftJoin(users, eq(messages2.senderUserId, users.id)).where(and(
-          eq(messages2.conversationId, conversationId),
-          isNull(messages2.deletedAt)
-        )).orderBy(desc(messages2.createdAt)).limit(limit).offset(offset);
+        }).from(messages2).leftJoin(users, eq4(messages2.senderUserId, users.id)).where(and3(
+          eq4(messages2.conversationId, conversationId),
+          isNull2(messages2.deletedAt)
+        )).orderBy(desc2(messages2.createdAt)).limit(limit).offset(offset);
         res.json(msgs.reverse());
       } catch (error) {
         console.error("Error fetching messages:", error);
@@ -1143,7 +3561,7 @@ async function registerRoutes(app2) {
           res.status(400).json({ error: "Message body is required" });
           return;
         }
-        const [convo] = await db.select().from(conversations2).where(eq(conversations2.id, conversationId));
+        const [convo] = await db.select().from(conversations2).where(eq4(conversations2.id, conversationId));
         if (!convo) {
           res.status(404).json({ error: "Conversation not found" });
           return;
@@ -1157,7 +3575,7 @@ async function registerRoutes(app2) {
           if (convo.hrUserId) {
             recipientUserId = convo.hrUserId;
           } else {
-            const [hrUser] = await db.select({ id: users.id }).from(users).where(or(eq(users.role, "hr"), eq(users.role, "admin"))).limit(1);
+            const [hrUser] = await db.select({ id: users.id }).from(users).where(or(eq4(users.role, "hr"), eq4(users.role, "admin"))).limit(1);
             if (!hrUser) {
               res.status(400).json({ error: "No HR available to receive message" });
               return;
@@ -1185,8 +3603,8 @@ async function registerRoutes(app2) {
           lastMessageAt: /* @__PURE__ */ new Date(),
           lastMessagePreview: body.trim().substring(0, 100),
           updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq(conversations2.id, conversationId));
-        const [sender] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+        }).where(eq4(conversations2.id, conversationId));
+        const [sender] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, userId));
         sendPushNotifications(
           [recipientUserId],
           sender?.fullName || "New Message",
@@ -1210,16 +3628,16 @@ async function registerRoutes(app2) {
           res.status(401).json({ error: "Authentication required" });
           return;
         }
-        const unreadMessages = await db.select({ id: messages2.id }).from(messages2).where(and(
-          eq(messages2.conversationId, conversationId),
-          eq(messages2.recipientUserId, userId),
-          isNull(messages2.readAt)
+        const unreadMessages = await db.select({ id: messages2.id }).from(messages2).where(and3(
+          eq4(messages2.conversationId, conversationId),
+          eq4(messages2.recipientUserId, userId),
+          isNull2(messages2.readAt)
         ));
         const now = /* @__PURE__ */ new Date();
-        await db.update(messages2).set({ readAt: now, status: "read" }).where(and(
-          eq(messages2.conversationId, conversationId),
-          eq(messages2.recipientUserId, userId),
-          isNull(messages2.readAt)
+        await db.update(messages2).set({ readAt: now, status: "read" }).where(and3(
+          eq4(messages2.conversationId, conversationId),
+          eq4(messages2.recipientUserId, userId),
+          isNull2(messages2.readAt)
         ));
         for (const msg of unreadMessages) {
           await db.insert(messageLogs).values({
@@ -1242,20 +3660,23 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: result.error.errors[0].message });
         return;
       }
-      const { email, password, fullName, role } = result.data;
-      const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+      const { email, password, fullName } = result.data;
+      const existingUser = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
       if (existingUser.length > 0) {
         res.status(400).json({ error: "Email already registered" });
         return;
       }
       const hashedPassword = await bcrypt.hash(password, 10);
+      const { role, businessName } = req.body;
+      const allowedRole = role === "client" ? "client" : "worker";
       const [newUser] = await db.insert(users).values({
         email: email.toLowerCase(),
         password: hashedPassword,
         fullName,
-        role,
+        role: allowedRole,
         isActive: false,
-        onboardingStatus: role === "worker" ? "NOT_APPLIED" : null
+        businessName: allowedRole === "client" ? businessName?.trim() || null : null,
+        onboardingStatus: allowedRole === "worker" ? "NOT_APPLIED" : null
       }).returning();
       const { password: _, ...userWithoutPassword } = newUser;
       res.json({ user: userWithoutPassword });
@@ -1276,9 +3697,9 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Token is required" });
         return;
       }
-      const existing = await db.select().from(pushTokens).where(eq(pushTokens.token, token)).limit(1);
+      const existing = await db.select().from(pushTokens).where(eq4(pushTokens.token, token)).limit(1);
       if (existing.length > 0) {
-        await db.update(pushTokens).set({ userId, platform: platform || "unknown", isActive: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq(pushTokens.token, token));
+        await db.update(pushTokens).set({ userId, platform: platform || "unknown", isActive: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(pushTokens.token, token));
       } else {
         await db.insert(pushTokens).values({
           userId,
@@ -1299,11 +3720,67 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Token is required" });
         return;
       }
-      await db.update(pushTokens).set({ isActive: false, updatedAt: /* @__PURE__ */ new Date() }).where(eq(pushTokens.token, token));
+      await db.update(pushTokens).set({ isActive: false, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(pushTokens.token, token));
       res.json({ success: true });
     } catch (error) {
       console.error("Error deactivating push token:", error);
       res.status(500).json({ error: "Failed to deactivate push token" });
+    }
+  });
+  app2.post("/api/auth/google", async (req, res) => {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        res.status(400).json({ error: "ID token required" });
+        return;
+      }
+      const tokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
+      const tokenRes = await fetch(tokenInfoUrl);
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || tokenData.error) {
+        res.status(401).json({ error: "Invalid Google token" });
+        return;
+      }
+      const { sub: googleId, email, name } = tokenData;
+      if (!email) {
+        res.status(401).json({ error: "Could not retrieve email from Google account" });
+        return;
+      }
+      let [user] = await db.select().from(users).where(eq4(users.googleId, googleId));
+      if (!user) {
+        const [byEmail] = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
+        user = byEmail;
+      }
+      if (!user) {
+        const fullName = name || email.split("@")[0];
+        await db.insert(users).values({
+          email: email.toLowerCase(),
+          fullName,
+          role: "worker",
+          isActive: false,
+          googleId,
+          onboardingStatus: "NOT_APPLIED"
+        }).returning();
+        res.json({ registered: true, message: "Your account has been created and is pending admin approval. You will be notified when your account is activated." });
+        return;
+      }
+      if (!user.isActive) {
+        res.json({ pending: true, message: "Your account is pending admin approval. An admin will review and activate your account. You will be notified once access is granted." });
+        return;
+      }
+      if (!user.googleId) {
+        await db.update(users).set({ googleId }).where(eq4(users.id, user.id));
+      }
+      if (user.totpEnabled) {
+        res.json({ requires2FA: true, userId: user.id });
+        return;
+      }
+      const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+      setSessionCookie(res, user.id, user.role);
+      res.json({ user: { ...userWithoutSensitive, mustChangePassword: user.mustChangePassword || false } });
+    } catch (error) {
+      console.error("Error with Google auth:", error);
+      res.status(500).json({ error: "Failed to authenticate with Google" });
     }
   });
   app2.post("/api/auth/login", async (req, res) => {
@@ -1314,18 +3791,21 @@ async function registerRoutes(app2) {
         return;
       }
       const { email, password } = result.data;
-      const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}"`);
+      const [user] = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}" userFound=${Boolean(user)}`);
       if (!user) {
         res.status(401).json({ error: "Invalid email or password" });
         return;
       }
       const validPassword = await bcrypt.compare(password, user.password);
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}" passwordMatched=${validPassword}`);
       if (!validPassword) {
         res.status(401).json({ error: "Invalid email or password" });
         return;
       }
       if (!user.isActive) {
-        res.status(401).json({ error: "Your account is pending approval. An admin will review and activate your account shortly." });
+        res.json({ pending: true, message: "Your account is pending admin approval. An admin will review and activate your account shortly." });
         return;
       }
       if (user.totpEnabled) {
@@ -1333,10 +3813,107 @@ async function registerRoutes(app2) {
         return;
       }
       const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
-      res.json({ user: userWithoutSensitive });
+      setSessionCookie(res, user.id, user.role);
+      console.info(`[AUTH_LOGIN] submittedIdentifier="${email.toLowerCase()}" sessionCreated=true userId=${user.id} role=${user.role}`);
+      res.json({ user: { ...userWithoutSensitive, mustChangePassword: user.mustChangePassword || false } });
     } catch (error) {
       console.error("Error logging in:", error);
       res.status(500).json({ error: "Failed to login" });
+    }
+  });
+  app2.get("/api/auth/me", async (req, res) => {
+    try {
+      const session = parseSessionCookie(req);
+      if (!session) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      const [user] = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        isActive: users.isActive
+      }).from(users).where(eq4(users.id, session.userId));
+      if (!user || !user.isActive) {
+        clearSessionCookie(res);
+        res.status(401).json({ error: "Invalid or inactive user" });
+        return;
+      }
+      if (user.role !== session.role) {
+        clearSessionCookie(res);
+        res.status(401).json({ error: "Session invalid" });
+        return;
+      }
+      res.json({ user });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to verify session" });
+    }
+  });
+  app2.post("/api/auth/logout", (_req, res) => {
+    clearSessionCookie(res);
+    res.json({ success: true });
+  });
+  app2.get("/api/auth/verify", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || !userRole) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+      const [user] = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        isActive: users.isActive
+      }).from(users).where(eq4(users.id, userId));
+      if (!user || !user.isActive) {
+        res.status(401).json({ error: "Invalid or inactive user" });
+        return;
+      }
+      if (user.role !== userRole) {
+        res.status(401).json({ error: "Role mismatch" });
+        return;
+      }
+      res.json({ user });
+    } catch (error) {
+      res.status(500).json({ error: "Verification failed" });
+    }
+  });
+  app2.post("/api/auth/change-password", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        res.status(400).json({ error: "Current password and new password are required" });
+        return;
+      }
+      if (newPassword.length < 8) {
+        res.status(400).json({ error: "New password must be at least 8 characters" });
+        return;
+      }
+      const [user] = await db.select().from(users).where(eq4(users.id, userId)).limit(1);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      const validPassword = await bcrypt.compare(currentPassword, user.password);
+      if (!validPassword) {
+        res.status(401).json({ error: "Current password is incorrect" });
+        return;
+      }
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await db.update(users).set({ password: hashedPassword, mustChangePassword: false, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(users.id, userId));
+      res.json({ success: true, message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ error: "Failed to change password" });
     }
   });
   function generateRecoveryCodes() {
@@ -1353,7 +3930,7 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, userId));
       if (!user) {
         res.status(404).json({ error: "User not found" });
         return;
@@ -1371,7 +3948,7 @@ async function registerRoutes(app2) {
         period: 30,
         secret
       });
-      await db.update(users).set({ totpSecret: secret.base32, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, userId));
+      await db.update(users).set({ totpSecret: secret.base32, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(users.id, userId));
       res.json({
         secret: secret.base32,
         uri: totp.toString()
@@ -1393,7 +3970,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Verification code is required" });
         return;
       }
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, userId));
       if (!user || !user.totpSecret) {
         res.status(400).json({ error: "2FA setup not initiated" });
         return;
@@ -1416,7 +3993,7 @@ async function registerRoutes(app2) {
         totpEnabled: true,
         recoveryCodes: JSON.stringify(recoveryCodes),
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(users.id, userId));
+      }).where(eq4(users.id, userId));
       res.json({
         enabled: true,
         recoveryCodes
@@ -1438,7 +4015,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Verification code is required" });
         return;
       }
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, userId));
       if (!user || !user.totpEnabled || !user.totpSecret) {
         res.status(400).json({ error: "2FA is not enabled" });
         return;
@@ -1461,7 +4038,7 @@ async function registerRoutes(app2) {
         totpSecret: null,
         recoveryCodes: null,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(users.id, userId));
+      }).where(eq4(users.id, userId));
       res.json({ disabled: true });
     } catch (error) {
       console.error("Error disabling 2FA:", error);
@@ -1475,7 +4052,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "User ID and code are required" });
         return;
       }
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [user] = await db.select().from(users).where(eq4(users.id, userId));
       if (!user || !user.totpEnabled || !user.totpSecret) {
         res.status(400).json({ error: "2FA is not enabled for this user" });
         return;
@@ -1491,6 +4068,7 @@ async function registerRoutes(app2) {
       const delta = totp.validate({ token: code, window: 1 });
       if (delta !== null) {
         const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+        setSessionCookie(res, user.id, user.role);
         res.json({ verified: true, user: userWithoutSensitive });
         return;
       }
@@ -1499,8 +4077,9 @@ async function registerRoutes(app2) {
         const codeIndex = codes.indexOf(code.toUpperCase());
         if (codeIndex !== -1) {
           codes.splice(codeIndex, 1);
-          await db.update(users).set({ recoveryCodes: JSON.stringify(codes), updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, userId));
+          await db.update(users).set({ recoveryCodes: JSON.stringify(codes), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(users.id, userId));
           const { password: _, totpSecret: __, recoveryCodes: ___, ...userWithoutSensitive } = user;
+          setSessionCookie(res, user.id, user.role);
           res.json({ verified: true, user: userWithoutSensitive, remainingRecoveryCodes: codes.length });
           return;
         }
@@ -1518,7 +4097,7 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const [user] = await db.select({ totpEnabled: users.totpEnabled }).from(users).where(eq(users.id, userId));
+      const [user] = await db.select({ totpEnabled: users.totpEnabled }).from(users).where(eq4(users.id, userId));
       if (!user) {
         res.status(404).json({ error: "User not found" });
         return;
@@ -1527,6 +4106,18 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error checking 2FA status:", error);
       res.status(500).json({ error: "Failed to check 2FA status" });
+    }
+  });
+  app2.get("/api/users/workers", checkRoles("admin", "hr"), async (_req, res) => {
+    try {
+      const workers = await db.select({
+        id: users.id,
+        fullName: users.fullName
+      }).from(users).where(and3(eq4(users.role, "worker"), eq4(users.isActive, true))).orderBy(asc(users.fullName));
+      res.json(workers);
+    } catch (error) {
+      console.error("Error fetching workers list:", error);
+      res.status(500).json({ error: "Failed to fetch workers" });
     }
   });
   app2.get("/api/users", checkRoles("admin"), async (_req, res) => {
@@ -1540,6 +4131,7 @@ async function registerRoutes(app2) {
         onboardingStatus: users.onboardingStatus,
         workerRoles: users.workerRoles,
         businessName: users.businessName,
+        phone: users.phone,
         isActive: users.isActive,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt
@@ -1553,22 +4145,41 @@ async function registerRoutes(app2) {
   app2.patch("/api/users/:id", checkRoles("admin"), async (req, res) => {
     try {
       const id = req.params.id;
-      const { role, isActive, onboardingStatus, workerRoles } = req.body;
+      const { role, isActive, onboardingStatus, workerRoles, phone } = req.body;
       const updateData = { updatedAt: /* @__PURE__ */ new Date() };
       if (role !== void 0) updateData.role = role;
       if (isActive !== void 0) updateData.isActive = isActive;
       if (onboardingStatus !== void 0) updateData.onboardingStatus = onboardingStatus;
       if (workerRoles !== void 0) updateData.workerRoles = workerRoles;
-      if (isActive === true && onboardingStatus === void 0) {
-        const [existingUser] = await db.select().from(users).where(eq(users.id, id));
-        if (existingUser && existingUser.role === "worker" && (existingUser.onboardingStatus === "APPLICATION_SUBMITTED" || existingUser.onboardingStatus === "NOT_APPLIED")) {
+      if (phone !== void 0) updateData.phone = phone;
+      let existingUserBeforeUpdate = null;
+      if (isActive === true) {
+        const [fetched] = await db.select().from(users).where(eq4(users.id, id));
+        existingUserBeforeUpdate = fetched || null;
+        if (existingUserBeforeUpdate && existingUserBeforeUpdate.role === "worker" && onboardingStatus === void 0 && (existingUserBeforeUpdate.onboardingStatus === "APPLICATION_SUBMITTED" || existingUserBeforeUpdate.onboardingStatus === "NOT_APPLIED")) {
           updateData.onboardingStatus = "AGREEMENT_PENDING";
         }
       }
-      const [updatedUser] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+      const [updatedUser] = await db.update(users).set(updateData).where(eq4(users.id, id)).returning();
       if (!updatedUser) {
         res.status(404).json({ error: "User not found" });
         return;
+      }
+      if (isActive === true && existingUserBeforeUpdate?.isActive === false && updatedUser.email) {
+        sendEmail({
+          to: updatedUser.email,
+          subject: "Your Workforce Connect account has been approved",
+          text: `Hi ${updatedUser.fullName},
+
+Great news! Your Workforce Connect account has been approved and is now active.
+
+Sign in at: https://app.wfconnect.org
+
+Welcome to the team!
+
+The WFConnect Team`,
+          html: `<p>Hi ${updatedUser.fullName},</p><p>Great news! Your <strong>Workforce Connect</strong> account has been approved and is now active.</p><p><a href="https://app.wfconnect.org" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Sign In Now</a></p><p>Welcome to the team!</p><p>The WFConnect Team</p>`
+        }).catch((err) => console.error("[EMAIL] Approval email error:", err));
       }
       const { password: _, ...userWithoutPassword } = updatedUser;
       res.json(userWithoutPassword);
@@ -1576,6 +4187,56 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+  app2.patch("/api/users/me/profile", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const role = req.headers["x-user-role"];
+      if (!userId || !role) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      const { fullName, email, phone, timezone, businessName, businessAddress, businessPhone } = req.body;
+      const updateData = { updatedAt: /* @__PURE__ */ new Date() };
+      if (fullName !== void 0 && typeof fullName === "string" && fullName.trim().length >= 2) {
+        updateData.fullName = fullName.trim();
+      }
+      if (phone !== void 0) {
+        updateData.phone = phone ? phone.trim() : null;
+      }
+      if (timezone !== void 0 && typeof timezone === "string" && timezone.trim().length > 0) {
+        updateData.timezone = timezone.trim();
+      }
+      if (email !== void 0 && typeof email === "string") {
+        const trimmedEmail = email.trim().toLowerCase();
+        if (trimmedEmail.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+          res.status(400).json({ error: "Invalid email address" });
+          return;
+        }
+        const [existingUser] = await db.select({ id: users.id }).from(users).where(and3(eq4(users.email, trimmedEmail), ne2(users.id, userId))).limit(1);
+        if (existingUser) {
+          res.status(409).json({ error: "Email is already in use by another account" });
+          return;
+        }
+        updateData.email = trimmedEmail;
+      }
+      if (role === "client") {
+        if (businessName !== void 0) updateData.businessName = businessName ? businessName.trim() : null;
+        if (businessAddress !== void 0) updateData.businessAddress = businessAddress ? businessAddress.trim() : null;
+        if (businessPhone !== void 0) updateData.businessPhone = businessPhone ? businessPhone.trim() : null;
+      }
+      const [updatedUser] = await db.update(users).set(updateData).where(eq4(users.id, userId)).returning();
+      if (!updatedUser) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      const { password: _, totpSecret: _ts, recoveryCodes: _rc, ...safeUser } = updatedUser;
+      res.json(safeUser);
+      broadcast({ type: "updated", entity: "user", id: userId });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
     }
   });
   app2.patch("/api/users/me/onboarding-status", async (req, res) => {
@@ -1600,7 +4261,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Invalid onboarding status" });
         return;
       }
-      const [updatedUser] = await db.update(users).set({ onboardingStatus, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, userId)).returning();
+      const [updatedUser] = await db.update(users).set({ onboardingStatus, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(users.id, userId)).returning();
       if (!updatedUser) {
         console.log(`[ONBOARDING] REJECTED: User not found for id=${userId}`);
         res.status(404).json({ error: "User not found" });
@@ -1627,45 +4288,45 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "You cannot delete your own account" });
         return;
       }
-      const [existingUser] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      const [existingUser] = await db.select().from(users).where(eq4(users.id, id)).limit(1);
       if (!existingUser) {
         console.log(`[DELETE USER] REJECTED: User ${id} not found`);
         res.status(404).json({ error: "User not found" });
         return;
       }
       console.log(`[DELETE USER] Deleting user: ${existingUser.email} (${existingUser.role})`);
-      await db.execute(sql2`DELETE FROM message_logs WHERE message_id IN (SELECT id FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id})`);
-      await db.execute(sql2`DELETE FROM message_logs WHERE actor_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM conversations WHERE worker_user_id = ${id} OR hr_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM push_tokens WHERE user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM app_notifications WHERE user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM sent_reminders WHERE worker_id = ${id}`);
-      await db.execute(sql2`DELETE FROM shift_checkins WHERE worker_id = ${id}`);
-      await db.execute(sql2`DELETE FROM shift_offers WHERE worker_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM payroll_batch_items WHERE worker_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM timesheet_entries WHERE timesheet_id IN (SELECT id FROM timesheets WHERE worker_user_id = ${id})`);
-      await db.execute(sql2`UPDATE timesheets SET approved_by_user_id = NULL WHERE approved_by_user_id = ${id}`);
-      await db.execute(sql2`UPDATE timesheets SET disputed_by_user_id = NULL WHERE disputed_by_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM timesheets WHERE worker_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM tito_logs WHERE worker_id = ${id}`);
-      await db.execute(sql2`UPDATE workplace_assignments SET invited_by_user_id = NULL WHERE invited_by_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM workplace_assignments WHERE worker_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM payment_profiles WHERE worker_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM export_audit_logs WHERE admin_user_id = ${id}`);
-      await db.execute(sql2`UPDATE payroll_batches SET created_by_user_id = ${adminId} WHERE created_by_user_id = ${id}`);
-      await db.execute(sql2`UPDATE payroll_batches SET finalized_by_user_id = NULL WHERE finalized_by_user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM recurrence_exceptions WHERE override_worker_user_id = ${id} OR cancelled_by_user_id = ${id}`);
-      await db.execute(sql2`UPDATE shift_series SET worker_user_id = NULL WHERE worker_user_id = ${id}`);
-      await db.execute(sql2`UPDATE shift_series SET created_by_user_id = NULL WHERE created_by_user_id = ${id}`);
-      await db.execute(sql2`UPDATE shifts SET worker_user_id = NULL WHERE worker_user_id = ${id}`);
-      await db.execute(sql2`UPDATE shifts SET created_by_user_id = NULL WHERE created_by_user_id = ${id}`);
-      await db.execute(sql2`UPDATE shift_requests SET requested_worker_id = NULL WHERE requested_worker_id = ${id}`);
-      await db.execute(sql2`DELETE FROM shift_requests WHERE client_id = ${id}`);
-      await db.execute(sql2`DELETE FROM user_photos WHERE user_id = ${id} OR reviewer_id = ${id}`);
-      await db.execute(sql2`DELETE FROM audit_log WHERE user_id = ${id}`);
-      await db.execute(sql2`DELETE FROM worker_applications WHERE email = ${existingUser.email}`);
-      await db.execute(sql2`DELETE FROM users WHERE id = ${id}`);
+      await db.execute(sql3`DELETE FROM message_logs WHERE message_id IN (SELECT id FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id})`);
+      await db.execute(sql3`DELETE FROM message_logs WHERE actor_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM messages WHERE sender_user_id = ${id} OR recipient_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM conversations WHERE worker_user_id = ${id} OR hr_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM push_tokens WHERE user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM app_notifications WHERE user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM sent_reminders WHERE worker_id = ${id}`);
+      await db.execute(sql3`DELETE FROM shift_checkins WHERE worker_id = ${id}`);
+      await db.execute(sql3`DELETE FROM shift_offers WHERE worker_id = ${id}`);
+      await db.execute(sql3`DELETE FROM payroll_batch_items WHERE worker_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM timesheet_entries WHERE timesheet_id IN (SELECT id FROM timesheets WHERE worker_user_id = ${id})`);
+      await db.execute(sql3`UPDATE timesheets SET approved_by_user_id = NULL WHERE approved_by_user_id = ${id}`);
+      await db.execute(sql3`UPDATE timesheets SET disputed_by_user_id = NULL WHERE disputed_by_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM timesheets WHERE worker_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM tito_logs WHERE worker_id = ${id}`);
+      await db.execute(sql3`UPDATE workplace_assignments SET invited_by_user_id = NULL WHERE invited_by_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM workplace_assignments WHERE worker_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM payment_profiles WHERE worker_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM export_audit_logs WHERE admin_user_id = ${id}`);
+      await db.execute(sql3`UPDATE payroll_batches SET created_by_user_id = ${adminId} WHERE created_by_user_id = ${id}`);
+      await db.execute(sql3`UPDATE payroll_batches SET finalized_by_user_id = NULL WHERE finalized_by_user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM recurrence_exceptions WHERE override_worker_user_id = ${id} OR cancelled_by_user_id = ${id}`);
+      await db.execute(sql3`UPDATE shift_series SET worker_user_id = NULL WHERE worker_user_id = ${id}`);
+      await db.execute(sql3`UPDATE shift_series SET created_by_user_id = NULL WHERE created_by_user_id = ${id}`);
+      await db.execute(sql3`UPDATE shifts SET worker_user_id = NULL WHERE worker_user_id = ${id}`);
+      await db.execute(sql3`UPDATE shifts SET created_by_user_id = NULL WHERE created_by_user_id = ${id}`);
+      await db.execute(sql3`UPDATE shift_requests SET requested_worker_id = NULL WHERE requested_worker_id = ${id}`);
+      await db.execute(sql3`DELETE FROM shift_requests WHERE client_id = ${id}`);
+      await db.execute(sql3`DELETE FROM user_photos WHERE user_id = ${id} OR reviewer_id = ${id}`);
+      await db.execute(sql3`DELETE FROM audit_log WHERE user_id = ${id}`);
+      await db.execute(sql3`DELETE FROM worker_applications WHERE email = ${existingUser.email}`);
+      await db.execute(sql3`DELETE FROM users WHERE id = ${id}`);
       console.log(`[DELETE USER] SUCCESS: User ${existingUser.email} (${id}) deleted by admin ${adminId}`);
       res.json({ message: "User deleted successfully" });
       broadcast({ type: "deleted", entity: "user", id });
@@ -1687,10 +4348,25 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Invalid role. Must be one of: admin, hr, client, worker" });
         return;
       }
-      const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+      const existingUser = await db.select().from(users).where(eq4(users.email, email.toLowerCase())).limit(1);
       if (existingUser.length > 0) {
         res.status(409).json({ error: "A user with this email already exists" });
         return;
+      }
+      const phone = req.body.phone;
+      if (phone) {
+        const [phoneDup] = await db.select({ id: users.id }).from(users).where(eq4(users.phone, phone)).limit(1);
+        if (phoneDup) {
+          res.status(409).json({ error: `A worker with phone ${phone} already exists.` });
+          return;
+        }
+      }
+      if (role === "worker") {
+        const [nameDup] = await db.select({ id: users.id }).from(users).where(eq4(users.fullName, fullName.trim())).limit(1);
+        if (nameDup) {
+          res.status(409).json({ error: `A worker named "${fullName}" already exists.` });
+          return;
+        }
       }
       const hashedPassword = await bcrypt.hash(password, 10);
       const [newUser] = await db.insert(users).values({
@@ -1701,6 +4377,22 @@ async function registerRoutes(app2) {
         isActive: true,
         onboardingStatus: role === "worker" ? "NOT_APPLIED" : null
       }).returning();
+      if (newUser.email) {
+        sendEmail({
+          to: newUser.email,
+          subject: "Welcome to Workforce Connect",
+          text: `Hi ${newUser.fullName},
+
+An admin has created a Workforce Connect account for you as a ${role}.
+
+Sign in at: https://app.wfconnect.org
+
+Please use the password provided to you by your admin. You can change it after logging in.
+
+The WFConnect Team`,
+          html: `<p>Hi ${newUser.fullName},</p><p>An admin has created a <strong>Workforce Connect</strong> account for you as a <strong>${role}</strong>.</p><p><a href="https://app.wfconnect.org" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Sign In Now</a></p><p>Please use the password provided to you by your admin. You can change it after logging in.</p><p>The WFConnect Team</p>`
+        }).catch((err) => console.error("[EMAIL] Welcome email error:", err));
+      }
       const { password: _, ...userWithoutPassword } = newUser;
       res.status(201).json(userWithoutPassword);
       broadcast({ type: "created", entity: "user" });
@@ -1749,6 +4441,32 @@ async function registerRoutes(app2) {
       res.status(500).json({ ok: false, error: "Failed to submit form. Please try again." });
     }
   });
+  app2.get("/api/public/positions", async (_req, res) => {
+    try {
+      const crmClient = await Promise.resolve().then(() => (init_weekdays_crm(), weekdays_crm_exports));
+      if (crmClient.isConfigured()) {
+        const workplaces2 = await crmClient.getWorkplaces();
+        const positionSet = /* @__PURE__ */ new Set();
+        for (const wp of workplaces2) {
+          if (wp.jobPosition) positionSet.add(wp.jobPosition);
+          if (wp.positions) {
+            for (const p of wp.positions) {
+              if (p.title) positionSet.add(p.title);
+            }
+          }
+        }
+        if (positionSet.size > 0) {
+          const positions = Array.from(positionSet).sort((a, b) => a.localeCompare(b));
+          res.json({ positions });
+          return;
+        }
+      }
+      res.json({ positions: ["Housekeeper", "Houseperson", "Server", "Event Staff", "Concierge", "Receptionist", "Hotel Staff", "Supervisor", "Other"] });
+    } catch (error) {
+      console.error("Error fetching positions:", error);
+      res.json({ positions: ["Housekeeper", "Houseperson", "Server", "Event Staff", "Concierge", "Receptionist", "Hotel Staff", "Supervisor", "Other"] });
+    }
+  });
   app2.post("/api/public/apply", async (req, res) => {
     try {
       const ip = getClientIp(req);
@@ -1757,8 +4475,24 @@ async function registerRoutes(app2) {
         return;
       }
       const userAgent = req.headers["user-agent"] || null;
+      const resolvedIdentity = resolveWorkerIdentity({
+        fullName: req.body?.fullName ?? req.body?.full_name,
+        firstName: req.body?.firstName ?? req.body?.first_name,
+        lastName: req.body?.lastName ?? req.body?.last_name,
+        email: req.body?.email,
+        phone: req.body?.phone
+      });
+      if (!resolvedIdentity.fullName) {
+        res.status(400).json({ error: "Worker name is required" });
+        return;
+      }
       const applicationData = {
         ...req.body,
+        fullName: resolvedIdentity.fullName,
+        email: typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : req.body?.email,
+        agreementVersion: req.body?.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+        nonSolicitationAcknowledged: req.body?.nonSolicitationAcknowledged === true,
+        nonSolicitationAcknowledgedAt: req.body?.nonSolicitationAcknowledged ? new Date(req.body?.nonSolicitationAcknowledgedAt || Date.now()) : null,
         ip,
         userAgent
       };
@@ -1770,42 +4504,316 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to submit application. Please try again." });
     }
   });
-  app2.get("/api/admin/applications", async (req, res) => {
+  app2.patch("/api/agreements/me/non-solicitation", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
+      const userId = req.headers["x-user-id"];
+      const role = req.headers["x-user-role"];
+      if (!userId || role !== "worker") {
+        res.status(401).json({ error: "Authenticated worker required" });
         return;
       }
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
+      const { user, application } = await getWorkerApplicationForUser(userId);
+      if (!user || !application) {
+        res.status(404).json({ error: "Worker application not found" });
         return;
       }
-      const applications = await db.select().from(workerApplications).orderBy(desc(workerApplications.createdAt));
-      res.json(applications);
+      const acknowledgedAt = /* @__PURE__ */ new Date();
+      const [updatedApplication] = await db.update(workerApplications).set({
+        agreementVersion: WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+        nonSolicitationAcknowledged: true,
+        nonSolicitationAcknowledgedAt: acknowledgedAt,
+        updatedAt: acknowledgedAt
+      }).where(eq4(workerApplications.id, application.id)).returning();
+      res.json({
+        ok: true,
+        id: updatedApplication.id,
+        agreementVersion: updatedApplication.agreementVersion,
+        nonSolicitationAcknowledged: updatedApplication.nonSolicitationAcknowledged,
+        nonSolicitationAcknowledgedAt: updatedApplication.nonSolicitationAcknowledgedAt
+      });
+    } catch (error) {
+      console.error("Error acknowledging non-solicitation clause:", error);
+      res.status(500).json({ error: "Failed to save acknowledgment" });
+    }
+  });
+  app2.get("/api/applications", checkApplicationsApiKey, async (req, res) => {
+    try {
+      const statusFilter = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
+      if (statusFilter && !WORKER_APPLICATION_STATUSES.has(statusFilter)) {
+        res.status(400).json({ error: "Invalid status filter" });
+        return;
+      }
+      const applications = statusFilter ? await db.select().from(workerApplications).where(eq4(workerApplications.status, statusFilter)).orderBy(desc2(workerApplications.createdAt)) : await db.select().from(workerApplications).orderBy(desc2(workerApplications.createdAt));
+      const mapped = applications.map(mapApplicationForSync);
+      const data = mapped.filter((row) => row.identityResolved).map((row) => row.payload);
+      const skippedMissingIdentity = mapped.length - data.length;
+      res.type("application/json").json({
+        data,
+        skipped_missing_identity: skippedMissingIdentity
+      });
+    } catch (error) {
+      console.error("Error fetching applications for API sync:", error);
+      res.status(500).json({ error: "Failed to fetch applications" });
+    }
+  });
+  app2.post("/api/sync/workers", checkApplicationsApiKey, async (req, res) => {
+    try {
+      const statusFilter = typeof req.body?.status === "string" ? req.body.status.trim().toLowerCase() : "approved";
+      if (statusFilter && !WORKER_APPLICATION_STATUSES.has(statusFilter)) {
+        res.status(400).json({ error: "Invalid status filter" });
+        return;
+      }
+      const applications = await db.select().from(workerApplications).where(eq4(workerApplications.status, statusFilter)).orderBy(desc2(workerApplications.createdAt));
+      const mapped = applications.map(mapApplicationForSync);
+      const workers = mapped.filter((row) => row.identityResolved).map((row) => row.payload);
+      const skippedMissingIdentity = mapped.length - workers.length;
+      res.type("application/json").json({
+        success: true,
+        status: statusFilter,
+        total: workers.length,
+        skipped_missing_identity: skippedMissingIdentity,
+        workers
+      });
+    } catch (error) {
+      console.error("Error syncing workers for API integration:", error);
+      res.status(500).json({ error: "Failed to sync workers" });
+    }
+  });
+  app2.get("/api/sync/workers", checkApplicationsApiKey, async (req, res) => {
+    try {
+      const statusFilter = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "approved";
+      if (statusFilter && !WORKER_APPLICATION_STATUSES.has(statusFilter)) {
+        res.status(400).json({ error: "Invalid status filter" });
+        return;
+      }
+      const applications = await db.select().from(workerApplications).where(eq4(workerApplications.status, statusFilter)).orderBy(desc2(workerApplications.createdAt));
+      const mapped = applications.map(mapApplicationForSync);
+      const workers = mapped.filter((row) => row.identityResolved).map((row) => row.payload);
+      const skippedMissingIdentity = mapped.length - workers.length;
+      res.type("application/json").json({
+        success: true,
+        status: statusFilter,
+        total: workers.length,
+        skipped_missing_identity: skippedMissingIdentity,
+        workers
+      });
+    } catch (error) {
+      console.error("Error fetching worker sync payload:", error);
+      res.status(500).json({ error: "Failed to fetch worker sync payload" });
+    }
+  });
+  app2.get("/api/admin/applications", tryBearerApiKey, async (req, res) => {
+    try {
+      const apiKeyScopes = req.apiKeyScopes;
+      if (apiKeyScopes !== void 0) {
+        if (!apiKeyScopes.includes("applications:read") && !apiKeyScopes.includes("*")) {
+          res.status(403).json({
+            error: "API key missing required scope: applications:read",
+            required_scope: "applications:read",
+            your_scopes: apiKeyScopes
+          });
+          return;
+        }
+      } else {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith("Basic ")) {
+          if (!await checkBasicAuthAdmin(req, res)) return;
+        } else {
+          const session = parseSessionCookie(req);
+          if (!session || !["admin", "hr"].includes(session.role)) {
+            res.status(401).json({ error: "Authentication required" });
+            return;
+          }
+        }
+      }
+      const applications = await db.select().from(workerApplications).orderBy(desc2(workerApplications.createdAt));
+      const mappedApplications = applications.map((application) => {
+        const identity = resolveWorkerIdentity({
+          fullName: application.fullName,
+          email: application.email,
+          phone: application.phone
+        });
+        return {
+          ...application,
+          fullName: identity.fullName,
+          full_name: identity.fullName,
+          first_name: identity.firstName,
+          last_name: identity.lastName
+        };
+      });
+      res.json(mappedApplications);
     } catch (error) {
       console.error("Error fetching applications:", error);
       res.status(500).json({ error: "Failed to fetch applications" });
     }
   });
+  app2.get("/api/admin/applications/api-keys", async (req, res) => {
+    try {
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const keys = await getManagedApiKeys();
+      const nonSensitive = keys.map((key) => ({
+        id: key.id,
+        name: key.name,
+        prefix: key.prefix,
+        scopes: key.scopes ?? [],
+        createdAt: key.createdAt,
+        createdBy: key.createdBy,
+        lastUsedAt: key.lastUsedAt,
+        revokedAt: key.revokedAt,
+        revokedBy: key.revokedBy
+      }));
+      res.json({ data: nonSensitive });
+    } catch (error) {
+      console.error("Error fetching API keys:", error);
+      res.status(500).json({ error: "Failed to fetch API keys" });
+    }
+  });
+  app2.post("/api/admin/applications/api-keys", async (req, res) => {
+    try {
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const { name, scopes } = req.body;
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        res.status(400).json({ error: "Key name is required" });
+        return;
+      }
+      const keyScopes = Array.isArray(scopes) ? scopes.filter((s) => typeof s === "string") : [];
+      const keys = await getManagedApiKeysRaw();
+      if (keys.some((k) => k.name === name.trim())) {
+        res.status(409).json({ error: "Key name already exists" });
+        return;
+      }
+      const keyId = crypto2.randomUUID();
+      const plaintextKey = `${generateApiKeyPrefix()}_${crypto2.randomBytes(8).toString("hex")}`;
+      const hashedKey = hashApiKey(plaintextKey);
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const newKey = {
+        id: keyId,
+        name: name.trim(),
+        prefix: plaintextKey.substring(0, 12),
+        hash: hashedKey,
+        scopes: keyScopes,
+        createdAt: now,
+        createdBy: "admin",
+        lastUsedAt: null,
+        revokedAt: null,
+        revokedBy: null
+      };
+      keys.push(newKey);
+      await saveManagedApiKeys(keys);
+      res.status(201).json({
+        id: keyId,
+        name: newKey.name,
+        prefix: newKey.prefix,
+        scopes: newKey.scopes,
+        plaintext: plaintextKey,
+        createdAt: now,
+        message: "Save this key securely. You won't be able to see it again."
+      });
+    } catch (error) {
+      console.error("Error creating API key:", error);
+      res.status(500).json({ error: "Failed to create API key" });
+    }
+  });
+  app2.post("/api/admin/applications/api-keys/:id/rotate", async (req, res) => {
+    try {
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const keyId = req.params.id;
+      const keys = await getManagedApiKeysRaw();
+      const keyIndex = keys.findIndex((k) => k.id === keyId);
+      if (keyIndex === -1) {
+        res.status(404).json({ error: "Key not found" });
+        return;
+      }
+      const oldKey = keys[keyIndex];
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      oldKey.revokedAt = now;
+      oldKey.revokedBy = "admin";
+      const newKeyId = crypto2.randomUUID();
+      const plaintextKey = `${generateApiKeyPrefix()}_${crypto2.randomBytes(8).toString("hex")}`;
+      const hashedKey = hashApiKey(plaintextKey);
+      const newKey = {
+        id: newKeyId,
+        name: oldKey.name,
+        prefix: plaintextKey.substring(0, 12),
+        hash: hashedKey,
+        scopes: oldKey.scopes ?? [],
+        createdAt: now,
+        createdBy: "admin",
+        lastUsedAt: null,
+        revokedAt: null,
+        revokedBy: null
+      };
+      keys[keyIndex] = oldKey;
+      keys.push(newKey);
+      await saveManagedApiKeys(keys);
+      res.json({
+        id: newKeyId,
+        name: newKey.name,
+        prefix: newKey.prefix,
+        plaintext: plaintextKey,
+        createdAt: now,
+        message: "Key rotated successfully. Save the new key securely."
+      });
+    } catch (error) {
+      console.error("Error rotating API key:", error);
+      res.status(500).json({ error: "Failed to rotate API key" });
+    }
+  });
+  app2.patch("/api/admin/applications/api-keys/:id/scopes", async (req, res) => {
+    try {
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const keyId = req.params.id;
+      const { scopes } = req.body;
+      if (!Array.isArray(scopes) || scopes.some((s) => typeof s !== "string")) {
+        res.status(400).json({ error: "scopes must be an array of strings" });
+        return;
+      }
+      const keys = await getManagedApiKeysRaw();
+      const keyIndex = keys.findIndex((k) => k.id === keyId);
+      if (keyIndex === -1) {
+        res.status(404).json({ error: "Key not found" });
+        return;
+      }
+      if (keys[keyIndex].revokedAt) {
+        res.status(409).json({ error: "Cannot update scopes on a revoked key" });
+        return;
+      }
+      keys[keyIndex].scopes = scopes;
+      await saveManagedApiKeys(keys);
+      res.json({
+        id: keyId,
+        scopes: keys[keyIndex].scopes,
+        message: "Scopes updated successfully"
+      });
+    } catch (error) {
+      console.error("Error updating API key scopes:", error);
+      res.status(500).json({ error: "Failed to update API key scopes" });
+    }
+  });
+  app2.delete("/api/admin/applications/api-keys/:id", async (req, res) => {
+    try {
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const keyId = req.params.id;
+      const keys = await getManagedApiKeysRaw();
+      const keyIndex = keys.findIndex((k) => k.id === keyId);
+      if (keyIndex === -1) {
+        res.status(404).json({ error: "Key not found" });
+        return;
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      keys[keyIndex].revokedAt = now;
+      keys[keyIndex].revokedBy = "admin";
+      await saveManagedApiKeys(keys);
+      res.json({ success: true, message: "Key revoked successfully" });
+    } catch (error) {
+      console.error("Error revoking API key:", error);
+      res.status(500).json({ error: "Failed to revoke API key" });
+    }
+  });
   app2.get("/api/admin/applications/:id", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
-      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id));
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id));
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
@@ -1818,37 +4826,78 @@ async function registerRoutes(app2) {
   });
   app2.patch("/api/admin/applications/:id", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
+      if (!await checkBasicAuthAdmin(req, res)) return;
       const { status, notes } = req.body;
       const [updatedApplication] = await db.update(workerApplications).set({
         status,
         notes,
         reviewedAt: /* @__PURE__ */ new Date(),
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(workerApplications.id, req.params.id)).returning();
+      }).where(eq4(workerApplications.id, req.params.id)).returning();
       if (!updatedApplication) {
         res.status(404).json({ error: "Application not found" });
         return;
       }
       if (status === "approved" && updatedApplication.email) {
         try {
-          await db.update(users).set({
-            onboardingStatus: "AGREEMENT_PENDING",
-            updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq(users.email, updatedApplication.email));
+          const [existingUser] = await db.select({ id: users.id }).from(users).where(eq4(users.email, updatedApplication.email.toLowerCase())).limit(1);
+          if (existingUser) {
+            const updateData = {
+              onboardingStatus: "AGREEMENT_PENDING",
+              updatedAt: /* @__PURE__ */ new Date()
+            };
+            if (updatedApplication.phone) {
+              updateData.phone = updatedApplication.phone;
+            }
+            await db.update(users).set(updateData).where(eq4(users.id, existingUser.id));
+            console.log(`[APPROVAL] Updated existing user ${updatedApplication.email} to AGREEMENT_PENDING`);
+          } else {
+            if (updatedApplication.phone) {
+              const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.phone, updatedApplication.phone)).limit(1);
+              if (phoneDuplicate) {
+                res.status(409).json({ error: `A worker with phone ${updatedApplication.phone} already exists.` });
+                return;
+              }
+            }
+            const fullNameToUse = updatedApplication.fullName || "Worker";
+            const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.fullName, fullNameToUse)).limit(1);
+            if (fullNameDuplicate) {
+              res.status(409).json({ error: `A worker named "${fullNameToUse}" already exists.` });
+              return;
+            }
+            const firstName = fullNameToUse.split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+            const phoneLast4 = (updatedApplication.phone || "0000").replace(/\D/g, "").slice(-4);
+            const tempPassword = `${firstName}${phoneLast4}`;
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+            await db.insert(users).values({
+              id: crypto2.randomUUID(),
+              email: updatedApplication.email.toLowerCase(),
+              password: hashedPassword,
+              fullName: fullNameToUse,
+              role: "worker",
+              phone: updatedApplication.phone || void 0,
+              isActive: true,
+              onboardingStatus: "AGREEMENT_PENDING",
+              workerRoles: updatedApplication.preferredRoles || void 0,
+              mustChangePassword: true,
+              timezone: "America/Toronto"
+            });
+            console.log(`[APPROVAL] Created user account for ${updatedApplication.email}`);
+            if (updatedApplication.phone) {
+              try {
+                const smsMessage = `Welcome to WFConnect! Your application has been approved. Download the app and log in with:
+Email: ${updatedApplication.email}
+Password: ${tempPassword}
+Please change your password after first login.`;
+                await sendSMS(updatedApplication.phone, smsMessage);
+                console.log(`[APPROVAL] Welcome SMS sent to ${updatedApplication.phone}`);
+              } catch (smsError) {
+                console.error("[APPROVAL] Failed to send welcome SMS:", smsError);
+              }
+            }
+          }
         } catch (linkError) {
-          console.error("Failed to update user onboarding status on approval:", linkError);
+          console.error("Failed to create/update user on approval:", linkError);
         }
       }
       res.json(updatedApplication);
@@ -1859,19 +4908,8 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/admin/applications/:id", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
-      const [deletedApplication] = await db.delete(workerApplications).where(eq(workerApplications.id, req.params.id)).returning();
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const [deletedApplication] = await db.delete(workerApplications).where(eq4(workerApplications.id, req.params.id)).returning();
       if (!deletedApplication) {
         res.status(404).json({ error: "Application not found" });
         return;
@@ -1882,157 +4920,800 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to delete application" });
     }
   });
-  app2.get("/api/admin/applications/:id/agreement-pdf", async (req, res) => {
+  app2.post("/api/admin/send-app-instructions", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      const hasSessionAccess = Boolean(userId && (userRole === "admin" || userRole === "hr"));
+      if (!hasSessionAccess && !await checkBasicAuthAdmin(req, res)) {
+        return;
+      }
+      const allWorkers = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        phone: users.phone,
+        mustChangePassword: users.mustChangePassword
+      }).from(users).where(eq4(users.role, "worker"));
+      const alreadySent = await db.select({ workerId: smsLogs.workerId }).from(smsLogs).where(and3(
+        eq4(smsLogs.direction, "outbound"),
+        sql3`${smsLogs.message} LIKE '%WFConnect App%Download%'`
+      ));
+      const sentWorkerIds = new Set(alreadySent.map((s) => s.workerId));
+      let sent = 0;
+      let skipped = 0;
+      let alreadyNotified = 0;
+      for (const worker of allWorkers) {
+        if (!worker.phone) {
+          skipped++;
+          continue;
+        }
+        if (sentWorkerIds.has(worker.id)) {
+          alreadyNotified++;
+          continue;
+        }
+        let smsMessage;
+        if (worker.mustChangePassword) {
+          smsMessage = `WFConnect App is now available! Download from App Store or Google Play. Log in with:
+Email: ${worker.email}
+Your temporary password was sent when your application was approved. Change your password after first login.`;
+        } else {
+          smsMessage = `WFConnect App is now available! Download from App Store or Google Play. Log in with your email: ${worker.email}`;
+        }
+        try {
+          const result = await sendSMS(worker.phone, smsMessage);
+          if (result.success) {
+            await logSMS({
+              phoneNumber: worker.phone,
+              direction: "outbound",
+              message: smsMessage,
+              workerId: worker.id,
+              status: "sent",
+              openphoneMessageId: result.messageId
+            });
+            sent++;
+          } else {
+            skipped++;
+          }
+        } catch (smsErr) {
+          console.error(`[BULK SMS] Failed for ${worker.email}:`, smsErr);
+          skipped++;
+        }
+      }
+      console.log(`[BULK SMS] Sent: ${sent}, Skipped: ${skipped}, Already notified: ${alreadyNotified}`);
+      res.json({ success: true, sent, skipped, alreadyNotified, total: allWorkers.length });
+    } catch (error) {
+      console.error("Error sending bulk app instructions:", error);
+      res.status(500).json({ error: "Failed to send app instructions" });
+    }
+  });
+  app2.get("/api/admin/sync/status", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || userRole !== "admin" && userRole !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { getSyncStatus: getSyncStatus2, getCrmPushQueueStats: getCrmPushQueueStats2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      const status = await getSyncStatus2();
+      const pushQueueStats = await getCrmPushQueueStats2();
+      res.json({ ...status, pushQueue: pushQueueStats });
+    } catch (error) {
+      console.error("Error getting sync status:", error);
+      res.status(500).json({ error: "Failed to get sync status" });
+    }
+  });
+  app2.get("/api/admin/sync/logs", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || userRole !== "admin" && userRole !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { getSyncLogs: getSyncLogs2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      const limit = parseInt(req.query.limit) || 50;
+      const logs = await getSyncLogs2(limit);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error getting sync logs:", error);
+      res.status(500).json({ error: "Failed to get sync logs" });
+    }
+  });
+  app2.post("/api/admin/sync/workplaces", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || userRole !== "admin" && userRole !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { syncWorkplaces: syncWorkplaces2, isSyncRunning: isSyncRunning2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      if (isSyncRunning2()) {
+        res.status(409).json({ error: "A sync is already running" });
+        return;
+      }
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncWorkplaces2(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error) {
+      console.error("Error syncing workplaces:", error);
+      res.status(500).json({ error: error.message || "Failed to sync workplaces" });
+    }
+  });
+  app2.post("/api/admin/sync/shifts", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || userRole !== "admin" && userRole !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { syncConfirmedShifts: syncConfirmedShifts2, isSyncRunning: isSyncRunning2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      if (isSyncRunning2()) {
+        res.status(409).json({ error: "A sync is already running" });
+        return;
+      }
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncConfirmedShifts2(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error) {
+      console.error("Error syncing shifts:", error);
+      res.status(500).json({ error: error.message || "Failed to sync shifts" });
+    }
+  });
+  app2.post("/api/admin/sync/hotel-requests", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || userRole !== "admin" && userRole !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { syncHotelRequests: syncHotelRequests2, isSyncRunning: isSyncRunning2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      if (isSyncRunning2()) {
+        res.status(409).json({ error: "A sync is already running" });
+        return;
+      }
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncHotelRequests2(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error) {
+      console.error("Error syncing hotel requests:", error);
+      res.status(500).json({ error: error.message || "Failed to sync hotel requests" });
+    }
+  });
+  app2.post("/api/admin/sync/all", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || userRole !== "admin" && userRole !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { syncAll: syncAll2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      const dryRun = req.query.dryRun === "true";
+      const result = await syncAll2(dryRun);
+      res.json({ success: true, dryRun, ...result });
+    } catch (error) {
+      console.error("Error running full sync:", error);
+      res.status(500).json({ error: error.message || "Failed to run full sync" });
+    }
+  });
+  app2.post("/api/admin/workplaces/sync-to-crm", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const userRole = req.headers["x-user-role"];
+      if (!userId || userRole !== "admin" && userRole !== "hr") {
+        res.status(403).json({ error: "Admin or HR access required" });
+        return;
+      }
+      const { backfillWorkplacesToCrm: backfillWorkplacesToCrm2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      const result = await backfillWorkplacesToCrm2();
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error("Error running workplace CRM backfill:", error);
+      res.status(500).json({ error: error.message || "Failed to run workplace CRM backfill" });
+    }
+  });
+  app2.post("/api/discord/preview-announcement", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { rawText } = req.body;
+      if (!rawText || typeof rawText !== "string" || rawText.trim().length === 0) {
+        res.status(400).json({ error: "rawText is required" });
+        return;
+      }
+      res.json({ title: "Announcement", body: rawText.trim(), color: "blue" });
+    } catch (error) {
+      res.status(500).json({ error: error.message || "Failed to preview announcement" });
+    }
+  });
+  app2.post("/api/discord/send-announcement", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { title, body, color } = req.body;
+      if (!title || !body) {
+        res.status(400).json({ error: "title and body are required" });
+        return;
+      }
+      const result = await sendDiscordNotification({
+        title: String(title),
+        message: String(body),
+        color: ["red", "blue", "green", "amber", "purple"].includes(color) ? color : "blue",
+        type: "announcement"
+      });
+      if (!result.success) {
+        res.status(502).json({ error: result.error || "Failed to send to Discord" });
+        return;
+      }
+      res.json({ success: true, alertId: result.alertId });
+    } catch (error) {
+      console.error("[DISCORD ANNOUNCE] Send error:", error);
+      res.status(500).json({ error: error.message || "Failed to send announcement" });
+    }
+  });
+  app2.get("/api/discord-alerts", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const status = req.query.status;
+      const type = req.query.type;
+      const conditions = [];
+      if (status && status !== "all") conditions.push(eq4(discordAlerts.status, status));
+      if (type) conditions.push(eq4(discordAlerts.type, type));
+      const alerts = await db.select().from(discordAlerts).where(conditions.length > 0 ? and3(...conditions) : void 0).orderBy(desc2(discordAlerts.createdAt)).limit(50);
+      res.json(alerts);
+    } catch (error) {
+      console.error("[Discord Alerts] Fetch error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch alerts" });
+    }
+  });
+  app2.post("/api/discord-alerts/:alertId/acknowledge", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { alertId } = req.params;
+      const { responseNote } = req.body;
+      const userId = req.user?.id || "unknown";
+      const [user] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, userId));
+      const acknowledgedBy = user?.fullName || userId;
+      const success = await acknowledgeAlert(alertId, acknowledgedBy, responseNote);
+      if (!success) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+      res.json({ success: true, acknowledgedBy });
+    } catch (error) {
+      console.error("[Discord Alerts] Acknowledge error:", error);
+      res.status(500).json({ error: error.message || "Failed to acknowledge alert" });
+    }
+  });
+  app2.post("/api/webhooks/discord", async (req, res) => {
+    try {
+      res.status(200).json({ received: true });
+      const body = req.body;
+      if (body?.type === 1) return;
+      const content = body?.content || body?.message?.content || "";
+      const ackMatch = content.match(/ACK\s+(WFC-[A-Z0-9]+)/i) || content.match(/ACKNOWLEDGE\s+(WFC-[A-Z0-9]+)/i);
+      if (!ackMatch) {
+        console.log("[Discord Webhook] No ACK pattern found in:", content.slice(0, 100));
+        return;
+      }
+      const alertId = ackMatch[1].toUpperCase();
+      const username = body?.author?.username || body?.username || "Discord User";
+      const success = await acknowledgeAlert(alertId, username);
+      console.log(`[Discord Webhook] Alert ${alertId} ${success ? "acknowledged" : "not found"} by ${username}`);
+    } catch (error) {
+      console.error("[Discord Webhook] Error:", error?.message);
+    }
+  });
+  app2.post("/api/webhooks/crm", async (req, res) => {
+    try {
+      const webhookSecret = process.env.CRM_WEBHOOK_SECRET;
+      if (!webhookSecret) {
+        res.status(501).json({ error: "CRM webhook secret not configured. Set CRM_WEBHOOK_SECRET env var." });
+        return;
+      }
+      const providedSecret = req.headers["x-crm-webhook-secret"];
+      if (!providedSecret || providedSecret !== webhookSecret) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      res.status(200).json({ received: true });
+      const { event, data } = req.body || {};
+      console.log(`[CRM Webhook] Received event: ${event || "unknown"}`);
+      const { syncAll: syncAll2, isSyncRunning: isSyncRunning2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+      if (!isSyncRunning2()) {
+        syncAll2(false).catch(
+          (err) => console.error("[CRM Webhook] syncAll failed:", err?.message)
+        );
+      }
+      if (event === "hotel_request.created" && data?.hotelName) {
+        try {
+          const { sendDiscordNotification: sendDiscordNotification2 } = await Promise.resolve().then(() => (init_discord(), discord_exports));
+          await sendDiscordNotification2({
+            title: "New CRM Hotel Request",
+            message: `**${data.hotelName}** needs ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"}
+Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
+            color: "blue"
+          });
+        } catch (discordErr) {
+          console.error("[CRM Webhook] Discord alert failed:", discordErr?.message);
+        }
+        try {
+          const GM_PHONE = "+14166028038";
+          const { sendSMS: sendSMS2, logSMS: logSMS2 } = await Promise.resolve().then(() => (init_openphone(), openphone_exports));
+          const msg = `CRM Alert: New hotel request from ${data.hotelName} - ${data.quantityNeeded || 1} ${data.roleNeeded || "worker(s)"} needed`;
+          await sendSMS2(GM_PHONE, msg);
+          await logSMS2({ phoneNumber: GM_PHONE, direction: "outbound", message: msg, status: "sent" });
+        } catch (smsErr) {
+          console.error("[CRM Webhook] SMS alert failed:", smsErr?.message);
+        }
+      }
+    } catch (error) {
+      console.error("[CRM Webhook] Error:", error?.message);
+    }
+  });
+  app2.get("/api/appointments/upcoming", checkRoles("admin", "hr"), async (_req, res) => {
+    try {
+      const now = /* @__PURE__ */ new Date();
+      const results = await db.select({
+        id: appointments.id,
+        title: appointments.title,
+        companyName: appointments.companyName,
+        contactName: appointments.contactName,
+        contactPhone: appointments.contactPhone,
+        contactEmail: appointments.contactEmail,
+        appointmentDate: appointments.appointmentDate,
+        location: appointments.location,
+        address: appointments.address,
+        latitude: appointments.latitude,
+        longitude: appointments.longitude,
+        leadSource: appointments.leadSource,
+        status: appointments.status,
+        assignedUserId: appointments.assignedUserId,
+        notes: appointments.notes,
+        outcome: appointments.outcome,
+        crmAppointmentId: appointments.crmAppointmentId,
+        crmSource: appointments.crmSource,
+        createdBy: appointments.createdBy,
+        createdAt: appointments.createdAt,
+        updatedAt: appointments.updatedAt,
+        assignedUserName: users.fullName
+      }).from(appointments).leftJoin(users, eq4(appointments.assignedUserId, users.id)).where(and3(
+        eq4(appointments.status, "scheduled"),
+        gte2(appointments.appointmentDate, now)
+      )).orderBy(asc(appointments.appointmentDate)).limit(20);
+      res.json(results);
+    } catch (error) {
+      console.error("[APPOINTMENTS] Error fetching upcoming:", error);
+      res.status(500).json({ error: "Failed to fetch upcoming appointments" });
+    }
+  });
+  app2.get("/api/appointments", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { status, assignedUserId, startDate, endDate, leadSource } = req.query;
+      const conditions = [];
+      if (status) {
+        conditions.push(eq4(appointments.status, status));
+      }
+      if (assignedUserId) {
+        conditions.push(eq4(appointments.assignedUserId, assignedUserId));
+      }
+      if (startDate) {
+        conditions.push(gte2(appointments.appointmentDate, new Date(startDate)));
+      }
+      if (endDate) {
+        conditions.push(lte2(appointments.appointmentDate, new Date(endDate)));
+      }
+      if (leadSource) {
+        conditions.push(eq4(appointments.leadSource, leadSource));
+      }
+      const results = await db.select({
+        id: appointments.id,
+        title: appointments.title,
+        companyName: appointments.companyName,
+        contactName: appointments.contactName,
+        contactPhone: appointments.contactPhone,
+        contactEmail: appointments.contactEmail,
+        appointmentDate: appointments.appointmentDate,
+        location: appointments.location,
+        address: appointments.address,
+        latitude: appointments.latitude,
+        longitude: appointments.longitude,
+        leadSource: appointments.leadSource,
+        status: appointments.status,
+        assignedUserId: appointments.assignedUserId,
+        notes: appointments.notes,
+        outcome: appointments.outcome,
+        crmAppointmentId: appointments.crmAppointmentId,
+        crmSource: appointments.crmSource,
+        createdBy: appointments.createdBy,
+        createdAt: appointments.createdAt,
+        updatedAt: appointments.updatedAt,
+        assignedUserName: users.fullName
+      }).from(appointments).leftJoin(users, eq4(appointments.assignedUserId, users.id)).where(conditions.length > 0 ? and3(...conditions) : void 0).orderBy(desc2(appointments.appointmentDate));
+      res.json(results);
+    } catch (error) {
+      console.error("[APPOINTMENTS] Error fetching:", error);
+      res.status(500).json({ error: "Failed to fetch appointments" });
+    }
+  });
+  app2.post("/api/appointments", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      if (!userId) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
+      const body = { ...req.body, createdBy: userId };
+      if (typeof body.appointmentDate === "string") {
+        body.appointmentDate = new Date(body.appointmentDate);
+      }
+      const parsed = insertAppointmentSchema.safeParse(body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Validation failed", details: parsed.error.flatten() });
         return;
       }
-      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id));
+      const [created] = await db.insert(appointments).values(parsed.data).returning();
+      if (created.contactPhone) {
+        const apptDate = new Date(created.appointmentDate);
+        const dateLabel = apptDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+        const timeLabel = apptDate.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" });
+        const contactMsg = `Hi ${created.contactName}, this is WFConnect confirming your appointment on ${dateLabel} at ${timeLabel}. Location: ${created.location || "TBD"}. Questions? Reply to this message.`;
+        try {
+          const cRes = await sendSMS(created.contactPhone, contactMsg);
+          await logSMS({ phoneNumber: created.contactPhone, direction: "outbound", message: contactMsg, status: cRes.success ? "sent" : "failed" });
+        } catch (smsErr) {
+          console.error("[APPOINTMENTS] Contact SMS failed:", smsErr);
+        }
+      }
+      if (created.assignedUserId) {
+        const [assignedUser] = await db.select({ phone: users.phone, fullName: users.fullName }).from(users).where(eq4(users.id, created.assignedUserId)).limit(1);
+        if (assignedUser?.phone) {
+          const apptDate = new Date(created.appointmentDate);
+          const dateLabel = apptDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+          const timeLabel = apptDate.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" });
+          const assignMsg = `Appointment assigned to you: ${created.title || created.companyName} on ${dateLabel} at ${timeLabel}. Location: ${created.location || "TBD"}.`;
+          try {
+            const aRes = await sendSMS(assignedUser.phone, assignMsg);
+            await logSMS({ phoneNumber: assignedUser.phone, direction: "outbound", message: assignMsg, status: aRes.success ? "sent" : "failed" });
+          } catch (smsErr) {
+            console.error("[APPOINTMENTS] Assignee SMS failed:", smsErr);
+          }
+        }
+      }
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("[APPOINTMENTS] Error creating:", error);
+      res.status(500).json({ error: "Failed to create appointment" });
+    }
+  });
+  app2.post("/api/appointments/:id/send-sms", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [appt] = await db.select().from(appointments).where(eq4(appointments.id, id)).limit(1);
+      if (!appt) {
+        res.status(404).json({ error: "Appointment not found" });
+        return;
+      }
+      if (!appt.contactPhone) {
+        res.status(400).json({ error: "No contact phone on this appointment" });
+        return;
+      }
+      const apptDate = new Date(appt.appointmentDate);
+      const dateLabel = apptDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+      const timeLabel = apptDate.toLocaleTimeString("en-CA", { timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit" });
+      const msg = `Hi ${appt.contactName}, this is WFConnect confirming your appointment on ${dateLabel} at ${timeLabel}. Location: ${appt.location || "TBD"}. Questions? Reply to this message.`;
+      const smsRes = await sendSMS(appt.contactPhone, msg);
+      await logSMS({ phoneNumber: appt.contactPhone, direction: "outbound", message: msg, status: smsRes.success ? "sent" : "failed" });
+      res.json({ success: true, sent: smsRes.success });
+    } catch (error) {
+      console.error("[APPOINTMENTS] send-sms error:", error);
+      res.status(500).json({ error: "Failed to send SMS" });
+    }
+  });
+  app2.patch("/api/appointments/:id", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [existing] = await db.select({ id: appointments.id }).from(appointments).where(eq4(appointments.id, id));
+      if (!existing) {
+        res.status(404).json({ error: "Appointment not found" });
+        return;
+      }
+      const updateData = { ...req.body, updatedAt: /* @__PURE__ */ new Date() };
+      if (typeof updateData.appointmentDate === "string") {
+        updateData.appointmentDate = new Date(updateData.appointmentDate);
+      }
+      const [updated] = await db.update(appointments).set(updateData).where(eq4(appointments.id, id)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("[APPOINTMENTS] Error updating:", error);
+      res.status(500).json({ error: "Failed to update appointment" });
+    }
+  });
+  app2.delete("/api/appointments/:id", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [existing] = await db.select({ id: appointments.id }).from(appointments).where(eq4(appointments.id, id));
+      if (!existing) {
+        res.status(404).json({ error: "Appointment not found" });
+        return;
+      }
+      const [cancelled] = await db.update(appointments).set({ status: "cancelled", updatedAt: /* @__PURE__ */ new Date() }).where(eq4(appointments.id, id)).returning();
+      res.json(cancelled);
+    } catch (error) {
+      console.error("[APPOINTMENTS] Error deleting:", error);
+      res.status(500).json({ error: "Failed to delete appointment" });
+    }
+  });
+  app2.get("/api/config", checkRoles("admin", "hr"), async (_req, res) => {
+    try {
+      const configs = await db.select().from(appConfig).orderBy(asc(appConfig.key));
+      const result = {};
+      configs.forEach((c) => {
+        result[c.key] = c.value;
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch config" });
+    }
+  });
+  app2.put("/api/config/:key", checkRoles("admin"), async (req, res) => {
+    try {
+      const { key } = req.params;
+      const { value, description } = req.body;
+      const userId = req.user?.id;
+      if (!value && value !== "") {
+        return res.status(400).json({ error: "value is required" });
+      }
+      await db.insert(appConfig).values({ key, value, description: description || null, updatedBy: userId || null }).onConflictDoUpdate({
+        target: appConfig.key,
+        set: { value, description: description || null, updatedAt: /* @__PURE__ */ new Date(), updatedBy: userId || null }
+      });
+      res.json({ success: true, key, value });
+    } catch (error) {
+      console.error("[CONFIG] Update error:", error);
+      res.status(500).json({ error: "Failed to update config" });
+    }
+  });
+  app2.delete("/api/config/:key", checkRoles("admin"), async (req, res) => {
+    try {
+      await db.delete(appConfig).where(eq4(appConfig.key, req.params.key));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete config" });
+    }
+  });
+  app2.post("/api/applicants", async (req, res) => {
+    try {
+      const {
+        fullName: fullNameIn,
+        phone,
+        addressFull,
+        addressStreet,
+        addressCity,
+        addressProvince,
+        addressPostalCode,
+        addressCountry,
+        applyingFor,
+        jobPostingSource,
+        photoData: photoDataIn,
+        photoFilename,
+        photoMimeType,
+        photoFileSize,
+        resumeData: resumeDataIn,
+        resumeFilename,
+        resumeMimeType,
+        resumeFileSize
+      } = req.body;
+      const resolvedIdentity = resolveWorkerIdentity({
+        fullName: fullNameIn ?? req.body?.full_name,
+        firstName: req.body?.firstName ?? req.body?.first_name,
+        lastName: req.body?.lastName ?? req.body?.last_name,
+        email: req.body?.email,
+        phone
+      });
+      const fullName = resolvedIdentity.fullName;
+      if (!fullName?.trim()) return res.status(400).json({ error: "Full name required" });
+      if (!phone?.trim()) return res.status(400).json({ error: "Phone required" });
+      if (!addressFull?.trim()) return res.status(400).json({ error: "Address required" });
+      if (!applyingFor?.trim()) return res.status(400).json({ error: "Position required" });
+      if (!jobPostingSource?.trim()) return res.status(400).json({ error: "Job posting source required" });
+      if (!photoDataIn) return res.status(400).json({ error: "Photo required" });
+      if (!resumeDataIn) return res.status(400).json({ error: "Resume required" });
+      const PHOTO_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+      const RESUME_TYPES = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+      const MAX_SIZE = 10 * 1024 * 1024;
+      if (photoMimeType && !PHOTO_TYPES.includes(photoMimeType)) {
+        return res.status(400).json({ error: "Invalid photo file type" });
+      }
+      if (resumeMimeType && !RESUME_TYPES.includes(resumeMimeType)) {
+        return res.status(400).json({ error: "Invalid resume file type" });
+      }
+      if (photoFileSize && photoFileSize > MAX_SIZE) {
+        return res.status(400).json({ error: "Photo exceeds 10 MB limit" });
+      }
+      if (resumeFileSize && resumeFileSize > MAX_SIZE) {
+        return res.status(400).json({ error: "Resume exceeds 10 MB limit" });
+      }
+      const now = /* @__PURE__ */ new Date();
+      const [applicant] = await db.insert(applicants).values({
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        addressFull: addressFull.trim(),
+        addressStreet: addressStreet?.trim() || null,
+        addressCity: addressCity?.trim() || null,
+        addressProvince: addressProvince?.trim() || null,
+        addressPostalCode: addressPostalCode?.trim() || null,
+        addressCountry: addressCountry?.trim() || "Canada",
+        applyingFor: applyingFor.trim(),
+        jobPostingSource: jobPostingSource.trim(),
+        photoData: photoDataIn,
+        photoFilename: photoFilename || null,
+        photoMimeType: photoMimeType || null,
+        photoFileSize: photoFileSize || null,
+        resumeData: resumeDataIn,
+        resumeFilename: resumeFilename || null,
+        resumeMimeType: resumeMimeType || null,
+        resumeFileSize: resumeFileSize || null,
+        status: "new",
+        submittedAt: now
+      }).returning({ id: applicants.id });
+      console.log(`[APPLICANTS] New submission: ${fullName} (${phone}) for ${applyingFor}`);
+      res.json({ success: true, applicantId: applicant.id });
+    } catch (error) {
+      console.error("[APPLICANTS] Submission error:", error);
+      res.status(500).json({ error: "Failed to submit application" });
+    }
+  });
+  app2.get("/api/applicants", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { search, status, limit: limitParam } = req.query;
+      const limitVal = Math.min(parseInt(limitParam) || 50, 200);
+      const conditions = [];
+      if (status && status !== "all") conditions.push(eq4(applicants.status, status));
+      if (search) {
+        const s = `%${search}%`;
+        conditions.push(
+          sql3`(${applicants.fullName} ILIKE ${s} OR ${applicants.phone} ILIKE ${s})`
+        );
+      }
+      const rows = await db.select({
+        id: applicants.id,
+        fullName: applicants.fullName,
+        phone: applicants.phone,
+        addressFull: applicants.addressFull,
+        addressCity: applicants.addressCity,
+        addressProvince: applicants.addressProvince,
+        applyingFor: applicants.applyingFor,
+        jobPostingSource: applicants.jobPostingSource,
+        photoFilename: applicants.photoFilename,
+        photoMimeType: applicants.photoMimeType,
+        resumeFilename: applicants.resumeFilename,
+        resumeMimeType: applicants.resumeMimeType,
+        status: applicants.status,
+        submittedAt: applicants.submittedAt
+      }).from(applicants).where(conditions.length > 0 ? and3(...conditions) : void 0).orderBy(desc2(applicants.submittedAt)).limit(limitVal);
+      res.json(rows);
+    } catch (error) {
+      console.error("[APPLICANTS] List error:", error);
+      res.status(500).json({ error: "Failed to fetch applicants" });
+    }
+  });
+  app2.get("/api/applicants/:id", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const [row] = await db.select().from(applicants).where(eq4(applicants.id, req.params.id));
+      if (!row) return res.status(404).json({ error: "Applicant not found" });
+      const { photoData: _p, resumeData: _r, ...safe } = row;
+      res.json({ ...safe, hasPhoto: !!_p, hasResume: !!_r });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch applicant" });
+    }
+  });
+  app2.patch("/api/applicants/:id/status", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { status, adminNotes } = req.body;
+      const VALID = ["new", "reviewing", "interviewed", "hired", "rejected"];
+      if (!VALID.includes(status)) return res.status(400).json({ error: "Invalid status" });
+      const [updated] = await db.update(applicants).set({ status, adminNotes: adminNotes || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(applicants.id, req.params.id)).returning({ id: applicants.id, status: applicants.status });
+      if (!updated) return res.status(404).json({ error: "Applicant not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update status" });
+    }
+  });
+  app2.get("/api/applicants/:id/download/photo", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const [row] = await db.select({ photoData: applicants.photoData, photoFilename: applicants.photoFilename, photoMimeType: applicants.photoMimeType }).from(applicants).where(eq4(applicants.id, req.params.id));
+      if (!row?.photoData) return res.status(404).json({ error: "Photo not found" });
+      const base64 = row.photoData.split(",")[1] || row.photoData;
+      const buffer = Buffer.from(base64, "base64");
+      res.setHeader("Content-Type", row.photoMimeType || "image/jpeg");
+      res.setHeader("Content-Disposition", `attachment; filename="${row.photoFilename || "photo.jpg"}"`);
+      res.send(buffer);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to download photo" });
+    }
+  });
+  app2.get("/api/applicants/:id/download/resume", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const [row] = await db.select({ resumeData: applicants.resumeData, resumeFilename: applicants.resumeFilename, resumeMimeType: applicants.resumeMimeType }).from(applicants).where(eq4(applicants.id, req.params.id));
+      if (!row?.resumeData) return res.status(404).json({ error: "Resume not found" });
+      const base64 = row.resumeData.split(",")[1] || row.resumeData;
+      const buffer = Buffer.from(base64, "base64");
+      res.setHeader("Content-Type", row.resumeMimeType || "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${row.resumeFilename || "resume.pdf"}"`);
+      res.send(buffer);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to download resume" });
+    }
+  });
+  app2.get("/api/agreements/me/download", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const role = req.headers["x-user-role"];
+      if (!userId || role !== "worker") {
+        res.status(401).json({ error: "Authenticated worker required" });
+        return;
+      }
+      const { user, application } = await getWorkerApplicationForUser(userId);
+      if (!user || !application) {
+        res.status(404).json({ error: "Agreement not found" });
+        return;
+      }
+      if (!["AGREEMENT_ACCEPTED", "ONBOARDED"].includes(user.onboardingStatus || "")) {
+        res.status(403).json({ error: "Agreement is not available until onboarding is complete" });
+        return;
+      }
+      await db.update(workerApplications).set({ workerPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
+      streamAgreementPdf(res, application, "worker");
+    } catch (error) {
+      console.error("Error generating agreement PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
+  app2.get("/api/admin/agreements/:id/internal", async (req, res) => {
+    try {
+      if (!await hasAdminAgreementAccess(req, res)) {
+        return;
+      }
+      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
       }
-      const PDFDocument = (await import("pdfkit")).default;
-      const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 60, right: 60 } });
-      const fileName = `Subcontractor_Agreement_${application.fullName.replace(/\s+/g, "_")}.pdf`;
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      doc.pipe(res);
-      const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      doc.fontSize(18).font("Helvetica-Bold").text("SUBCONTRACTOR AGREEMENT", { align: "center" });
-      doc.moveDown(0.3);
-      doc.fontSize(11).font("Helvetica").text("1001328662 Ontario Inc.", { align: "center" });
-      doc.moveDown(0.2);
-      doc.fontSize(9).fillColor("#666666").text("1900 Dundas St. West, Mississauga L5K 1P9", { align: "center" });
-      doc.fillColor("#000000");
-      doc.moveDown(1);
-      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
-      doc.moveDown(1);
-      doc.fontSize(13).font("Helvetica-Bold").text("1. Contractor Information");
-      doc.moveDown(0.5);
-      const addField = (label, value) => {
-        doc.fontSize(9).font("Helvetica-Bold").fillColor("#555555").text(label, { continued: true });
-        doc.font("Helvetica").fillColor("#000000").text(`  ${value || "N/A"}`);
-        doc.moveDown(0.2);
-      };
-      addField("Full Name:", application.fullName);
-      addField("Email:", application.email);
-      addField("Phone:", application.phone);
-      addField("Address:", `${application.address}, ${application.city}, ${application.province} ${application.postalCode}`);
-      if (application.dateOfBirth) addField("Date of Birth:", application.dateOfBirth);
-      const workStatusMap = {
-        citizen: "Canadian Citizen",
-        permanent_resident: "Permanent Resident",
-        work_permit: "Work Permit Holder"
-      };
-      addField("Work Status:", workStatusMap[application.workStatus] || application.workStatus);
-      doc.moveDown(0.5);
-      doc.fontSize(13).font("Helvetica-Bold").fillColor("#000000").text("2. Scope of Work");
-      doc.moveDown(0.5);
-      let roles = [];
-      try {
-        roles = JSON.parse(application.preferredRoles);
-      } catch (e) {
-        roles = [application.preferredRoles];
+      await db.update(workerApplications).set({ internalPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
+      streamAgreementPdf(res, application, "internal");
+    } catch (error) {
+      console.error("Error generating internal agreement PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
+  app2.get("/api/admin/agreements/:id/worker", async (req, res) => {
+    try {
+      if (!await hasAdminAgreementAccess(req, res)) {
+        return;
       }
-      addField("Preferred Roles:", roles.join(", "));
-      let days = [];
-      try {
-        days = JSON.parse(application.availableDays);
-      } catch (e) {
-        days = [application.availableDays];
+      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
       }
-      addField("Available Days:", days.join(", "));
-      let shifts2 = [];
-      try {
-        shifts2 = JSON.parse(application.preferredShifts);
-      } catch (e) {
-        shifts2 = [application.preferredShifts];
+      await db.update(workerApplications).set({ workerPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
+      streamAgreementPdf(res, application, "worker");
+    } catch (error) {
+      console.error("Error generating worker agreement PDF:", error);
+      res.status(500).json({ error: "Failed to generate PDF" });
+    }
+  });
+  app2.get("/api/admin/applications/:id/agreement-pdf", async (req, res) => {
+    try {
+      if (!await hasAdminAgreementAccess(req, res)) {
+        return;
       }
-      addField("Preferred Shifts:", shifts2.join(", "));
-      doc.moveDown(0.5);
-      doc.fontSize(13).font("Helvetica-Bold").text("3. Terms and Conditions");
-      doc.moveDown(0.5);
-      doc.fontSize(9).font("Helvetica").text(
-        'This Subcontractor Agreement (the "Agreement") is entered into by and between 1001328662 Ontario Inc. (the "Company"), located at 1900 Dundas St. West, Mississauga L5K 1P9, and the above-named individual (the "Contractor"). The Contractor agrees to perform services as an independent subcontractor, NOT as an employee of the Company.',
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.3);
-      doc.text(
-        "The Contractor acknowledges that they are responsible for their own tax obligations, including but not limited to income tax and HST/GST remittances. The Company will not withhold taxes, provide benefits, or make contributions to employment insurance or the Canada Pension Plan on behalf of the Contractor.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.3);
-      doc.text(
-        "The Contractor agrees to comply with all applicable laws, regulations, and client site rules while performing services. The Contractor understands that failure to comply may result in immediate termination of this Agreement.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.3);
-      doc.text(
-        "Either party may terminate this Agreement at any time with or without cause. The Contractor will be compensated for all services performed up to the date of termination.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.5);
-      doc.fontSize(13).font("Helvetica-Bold").text("4. Time Tracking (TITO)");
-      doc.moveDown(0.5);
-      doc.fontSize(9).font("Helvetica").text(
-        "The Contractor acknowledges that they must accurately submit Time-In/Time-Out (TITO) records through the designated platform. GPS verification may be required to confirm presence at work sites. Falsification of time records may result in immediate termination of this Agreement and forfeiture of payment for the affected period.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.5);
-      doc.fontSize(13).font("Helvetica-Bold").text("5. Acknowledgments");
-      doc.moveDown(0.5);
-      const addCheckbox = (label, checked) => {
-        const checkmark = checked ? "[X]" : "[ ]";
-        doc.fontSize(9).font("Helvetica").text(`${checkmark}  ${label}`);
-        doc.moveDown(0.2);
-      };
-      addCheckbox("TITO System Acknowledgment - I understand that I must accurately submit Time-In/Time-Out records", application.titoAcknowledgment ?? false);
-      addCheckbox("Site Rules Agreement - I agree to adhere to client site-specific rules and regulations", application.siteRulesAcknowledgment ?? false);
-      addCheckbox("Worker Agreement - I understand I will be working as an independent subcontractor, NOT as an employee", application.workerAgreementConsent ?? false);
-      addCheckbox("Privacy Policy - I consent to the collection and use of my personal data (GDPR & PIPEDA compliant)", application.privacyConsent ?? false);
-      addCheckbox("Marketing Communications (optional)", application.marketingConsent ?? false);
-      doc.moveDown(0.5);
-      doc.fontSize(13).font("Helvetica-Bold").text("6. Emergency Contact");
-      doc.moveDown(0.5);
-      addField("Name:", application.emergencyContactName);
-      addField("Relationship:", application.emergencyContactRelationship);
-      addField("Phone:", application.emergencyContactPhone);
-      doc.moveDown(0.5);
-      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
-      doc.moveDown(1);
-      doc.fontSize(13).font("Helvetica-Bold").text("7. Electronic Signature");
-      doc.moveDown(0.5);
-      doc.fontSize(9).font("Helvetica").text(
-        "By signing below, the Contractor confirms that all information provided is true and accurate to the best of their knowledge. This electronic signature has the same legal effect as a handwritten signature.",
-        { lineGap: 3 }
-      );
-      doc.moveDown(0.8);
-      doc.fontSize(11).font("Helvetica-Bold").text("Signed:");
-      doc.moveDown(0.3);
-      doc.fontSize(14).font("Helvetica-Oblique").fillColor("#1a3a5c").text(application.signature, { underline: true });
-      doc.fillColor("#000000");
-      doc.moveDown(0.5);
-      addField("Date Signed:", application.signatureDate);
-      addField("Application Status:", application.status.toUpperCase());
-      addField("Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" }));
-      doc.moveDown(1.5);
-      doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.margins.left + pageWidth, doc.y).stroke("#cccccc");
-      doc.moveDown(0.5);
-      doc.fontSize(8).font("Helvetica").fillColor("#999999").text(
-        "This document was generated by 1001328662 Ontario Inc., 1900 Dundas St. West, Mississauga L5K 1P9. For questions, contact admin@wfconnect.org",
-        { align: "center" }
-      );
-      doc.end();
+      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
+      if (!application) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+      await db.update(workerApplications).set({ internalPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
+      streamAgreementPdf(res, application, "internal");
     } catch (error) {
       console.error("Error generating agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -2045,7 +5726,7 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const [profile] = await db.select().from(paymentProfiles).where(eq(paymentProfiles.workerUserId, userId));
+      const [profile] = await db.select().from(paymentProfiles).where(eq4(paymentProfiles.workerUserId, userId));
       res.json(profile || null);
     } catch (error) {
       console.error("Error fetching payment profile:", error);
@@ -2068,7 +5749,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "E-Transfer email is required" });
         return;
       }
-      const [existing] = await db.select().from(paymentProfiles).where(eq(paymentProfiles.workerUserId, userId));
+      const [existing] = await db.select().from(paymentProfiles).where(eq4(paymentProfiles.workerUserId, userId));
       const paymentData = {
         paymentMethod: "both",
         bankName,
@@ -2079,7 +5760,7 @@ async function registerRoutes(app2) {
         updatedAt: /* @__PURE__ */ new Date()
       };
       if (existing) {
-        const [updated] = await db.update(paymentProfiles).set(paymentData).where(eq(paymentProfiles.workerUserId, userId)).returning();
+        const [updated] = await db.update(paymentProfiles).set(paymentData).where(eq4(paymentProfiles.workerUserId, userId)).returning();
         res.json(updated);
       } else {
         const [created] = await db.insert(paymentProfiles).values({ workerUserId: userId, ...paymentData }).returning();
@@ -2119,20 +5800,20 @@ async function registerRoutes(app2) {
         etransferEmail,
         updatedAt: /* @__PURE__ */ new Date()
       };
-      const [user] = await db.select().from(users).where(eq(users.email, email.trim().toLowerCase()));
+      const [user] = await db.select().from(users).where(eq4(users.email, email.trim().toLowerCase()));
       if (!user) {
-        const [application] = await db.select().from(workerApplications).where(eq(workerApplications.email, email.trim().toLowerCase()));
+        const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.email, email.trim().toLowerCase()));
         if (application) {
-          await db.update(workerApplications).set(paymentData).where(eq(workerApplications.id, application.id));
+          await db.update(workerApplications).set(paymentData).where(eq4(workerApplications.id, application.id));
           res.json({ ok: true, message: "Payment information updated for your application" });
           return;
         }
         res.status(404).json({ error: "No account or application found with this email. Please apply first at /apply" });
         return;
       }
-      const [existing] = await db.select().from(paymentProfiles).where(eq(paymentProfiles.workerUserId, user.id));
+      const [existing] = await db.select().from(paymentProfiles).where(eq4(paymentProfiles.workerUserId, user.id));
       if (existing) {
-        await db.update(paymentProfiles).set(paymentData).where(eq(paymentProfiles.workerUserId, user.id));
+        await db.update(paymentProfiles).set(paymentData).where(eq4(paymentProfiles.workerUserId, user.id));
       } else {
         await db.insert(paymentProfiles).values({ workerUserId: user.id, ...paymentData });
       }
@@ -2144,18 +5825,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/admin/payment-profiles", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Basic ")) {
-        res.status(401).json({ error: "Authentication required" });
-        return;
-      }
-      const base64Credentials = authHeader.split(" ")[1];
-      const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-      const [username, password] = credentials.split(":");
-      if (username !== "wfconnect" || password !== "@2255Dundaswest") {
-        res.status(401).json({ error: "Invalid credentials" });
-        return;
-      }
+      if (!await checkBasicAuthAdmin(req, res)) return;
       const profiles = await db.select({
         id: paymentProfiles.id,
         workerUserId: paymentProfiles.workerUserId,
@@ -2169,7 +5839,7 @@ async function registerRoutes(app2) {
         workerEmail: users.email,
         createdAt: paymentProfiles.createdAt,
         updatedAt: paymentProfiles.updatedAt
-      }).from(paymentProfiles).leftJoin(users, eq(paymentProfiles.workerUserId, users.id)).orderBy(desc(paymentProfiles.updatedAt));
+      }).from(paymentProfiles).leftJoin(users, eq4(paymentProfiles.workerUserId, users.id)).orderBy(desc2(paymentProfiles.updatedAt));
       res.json(profiles);
     } catch (error) {
       console.error("Error fetching payment profiles:", error);
@@ -2178,7 +5848,7 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/workplaces", checkRoles("admin", "hr"), async (_req, res) => {
     try {
-      const allWorkplaces = await db.select().from(workplaces).orderBy(desc(workplaces.createdAt));
+      const allWorkplaces = await db.select().from(workplaces).orderBy(desc2(workplaces.createdAt));
       res.json(allWorkplaces);
     } catch (error) {
       console.error("Error fetching workplaces:", error);
@@ -2193,19 +5863,19 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
+      const [workplace] = await db.select().from(workplaces).where(eq4(workplaces.id, req.params.id));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found" });
         return;
       }
       if (role === "worker" || role === "client") {
-        const [assignment] = await db.select().from(workplaceAssignments).where(and(
-          eq(workplaceAssignments.workplaceId, req.params.id),
-          eq(workplaceAssignments.workerUserId, userId)
+        const [assignment] = await db.select().from(workplaceAssignments).where(and3(
+          eq4(workplaceAssignments.workplaceId, req.params.id),
+          eq4(workplaceAssignments.workerUserId, userId)
         ));
-        const [assignedShift] = await db.select({ id: shifts.id }).from(shifts).where(and(
-          eq(shifts.workplaceId, req.params.id),
-          eq(shifts.workerUserId, userId)
+        const [assignedShift] = await db.select({ id: shifts.id }).from(shifts).where(and3(
+          eq4(shifts.workplaceId, req.params.id),
+          eq4(shifts.workerUserId, userId)
         )).limit(1);
         if (!assignment && !assignedShift) {
           res.json({
@@ -2264,7 +5934,7 @@ async function registerRoutes(app2) {
       if (longitude !== void 0) updateData.longitude = longitude;
       if (geofenceRadiusMeters !== void 0) updateData.geofenceRadiusMeters = geofenceRadiusMeters;
       if (isActive !== void 0) updateData.isActive = isActive;
-      const [updatedWorkplace] = await db.update(workplaces).set(updateData).where(eq(workplaces.id, req.params.id)).returning();
+      const [updatedWorkplace] = await db.update(workplaces).set(updateData).where(eq4(workplaces.id, req.params.id)).returning();
       if (!updatedWorkplace) {
         res.status(404).json({ error: "Workplace not found" });
         return;
@@ -2278,12 +5948,12 @@ async function registerRoutes(app2) {
   });
   app2.patch("/api/workplaces/:id/toggle-active", checkRoles("admin", "hr"), async (req, res) => {
     try {
-      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
+      const [workplace] = await db.select().from(workplaces).where(eq4(workplaces.id, req.params.id));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found" });
         return;
       }
-      const [updatedWorkplace] = await db.update(workplaces).set({ isActive: !workplace.isActive, updatedAt: /* @__PURE__ */ new Date() }).where(eq(workplaces.id, req.params.id)).returning();
+      const [updatedWorkplace] = await db.update(workplaces).set({ isActive: !workplace.isActive, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workplaces.id, req.params.id)).returning();
       res.json(updatedWorkplace);
       broadcast({ type: "updated", entity: "workplace", id: req.params.id });
     } catch (error) {
@@ -2294,26 +5964,26 @@ async function registerRoutes(app2) {
   app2.delete("/api/workplaces/:id", checkRoles("admin"), async (req, res) => {
     try {
       const workplaceId = req.params.id;
-      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
+      const [workplace] = await db.select().from(workplaces).where(eq4(workplaces.id, workplaceId));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found" });
         return;
       }
-      const workplaceShifts = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.workplaceId, workplaceId));
+      const workplaceShifts = await db.select({ id: shifts.id }).from(shifts).where(eq4(shifts.workplaceId, workplaceId));
       if (workplaceShifts.length > 0) {
         const shiftIds = workplaceShifts.map((s) => s.id);
         await db.delete(shiftOffers).where(inArray(shiftOffers.shiftId, shiftIds));
         await db.delete(shiftCheckins).where(inArray(shiftCheckins.shiftId, shiftIds));
         await db.delete(sentReminders).where(inArray(sentReminders.shiftId, shiftIds));
       }
-      await db.delete(shifts).where(eq(shifts.workplaceId, workplaceId));
-      await db.delete(shiftSeries).where(eq(shiftSeries.workplaceId, workplaceId));
-      await db.delete(shiftRequests).where(eq(shiftRequests.workplaceId, workplaceId));
-      await db.delete(workplaceAssignments).where(eq(workplaceAssignments.workplaceId, workplaceId));
-      await db.delete(titoLogs).where(eq(titoLogs.workplaceId, workplaceId));
-      await db.update(timesheetEntries).set({ workplaceId: null }).where(eq(timesheetEntries.workplaceId, workplaceId));
-      await db.update(exportAuditLogs).set({ workplaceId: null }).where(eq(exportAuditLogs.workplaceId, workplaceId));
-      await db.delete(workplaces).where(eq(workplaces.id, workplaceId));
+      await db.delete(shifts).where(eq4(shifts.workplaceId, workplaceId));
+      await db.delete(shiftSeries).where(eq4(shiftSeries.workplaceId, workplaceId));
+      await db.delete(shiftRequests).where(eq4(shiftRequests.workplaceId, workplaceId));
+      await db.delete(workplaceAssignments).where(eq4(workplaceAssignments.workplaceId, workplaceId));
+      await db.delete(titoLogs).where(eq4(titoLogs.workplaceId, workplaceId));
+      await db.update(timesheetEntries).set({ workplaceId: null }).where(eq4(timesheetEntries.workplaceId, workplaceId));
+      await db.update(exportAuditLogs).set({ workplaceId: null }).where(eq4(exportAuditLogs.workplaceId, workplaceId));
+      await db.delete(workplaces).where(eq4(workplaces.id, workplaceId));
       broadcast({ type: "deleted", entity: "workplace", id: workplaceId });
       res.json({ success: true });
     } catch (error) {
@@ -2335,7 +6005,7 @@ async function registerRoutes(app2) {
         workerName: users.fullName,
         workerEmail: users.email,
         workerRoles: users.workerRoles
-      }).from(workplaceAssignments).leftJoin(users, eq(workplaceAssignments.workerUserId, users.id)).where(eq(workplaceAssignments.workplaceId, req.params.id)).orderBy(desc(workplaceAssignments.createdAt));
+      }).from(workplaceAssignments).leftJoin(users, eq4(workplaceAssignments.workerUserId, users.id)).where(and3(eq4(workplaceAssignments.workplaceId, req.params.id), eq4(workplaceAssignments.status, "active"))).orderBy(desc2(workplaceAssignments.createdAt));
       res.json(assignments);
     } catch (error) {
       console.error("Error fetching workplace workers:", error);
@@ -2350,23 +6020,23 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "workerUserId is required" });
         return;
       }
-      const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
+      const [worker] = await db.select().from(users).where(and3(eq4(users.id, workerUserId), eq4(users.role, "worker")));
       if (!worker) {
         res.status(404).json({ error: "Worker not found" });
         return;
       }
-      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, req.params.id));
+      const [workplace] = await db.select().from(workplaces).where(eq4(workplaces.id, req.params.id));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found" });
         return;
       }
-      const existing = await db.select().from(workplaceAssignments).where(and(
-        eq(workplaceAssignments.workplaceId, req.params.id),
-        eq(workplaceAssignments.workerUserId, workerUserId)
+      const existing = await db.select().from(workplaceAssignments).where(and3(
+        eq4(workplaceAssignments.workplaceId, req.params.id),
+        eq4(workplaceAssignments.workerUserId, workerUserId)
       )).limit(1);
       if (existing.length > 0) {
         if (existing[0].status === "removed") {
-          const [updated] = await db.update(workplaceAssignments).set({ status: status || "active", notes, updatedAt: /* @__PURE__ */ new Date() }).where(eq(workplaceAssignments.id, existing[0].id)).returning();
+          const [updated] = await db.update(workplaceAssignments).set({ status: status || "active", notes, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workplaceAssignments.id, existing[0].id)).returning();
           res.json(updated);
           return;
         }
@@ -2396,7 +6066,7 @@ async function registerRoutes(app2) {
       if (status === "active" && !req.body.acceptedAt) {
         updateData.acceptedAt = /* @__PURE__ */ new Date();
       }
-      const [updatedAssignment] = await db.update(workplaceAssignments).set(updateData).where(eq(workplaceAssignments.id, req.params.id)).returning();
+      const [updatedAssignment] = await db.update(workplaceAssignments).set(updateData).where(eq4(workplaceAssignments.id, req.params.id)).returning();
       if (!updatedAssignment) {
         res.status(404).json({ error: "Assignment not found" });
         return;
@@ -2410,7 +6080,7 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/workplace-assignments/:id", checkRoles("admin"), async (req, res) => {
     try {
-      const [deleted] = await db.delete(workplaceAssignments).where(eq(workplaceAssignments.id, req.params.id)).returning();
+      const [deleted] = await db.delete(workplaceAssignments).where(eq4(workplaceAssignments.id, req.params.id)).returning();
       if (!deleted) {
         res.status(404).json({ error: "Assignment not found" });
         return;
@@ -2448,10 +6118,10 @@ async function registerRoutes(app2) {
         longitude: workplaces.longitude,
         geofenceRadiusMeters: workplaces.geofenceRadiusMeters,
         isActive: workplaces.isActive
-      }).from(workplaceAssignments).leftJoin(workplaces, eq(workplaceAssignments.workplaceId, workplaces.id)).where(and(
-        eq(workplaceAssignments.workerUserId, userId),
-        or(eq(workplaceAssignments.status, "active"), eq(workplaceAssignments.status, "invited"))
-      )).orderBy(desc(workplaceAssignments.invitedAt));
+      }).from(workplaceAssignments).leftJoin(workplaces, eq4(workplaceAssignments.workplaceId, workplaces.id)).where(and3(
+        eq4(workplaceAssignments.workerUserId, userId),
+        or(eq4(workplaceAssignments.status, "active"), eq4(workplaceAssignments.status, "invited"))
+      )).orderBy(desc2(workplaceAssignments.invitedAt));
       res.json(myWorkplaces);
     } catch (error) {
       console.error("Error fetching worker workplaces:", error);
@@ -2470,35 +6140,45 @@ async function registerRoutes(app2) {
         res.status(403).json({ error: "Only workers can clock in" });
         return;
       }
+      if (!checkTitoRateLimit(userId)) {
+        res.status(429).json({ error: "Too many requests. Please wait before trying again.", errorCode: "RATE_LIMITED" });
+        return;
+      }
       const { workplaceId, gpsLat, gpsLng, shiftId } = req.body;
       if (!workplaceId) {
         res.status(400).json({ error: "workplaceId is required" });
         return;
       }
-      const existingConditions = [
-        eq(titoLogs.workerId, userId),
-        eq(titoLogs.workplaceId, workplaceId),
-        isNull(titoLogs.timeOut)
-      ];
-      if (shiftId) {
-        existingConditions.push(eq(titoLogs.shiftId, shiftId));
-      }
-      const existingLogs = await db.select().from(titoLogs).where(and(...existingConditions)).limit(1);
-      if (existingLogs.length > 0) {
-        const existing = existingLogs[0];
-        console.log(`[TITO] Idempotent clock-in: worker ${userId} already clocked in (titoLogId=${existing.id})`);
-        res.json({
-          success: true,
-          message: "Already clocked in",
-          titoLogId: existing.id,
-          timeIn: existing.timeIn,
-          distance: existing.timeInDistanceMeters ? Math.round(existing.timeInDistanceMeters) : null,
-          gpsVerified: existing.timeInGpsVerified,
-          alreadyClockedIn: true
+      const anyOpenLogs = await db.select().from(titoLogs).where(and3(
+        eq4(titoLogs.workerId, userId),
+        isNull2(titoLogs.timeOut),
+        ne2(titoLogs.status, "canceled")
+      )).limit(1);
+      if (anyOpenLogs.length > 0) {
+        const existing = anyOpenLogs[0];
+        if (existing.workplaceId === workplaceId && (!shiftId || existing.shiftId === shiftId)) {
+          console.log(`[TITO] Idempotent clock-in: worker ${userId} already clocked in (titoLogId=${existing.id})`);
+          res.json({
+            success: true,
+            message: "Already clocked in",
+            titoLogId: existing.id,
+            timeIn: existing.timeIn,
+            distance: existing.timeInDistanceMeters ? Math.round(existing.timeInDistanceMeters) : null,
+            gpsVerified: existing.timeInGpsVerified,
+            alreadyClockedIn: true
+          });
+          return;
+        }
+        console.log(`[TITO] Rejected clock-in: worker ${userId} has active session at workplace ${existing.workplaceId} (titoLogId=${existing.id})`);
+        res.status(409).json({
+          error: "You already have an active clock-in session. Please clock out first.",
+          errorCode: "ACTIVE_SESSION_EXISTS",
+          existingTitoLogId: existing.id,
+          existingWorkplaceId: existing.workplaceId
         });
         return;
       }
-      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
+      const [workplace] = await db.select().from(workplaces).where(eq4(workplaces.id, workplaceId));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found", errorCode: "WORKPLACE_NOT_FOUND" });
         return;
@@ -2507,48 +6187,63 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Workplace is not active", errorCode: "WORKPLACE_INACTIVE" });
         return;
       }
-      const assignment = await db.select().from(workplaceAssignments).where(and(
-        eq(workplaceAssignments.workplaceId, workplaceId),
-        eq(workplaceAssignments.workerUserId, userId),
-        eq(workplaceAssignments.status, "active")
+      const assignment = await db.select().from(workplaceAssignments).where(and3(
+        eq4(workplaceAssignments.workplaceId, workplaceId),
+        eq4(workplaceAssignments.workerUserId, userId),
+        eq4(workplaceAssignments.status, "active")
       )).limit(1);
       if (assignment.length === 0) {
         res.status(403).json({ error: "You are not assigned to this workplace", errorCode: "NOT_ASSIGNED" });
         return;
       }
-      if (shiftId) {
-        const [shiftRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
-        if (!shiftRow) {
-          res.status(404).json({ error: "Shift not found", errorCode: "SHIFT_NOT_FOUND" });
-          return;
+      if (!shiftId) {
+        res.status(400).json({ error: "shiftId is required. You must clock in against a scheduled shift.", errorCode: "NO_SHIFT_ID" });
+        return;
+      }
+      const [shiftRow] = await db.select().from(shifts).where(eq4(shifts.id, shiftId));
+      if (!shiftRow) {
+        res.status(404).json({ error: "Shift not found", errorCode: "SHIFT_NOT_FOUND" });
+        return;
+      }
+      const isAssignedWorker = shiftRow.workerUserId === userId;
+      const [acceptedOffer] = isAssignedWorker ? [{ id: "assigned" }] : await db.select({ id: shiftOffers.id }).from(shiftOffers).where(and3(
+        eq4(shiftOffers.shiftId, shiftId),
+        eq4(shiftOffers.workerId, userId),
+        eq4(shiftOffers.status, "accepted")
+      )).limit(1);
+      if (!isAssignedWorker && !acceptedOffer) {
+        res.status(403).json({
+          error: "You must have an accepted shift offer to clock in for this shift",
+          errorCode: "NO_ACCEPTED_OFFER"
+        });
+        return;
+      }
+      {
+        const now = /* @__PURE__ */ new Date();
+        const [sH, sM] = shiftRow.startTime.split(":").map(Number);
+        const shiftStart = /* @__PURE__ */ new Date(shiftRow.date + "T00:00:00");
+        shiftStart.setHours(sH, sM, 0, 0);
+        const windowOpen = new Date(shiftStart.getTime() - 15 * 60 * 1e3);
+        let windowClose;
+        if (shiftRow.endTime) {
+          const [eH, eM] = shiftRow.endTime.split(":").map(Number);
+          const shiftEnd = /* @__PURE__ */ new Date(shiftRow.date + "T00:00:00");
+          shiftEnd.setHours(eH, eM, 0, 0);
+          if (shiftEnd <= shiftStart) {
+            shiftEnd.setDate(shiftEnd.getDate() + 1);
+          }
+          windowClose = new Date(shiftEnd.getTime() + 30 * 60 * 1e3);
+        } else {
+          windowClose = new Date(shiftStart.getTime() + 24 * 60 * 60 * 1e3);
         }
-        const isAssignedWorker = shiftRow.workerUserId === userId;
-        const [acceptedOffer] = isAssignedWorker ? [{ id: "assigned" }] : await db.select({ id: shiftOffers.id }).from(shiftOffers).where(and(
-          eq(shiftOffers.shiftId, shiftId),
-          eq(shiftOffers.workerId, userId),
-          eq(shiftOffers.status, "accepted")
-        )).limit(1);
-        if (!isAssignedWorker && !acceptedOffer) {
-          res.status(403).json({
-            error: "You must have an accepted shift offer to clock in for this shift",
-            errorCode: "NO_ACCEPTED_OFFER"
-          });
-          return;
-        }
-      } else {
-        const todayStr = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
-        const todayShifts = await db.select({ id: shifts.id }).from(shifts).where(and(
-          eq(shifts.workplaceId, workplaceId),
-          eq(shifts.date, todayStr),
-          or(
-            eq(shifts.workerUserId, userId),
-            sql2`EXISTS (SELECT 1 FROM shift_offers WHERE shift_offers.shift_id = shifts.id AND shift_offers.worker_id = ${userId} AND shift_offers.status = 'accepted')`
-          )
-        )).limit(1);
-        if (todayShifts.length === 0) {
-          res.status(403).json({
-            error: "No shift scheduled for you today at this workplace. Accept a shift offer first.",
-            errorCode: "NO_SHIFT_TODAY"
+        if (now < windowOpen || now > windowClose) {
+          const fmtTime = (d) => d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Toronto" });
+          res.status(400).json({
+            error: "Clock-in is only allowed during your scheduled shift window.",
+            errorCode: "OUTSIDE_SHIFT_WINDOW",
+            windowOpen: windowOpen.toISOString(),
+            windowClose: windowClose.toISOString(),
+            windowDescription: `Clock-in available ${fmtTime(windowOpen)} - ${fmtTime(windowClose)}`
           });
           return;
         }
@@ -2568,7 +6263,7 @@ async function registerRoutes(app2) {
         const [titoLog2] = await db.insert(titoLogs).values({
           workerId: userId,
           workplaceId,
-          shiftId: shiftId || null,
+          shiftId,
           timeIn: /* @__PURE__ */ new Date(),
           timeInGpsLat: gpsLat,
           timeInGpsLng: gpsLng,
@@ -2590,7 +6285,7 @@ async function registerRoutes(app2) {
       const [titoLog] = await db.insert(titoLogs).values({
         workerId: userId,
         workplaceId,
-        shiftId: shiftId || null,
+        shiftId,
         timeIn: /* @__PURE__ */ new Date(),
         timeInGpsLat: gpsLat,
         timeInGpsLng: gpsLng,
@@ -2613,26 +6308,43 @@ async function registerRoutes(app2) {
         distance: Math.round(distance),
         gpsVerified: true
       });
+      if (shiftId) {
+        (async () => {
+          try {
+            const [shiftForCrm] = await db.select().from(shifts).where(eq4(shifts.id, shiftId));
+            if (shiftForCrm?.crmShiftId) {
+              const { enqueueCrmPush: enqueueCrmPush2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+              await enqueueCrmPush2("confirmed_shift", shiftId, "update", {
+                crmExternalId: shiftForCrm.crmShiftId,
+                checkedInAt: titoLog.timeIn.toISOString(),
+                confirmStatus: "CONFIRMED"
+              });
+            }
+          } catch (crmErr) {
+            console.error("[CRM-PUSH] TITO clock-in push failed:", crmErr?.message);
+          }
+        })();
+      }
       try {
-        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, userId));
         const workerName = worker?.fullName || "Worker";
         const nowToronto = new Date((/* @__PURE__ */ new Date()).toLocaleString("en-US", { timeZone: "America/Toronto" }));
         const currentHour = nowToronto.getHours();
         const hrAdmins = await db.select({ id: users.id }).from(users).where(
-          and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
+          and3(inArray(users.role, ["admin", "hr"]), eq4(users.isActive, true))
         );
         const hrAdminIds = hrAdmins.map((u) => u.id);
         let isLate = false;
         if (shiftId) {
-          const [shiftRow] = await db.select({ startTime: shifts.startTime, date: shifts.date }).from(shifts).where(eq(shifts.id, shiftId));
-          if (shiftRow?.startTime && shiftRow?.date) {
-            const [h, m] = shiftRow.startTime.split(":").map(Number);
-            const shiftStart = /* @__PURE__ */ new Date(shiftRow.date + "T00:00:00");
+          const [shiftRow2] = await db.select({ startTime: shifts.startTime, date: shifts.date }).from(shifts).where(eq4(shifts.id, shiftId));
+          if (shiftRow2?.startTime && shiftRow2?.date) {
+            const [h, m] = shiftRow2.startTime.split(":").map(Number);
+            const shiftStart = /* @__PURE__ */ new Date(shiftRow2.date + "T00:00:00");
             shiftStart.setHours(h, m, 0, 0);
             const lateMinutes = Math.round((Date.now() - shiftStart.getTime()) / 6e4);
             if (lateMinutes > 10) {
               isLate = true;
-              await db.update(titoLogs).set({ flaggedLate: true, lateMinutes }).where(eq(titoLogs.id, titoLog.id));
+              await db.update(titoLogs).set({ flaggedLate: true, lateMinutes }).where(eq4(titoLogs.id, titoLog.id));
               const lateMsg = `${workerName} clocked in ${lateMinutes} min late for shift at ${workplace.name}`;
               await db.insert(appNotifications).values({
                 userId,
@@ -2702,7 +6414,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "lateReason is required" });
         return;
       }
-      const [log2] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      const [log2] = await db.select().from(titoLogs).where(eq4(titoLogs.id, titoLogId));
       if (!log2) {
         res.status(404).json({ error: "TITO log not found" });
         return;
@@ -2711,7 +6423,7 @@ async function registerRoutes(app2) {
         res.status(403).json({ error: "Not your TITO log" });
         return;
       }
-      await db.update(titoLogs).set({ lateReason, lateNote: lateNote || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq(titoLogs.id, titoLogId));
+      await db.update(titoLogs).set({ lateReason, lateNote: lateNote || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(titoLogs.id, titoLogId));
       res.json({ success: true });
     } catch (error) {
       console.error("Error updating late reason:", error);
@@ -2730,12 +6442,16 @@ async function registerRoutes(app2) {
         res.status(403).json({ error: "Only workers can clock out" });
         return;
       }
+      if (!checkTitoRateLimit(userId)) {
+        res.status(429).json({ error: "Too many requests. Please wait before trying again.", errorCode: "RATE_LIMITED" });
+        return;
+      }
       const { titoLogId, gpsLat, gpsLng } = req.body;
       if (!titoLogId) {
         res.status(400).json({ error: "titoLogId is required" });
         return;
       }
-      const [titoLog] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      const [titoLog] = await db.select().from(titoLogs).where(eq4(titoLogs.id, titoLogId));
       if (!titoLog) {
         res.status(404).json({ error: "TITO record not found" });
         return;
@@ -2745,7 +6461,7 @@ async function registerRoutes(app2) {
         return;
       }
       if (titoLog.timeOut) {
-        console.log(`[TITO] Idempotent clock-out: worker ${userId} already clocked out (titoLogId=${titoLog.id})`);
+        console.log(`[TITO] Double clock-out prevented: worker ${userId} already clocked out (titoLogId=${titoLog.id})`);
         const totalMs2 = new Date(titoLog.timeOut).getTime() - new Date(titoLog.timeIn).getTime();
         const totalHours2 = Math.max(0, parseFloat((totalMs2 / 36e5).toFixed(2)));
         res.json({
@@ -2765,7 +6481,47 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Cannot clock out without a clock-in time" });
         return;
       }
-      const [workplace] = titoLog.workplaceId ? await db.select().from(workplaces).where(eq(workplaces.id, titoLog.workplaceId)) : [null];
+      const elapsedSeconds = (Date.now() - new Date(titoLog.timeIn).getTime()) / 1e3;
+      if (elapsedSeconds < 60) {
+        const remainingSeconds = Math.ceil(60 - elapsedSeconds);
+        res.status(400).json({
+          error: "Minimum shift duration is 1 minute.",
+          errorCode: "MIN_DURATION",
+          remainingSeconds
+        });
+        return;
+      }
+      if (titoLog.shiftId) {
+        const [clockOutShift] = await db.select().from(shifts).where(eq4(shifts.id, titoLog.shiftId));
+        if (clockOutShift) {
+          const now = /* @__PURE__ */ new Date();
+          const [sH, sM] = clockOutShift.startTime.split(":").map(Number);
+          const shiftStart = /* @__PURE__ */ new Date(clockOutShift.date + "T00:00:00");
+          shiftStart.setHours(sH, sM, 0, 0);
+          let windowClose;
+          if (clockOutShift.endTime) {
+            const [eH, eM] = clockOutShift.endTime.split(":").map(Number);
+            const shiftEnd = /* @__PURE__ */ new Date(clockOutShift.date + "T00:00:00");
+            shiftEnd.setHours(eH, eM, 0, 0);
+            if (shiftEnd <= shiftStart) {
+              shiftEnd.setDate(shiftEnd.getDate() + 1);
+            }
+            windowClose = new Date(shiftEnd.getTime() + 30 * 60 * 1e3);
+          } else {
+            windowClose = new Date(shiftStart.getTime() + 24 * 60 * 60 * 1e3);
+          }
+          if (now < shiftStart || now > windowClose) {
+            const fmtTime = (d) => d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Toronto" });
+            res.status(400).json({
+              error: "Clock-out must occur within your scheduled shift window.",
+              errorCode: "OUTSIDE_SHIFT_WINDOW",
+              windowDescription: `Clock-out allowed ${fmtTime(shiftStart)} - ${fmtTime(windowClose)}`
+            });
+            return;
+          }
+        }
+      }
+      const [workplace] = titoLog.workplaceId ? await db.select().from(workplaces).where(eq4(workplaces.id, titoLog.workplaceId)) : [null];
       const hasGps = gpsLat != null && gpsLng != null && (gpsLat !== 0 || gpsLng !== 0);
       const hasWorkplaceCoords = workplace?.latitude != null && workplace?.longitude != null;
       let distance = null;
@@ -2786,7 +6542,7 @@ async function registerRoutes(app2) {
         timeOutGpsFailureReason: !hasGps ? "GPS unavailable at clock-out" : isFlagged ? `Outside geofence: ${Math.round(distance)}m from workplace (max ${workplace.geofenceRadiusMeters || 150}m)` : null,
         status: isFlagged || !hasGps ? "flagged" : void 0,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(titoLogs.id, titoLogId)).returning();
+      }).where(eq4(titoLogs.id, titoLogId)).returning();
       const totalMs = clockOutTime.getTime() - new Date(titoLog.timeIn).getTime();
       const totalHours = Math.max(0, parseFloat((totalMs / 36e5).toFixed(2)));
       let timesheetEntryCreated = false;
@@ -2795,10 +6551,10 @@ async function registerRoutes(app2) {
         const dateLocalStr = clockInDate.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
         const payPeriod = getCurrentPayPeriod(/* @__PURE__ */ new Date(dateLocalStr + "T12:00:00"));
         if (payPeriod && totalHours > 0) {
-          const [existingTimesheet] = await db.select().from(timesheets).where(and(
-            eq(timesheets.workerUserId, userId),
-            eq(timesheets.periodYear, payPeriod.year),
-            eq(timesheets.periodNumber, payPeriod.periodNumber)
+          const [existingTimesheet] = await db.select().from(timesheets).where(and3(
+            eq4(timesheets.workerUserId, userId),
+            eq4(timesheets.periodYear, payPeriod.year),
+            eq4(timesheets.periodNumber, payPeriod.periodNumber)
           ));
           let timesheetId;
           if (existingTimesheet) {
@@ -2814,7 +6570,7 @@ async function registerRoutes(app2) {
           }
           const defaultPayRate = 18;
           const amount = parseFloat((totalHours * defaultPayRate).toFixed(2));
-          const existingEntry = await db.select().from(timesheetEntries).where(eq(timesheetEntries.titoLogId, titoLogId)).limit(1);
+          const existingEntry = await db.select().from(timesheetEntries).where(eq4(timesheetEntries.titoLogId, titoLogId)).limit(1);
           if (existingEntry.length === 0) {
             await db.insert(timesheetEntries).values({
               timesheetId,
@@ -2832,14 +6588,14 @@ async function registerRoutes(app2) {
             const allEntries = await db.select({
               hours: timesheetEntries.hours,
               amount: timesheetEntries.amount
-            }).from(timesheetEntries).where(eq(timesheetEntries.timesheetId, timesheetId));
+            }).from(timesheetEntries).where(eq4(timesheetEntries.timesheetId, timesheetId));
             const totalTimesheetHours = allEntries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
             const totalTimesheetPay = allEntries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
             await db.update(timesheets).set({
               totalHours: totalTimesheetHours.toFixed(2),
               totalPay: totalTimesheetPay.toFixed(2),
               updatedAt: /* @__PURE__ */ new Date()
-            }).where(eq(timesheets.id, timesheetId));
+            }).where(eq4(timesheets.id, timesheetId));
             console.log(`[TIMESHEET] Auto-created entry: worker=${userId}, titoLog=${titoLogId}, hours=${totalHours}, amount=${amount}, period=${payPeriod.year}-${payPeriod.periodNumber}`);
           }
         } else {
@@ -2876,15 +6632,33 @@ async function registerRoutes(app2) {
         flaggedForReview: isFlagged || !hasGps,
         timesheetEntryCreated
       });
+      if (titoLog.shiftId) {
+        (async () => {
+          try {
+            const [shiftForCrm] = await db.select().from(shifts).where(eq4(shifts.id, titoLog.shiftId));
+            if (shiftForCrm?.crmShiftId) {
+              const { enqueueCrmPush: enqueueCrmPush2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+              await enqueueCrmPush2("confirmed_shift", titoLog.shiftId, "update", {
+                crmExternalId: shiftForCrm.crmShiftId,
+                completedAt: clockOutTime.toISOString(),
+                confirmStatus: "COMPLETED",
+                notes: `Clock-out: ${totalHours}h, GPS verified: ${isWithinRadius}`
+              });
+            }
+          } catch (crmErr) {
+            console.error("[CRM-PUSH] TITO clock-out push failed:", crmErr?.message);
+          }
+        })();
+      }
       try {
-        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, userId));
         const workerName = worker?.fullName || "Worker";
         const nowToronto = new Date((/* @__PURE__ */ new Date()).toLocaleString("en-US", { timeZone: "America/Toronto" }));
         const currentHour = nowToronto.getHours();
         const wpName = workplace?.name || "work site";
         if (currentHour < 5 || currentHour >= 23) {
           const hrAdmins = await db.select({ id: users.id }).from(users).where(
-            and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
+            and3(inArray(users.role, ["admin", "hr"]), eq4(users.isActive, true))
           );
           const hrAdminIds = hrAdmins.map((u) => u.id);
           const unusualMsg = `${workerName} clocked out at unusual hours (${nowToronto.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}) at ${wpName}`;
@@ -2909,7 +6683,7 @@ async function registerRoutes(app2) {
         }
         if (isFlagged && distance != null) {
           const hrAdmins2 = await db.select({ id: users.id }).from(users).where(
-            and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true))
+            and3(inArray(users.role, ["admin", "hr"]), eq4(users.isActive, true))
           );
           const hrAdminIds2 = hrAdmins2.map((u) => u.id);
           const flaggedMsg = `${workerName} clocked out ${Math.round(distance)}m away from ${wpName} (max ${workplace?.geofenceRadiusMeters || 150}m). Flagged for review.`;
@@ -2970,11 +6744,20 @@ async function registerRoutes(app2) {
       };
       let query;
       if (isAdmin) {
-        query = db.select(baseSelect).from(titoLogs).leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id)).leftJoin(users, eq(titoLogs.workerId, users.id)).leftJoin(shifts, eq(titoLogs.shiftId, shifts.id)).orderBy(desc(titoLogs.createdAt)).limit(100);
+        query = db.select(baseSelect).from(titoLogs).leftJoin(workplaces, eq4(titoLogs.workplaceId, workplaces.id)).leftJoin(users, eq4(titoLogs.workerId, users.id)).leftJoin(shifts, eq4(titoLogs.shiftId, shifts.id)).orderBy(desc2(titoLogs.createdAt)).limit(100);
       } else {
-        query = db.select(baseSelect).from(titoLogs).leftJoin(workplaces, eq(titoLogs.workplaceId, workplaces.id)).leftJoin(users, eq(titoLogs.workerId, users.id)).leftJoin(shifts, eq(titoLogs.shiftId, shifts.id)).where(eq(titoLogs.workerId, userId)).orderBy(desc(titoLogs.createdAt)).limit(50);
+        query = db.select(baseSelect).from(titoLogs).leftJoin(workplaces, eq4(titoLogs.workplaceId, workplaces.id)).leftJoin(users, eq4(titoLogs.workerId, users.id)).leftJoin(shifts, eq4(titoLogs.shiftId, shifts.id)).where(eq4(titoLogs.workerId, userId)).orderBy(desc2(titoLogs.createdAt)).limit(50);
       }
       const logs = await query;
+      const logIds = logs.map((l) => l.id);
+      let correctedLogIds = /* @__PURE__ */ new Set();
+      if (logIds.length > 0) {
+        const corrections = await db.select({ titoLogId: titoCorrections.titoLogId }).from(titoCorrections).where(and3(
+          inArray(titoCorrections.titoLogId, logIds),
+          eq4(titoCorrections.status, "approved")
+        ));
+        correctedLogIds = new Set(corrections.map((c) => c.titoLogId));
+      }
       const formattedLogs = logs.map((log2) => ({
         id: log2.id,
         shiftId: log2.shiftId || "",
@@ -2998,6 +6781,8 @@ async function registerRoutes(app2) {
         flaggedLate: log2.flaggedLate || false,
         lateMinutes: log2.lateMinutes || void 0,
         lateReason: log2.lateReason || void 0,
+        corrected: correctedLogIds.has(log2.id),
+        cancelReason: log2.status === "canceled" ? log2.notes || "Accidental clock-in" : void 0,
         totalHours: log2.timeIn && log2.timeOut ? parseFloat(((new Date(log2.timeOut).getTime() - new Date(log2.timeIn).getTime()) / 36e5).toFixed(2)) : void 0
       }));
       res.json(formattedLogs);
@@ -3006,16 +6791,128 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to fetch TITO logs" });
     }
   });
+  app2.post("/api/tito/email-timesheet", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { to, subject, period, workplaceId, workerId } = req.body;
+      if (!to || typeof to !== "string" || !to.includes("@")) {
+        res.status(400).json({ error: "Valid email address is required" });
+        return;
+      }
+      const now = /* @__PURE__ */ new Date();
+      let startDate;
+      let endDate;
+      let periodLabel;
+      const selectedPeriod = period || "biweekly";
+      if (selectedPeriod === "weekly") {
+        const dayOfWeek = now.getDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() + mondayOffset);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        endDate.setHours(23, 59, 59, 999);
+        periodLabel = "Weekly";
+      } else if (selectedPeriod === "monthly") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        periodLabel = "Monthly";
+      } else {
+        const currentPayPeriod = getCurrentPayPeriod();
+        if (currentPayPeriod) {
+          startDate = /* @__PURE__ */ new Date(currentPayPeriod.startDate + "T00:00:00");
+          endDate = /* @__PURE__ */ new Date(currentPayPeriod.endDate + "T23:59:59.999");
+          periodLabel = `Pay Period ${currentPayPeriod.periodNumber}`;
+        } else {
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 13);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now);
+          endDate.setHours(23, 59, 59, 999);
+          periodLabel = "Biweekly";
+        }
+      }
+      const conditions = [
+        ne2(titoLogs.status, "canceled"),
+        gte2(titoLogs.timeIn, startDate),
+        lte2(titoLogs.timeIn, endDate)
+      ];
+      if (workplaceId) {
+        conditions.push(eq4(titoLogs.workplaceId, workplaceId));
+      }
+      if (workerId) {
+        conditions.push(eq4(titoLogs.workerId, workerId));
+      }
+      const logs = await db.select({
+        id: titoLogs.id,
+        workerId: titoLogs.workerId,
+        workerName: users.fullName,
+        workplaceName: workplaces.name,
+        shiftDate: shifts.date,
+        shiftTitle: shifts.title,
+        timeIn: titoLogs.timeIn,
+        timeOut: titoLogs.timeOut,
+        status: titoLogs.status
+      }).from(titoLogs).leftJoin(users, eq4(titoLogs.workerId, users.id)).leftJoin(workplaces, eq4(titoLogs.workplaceId, workplaces.id)).leftJoin(shifts, eq4(titoLogs.shiftId, shifts.id)).where(and3(...conditions)).orderBy(asc(users.fullName), asc(titoLogs.timeIn)).limit(1e3);
+      const formatTime = (d) => d ? d.toLocaleString("en-CA", { timeZone: "America/Toronto" }) : "";
+      const formatDate = (d) => d.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+      const workerTotals = {};
+      const csvDataLines = logs.map((log2) => {
+        const timeIn = log2.timeIn ? new Date(log2.timeIn) : null;
+        const timeOut = log2.timeOut ? new Date(log2.timeOut) : null;
+        const hours = timeIn && timeOut ? (timeOut.getTime() - timeIn.getTime()) / 36e5 : 0;
+        const wName = log2.workerName || "Unknown";
+        if (!workerTotals[log2.workerId]) {
+          workerTotals[log2.workerId] = { name: wName, hours: 0 };
+        }
+        workerTotals[log2.workerId].hours += hours;
+        return `"${wName}","${log2.workplaceName || ""}","${log2.shiftDate || ""}","${formatTime(timeIn)}","${formatTime(timeOut)}",${hours.toFixed(2)},"${log2.status}"`;
+      });
+      const grandTotal = Object.values(workerTotals).reduce((sum, w) => sum + w.hours, 0);
+      const summaryLines = [
+        "",
+        "SUMMARY",
+        "Worker,Total Hours",
+        ...Object.values(workerTotals).map((w) => `"${w.name}",${w.hours.toFixed(2)}`),
+        `"GRAND TOTAL",${grandTotal.toFixed(2)}`
+      ];
+      const csvLines = [
+        "Worker Name,Workplace,Shift Date,Time In,Time Out,Hours,Status",
+        ...csvDataLines,
+        ...summaryLines
+      ];
+      const csvContent = csvLines.join("\n");
+      const dateRange = `${formatDate(startDate)} to ${formatDate(endDate)}`;
+      const filename = `tito-timesheet-${formatDate(startDate)}-to-${formatDate(endDate)}.csv`;
+      const emailSubject = subject || `WFConnect ${periodLabel} Timesheet - ${dateRange}`;
+      const bodyText = `Please find attached the ${periodLabel} TITO timesheet report.
+
+Period: ${dateRange}
+Total Records: ${logs.length}
+Total Hours: ${grandTotal.toFixed(2)}
+
+- WFConnect`;
+      const result = await sendCSVEmail(to, emailSubject, bodyText, csvContent, filename);
+      if (result.success) {
+        res.json({ success: true, message: `${periodLabel} timesheet emailed to ${to}`, period: dateRange, totalRecords: logs.length, totalHours: grandTotal.toFixed(2) });
+      } else {
+        res.status(500).json({ error: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Error emailing TITO timesheet:", error);
+      res.status(500).json({ error: "Failed to email timesheet" });
+    }
+  });
   app2.post("/api/tito/:id/approve", checkRoles("admin", "hr", "client"), async (req, res) => {
     try {
       const titoLogId = req.params.id;
       const userId = req.headers["x-user-id"];
-      const [log2] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      const [log2] = await db.select().from(titoLogs).where(eq4(titoLogs.id, titoLogId));
       if (!log2) {
         res.status(404).json({ error: "TITO log not found" });
         return;
       }
-      await db.update(titoLogs).set({ status: "approved", approvedBy: userId, approvedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq(titoLogs.id, titoLogId));
+      await db.update(titoLogs).set({ status: "approved", approvedBy: userId, approvedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(titoLogs.id, titoLogId));
       await db.insert(auditLog).values({
         userId,
         action: "TITO_APPROVED",
@@ -3034,12 +6931,12 @@ async function registerRoutes(app2) {
       const titoLogId = req.params.id;
       const userId = req.headers["x-user-id"];
       const { reason } = req.body;
-      const [log2] = await db.select().from(titoLogs).where(eq(titoLogs.id, titoLogId));
+      const [log2] = await db.select().from(titoLogs).where(eq4(titoLogs.id, titoLogId));
       if (!log2) {
         res.status(404).json({ error: "TITO log not found" });
         return;
       }
-      await db.update(titoLogs).set({ status: "disputed", disputedBy: userId, disputedAt: /* @__PURE__ */ new Date(), notes: reason || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq(titoLogs.id, titoLogId));
+      await db.update(titoLogs).set({ status: "disputed", disputedBy: userId, disputedAt: /* @__PURE__ */ new Date(), notes: reason || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(titoLogs.id, titoLogId));
       await db.insert(auditLog).values({
         userId,
         action: "TITO_DISPUTED",
@@ -3053,6 +6950,168 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to dispute TITO log" });
     }
   });
+  app2.post("/api/tito/:id/cancel", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const titoLogId = req.params.id;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      const [log2] = await db.select().from(titoLogs).where(eq4(titoLogs.id, titoLogId));
+      if (!log2) {
+        res.status(404).json({ error: "TITO log not found" });
+        return;
+      }
+      if (log2.workerId !== userId) {
+        res.status(403).json({ error: "You can only cancel your own clock-in" });
+        return;
+      }
+      if (log2.timeOut) {
+        res.status(400).json({ error: "Cannot cancel a completed clock-in/out record" });
+        return;
+      }
+      if (log2.status === "canceled") {
+        res.json({ success: true, message: "Already canceled", alreadyCanceled: true });
+        return;
+      }
+      const clockInTime = log2.timeIn ? new Date(log2.timeIn).getTime() : 0;
+      const elapsed = Date.now() - clockInTime;
+      const twoMinutes = 2 * 60 * 1e3;
+      if (elapsed > twoMinutes) {
+        res.status(400).json({ error: "Cancel window has expired. You can only cancel within 2 minutes of clocking in." });
+        return;
+      }
+      await db.update(titoLogs).set({ status: "canceled", notes: "Accidental clock-in", updatedAt: /* @__PURE__ */ new Date() }).where(eq4(titoLogs.id, titoLogId));
+      await db.insert(auditLog).values({
+        userId,
+        action: "TITO_CANCELED",
+        entityType: "tito_log",
+        entityId: titoLogId,
+        details: JSON.stringify({ reason: "Accidental clock-in", elapsedMs: elapsed })
+      });
+      console.log(`[TITO] Clock-in canceled: worker ${userId}, titoLogId=${titoLogId}, elapsed=${Math.round(elapsed / 1e3)}s`);
+      res.json({ success: true, message: "Clock-in canceled" });
+    } catch (error) {
+      console.error("Error canceling TITO log:", error);
+      res.status(500).json({ error: "Failed to cancel clock-in" });
+    }
+  });
+  app2.post("/api/tito/:id/correction", async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const titoLogId = req.params.id;
+      const { reason, note } = req.body;
+      if (!userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      if (!reason) {
+        res.status(400).json({ error: "Reason is required for correction requests" });
+        return;
+      }
+      const [log2] = await db.select().from(titoLogs).where(eq4(titoLogs.id, titoLogId));
+      if (!log2) {
+        res.status(404).json({ error: "TITO log not found" });
+        return;
+      }
+      if (log2.workerId !== userId) {
+        res.status(403).json({ error: "You can only request corrections for your own records" });
+        return;
+      }
+      const existingPending = await db.select().from(titoCorrections).where(and3(
+        eq4(titoCorrections.titoLogId, titoLogId),
+        eq4(titoCorrections.status, "pending")
+      )).limit(1);
+      if (existingPending.length > 0) {
+        res.status(400).json({ error: "A correction request is already pending for this record" });
+        return;
+      }
+      const [correction] = await db.insert(titoCorrections).values({
+        titoLogId,
+        requesterId: userId,
+        originalTimeIn: log2.timeIn,
+        originalTimeOut: log2.timeOut,
+        reason,
+        note: note || null,
+        status: "pending"
+      }).returning();
+      await db.insert(auditLog).values({
+        userId,
+        action: "TITO_CORRECTION_REQUESTED",
+        entityType: "tito_correction",
+        entityId: correction.id,
+        details: JSON.stringify({ titoLogId, reason, note })
+      });
+      const hrAdmins = await db.select({ id: users.id }).from(users).where(
+        and3(inArray(users.role, ["admin", "hr"]), eq4(users.isActive, true))
+      );
+      for (const admin of hrAdmins) {
+        await db.insert(appNotifications).values({
+          userId: admin.id,
+          type: "tito_correction",
+          title: "TITO Correction Request",
+          body: `A worker has requested a time correction: ${reason}`
+        });
+      }
+      console.log(`[TITO] Correction requested: worker ${userId}, titoLogId=${titoLogId}, correctionId=${correction.id}`);
+      res.json({ success: true, correctionId: correction.id });
+    } catch (error) {
+      console.error("Error requesting TITO correction:", error);
+      res.status(500).json({ error: "Failed to submit correction request" });
+    }
+  });
+  app2.post("/api/tito/corrections/:id/review", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"];
+      const correctionId = req.params.id;
+      const { action, correctedTimeIn, correctedTimeOut } = req.body;
+      if (!action || !["approved", "rejected"].includes(action)) {
+        res.status(400).json({ error: "action must be 'approved' or 'rejected'" });
+        return;
+      }
+      const [correction] = await db.select().from(titoCorrections).where(eq4(titoCorrections.id, correctionId));
+      if (!correction) {
+        res.status(404).json({ error: "Correction request not found" });
+        return;
+      }
+      if (correction.status !== "pending") {
+        res.status(400).json({ error: "This correction has already been reviewed" });
+        return;
+      }
+      const updateData = {
+        status: action,
+        approverId: userId,
+        reviewedAt: /* @__PURE__ */ new Date()
+      };
+      if (action === "approved") {
+        if (correctedTimeIn) updateData.correctedTimeIn = new Date(correctedTimeIn);
+        if (correctedTimeOut) updateData.correctedTimeOut = new Date(correctedTimeOut);
+        const titoUpdate = { updatedAt: /* @__PURE__ */ new Date() };
+        if (correctedTimeIn) titoUpdate.timeIn = new Date(correctedTimeIn);
+        if (correctedTimeOut) titoUpdate.timeOut = new Date(correctedTimeOut);
+        await db.update(titoLogs).set(titoUpdate).where(eq4(titoLogs.id, correction.titoLogId));
+      }
+      await db.update(titoCorrections).set(updateData).where(eq4(titoCorrections.id, correctionId));
+      await db.insert(auditLog).values({
+        userId,
+        action: action === "approved" ? "TITO_CORRECTION_APPROVED" : "TITO_CORRECTION_REJECTED",
+        entityType: "tito_correction",
+        entityId: correctionId,
+        details: JSON.stringify({ titoLogId: correction.titoLogId, correctedTimeIn, correctedTimeOut })
+      });
+      await db.insert(appNotifications).values({
+        userId: correction.requesterId,
+        type: "tito_correction",
+        title: `Correction ${action === "approved" ? "Approved" : "Rejected"}`,
+        body: action === "approved" ? "Your time correction request has been approved." : "Your time correction request has been rejected."
+      });
+      res.json({ success: true, message: `Correction ${action}` });
+    } catch (error) {
+      console.error("Error reviewing TITO correction:", error);
+      res.status(500).json({ error: "Failed to review correction" });
+    }
+  });
   app2.get("/api/workers", checkRoles("admin", "hr"), async (_req, res) => {
     try {
       const workers = await db.select({
@@ -3062,8 +7121,9 @@ async function registerRoutes(app2) {
         onboardingStatus: users.onboardingStatus,
         workerRoles: users.workerRoles,
         isActive: users.isActive,
+        profilePhotoUrl: users.profilePhotoUrl,
         createdAt: users.createdAt
-      }).from(users).where(eq(users.role, "worker")).orderBy(desc(users.createdAt));
+      }).from(users).where(eq4(users.role, "worker")).orderBy(desc2(users.createdAt));
       res.json(workers);
     } catch (error) {
       console.error("Error fetching workers:", error);
@@ -3091,8 +7151,8 @@ async function registerRoutes(app2) {
         workerUserId: shifts.workerUserId,
         workplaceName: workplaces.name,
         workerName: users.fullName
-      }).from(shifts).leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id)).leftJoin(users, eq(shifts.workerUserId, users.id)).where(
-        role === "worker" ? and(eq(shifts.date, today), eq(shifts.workerUserId, userId)) : eq(shifts.date, today)
+      }).from(shifts).leftJoin(workplaces, eq4(shifts.workplaceId, workplaces.id)).leftJoin(users, eq4(shifts.workerUserId, users.id)).where(
+        role === "worker" ? and3(eq4(shifts.date, today), eq4(shifts.workerUserId, userId), ne2(shifts.status, "cancelled")) : and3(eq4(shifts.date, today), ne2(shifts.status, "cancelled"))
       ).orderBy(shifts.startTime);
       const todayShifts = await todayShiftsQuery;
       let pendingOffers = [];
@@ -3107,17 +7167,17 @@ async function registerRoutes(app2) {
           shiftStartTime: shifts.startTime,
           shiftEndTime: shifts.endTime,
           workplaceName: workplaces.name
-        }).from(shiftOffers).innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id)).leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id)).where(
-          and(
-            eq(shiftOffers.workerId, userId),
-            eq(shiftOffers.status, "pending")
+        }).from(shiftOffers).innerJoin(shifts, eq4(shiftOffers.shiftId, shifts.id)).leftJoin(workplaces, eq4(shifts.workplaceId, workplaces.id)).where(
+          and3(
+            eq4(shiftOffers.workerId, userId),
+            eq4(shiftOffers.status, "pending")
           )
         ).orderBy(shifts.date);
       }
       let pendingRequestsCount = 0;
       let unfilledTodayCount = 0;
       if (role === "admin" || role === "hr") {
-        const [reqCount] = await db.select({ count: sql2`count(*)::int` }).from(shiftRequests).where(eq(shiftRequests.status, "pending"));
+        const [reqCount] = await db.select({ count: sql3`count(*)::int` }).from(shiftRequests).where(eq4(shiftRequests.status, "pending"));
         pendingRequestsCount = reqCount?.count || 0;
         unfilledTodayCount = todayShifts.filter(
           (s) => !s.workerUserId && s.status !== "cancelled"
@@ -3149,13 +7209,13 @@ async function registerRoutes(app2) {
       const includePast = req.query.includePast === "true";
       if (!includePast) {
         const today = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
-        conditions.push(gte(shifts.date, today));
+        conditions.push(gte2(shifts.date, today));
       }
       if (role === "worker") {
-        conditions.push(eq(shifts.workerUserId, userId));
+        conditions.push(eq4(shifts.workerUserId, userId));
       }
       if (workplaceId) {
-        conditions.push(eq(shifts.workplaceId, workplaceId));
+        conditions.push(eq4(shifts.workplaceId, workplaceId));
       }
       const result = await db.select({
         id: shifts.id,
@@ -3178,7 +7238,7 @@ async function registerRoutes(app2) {
         workplaceName: workplaces.name,
         workerName: users.fullName,
         workerEmail: users.email
-      }).from(shifts).leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id)).leftJoin(users, eq(shifts.workerUserId, users.id)).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(desc(shifts.date));
+      }).from(shifts).leftJoin(workplaces, eq4(shifts.workplaceId, workplaces.id)).leftJoin(users, eq4(shifts.workerUserId, users.id)).where(conditions.length > 0 ? and3(...conditions) : void 0).orderBy(desc2(shifts.date));
       res.json(result);
     } catch (error) {
       console.error("Error fetching shifts:", error);
@@ -3204,13 +7264,13 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "recurringDays are required for recurring shifts" });
         return;
       }
-      const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, workplaceId));
+      const [workplace] = await db.select().from(workplaces).where(eq4(workplaces.id, workplaceId));
       if (!workplace) {
         res.status(404).json({ error: "Workplace not found" });
         return;
       }
       if (!blastToAll) {
-        const [worker] = await db.select().from(users).where(and(eq(users.id, workerUserId), eq(users.role, "worker")));
+        const [worker] = await db.select().from(users).where(and3(eq4(users.id, workerUserId), eq4(users.role, "worker")));
         if (!worker) {
           res.status(404).json({ error: "Worker not found" });
           return;
@@ -3260,17 +7320,19 @@ async function registerRoutes(app2) {
           workersNeeded: blastToAll && workersNeeded ? workersNeeded : null
         }).returning();
         if (blastToAll) {
-          const eligibleWorkers = await db.select({ id: users.id }).from(users).where(and(eq(users.role, "worker"), eq(users.status, "active")));
+          const eligibleWorkers = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone }).from(users).where(and3(eq4(users.role, "worker"), eq4(users.isActive, true)));
           let offersCreated = 0;
+          const offerIds = [];
           for (const w of eligibleWorkers) {
             try {
-              await db.insert(shiftOffers).values({
+              const [offer] = await db.insert(shiftOffers).values({
                 shiftId: newShift.id,
                 workerId: w.id,
                 offeredByUserId: userId,
                 status: "pending"
-              });
+              }).returning();
               offersCreated++;
+              offerIds.push({ workerId: w.id, offerId: offer.id, phone: w.phone });
               await db.insert(appNotifications).values({
                 userId: w.id,
                 type: "shift_offer",
@@ -3287,6 +7349,16 @@ async function registerRoutes(app2) {
             `A new ${cat} shift "${title}" on ${date2} is available.`,
             { type: "shift_offer", shiftId: newShift.id }
           );
+          for (const o of offerIds) {
+            const worker = eligibleWorkers.find((w) => w.id === o.workerId);
+            if (worker?.phone) {
+              sendShiftOfferSMS(
+                { id: worker.id, fullName: worker.fullName, phone: worker.phone },
+                newShift,
+                o.offerId
+              ).catch((err) => console.error(`[OPENPHONE] SMS error for worker ${worker.id}:`, err));
+            }
+          }
           broadcast({ type: "shift_blast", data: { shiftId: newShift.id, offersCreated } });
           broadcast({ type: "created", entity: "shift", id: newShift.id, data: { workplaceId, blasted: true } });
           res.status(201).json({ ...newShift, blasted: true, offersCreated, totalWorkers: eligibleWorkers.length });
@@ -3303,7 +7375,7 @@ async function registerRoutes(app2) {
   app2.patch("/api/shifts/:id", checkRoles("admin", "hr"), async (req, res) => {
     try {
       const { title, date: date2, startTime, endTime, notes, status } = req.body;
-      const [existing] = await db.select().from(shifts).where(eq(shifts.id, req.params.id));
+      const [existing] = await db.select().from(shifts).where(eq4(shifts.id, req.params.id));
       if (!existing) {
         res.status(404).json({ error: "Shift not found" });
         return;
@@ -3320,7 +7392,7 @@ async function registerRoutes(app2) {
       if (category !== void 0) updates.category = category;
       if (recurringDays !== void 0) updates.recurringDays = recurringDays;
       if (recurringEndDate !== void 0) updates.recurringEndDate = recurringEndDate;
-      const [updated] = await db.update(shifts).set(updates).where(eq(shifts.id, req.params.id)).returning();
+      const [updated] = await db.update(shifts).set(updates).where(eq4(shifts.id, req.params.id)).returning();
       broadcast({ type: "updated", entity: "shift", id: updated.id, data: { workerUserId: existing.workerUserId, workplaceId: existing.workplaceId } });
       res.json(updated);
     } catch (error) {
@@ -3330,21 +7402,21 @@ async function registerRoutes(app2) {
   });
   app2.delete("/api/shifts/:id", checkRoles("admin", "hr"), async (req, res) => {
     try {
-      const [existing] = await db.select().from(shifts).where(eq(shifts.id, req.params.id));
+      const [existing] = await db.select().from(shifts).where(eq4(shifts.id, req.params.id));
       if (!existing) {
         res.status(404).json({ error: "Shift not found" });
         return;
       }
-      await db.delete(shiftOffers).where(eq(shiftOffers.shiftId, req.params.id));
-      await db.delete(shiftCheckins).where(eq(shiftCheckins.shiftId, req.params.id));
-      const childShifts = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.parentShiftId, req.params.id));
+      await db.delete(shiftOffers).where(eq4(shiftOffers.shiftId, req.params.id));
+      await db.delete(shiftCheckins).where(eq4(shiftCheckins.shiftId, req.params.id));
+      const childShifts = await db.select({ id: shifts.id }).from(shifts).where(eq4(shifts.parentShiftId, req.params.id));
       if (childShifts.length > 0) {
         const childIds = childShifts.map((c) => c.id);
         await db.delete(shiftOffers).where(inArray(shiftOffers.shiftId, childIds));
         await db.delete(shiftCheckins).where(inArray(shiftCheckins.shiftId, childIds));
-        await db.delete(shifts).where(eq(shifts.parentShiftId, req.params.id));
+        await db.delete(shifts).where(eq4(shifts.parentShiftId, req.params.id));
       }
-      await db.delete(shifts).where(eq(shifts.id, req.params.id));
+      await db.delete(shifts).where(eq4(shifts.id, req.params.id));
       broadcast({ type: "deleted", entity: "shift", id: req.params.id, data: { workerUserId: existing.workerUserId, workplaceId: existing.workplaceId } });
       res.json({ success: true });
     } catch (error) {
@@ -3356,9 +7428,9 @@ async function registerRoutes(app2) {
     try {
       const workplaceIdFilter = req.query.workplaceId;
       const statusFilter = req.query.status || "active";
-      const conditions = [eq(shiftSeries.status, statusFilter)];
+      const conditions = [eq4(shiftSeries.status, statusFilter)];
       if (workplaceIdFilter) {
-        conditions.push(eq(shiftSeries.workplaceId, workplaceIdFilter));
+        conditions.push(eq4(shiftSeries.workplaceId, workplaceIdFilter));
       }
       const results = await db.select({
         id: shiftSeries.id,
@@ -3382,7 +7454,7 @@ async function registerRoutes(app2) {
         updatedAt: shiftSeries.updatedAt,
         workplaceName: workplaces.name,
         workerName: users.fullName
-      }).from(shiftSeries).leftJoin(workplaces, eq(shiftSeries.workplaceId, workplaces.id)).leftJoin(users, eq(shiftSeries.workerUserId, users.id)).where(and(...conditions)).orderBy(desc(shiftSeries.startDate));
+      }).from(shiftSeries).leftJoin(workplaces, eq4(shiftSeries.workplaceId, workplaces.id)).leftJoin(users, eq4(shiftSeries.workerUserId, users.id)).where(and3(...conditions)).orderBy(desc2(shiftSeries.startDate));
       res.json(results);
     } catch (error) {
       console.error("Error fetching shift series:", error);
@@ -3413,12 +7485,12 @@ async function registerRoutes(app2) {
         updatedAt: shiftSeries.updatedAt,
         workplaceName: workplaces.name,
         workerName: users.fullName
-      }).from(shiftSeries).leftJoin(workplaces, eq(shiftSeries.workplaceId, workplaces.id)).leftJoin(users, eq(shiftSeries.workerUserId, users.id)).where(eq(shiftSeries.id, req.params.id));
+      }).from(shiftSeries).leftJoin(workplaces, eq4(shiftSeries.workplaceId, workplaces.id)).leftJoin(users, eq4(shiftSeries.workerUserId, users.id)).where(eq4(shiftSeries.id, req.params.id));
       if (!series) {
         res.status(404).json({ error: "Shift series not found" });
         return;
       }
-      const exceptions = await db.select().from(recurrenceExceptions).where(eq(recurrenceExceptions.seriesId, req.params.id));
+      const exceptions = await db.select().from(recurrenceExceptions).where(eq4(recurrenceExceptions.seriesId, req.params.id));
       res.json({ ...series, exceptions });
     } catch (error) {
       console.error("Error fetching shift series:", error);
@@ -3481,7 +7553,7 @@ async function registerRoutes(app2) {
     try {
       const userId = req.headers["x-user-id"];
       const { title, workerUserId, startTime, endTime, notes, category, recurringDays, endType, endDate, endAfterCount, status } = req.body;
-      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      const [existing] = await db.select().from(shiftSeries).where(eq4(shiftSeries.id, req.params.id));
       if (!existing) {
         res.status(404).json({ error: "Shift series not found" });
         return;
@@ -3498,7 +7570,7 @@ async function registerRoutes(app2) {
       if (endDate !== void 0) updates.endDate = endDate;
       if (endAfterCount !== void 0) updates.endAfterCount = endAfterCount;
       if (status !== void 0) updates.status = status;
-      const [updated] = await db.update(shiftSeries).set(updates).where(eq(shiftSeries.id, req.params.id)).returning();
+      const [updated] = await db.update(shiftSeries).set(updates).where(eq4(shiftSeries.id, req.params.id)).returning();
       await db.insert(auditLog).values({
         userId,
         action: "update_series",
@@ -3516,13 +7588,13 @@ async function registerRoutes(app2) {
   app2.delete("/api/shift-series/:id", checkRoles("admin"), async (req, res) => {
     try {
       const userId = req.headers["x-user-id"];
-      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      const [existing] = await db.select().from(shiftSeries).where(eq4(shiftSeries.id, req.params.id));
       if (!existing) {
         res.status(404).json({ error: "Shift series not found" });
         return;
       }
-      await db.delete(recurrenceExceptions).where(eq(recurrenceExceptions.seriesId, req.params.id));
-      await db.delete(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      await db.delete(recurrenceExceptions).where(eq4(recurrenceExceptions.seriesId, req.params.id));
+      await db.delete(shiftSeries).where(eq4(shiftSeries.id, req.params.id));
       await db.insert(auditLog).values({
         userId,
         action: "delete_series",
@@ -3545,7 +7617,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "date is required" });
         return;
       }
-      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      const [existing] = await db.select().from(shiftSeries).where(eq4(shiftSeries.id, req.params.id));
       if (!existing) {
         res.status(404).json({ error: "Shift series not found" });
         return;
@@ -3579,7 +7651,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "fromDate is required" });
         return;
       }
-      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      const [existing] = await db.select().from(shiftSeries).where(eq4(shiftSeries.id, req.params.id));
       if (!existing) {
         res.status(404).json({ error: "Shift series not found" });
         return;
@@ -3592,12 +7664,12 @@ async function registerRoutes(app2) {
           endType: "date",
           endDate: newEndDateStr,
           updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq(shiftSeries.id, req.params.id));
+        }).where(eq4(shiftSeries.id, req.params.id));
       }
       await db.delete(recurrenceExceptions).where(
-        and(
-          eq(recurrenceExceptions.seriesId, req.params.id),
-          gte(recurrenceExceptions.date, fromDate)
+        and3(
+          eq4(recurrenceExceptions.seriesId, req.params.id),
+          gte2(recurrenceExceptions.date, fromDate)
         )
       );
       await db.insert(auditLog).values({
@@ -3607,7 +7679,7 @@ async function registerRoutes(app2) {
         entityId: req.params.id,
         details: JSON.stringify({ fromDate })
       });
-      const [updated] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      const [updated] = await db.select().from(shiftSeries).where(eq4(shiftSeries.id, req.params.id));
       broadcast({ type: "updated", entity: "shift_series", id: req.params.id, data: { workplaceId: existing.workplaceId } });
       res.json(updated);
     } catch (error) {
@@ -3623,7 +7695,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "date is required" });
         return;
       }
-      const [existing] = await db.select().from(shiftSeries).where(eq(shiftSeries.id, req.params.id));
+      const [existing] = await db.select().from(shiftSeries).where(eq4(shiftSeries.id, req.params.id));
       if (!existing) {
         res.status(404).json({ error: "Shift series not found" });
         return;
@@ -3677,12 +7749,12 @@ async function registerRoutes(app2) {
         endAfterCount: shiftSeries.endAfterCount,
         status: shiftSeries.status,
         workerName: users.fullName
-      }).from(shiftSeries).leftJoin(users, eq(shiftSeries.workerUserId, users.id)).where(eq(shiftSeries.id, req.params.id));
+      }).from(shiftSeries).leftJoin(users, eq4(shiftSeries.workerUserId, users.id)).where(eq4(shiftSeries.id, req.params.id));
       if (!series) {
         res.status(404).json({ error: "Shift series not found" });
         return;
       }
-      const exceptions = await db.select().from(recurrenceExceptions).where(eq(recurrenceExceptions.seriesId, req.params.id));
+      const exceptions = await db.select().from(recurrenceExceptions).where(eq4(recurrenceExceptions.seriesId, req.params.id));
       const occurrences = expandSeriesOccurrences(series, exceptions, startDateParam, endDateParam);
       const enriched = occurrences.map((occ) => ({
         ...occ,
@@ -3716,10 +7788,10 @@ async function registerRoutes(app2) {
         category: shifts.category,
         status: shifts.status,
         notes: shifts.notes
-      }).from(shifts).leftJoin(users, eq(shifts.workerUserId, users.id)).where(and(
-        eq(shifts.workplaceId, workplaceId),
-        gte(shifts.date, startDateParam),
-        lte(shifts.date, endDateParam)
+      }).from(shifts).leftJoin(users, eq4(shifts.workerUserId, users.id)).where(and3(
+        eq4(shifts.workplaceId, workplaceId),
+        gte2(shifts.date, startDateParam),
+        lte2(shifts.date, endDateParam)
       )).orderBy(shifts.date, shifts.startTime);
       const shiftItems = oneTimeShifts.map((s) => ({
         id: s.id,
@@ -3753,18 +7825,18 @@ async function registerRoutes(app2) {
         endAfterCount: shiftSeries.endAfterCount,
         status: shiftSeries.status,
         workerName: users.fullName
-      }).from(shiftSeries).leftJoin(users, eq(shiftSeries.workerUserId, users.id)).where(and(
-        eq(shiftSeries.workplaceId, workplaceId),
-        eq(shiftSeries.status, "active")
+      }).from(shiftSeries).leftJoin(users, eq4(shiftSeries.workerUserId, users.id)).where(and3(
+        eq4(shiftSeries.workplaceId, workplaceId),
+        eq4(shiftSeries.status, "active")
       ));
       const seriesItems = [];
       for (const s of activeSeries) {
-        const exceptions = await db.select().from(recurrenceExceptions).where(eq(recurrenceExceptions.seriesId, s.id));
+        const exceptions = await db.select().from(recurrenceExceptions).where(eq4(recurrenceExceptions.seriesId, s.id));
         const occurrences = expandSeriesOccurrences(s, exceptions, startDateParam, endDateParam);
         for (const occ of occurrences) {
           let workerName = s.workerName;
           if (occ.isException && occ.exceptionType === "modified" && occ.workerUserId && occ.workerUserId !== s.workerUserId) {
-            const [overrideWorker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, occ.workerUserId));
+            const [overrideWorker] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, occ.workerUserId));
             if (overrideWorker) workerName = overrideWorker.fullName;
           }
           seriesItems.push({
@@ -3826,7 +7898,7 @@ async function registerRoutes(app2) {
         createdAt: timesheets.createdAt,
         workerName: users.fullName,
         workerEmail: users.email
-      }).from(timesheets).leftJoin(users, eq(timesheets.workerUserId, users.id)).where(eq(timesheets.periodYear, year)).orderBy(desc(timesheets.submittedAt));
+      }).from(timesheets).leftJoin(users, eq4(timesheets.workerUserId, users.id)).where(eq4(timesheets.periodYear, year)).orderBy(desc2(timesheets.submittedAt));
       const results = await query;
       let filtered = results;
       if (period) {
@@ -3859,7 +7931,7 @@ async function registerRoutes(app2) {
         createdAt: timesheets.createdAt,
         workerName: users.fullName,
         workerEmail: users.email
-      }).from(timesheets).leftJoin(users, eq(timesheets.workerUserId, users.id)).where(eq(timesheets.id, id));
+      }).from(timesheets).leftJoin(users, eq4(timesheets.workerUserId, users.id)).where(eq4(timesheets.id, id));
       if (!timesheet) {
         res.status(404).json({ error: "Timesheet not found" });
         return;
@@ -3878,7 +7950,7 @@ async function registerRoutes(app2) {
         amount: timesheetEntries.amount,
         notes: timesheetEntries.notes,
         workplaceName: workplaces.name
-      }).from(timesheetEntries).leftJoin(workplaces, eq(timesheetEntries.workplaceId, workplaces.id)).where(eq(timesheetEntries.timesheetId, id)).orderBy(timesheetEntries.dateLocal);
+      }).from(timesheetEntries).leftJoin(workplaces, eq4(timesheetEntries.workplaceId, workplaces.id)).where(eq4(timesheetEntries.timesheetId, id)).orderBy(timesheetEntries.dateLocal);
       res.json({ ...timesheet, entries });
     } catch (error) {
       console.error("Error fetching timesheet:", error);
@@ -3889,7 +7961,7 @@ async function registerRoutes(app2) {
     try {
       const { id } = req.params;
       const userId = req.headers["x-user-id"];
-      const [timesheet] = await db.select().from(timesheets).where(eq(timesheets.id, id));
+      const [timesheet] = await db.select().from(timesheets).where(eq4(timesheets.id, id));
       if (!timesheet) {
         res.status(404).json({ error: "Timesheet not found" });
         return;
@@ -3903,7 +7975,7 @@ async function registerRoutes(app2) {
         approvedByUserId: userId,
         approvedAt: /* @__PURE__ */ new Date(),
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(timesheets.id, id)).returning();
+      }).where(eq4(timesheets.id, id)).returning();
       res.json(updated);
     } catch (error) {
       console.error("Error approving timesheet:", error);
@@ -3919,7 +7991,7 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Dispute reason is required" });
         return;
       }
-      const [timesheet] = await db.select().from(timesheets).where(eq(timesheets.id, id));
+      const [timesheet] = await db.select().from(timesheets).where(eq4(timesheets.id, id));
       if (!timesheet) {
         res.status(404).json({ error: "Timesheet not found" });
         return;
@@ -3934,7 +8006,7 @@ async function registerRoutes(app2) {
         disputedAt: /* @__PURE__ */ new Date(),
         disputeReason: reason.trim(),
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(timesheets.id, id)).returning();
+      }).where(eq4(timesheets.id, id)).returning();
       res.json(updated);
     } catch (error) {
       console.error("Error disputing timesheet:", error);
@@ -3949,9 +8021,9 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Year and periodNumber are required" });
         return;
       }
-      const [existingBatch] = await db.select().from(payrollBatches).where(and(
-        eq(payrollBatches.periodYear, year),
-        eq(payrollBatches.periodNumber, periodNumber)
+      const [existingBatch] = await db.select().from(payrollBatches).where(and3(
+        eq4(payrollBatches.periodYear, year),
+        eq4(payrollBatches.periodNumber, periodNumber)
       ));
       if (existingBatch) {
         const items2 = await db.select({
@@ -3963,14 +8035,14 @@ async function registerRoutes(app2) {
           amount: payrollBatchItems.amount,
           workerName: users.fullName,
           workerEmail: users.email
-        }).from(payrollBatchItems).leftJoin(users, eq(payrollBatchItems.workerUserId, users.id)).where(eq(payrollBatchItems.payrollBatchId, existingBatch.id));
+        }).from(payrollBatchItems).leftJoin(users, eq4(payrollBatchItems.workerUserId, users.id)).where(eq4(payrollBatchItems.payrollBatchId, existingBatch.id));
         res.json({ ...existingBatch, items: items2 });
         return;
       }
-      const approvedTimesheets = await db.select().from(timesheets).where(and(
-        eq(timesheets.periodYear, year),
-        eq(timesheets.periodNumber, periodNumber),
-        eq(timesheets.status, "approved")
+      const approvedTimesheets = await db.select().from(timesheets).where(and3(
+        eq4(timesheets.periodYear, year),
+        eq4(timesheets.periodNumber, periodNumber),
+        eq4(timesheets.status, "approved")
       ));
       let totalWorkers = approvedTimesheets.length;
       let totalHours = 0;
@@ -4010,7 +8082,7 @@ async function registerRoutes(app2) {
     try {
       const year = parseInt(req.query.year) || 2026;
       const period = req.query.period ? parseInt(req.query.period) : void 0;
-      let results = await db.select().from(payrollBatches).where(eq(payrollBatches.periodYear, year)).orderBy(desc(payrollBatches.createdAt));
+      let results = await db.select().from(payrollBatches).where(eq4(payrollBatches.periodYear, year)).orderBy(desc2(payrollBatches.createdAt));
       if (period) {
         results = results.filter((b) => b.periodNumber === period);
       }
@@ -4023,7 +8095,7 @@ async function registerRoutes(app2) {
   app2.get("/api/payroll/batches/:id", checkRoles("admin", "hr"), async (req, res) => {
     try {
       const { id } = req.params;
-      const [batch] = await db.select().from(payrollBatches).where(eq(payrollBatches.id, id));
+      const [batch] = await db.select().from(payrollBatches).where(eq4(payrollBatches.id, id));
       if (!batch) {
         res.status(404).json({ error: "Payroll batch not found" });
         return;
@@ -4037,7 +8109,7 @@ async function registerRoutes(app2) {
         amount: payrollBatchItems.amount,
         workerName: users.fullName,
         workerEmail: users.email
-      }).from(payrollBatchItems).leftJoin(users, eq(payrollBatchItems.workerUserId, users.id)).where(eq(payrollBatchItems.payrollBatchId, id));
+      }).from(payrollBatchItems).leftJoin(users, eq4(payrollBatchItems.workerUserId, users.id)).where(eq4(payrollBatchItems.payrollBatchId, id));
       res.json({ ...batch, items });
     } catch (error) {
       console.error("Error fetching payroll batch:", error);
@@ -4048,7 +8120,7 @@ async function registerRoutes(app2) {
     try {
       const { id } = req.params;
       const userId = req.headers["x-user-id"];
-      const [batch] = await db.select().from(payrollBatches).where(eq(payrollBatches.id, id));
+      const [batch] = await db.select().from(payrollBatches).where(eq4(payrollBatches.id, id));
       if (!batch) {
         res.status(404).json({ error: "Payroll batch not found" });
         return;
@@ -4057,19 +8129,19 @@ async function registerRoutes(app2) {
         res.status(400).json({ error: "Only open batches can be finalized" });
         return;
       }
-      const items = await db.select().from(payrollBatchItems).where(and(
-        eq(payrollBatchItems.payrollBatchId, id),
-        eq(payrollBatchItems.status, "included")
+      const items = await db.select().from(payrollBatchItems).where(and3(
+        eq4(payrollBatchItems.payrollBatchId, id),
+        eq4(payrollBatchItems.status, "included")
       ));
       for (const item of items) {
-        await db.update(timesheets).set({ status: "processed", updatedAt: /* @__PURE__ */ new Date() }).where(eq(timesheets.id, item.timesheetId));
+        await db.update(timesheets).set({ status: "processed", updatedAt: /* @__PURE__ */ new Date() }).where(eq4(timesheets.id, item.timesheetId));
       }
       const [updated] = await db.update(payrollBatches).set({
         status: "finalized",
         finalizedByUserId: userId,
         finalizedAt: /* @__PURE__ */ new Date(),
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq(payrollBatches.id, id)).returning();
+      }).where(eq4(payrollBatches.id, id)).returning();
       res.json(updated);
     } catch (error) {
       console.error("Error finalizing payroll batch:", error);
@@ -4079,7 +8151,7 @@ async function registerRoutes(app2) {
   app2.get("/api/payroll/batches/:id/export.csv", checkRoles("admin"), async (req, res) => {
     try {
       const { id } = req.params;
-      const [batch] = await db.select().from(payrollBatches).where(eq(payrollBatches.id, id));
+      const [batch] = await db.select().from(payrollBatches).where(eq4(payrollBatches.id, id));
       if (!batch) {
         res.status(404).json({ error: "Payroll batch not found" });
         return;
@@ -4092,9 +8164,9 @@ async function registerRoutes(app2) {
         hours: payrollBatchItems.hours,
         amount: payrollBatchItems.amount,
         status: payrollBatchItems.status
-      }).from(payrollBatchItems).leftJoin(users, eq(payrollBatchItems.workerUserId, users.id)).where(and(
-        eq(payrollBatchItems.payrollBatchId, id),
-        eq(payrollBatchItems.status, "included")
+      }).from(payrollBatchItems).leftJoin(users, eq4(payrollBatchItems.workerUserId, users.id)).where(and3(
+        eq4(payrollBatchItems.payrollBatchId, id),
+        eq4(payrollBatchItems.status, "included")
       ));
       const csvLines = [
         "Worker Name,Worker Email,Hours,Amount,Period,Date Range",
@@ -4110,87 +8182,78 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to export payroll batch" });
     }
   });
-  app2.get("/api/places/autocomplete", checkRoles("admin", "hr", "worker"), async (req, res) => {
+  app2.post("/api/payroll/batches/:id/email", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { to, subject } = req.body;
+      if (!to || typeof to !== "string" || !to.includes("@")) {
+        res.status(400).json({ error: "Valid email address is required" });
+        return;
+      }
+      const [batch] = await db.select().from(payrollBatches).where(eq4(payrollBatches.id, id));
+      if (!batch) {
+        res.status(404).json({ error: "Payroll batch not found" });
+        return;
+      }
+      const period = getPayPeriod(batch.periodYear, batch.periodNumber);
+      const dateRange = period ? `${period.startDate} to ${period.endDate}` : "Unknown";
+      const items = await db.select({
+        workerName: users.fullName,
+        workerEmail: users.email,
+        hours: payrollBatchItems.hours,
+        amount: payrollBatchItems.amount,
+        status: payrollBatchItems.status
+      }).from(payrollBatchItems).leftJoin(users, eq4(payrollBatchItems.workerUserId, users.id)).where(and3(
+        eq4(payrollBatchItems.payrollBatchId, id),
+        eq4(payrollBatchItems.status, "included")
+      ));
+      const csvLines = [
+        "Worker Name,Worker Email,Hours,Amount,Period,Date Range",
+        ...items.map(
+          (item) => `"${item.workerName || ""}","${item.workerEmail || ""}",${item.hours},${item.amount},Period ${batch.periodNumber},"${dateRange}"`
+        )
+      ];
+      const csvContent = csvLines.join("\n");
+      const filename = `payroll-period-${batch.periodNumber}-${batch.periodYear}.csv`;
+      const emailSubject = subject || `WFConnect Payroll - Period ${batch.periodNumber} (${dateRange})`;
+      const bodyText = `Please find attached the payroll report for Period ${batch.periodNumber} (${dateRange}).
+
+This report includes ${items.length} worker(s).
+
+- WFConnect`;
+      const result = await sendCSVEmail(to, emailSubject, bodyText, csvContent, filename);
+      if (result.success) {
+        res.json({ success: true, message: `Payroll CSV sent to ${to}` });
+      } else {
+        res.status(500).json({ error: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Error emailing payroll batch:", error);
+      res.status(500).json({ error: "Failed to email payroll batch" });
+    }
+  });
+  app2.get("/api/places/autocomplete", async (req, res) => {
     try {
       const { input } = req.query;
       if (!input || typeof input !== "string" || input.length < 2) {
         res.json({ predictions: [] });
         return;
       }
-      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-      if (!apiKey) {
-        res.status(500).json({ error: "Google Places API key not configured" });
-        return;
-      }
-      const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
-      url.searchParams.set("input", input);
-      url.searchParams.set("key", apiKey);
-      url.searchParams.set("types", "address");
-      url.searchParams.set("components", "country:ca|country:us");
-      const response = await fetch(url.toString());
-      const data = await response.json();
-      if (data.status === "OK" || data.status === "ZERO_RESULTS") {
-        res.json({ predictions: data.predictions || [] });
-      } else {
-        console.error("Google Places API error:", data.status, data.error_message);
-        res.status(500).json({ error: "Failed to fetch address suggestions" });
-      }
+      res.json({ predictions: buildLocalAddressPredictions(input) });
     } catch (error) {
       console.error("Error in address autocomplete:", error);
       res.status(500).json({ error: "Failed to fetch address suggestions" });
     }
   });
-  app2.get("/api/places/details/:placeId", checkRoles("admin", "hr", "worker"), async (req, res) => {
+  app2.get("/api/places/details/:placeId", async (req, res) => {
     try {
       const { placeId } = req.params;
       if (!placeId) {
         res.status(400).json({ error: "Place ID is required" });
         return;
       }
-      const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-      if (!apiKey) {
-        res.status(500).json({ error: "Google Places API key not configured" });
-        return;
-      }
-      const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
-      url.searchParams.set("place_id", placeId);
-      url.searchParams.set("key", apiKey);
-      url.searchParams.set("fields", "formatted_address,address_components,geometry");
-      const response = await fetch(url.toString());
-      const data = await response.json();
-      if (data.status === "OK" && data.result) {
-        const result = data.result;
-        const components = result.address_components || [];
-        const getComponent = (types) => {
-          const comp = components.find(
-            (c) => types.some((t) => c.types.includes(t))
-          );
-          return comp?.long_name || "";
-        };
-        const getShortComponent = (types) => {
-          const comp = components.find(
-            (c) => types.some((t) => c.types.includes(t))
-          );
-          return comp?.short_name || "";
-        };
-        const streetNumber = getComponent(["street_number"]);
-        const streetName = getComponent(["route"]);
-        const addressLine1 = streetNumber && streetName ? `${streetNumber} ${streetName}` : streetName || getComponent(["premise", "subpremise"]);
-        const addressData = {
-          formattedAddress: result.formatted_address,
-          addressLine1,
-          city: getComponent(["locality", "sublocality", "administrative_area_level_3"]),
-          province: getShortComponent(["administrative_area_level_1"]),
-          postalCode: getComponent(["postal_code"]),
-          country: getComponent(["country"]),
-          latitude: result.geometry?.location?.lat || null,
-          longitude: result.geometry?.location?.lng || null
-        };
-        res.json(addressData);
-      } else {
-        console.error("Google Places Details API error:", data.status, data.error_message);
-        res.status(500).json({ error: "Failed to fetch address details" });
-      }
+      const decodedPlaceText = Buffer.from(placeId, "base64url").toString("utf-8");
+      res.json(parseLocalAddress(decodedPlaceText));
     } catch (error) {
       console.error("Error in address details:", error);
       res.status(500).json({ error: "Failed to fetch address details" });
@@ -4231,7 +8294,7 @@ async function registerRoutes(app2) {
           updatedAt: shiftRequests.updatedAt,
           workplaceName: workplaces.name,
           clientName: users.fullName
-        }).from(shiftRequests).leftJoin(workplaces, eq(shiftRequests.workplaceId, workplaces.id)).leftJoin(users, eq(shiftRequests.clientId, users.id)).orderBy(desc(shiftRequests.createdAt));
+        }).from(shiftRequests).leftJoin(workplaces, eq4(shiftRequests.workplaceId, workplaces.id)).leftJoin(users, eq4(shiftRequests.clientId, users.id)).orderBy(desc2(shiftRequests.createdAt));
       } else if (role === "client") {
         results = await db.select({
           id: shiftRequests.id,
@@ -4248,7 +8311,7 @@ async function registerRoutes(app2) {
           updatedAt: shiftRequests.updatedAt,
           workplaceName: workplaces.name,
           clientName: users.fullName
-        }).from(shiftRequests).leftJoin(workplaces, eq(shiftRequests.workplaceId, workplaces.id)).leftJoin(users, eq(shiftRequests.clientId, users.id)).where(eq(shiftRequests.clientId, userId)).orderBy(desc(shiftRequests.createdAt));
+        }).from(shiftRequests).leftJoin(workplaces, eq4(shiftRequests.workplaceId, workplaces.id)).leftJoin(users, eq4(shiftRequests.clientId, users.id)).where(eq4(shiftRequests.clientId, userId)).orderBy(desc2(shiftRequests.createdAt));
       } else {
         res.status(403).json({ error: "Access denied" });
         return;
@@ -4283,12 +8346,12 @@ async function registerRoutes(app2) {
           status: "submitted"
         }).returning();
         broadcast({ type: "shift_request_created", data: newRequest });
-        const [wp] = newRequest.workplaceId ? await db.select().from(workplaces).where(eq(workplaces.id, newRequest.workplaceId)) : [null];
+        const [wp] = newRequest.workplaceId ? await db.select().from(workplaces).where(eq4(workplaces.id, newRequest.workplaceId)) : [null];
         const wpName = wp?.name || "a workplace";
-        const adminsAndHR = await db.select({ id: users.id }).from(users).where(and(
-          or(eq(users.role, "admin"), eq(users.role, "hr")),
-          eq(users.isActive, true),
-          ne(users.id, userId)
+        const adminsAndHR = await db.select({ id: users.id }).from(users).where(and3(
+          or(eq4(users.role, "admin"), eq4(users.role, "hr")),
+          eq4(users.isActive, true),
+          ne2(users.id, userId)
         ));
         const notifyIds = adminsAndHR.map((u) => u.id);
         if (notifyIds.length > 0) {
@@ -4337,12 +8400,12 @@ async function registerRoutes(app2) {
       try {
         const requestId = req.params.id;
         const updates = req.body;
-        const [existing] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+        const [existing] = await db.select().from(shiftRequests).where(eq4(shiftRequests.id, requestId));
         if (!existing) {
           res.status(404).json({ error: "Shift request not found" });
           return;
         }
-        const [updated] = await db.update(shiftRequests).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq(shiftRequests.id, requestId)).returning();
+        const [updated] = await db.update(shiftRequests).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftRequests.id, requestId)).returning();
         if (updates.status === "filled" && existing.status !== "filled") {
           await db.insert(appNotifications).values({
             userId: existing.clientId,
@@ -4375,7 +8438,7 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const [existing] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+      const [existing] = await db.select().from(shiftRequests).where(eq4(shiftRequests.id, requestId));
       if (!existing) {
         res.status(404).json({ error: "Shift request not found" });
         return;
@@ -4388,14 +8451,14 @@ async function registerRoutes(app2) {
         res.status(403).json({ error: "Access denied" });
         return;
       }
-      const associatedShifts = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.requestId, requestId));
+      const associatedShifts = await db.select({ id: shifts.id }).from(shifts).where(eq4(shifts.requestId, requestId));
       if (associatedShifts.length > 0) {
         const shiftIds = associatedShifts.map((s) => s.id);
         await db.delete(shiftOffers).where(inArray(shiftOffers.shiftId, shiftIds));
         await db.delete(shiftCheckins).where(inArray(shiftCheckins.shiftId, shiftIds));
-        await db.delete(shifts).where(eq(shifts.requestId, requestId));
+        await db.delete(shifts).where(eq4(shifts.requestId, requestId));
       }
-      await db.delete(shiftRequests).where(eq(shiftRequests.id, requestId));
+      await db.delete(shiftRequests).where(eq4(shiftRequests.id, requestId));
       broadcast({ type: "shift_request_deleted", data: { id: requestId } });
       res.json({ success: true });
     } catch (error) {
@@ -4411,12 +8474,12 @@ async function registerRoutes(app2) {
         const requestId = req.params.id;
         const userId = req.headers["x-user-id"];
         const { workerId } = req.body;
-        const [request] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+        const [request] = await db.select().from(shiftRequests).where(eq4(shiftRequests.id, requestId));
         if (!request) {
           res.status(404).json({ error: "Shift request not found" });
           return;
         }
-        const [workplace] = await db.select().from(workplaces).where(eq(workplaces.id, request.workplaceId));
+        const [workplace] = await db.select().from(workplaces).where(eq4(workplaces.id, request.workplaceId));
         if (workerId) {
           const [newShift] = await db.insert(shifts).values({
             requestId,
@@ -4431,7 +8494,7 @@ async function registerRoutes(app2) {
             status: "scheduled",
             createdByUserId: userId
           }).returning();
-          await db.update(shiftRequests).set({ status: "filled", updatedAt: /* @__PURE__ */ new Date() }).where(eq(shiftRequests.id, requestId));
+          await db.update(shiftRequests).set({ status: "filled", updatedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftRequests.id, requestId));
           await db.insert(appNotifications).values({
             userId: workerId,
             type: "shift_assigned",
@@ -4445,6 +8508,14 @@ async function registerRoutes(app2) {
             `You have been assigned a ${request.roleType} shift at ${workplace?.name || "a workplace"} on ${request.date}.`,
             { type: "shift_assigned", shiftId: newShift.id }
           );
+          db.select({ id: users.id, fullName: users.fullName, phone: users.phone }).from(users).where(eq4(users.id, workerId)).then(([worker]) => {
+            if (worker?.phone) {
+              sendShiftAssignedSMS(
+                { id: worker.id, fullName: worker.fullName, phone: worker.phone },
+                newShift
+              ).catch((err) => console.error(`[OPENPHONE] Assigned SMS error:`, err));
+            }
+          }).catch((err) => console.error(`[OPENPHONE] Worker lookup error:`, err));
           await db.insert(appNotifications).values({
             userId: request.clientId,
             type: "request_filled",
@@ -4477,10 +8548,11 @@ async function registerRoutes(app2) {
           const allWorkers = await db.select({
             id: users.id,
             fullName: users.fullName,
-            workerRoles: users.workerRoles
-          }).from(users).where(and(
-            eq(users.role, "worker"),
-            eq(users.isActive, true)
+            workerRoles: users.workerRoles,
+            phone: users.phone
+          }).from(users).where(and3(
+            eq4(users.role, "worker"),
+            eq4(users.isActive, true)
           ));
           let eligibleWorkers = allWorkers.filter((w) => {
             if (w.workerRoles) {
@@ -4499,10 +8571,10 @@ async function registerRoutes(app2) {
             workerUserId: shifts.workerUserId,
             startTime: shifts.startTime,
             endTime: shifts.endTime
-          }).from(shifts).where(and(
-            eq(shifts.date, request.date),
-            not(isNull(shifts.workerUserId)),
-            ne(shifts.status, "cancelled")
+          }).from(shifts).where(and3(
+            eq4(shifts.date, request.date),
+            not(isNull2(shifts.workerUserId)),
+            ne2(shifts.status, "cancelled")
           ));
           const conflictWorkerIds = /* @__PURE__ */ new Set();
           for (const es of existingShifts) {
@@ -4516,15 +8588,16 @@ async function registerRoutes(app2) {
           }
           eligibleWorkers = eligibleWorkers.filter((w) => !conflictWorkerIds.has(w.id));
           const offeredWorkerIds = [];
+          const broadcastOfferIds = [];
           let offerErrors = 0;
           console.log(`[BROADCAST] Shift ${newShift.id}: ${eligibleWorkers.length} eligible workers found`);
           for (const worker of eligibleWorkers) {
             try {
-              await db.insert(shiftOffers).values({
+              const [offer] = await db.insert(shiftOffers).values({
                 shiftId: newShift.id,
                 workerId: worker.id,
                 status: "pending"
-              });
+              }).returning();
               await db.insert(appNotifications).values({
                 userId: worker.id,
                 type: "shift_offer",
@@ -4533,6 +8606,7 @@ async function registerRoutes(app2) {
                 deepLink: `/shift-offers`
               });
               offeredWorkerIds.push(worker.id);
+              broadcastOfferIds.push({ workerId: worker.id, offerId: offer.id });
             } catch (offerErr) {
               offerErrors++;
               console.error(`[BROADCAST] Failed to create offer for worker ${worker.id} (${worker.fullName}):`, offerErr?.message || offerErr);
@@ -4547,6 +8621,16 @@ async function registerRoutes(app2) {
               { type: "shift_offer", shiftId: newShift.id }
             );
           }
+          for (const o of broadcastOfferIds) {
+            const worker = eligibleWorkers.find((w) => w.id === o.workerId);
+            if (worker?.phone) {
+              sendShiftOfferSMS(
+                { id: worker.id, fullName: worker.fullName, phone: worker.phone },
+                newShift,
+                o.offerId
+              ).catch((err) => console.error(`[OPENPHONE] Broadcast SMS error for worker ${worker.id}:`, err));
+            }
+          }
           await db.insert(auditLog).values({
             userId,
             action: "SHIFT_BROADCAST",
@@ -4560,7 +8644,7 @@ async function registerRoutes(app2) {
               workerIds: offeredWorkerIds
             })
           });
-          await db.update(shiftRequests).set({ status: "offered", updatedAt: /* @__PURE__ */ new Date() }).where(eq(shiftRequests.id, requestId));
+          await db.update(shiftRequests).set({ status: "offered", updatedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftRequests.id, requestId));
           broadcast({ type: "shift_request_updated", data: { id: requestId, status: "offered" } });
           res.json({
             shift: newShift,
@@ -4581,7 +8665,7 @@ async function registerRoutes(app2) {
     async (req, res) => {
       try {
         const requestId = req.params.id;
-        const requestShifts = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.requestId, requestId));
+        const requestShifts = await db.select({ id: shifts.id }).from(shifts).where(eq4(shifts.requestId, requestId));
         if (requestShifts.length === 0) {
           res.json({ offers: [], counts: { pending: 0, accepted: 0, declined: 0, cancelled: 0 } });
           return;
@@ -4596,7 +8680,7 @@ async function registerRoutes(app2) {
           respondedAt: shiftOffers.respondedAt,
           workerName: users.fullName,
           workerEmail: users.email
-        }).from(shiftOffers).leftJoin(users, eq(shiftOffers.workerId, users.id)).where(inArray(shiftOffers.shiftId, shiftIds)).orderBy(desc(shiftOffers.offeredAt));
+        }).from(shiftOffers).leftJoin(users, eq4(shiftOffers.workerId, users.id)).where(inArray(shiftOffers.shiftId, shiftIds)).orderBy(desc2(shiftOffers.offeredAt));
         const counts = {
           pending: offers.filter((o) => o.status === "pending").length,
           accepted: offers.filter((o) => o.status === "accepted").length,
@@ -4621,9 +8705,9 @@ async function registerRoutes(app2) {
       const statusFilter = req.query.status;
       let results;
       if (role === "worker") {
-        const conditions = [eq(shiftOffers.workerId, userId)];
+        const conditions = [eq4(shiftOffers.workerId, userId)];
         if (statusFilter && statusFilter !== "all") {
-          conditions.push(eq(shiftOffers.status, statusFilter));
+          conditions.push(eq4(shiftOffers.status, statusFilter));
         }
         results = await db.select({
           id: shiftOffers.id,
@@ -4641,11 +8725,11 @@ async function registerRoutes(app2) {
           shiftRoleType: shifts.roleType,
           workplaceName: workplaces.name,
           workplaceCity: workplaces.city
-        }).from(shiftOffers).innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id)).leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id)).where(and(...conditions)).orderBy(desc(shiftOffers.offeredAt));
+        }).from(shiftOffers).innerJoin(shifts, eq4(shiftOffers.shiftId, shifts.id)).leftJoin(workplaces, eq4(shifts.workplaceId, workplaces.id)).where(and3(...conditions)).orderBy(desc2(shiftOffers.offeredAt));
       } else if (role === "admin" || role === "hr") {
         const conditions = [];
         if (statusFilter && statusFilter !== "all") {
-          conditions.push(eq(shiftOffers.status, statusFilter));
+          conditions.push(eq4(shiftOffers.status, statusFilter));
         }
         results = await db.select({
           id: shiftOffers.id,
@@ -4664,7 +8748,7 @@ async function registerRoutes(app2) {
           workplaceName: workplaces.name,
           workplaceCity: workplaces.city,
           workerName: users.fullName
-        }).from(shiftOffers).innerJoin(shifts, eq(shiftOffers.shiftId, shifts.id)).leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id)).leftJoin(users, eq(shiftOffers.workerId, users.id)).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(desc(shiftOffers.offeredAt));
+        }).from(shiftOffers).innerJoin(shifts, eq4(shiftOffers.shiftId, shifts.id)).leftJoin(workplaces, eq4(shifts.workplaceId, workplaces.id)).leftJoin(users, eq4(shiftOffers.workerId, users.id)).where(conditions.length > 0 ? and3(...conditions) : void 0).orderBy(desc2(shiftOffers.offeredAt));
       } else {
         res.status(403).json({ error: "Access denied" });
         return;
@@ -4687,7 +8771,7 @@ async function registerRoutes(app2) {
           res.status(400).json({ error: "response must be 'accepted' or 'declined'" });
           return;
         }
-        const [offer] = await db.select().from(shiftOffers).where(eq(shiftOffers.id, offerId));
+        const [offer] = await db.select().from(shiftOffers).where(eq4(shiftOffers.id, offerId));
         if (!offer) {
           res.status(404).json({ error: "Shift offer not found" });
           return;
@@ -4708,14 +8792,14 @@ async function registerRoutes(app2) {
           details: JSON.stringify({ shiftId: offer.shiftId, response })
         });
         if (response === "accepted") {
-          const [shift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
+          const [shift] = await db.select().from(shifts).where(eq4(shifts.id, offer.shiftId));
           if (!shift) {
             res.status(404).json({ error: "Associated shift not found" });
             return;
           }
-          const existingAccepted = await db.select({ count: sql2`count(*)::int` }).from(shiftOffers).where(and(
-            eq(shiftOffers.shiftId, offer.shiftId),
-            eq(shiftOffers.status, "accepted")
+          const existingAccepted = await db.select({ count: sql3`count(*)::int` }).from(shiftOffers).where(and3(
+            eq4(shiftOffers.shiftId, offer.shiftId),
+            eq4(shiftOffers.status, "accepted")
           ));
           const currentAccepted = existingAccepted[0]?.count || 0;
           const neededForShift = shift.workersNeeded || 1;
@@ -4723,26 +8807,26 @@ async function registerRoutes(app2) {
             res.status(409).json({ error: "This shift has already been filled with enough workers" });
             return;
           }
-          await db.update(shiftOffers).set({ status: "accepted", respondedAt: /* @__PURE__ */ new Date() }).where(eq(shiftOffers.id, offerId));
+          await db.update(shiftOffers).set({ status: "accepted", respondedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftOffers.id, offerId));
           if (!shift.workerUserId) {
-            await db.update(shifts).set({ workerUserId: userId, updatedAt: /* @__PURE__ */ new Date() }).where(eq(shifts.id, offer.shiftId));
+            await db.update(shifts).set({ workerUserId: userId, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(shifts.id, offer.shiftId));
           }
-          const acceptedCount = await db.select({ count: sql2`count(*)::int` }).from(shiftOffers).where(and(
-            eq(shiftOffers.shiftId, offer.shiftId),
-            eq(shiftOffers.status, "accepted")
+          const acceptedCount = await db.select({ count: sql3`count(*)::int` }).from(shiftOffers).where(and3(
+            eq4(shiftOffers.shiftId, offer.shiftId),
+            eq4(shiftOffers.status, "accepted")
           ));
           const totalAccepted = acceptedCount[0]?.count || 0;
           const neededCount = shift.workersNeeded || 1;
           const shiftFilled = totalAccepted >= neededCount;
           const cancelledWorkerIds = [];
           if (shiftFilled) {
-            const otherOffers = await db.select().from(shiftOffers).where(and(
-              eq(shiftOffers.shiftId, offer.shiftId),
-              ne(shiftOffers.id, offerId),
-              eq(shiftOffers.status, "pending")
+            const otherOffers = await db.select().from(shiftOffers).where(and3(
+              eq4(shiftOffers.shiftId, offer.shiftId),
+              ne2(shiftOffers.id, offerId),
+              eq4(shiftOffers.status, "pending")
             ));
             for (const otherOffer of otherOffers) {
-              await db.update(shiftOffers).set({ status: "cancelled", respondedAt: /* @__PURE__ */ new Date(), cancelledAt: /* @__PURE__ */ new Date(), cancelledBy: userId, cancelReason: "Shift filled - enough workers accepted" }).where(eq(shiftOffers.id, otherOffer.id));
+              await db.update(shiftOffers).set({ status: "cancelled", respondedAt: /* @__PURE__ */ new Date(), cancelledAt: /* @__PURE__ */ new Date(), cancelledBy: userId, cancelReason: "Shift filled - enough workers accepted" }).where(eq4(shiftOffers.id, otherOffer.id));
               cancelledWorkerIds.push(otherOffer.workerId);
               await db.insert(auditLog).values({
                 userId,
@@ -4754,10 +8838,24 @@ async function registerRoutes(app2) {
             }
           }
           if (shift.requestId && shiftFilled) {
-            await db.update(shiftRequests).set({ status: "filled", updatedAt: /* @__PURE__ */ new Date() }).where(eq(shiftRequests.id, shift.requestId));
+            await db.update(shiftRequests).set({ status: "filled", updatedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftRequests.id, shift.requestId));
+            const [filledReq] = await db.select({ crmRequestId: shiftRequests.crmRequestId }).from(shiftRequests).where(eq4(shiftRequests.id, shift.requestId));
+            if (filledReq?.crmRequestId) {
+              try {
+                const { enqueueCrmPush: enqueueCrmPush2 } = await Promise.resolve().then(() => (init_crm_sync(), crm_sync_exports));
+                await enqueueCrmPush2(
+                  "hotel_request",
+                  shift.requestId,
+                  "update",
+                  { crmExternalId: filledReq.crmRequestId, status: "CONFIRMED" }
+                );
+              } catch (crmErr) {
+                console.error("[CRM] Failed to enqueue hotel request update:", crmErr?.message);
+              }
+            }
           }
-          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq(users.role, "admin"), eq(users.role, "hr")));
-          const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq4(users.role, "admin"), eq4(users.role, "hr")));
+          const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, userId));
           for (const ha of hrAdmins) {
             await db.insert(appNotifications).values({
               userId: ha.id,
@@ -4791,7 +8889,7 @@ async function registerRoutes(app2) {
             );
           }
           if (shift.requestId) {
-            const [req2] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, shift.requestId));
+            const [req2] = await db.select().from(shiftRequests).where(eq4(shiftRequests.id, shift.requestId));
             if (req2) {
               await db.insert(appNotifications).values({
                 userId: req2.clientId,
@@ -4817,10 +8915,10 @@ async function registerRoutes(app2) {
           broadcast({ type: "shift_offer_accepted", data: { offerId, shiftId: offer.shiftId } });
           res.json({ success: true, status: "accepted" });
         } else {
-          await db.update(shiftOffers).set({ status: "declined", respondedAt: /* @__PURE__ */ new Date() }).where(eq(shiftOffers.id, offerId));
-          const [shift] = await db.select().from(shifts).where(eq(shifts.id, offer.shiftId));
-          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq(users.role, "admin"), eq(users.role, "hr")));
-          const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+          await db.update(shiftOffers).set({ status: "declined", respondedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftOffers.id, offerId));
+          const [shift] = await db.select().from(shifts).where(eq4(shifts.id, offer.shiftId));
+          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq4(users.role, "admin"), eq4(users.role, "hr")));
+          const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, userId));
           for (const ha of hrAdmins) {
             await db.insert(appNotifications).values({
               userId: ha.id,
@@ -4858,19 +8956,19 @@ async function registerRoutes(app2) {
     async (req, res) => {
       try {
         const shiftId = req.params.shiftId;
-        const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+        const [shift] = await db.select().from(shifts).where(eq4(shifts.id, shiftId));
         if (!shift) {
           res.status(404).json({ error: "Shift not found" });
           return;
         }
-        const offers = await db.select().from(shiftOffers).where(eq(shiftOffers.shiftId, shiftId));
+        const offers = await db.select().from(shiftOffers).where(eq4(shiftOffers.shiftId, shiftId));
         const workerIds = offers.map((o) => o.workerId);
         let tokensCount = 0;
         if (workerIds.length > 0) {
-          const tokens = await db.select({ token: pushTokens.token }).from(pushTokens).where(and(inArray(pushTokens.userId, workerIds), eq(pushTokens.isActive, true)));
+          const tokens = await db.select({ token: pushTokens.token }).from(pushTokens).where(and3(inArray(pushTokens.userId, workerIds), eq4(pushTokens.isActive, true)));
           tokensCount = tokens.length;
         }
-        const auditEntries = await db.select().from(auditLog).where(and(eq(auditLog.entityType, "shift"), eq(auditLog.entityId, shiftId))).orderBy(desc(auditLog.createdAt));
+        const auditEntries = await db.select().from(auditLog).where(and3(eq4(auditLog.entityType, "shift"), eq4(auditLog.entityId, shiftId))).orderBy(desc2(auditLog.createdAt));
         res.json({
           shiftId,
           shiftStatus: shift.status,
@@ -4900,22 +8998,22 @@ async function registerRoutes(app2) {
       const shiftId = req.params.id;
       const userId = req.headers["x-user-id"];
       const { workersNeeded } = req.body || {};
-      const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      const [shift] = await db.select().from(shifts).where(eq4(shifts.id, shiftId));
       if (!shift) {
         res.status(404).json({ error: "Shift not found" });
         return;
       }
       if (workersNeeded && typeof workersNeeded === "number" && workersNeeded > 0) {
-        await db.update(shifts).set({ workersNeeded, updatedAt: /* @__PURE__ */ new Date() }).where(eq(shifts.id, shiftId));
+        await db.update(shifts).set({ workersNeeded, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(shifts.id, shiftId));
       }
-      const [workplace] = shift.workplaceId ? await db.select().from(workplaces).where(eq(workplaces.id, shift.workplaceId)) : [null];
+      const [workplace] = shift.workplaceId ? await db.select().from(workplaces).where(eq4(workplaces.id, shift.workplaceId)) : [null];
       const allWorkers = await db.select({
         id: users.id,
         fullName: users.fullName,
         workerRoles: users.workerRoles
-      }).from(users).where(and(
-        eq(users.role, "worker"),
-        eq(users.isActive, true)
+      }).from(users).where(and3(
+        eq4(users.role, "worker"),
+        eq4(users.isActive, true)
       ));
       let eligibleWorkers = allWorkers.filter((w) => {
         if (shift.roleType && w.workerRoles) {
@@ -4933,8 +9031,8 @@ async function registerRoutes(app2) {
       if (shift.workerUserId) {
         eligibleWorkers = eligibleWorkers.filter((w) => w.id !== shift.workerUserId);
       }
-      const existingOffers = await db.select({ workerId: shiftOffers.workerId }).from(shiftOffers).where(and(
-        eq(shiftOffers.shiftId, shiftId),
+      const existingOffers = await db.select({ workerId: shiftOffers.workerId }).from(shiftOffers).where(and3(
+        eq4(shiftOffers.shiftId, shiftId),
         inArray(shiftOffers.status, ["pending", "accepted"])
       ));
       const alreadyOffered = new Set(existingOffers.map((o) => o.workerId));
@@ -4944,11 +9042,11 @@ async function registerRoutes(app2) {
           workerUserId: shifts.workerUserId,
           startTime: shifts.startTime,
           endTime: shifts.endTime
-        }).from(shifts).where(and(
-          eq(shifts.date, shift.date),
-          not(isNull(shifts.workerUserId)),
-          ne(shifts.status, "cancelled"),
-          ne(shifts.id, shiftId)
+        }).from(shifts).where(and3(
+          eq4(shifts.date, shift.date),
+          not(isNull2(shifts.workerUserId)),
+          ne2(shifts.status, "cancelled"),
+          ne2(shifts.id, shiftId)
         ));
         const conflictWorkerIds = /* @__PURE__ */ new Set();
         for (const es of existingShifts) {
@@ -5063,7 +9161,7 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const photos = await db.select().from(userPhotos).where(eq(userPhotos.userId, targetUserId)).orderBy(desc(userPhotos.createdAt)).limit(1);
+      const photos = await db.select().from(userPhotos).where(eq4(userPhotos.userId, targetUserId)).orderBy(desc2(userPhotos.createdAt)).limit(1);
       res.json({ photo: photos[0] || null });
     } catch (error) {
       console.error("Error fetching profile photo:", error);
@@ -5085,7 +9183,7 @@ async function registerRoutes(app2) {
         createdAt: userPhotos.createdAt,
         userName: users.fullName,
         userEmail: users.email
-      }).from(userPhotos).innerJoin(users, eq(userPhotos.userId, users.id)).where(eq(userPhotos.status, "pending_review")).orderBy(desc(userPhotos.createdAt));
+      }).from(userPhotos).innerJoin(users, eq4(userPhotos.userId, users.id)).where(eq4(userPhotos.status, "pending_review")).orderBy(desc2(userPhotos.createdAt));
       res.json({ photos: pendingPhotos });
     } catch (error) {
       console.error("Error fetching pending photos:", error);
@@ -5112,13 +9210,13 @@ async function registerRoutes(app2) {
         reviewerId: userId,
         reviewedAt: /* @__PURE__ */ new Date(),
         rejectionReason: action === "reject" ? rejectionReason || "Photo does not meet requirements" : null
-      }).where(eq(userPhotos.id, photoId)).returning();
+      }).where(eq4(userPhotos.id, photoId)).returning();
       if (!updated) {
         res.status(404).json({ error: "Photo not found" });
         return;
       }
       if (action === "approve") {
-        await db.update(users).set({ profilePhotoUrl: updated.url }).where(eq(users.id, updated.userId));
+        await db.update(users).set({ profilePhotoUrl: updated.url }).where(eq4(users.id, updated.userId));
       }
       const notifTitle = action === "approve" ? "Photo Approved" : "Photo Rejected";
       const notifBody = action === "approve" ? "Your profile photo has been approved." : `Your profile photo was rejected: ${rejectionReason || "Does not meet requirements"}`;
@@ -5129,6 +9227,7 @@ async function registerRoutes(app2) {
         type: "photo_review"
       });
       sendPushNotifications([updated.userId], notifTitle, notifBody, { type: "photo_review" });
+      broadcast({ type: "update", entity: "photo", id: updated.userId });
       res.json({ photo: { id: updated.id, status: updated.status } });
     } catch (error) {
       console.error("Error reviewing photo:", error);
@@ -5144,10 +9243,10 @@ async function registerRoutes(app2) {
       }
       const limit = parseInt(req.query.limit) || 50;
       const offset = parseInt(req.query.offset) || 0;
-      const notifications = await db.select().from(appNotifications).where(eq(appNotifications.userId, userId)).orderBy(desc(appNotifications.createdAt)).limit(limit).offset(offset);
-      const [unreadCount] = await db.select({ count: sql2`count(*)` }).from(appNotifications).where(and(
-        eq(appNotifications.userId, userId),
-        isNull(appNotifications.readAt)
+      const notifications = await db.select().from(appNotifications).where(eq4(appNotifications.userId, userId)).orderBy(desc2(appNotifications.createdAt)).limit(limit).offset(offset);
+      const [unreadCount] = await db.select({ count: sql3`count(*)` }).from(appNotifications).where(and3(
+        eq4(appNotifications.userId, userId),
+        isNull2(appNotifications.readAt)
       ));
       res.json({ notifications, unreadCount: Number(unreadCount?.count || 0) });
     } catch (error) {
@@ -5163,9 +9262,9 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      const [updated] = await db.update(appNotifications).set({ readAt: /* @__PURE__ */ new Date() }).where(and(
-        eq(appNotifications.id, notifId),
-        eq(appNotifications.userId, userId)
+      const [updated] = await db.update(appNotifications).set({ readAt: /* @__PURE__ */ new Date() }).where(and3(
+        eq4(appNotifications.id, notifId),
+        eq4(appNotifications.userId, userId)
       )).returning();
       if (!updated) {
         res.status(404).json({ error: "Notification not found" });
@@ -5184,9 +9283,9 @@ async function registerRoutes(app2) {
         res.status(401).json({ error: "Authentication required" });
         return;
       }
-      await db.update(appNotifications).set({ readAt: /* @__PURE__ */ new Date() }).where(and(
-        eq(appNotifications.userId, userId),
-        isNull(appNotifications.readAt)
+      await db.update(appNotifications).set({ readAt: /* @__PURE__ */ new Date() }).where(and3(
+        eq4(appNotifications.userId, userId),
+        isNull2(appNotifications.readAt)
       ));
       res.json({ success: true });
     } catch (error) {
@@ -5206,7 +9305,7 @@ async function registerRoutes(app2) {
           res.status(400).json({ error: "status must be 'on_my_way', 'issue', 'checked_in', or 'checked_out'" });
           return;
         }
-        const [shift] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+        const [shift] = await db.select().from(shifts).where(eq4(shifts.id, shiftId));
         if (!shift) {
           res.status(404).json({ error: "Shift not found" });
           return;
@@ -5217,7 +9316,7 @@ async function registerRoutes(app2) {
           status,
           note: note || null
         }).returning();
-        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, userId));
+        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, userId));
         const statusLabels = {
           on_my_way: "is on their way",
           issue: "reported an issue",
@@ -5225,7 +9324,7 @@ async function registerRoutes(app2) {
           checked_out: "has checked out"
         };
         if (status === "issue") {
-          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq(users.role, "admin"), eq(users.role, "hr")));
+          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq4(users.role, "admin"), eq4(users.role, "hr")));
           for (const ha of hrAdmins) {
             await db.insert(appNotifications).values({
               userId: ha.id,
@@ -5242,7 +9341,7 @@ async function registerRoutes(app2) {
             { type: "checkin_issue", shiftId }
           );
         } else {
-          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq(users.role, "admin"), eq(users.role, "hr")));
+          const hrAdmins = await db.select({ id: users.id }).from(users).where(or(eq4(users.role, "admin"), eq4(users.role, "hr")));
           sendPushNotifications(
             hrAdmins.map((ha) => ha.id),
             "Shift Status Update",
@@ -5274,7 +9373,7 @@ async function registerRoutes(app2) {
         note: shiftCheckins.note,
         createdAt: shiftCheckins.createdAt,
         workerName: users.fullName
-      }).from(shiftCheckins).leftJoin(users, eq(shiftCheckins.workerId, users.id)).where(eq(shiftCheckins.shiftId, shiftId)).orderBy(desc(shiftCheckins.createdAt));
+      }).from(shiftCheckins).leftJoin(users, eq4(shiftCheckins.workerId, users.id)).where(eq4(shiftCheckins.shiftId, shiftId)).orderBy(desc2(shiftCheckins.createdAt));
       res.json(checkins);
     } catch (error) {
       console.error("Error fetching shift checkins:", error);
@@ -5287,7 +9386,7 @@ async function registerRoutes(app2) {
     async (req, res) => {
       try {
         const requestId = req.params.id;
-        const [request] = await db.select().from(shiftRequests).where(eq(shiftRequests.id, requestId));
+        const [request] = await db.select().from(shiftRequests).where(eq4(shiftRequests.id, requestId));
         if (!request) {
           res.status(404).json({ error: "Shift request not found" });
           return;
@@ -5297,18 +9396,18 @@ async function registerRoutes(app2) {
           fullName: users.fullName,
           email: users.email,
           workerRoles: users.workerRoles
-        }).from(users).where(and(
-          eq(users.role, "worker"),
-          eq(users.isActive, true)
+        }).from(users).where(and3(
+          eq4(users.role, "worker"),
+          eq4(users.isActive, true)
         ));
         const existingShifts = await db.select({
           workerUserId: shifts.workerUserId,
           startTime: shifts.startTime,
           endTime: shifts.endTime
-        }).from(shifts).where(and(
-          eq(shifts.date, request.date),
-          not(isNull(shifts.workerUserId)),
-          ne(shifts.status, "cancelled")
+        }).from(shifts).where(and3(
+          eq4(shifts.date, request.date),
+          not(isNull2(shifts.workerUserId)),
+          ne2(shifts.status, "cancelled")
         ));
         const conflictMap = /* @__PURE__ */ new Map();
         for (const es of existingShifts) {
@@ -5379,12 +9478,12 @@ async function registerRoutes(app2) {
         { name: "audit_log", table: auditLog }
       ];
       for (const { name, table } of tables) {
-        const result = await db.select({ count: sql2`count(*)::int` }).from(table);
+        const result = await db.select({ count: sql3`count(*)::int` }).from(table);
         counts[name] = result[0]?.count || 0;
       }
-      const nonAdminUsers = await db.select({ count: sql2`count(*)::int` }).from(users).where(ne(users.role, "admin"));
+      const nonAdminUsers = await db.select({ count: sql3`count(*)::int` }).from(users).where(ne2(users.role, "admin"));
       counts["non_admin_users"] = nonAdminUsers[0]?.count || 0;
-      const adminUsers = await db.select({ count: sql2`count(*)::int` }).from(users).where(eq(users.role, "admin"));
+      const adminUsers = await db.select({ count: sql3`count(*)::int` }).from(users).where(eq4(users.role, "admin"));
       counts["admin_users_preserved"] = adminUsers[0]?.count || 0;
       const totalRecords = Object.entries(counts).filter(([k]) => k !== "admin_users_preserved").reduce((sum, [, v]) => sum + v, 0);
       res.json({ counts, totalRecords, adminUsersPreserved: counts["admin_users_preserved"] });
@@ -5402,30 +9501,30 @@ async function registerRoutes(app2) {
         return;
       }
       const deletionOrder = [
-        { name: "export_audit_logs", q: sql2`DELETE FROM export_audit_logs` },
-        { name: "shift_checkins", q: sql2`DELETE FROM shift_checkins` },
-        { name: "shift_offers", q: sql2`DELETE FROM shift_offers` },
-        { name: "shift_requests", q: sql2`DELETE FROM shift_requests` },
-        { name: "shifts", q: sql2`DELETE FROM shifts` },
-        { name: "recurrence_exceptions", q: sql2`DELETE FROM recurrence_exceptions` },
-        { name: "shift_series", q: sql2`DELETE FROM shift_series` },
-        { name: "sent_reminders", q: sql2`DELETE FROM sent_reminders` },
-        { name: "app_notifications", q: sql2`DELETE FROM app_notifications` },
-        { name: "tito_logs", q: sql2`DELETE FROM tito_logs` },
-        { name: "timesheet_entries", q: sql2`DELETE FROM timesheet_entries` },
-        { name: "timesheets", q: sql2`DELETE FROM timesheets` },
-        { name: "payroll_batch_items", q: sql2`DELETE FROM payroll_batch_items` },
-        { name: "payroll_batches", q: sql2`DELETE FROM payroll_batches` },
-        { name: "messages", q: sql2`DELETE FROM messages` },
-        { name: "message_logs", q: sql2`DELETE FROM message_logs` },
-        { name: "conversations", q: sql2`DELETE FROM conversations` },
-        { name: "workplace_assignments", q: sql2`DELETE FROM workplace_assignments` },
-        { name: "user_photos", q: sql2`DELETE FROM user_photos` },
-        { name: "push_tokens", q: sql2`DELETE FROM push_tokens WHERE user_id NOT IN (SELECT id FROM users WHERE role = 'admin')` },
-        { name: "worker_applications", q: sql2`DELETE FROM worker_applications` },
-        { name: "payment_profiles", q: sql2`DELETE FROM payment_profiles WHERE user_id NOT IN (SELECT id FROM users WHERE role = 'admin')` },
-        { name: "non_admin_users", q: sql2`DELETE FROM users WHERE role != 'admin'` },
-        { name: "audit_log", q: sql2`DELETE FROM audit_log` }
+        { name: "export_audit_logs", q: sql3`DELETE FROM export_audit_logs` },
+        { name: "shift_checkins", q: sql3`DELETE FROM shift_checkins` },
+        { name: "shift_offers", q: sql3`DELETE FROM shift_offers` },
+        { name: "shift_requests", q: sql3`DELETE FROM shift_requests` },
+        { name: "shifts", q: sql3`DELETE FROM shifts` },
+        { name: "recurrence_exceptions", q: sql3`DELETE FROM recurrence_exceptions` },
+        { name: "shift_series", q: sql3`DELETE FROM shift_series` },
+        { name: "sent_reminders", q: sql3`DELETE FROM sent_reminders` },
+        { name: "app_notifications", q: sql3`DELETE FROM app_notifications` },
+        { name: "tito_logs", q: sql3`DELETE FROM tito_logs` },
+        { name: "timesheet_entries", q: sql3`DELETE FROM timesheet_entries` },
+        { name: "timesheets", q: sql3`DELETE FROM timesheets` },
+        { name: "payroll_batch_items", q: sql3`DELETE FROM payroll_batch_items` },
+        { name: "payroll_batches", q: sql3`DELETE FROM payroll_batches` },
+        { name: "messages", q: sql3`DELETE FROM messages` },
+        { name: "message_logs", q: sql3`DELETE FROM message_logs` },
+        { name: "conversations", q: sql3`DELETE FROM conversations` },
+        { name: "workplace_assignments", q: sql3`DELETE FROM workplace_assignments` },
+        { name: "user_photos", q: sql3`DELETE FROM user_photos` },
+        { name: "push_tokens", q: sql3`DELETE FROM push_tokens WHERE user_id NOT IN (SELECT id FROM users WHERE role = 'admin')` },
+        { name: "worker_applications", q: sql3`DELETE FROM worker_applications` },
+        { name: "payment_profiles", q: sql3`DELETE FROM payment_profiles WHERE user_id NOT IN (SELECT id FROM users WHERE role = 'admin')` },
+        { name: "non_admin_users", q: sql3`DELETE FROM users WHERE role != 'admin'` },
+        { name: "audit_log", q: sql3`DELETE FROM audit_log` }
       ];
       const results = {};
       for (const { name, q } of deletionOrder) {
@@ -5448,39 +9547,120 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "Failed to execute trial reset" });
     }
   });
+  const GM_LILEE_PHONE = "+14166028038";
+  function getShiftTimezone(province) {
+    const p = (province || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (p.includes("british columbia") || p.includes(" bc")) return "America/Vancouver";
+    if (p.includes("alberta") || p.includes(" ab")) return "America/Edmonton";
+    if (p.includes("saskatchewan") || p.includes(" sk")) return "America/Regina";
+    if (p.includes("manitoba") || p.includes(" mb")) return "America/Winnipeg";
+    if (p.includes("newfoundland") || p.includes(" nl")) return "America/St_Johns";
+    if (p.includes("nova scotia") || p.includes("new brunswick") || p.includes("prince edward") || p.includes(" ns") || p.includes(" nb") || p.includes(" pe")) return "America/Halifax";
+    return "America/Toronto";
+  }
+  function getTimezoneAbbr(timezone) {
+    const map = {
+      "America/Vancouver": "PT",
+      "America/Edmonton": "MT",
+      "America/Regina": "CT",
+      "America/Winnipeg": "CT",
+      "America/Toronto": "ET",
+      "America/Halifax": "AT",
+      "America/St_Johns": "NT"
+    };
+    return map[timezone] || "ET";
+  }
+  function getLocalNow(timezone) {
+    const now = /* @__PURE__ */ new Date();
+    const dateStr = now.toLocaleDateString("en-CA", { timeZone: timezone });
+    const timeParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(now);
+    const hours = parseInt(timeParts.find((p) => p.type === "hour")?.value || "0", 10);
+    const minutes = parseInt(timeParts.find((p) => p.type === "minute")?.value || "0", 10);
+    return { dateStr, hours, minutes };
+  }
   async function processShiftReminders() {
     try {
-      const now = /* @__PURE__ */ new Date();
-      const today = now.toISOString().split("T")[0];
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1e3).toISOString().split("T")[0];
+      const torontoNow = getLocalNow("America/Toronto");
+      const tomorrowToronto = /* @__PURE__ */ new Date();
+      tomorrowToronto.setDate(tomorrowToronto.getDate() + 1);
+      const tomorrowTorontoStr = tomorrowToronto.toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
       const upcomingShifts = await db.select({
         id: shifts.id,
         title: shifts.title,
         date: shifts.date,
         startTime: shifts.startTime,
         workerUserId: shifts.workerUserId,
-        workplaceName: workplaces.name
-      }).from(shifts).leftJoin(workplaces, eq(shifts.workplaceId, workplaces.id)).where(
-        and(
-          or(eq(shifts.date, today), eq(shifts.date, tomorrow)),
-          eq(shifts.status, "scheduled"),
-          sql2`${shifts.workerUserId} IS NOT NULL`
+        workplaceName: workplaces.name,
+        workplaceProvince: workplaces.province,
+        workerName: users.fullName,
+        workerPhone: users.phone
+      }).from(shifts).leftJoin(workplaces, eq4(shifts.workplaceId, workplaces.id)).leftJoin(users, eq4(shifts.workerUserId, users.id)).where(
+        and3(
+          or(eq4(shifts.date, torontoNow.dateStr), eq4(shifts.date, tomorrowTorontoStr)),
+          eq4(shifts.status, "scheduled"),
+          sql3`${shifts.workerUserId} IS NOT NULL`
         )
       );
+      const lileeReminders = [];
       for (const shift of upcomingShifts) {
-        if (!shift.workerUserId) continue;
-        const isToday = shift.date === today;
+        if (!shift.workerUserId || !shift.startTime) continue;
+        const tz = getShiftTimezone(shift.workplaceProvince);
+        const local = getLocalNow(tz);
+        const tzAbbr = getTimezoneAbbr(tz);
+        const tomorrowLocal = /* @__PURE__ */ new Date();
+        tomorrowLocal.setDate(tomorrowLocal.getDate() + 1);
+        const tomorrowLocalStr = tomorrowLocal.toLocaleDateString("en-CA", { timeZone: tz });
+        const isToday = shift.date === local.dateStr;
+        const isTomorrow = shift.date === tomorrowLocalStr;
+        if (!isToday && !isTomorrow) continue;
         const reminderType = isToday ? "day_of" : "day_before";
+        const [sh, sm] = shift.startTime.split(":").map(Number);
+        const shiftMinutes = sh * 60 + (sm || 0);
+        const nowMinutes = local.hours * 60 + local.minutes;
+        if (isToday) {
+          const minutesUntilShift = shiftMinutes - nowMinutes;
+          if (minutesUntilShift < 60 || minutesUntilShift > 480) {
+            const isMorningWindow = local.hours >= 7 && local.hours < 9;
+            if (isMorningWindow && minutesUntilShift > 0) {
+              const morningSmsType = "day_of_morning_sms";
+              const existingMorning = await db.select().from(sentReminders).where(and3(
+                eq4(sentReminders.shiftId, shift.id),
+                eq4(sentReminders.workerId, shift.workerUserId),
+                eq4(sentReminders.reminderType, morningSmsType)
+              )).limit(1);
+              if (existingMorning.length === 0 && shift.workerPhone) {
+                const morningMsg = `Good morning ${shift.workerName || "there"}! You have a shift today \u2014 ${shift.title} at ${shift.workplaceName || "your workplace"} at ${shift.startTime} ${tzAbbr}. Have a great shift!`;
+                try {
+                  const mRes = await sendSMS(shift.workerPhone, morningMsg);
+                  await logSMS({ phoneNumber: shift.workerPhone, direction: "outbound", message: morningMsg, shiftId: shift.id, status: mRes.success ? "sent" : "failed" });
+                  await db.insert(sentReminders).values({ shiftId: shift.id, workerId: shift.workerUserId, reminderType: morningSmsType });
+                  lileeReminders.push({ name: shift.workerName || "Worker", title: shift.title || "", location: shift.workplaceName || "workplace", date: shift.date || "", time: shift.startTime || "", tzAbbr, label: "Today (morning)" });
+                  console.log(`[Reminder] Morning SMS sent to ${shift.workerName} (${shift.workerPhone}) \u2014 ${shift.title}`);
+                } catch (mErr) {
+                  console.error(`[Reminder] Morning SMS failed for shift ${shift.id}:`, mErr);
+                }
+              }
+            }
+            continue;
+          }
+        } else {
+          if (local.hours < 18 || local.hours >= 21) continue;
+        }
         const existing = await db.select().from(sentReminders).where(
-          and(
-            eq(sentReminders.shiftId, shift.id),
-            eq(sentReminders.workerId, shift.workerUserId),
-            eq(sentReminders.reminderType, reminderType)
+          and3(
+            eq4(sentReminders.shiftId, shift.id),
+            eq4(sentReminders.workerId, shift.workerUserId),
+            eq4(sentReminders.reminderType, reminderType)
           )
         ).limit(1);
         if (existing.length > 0) continue;
         const title = isToday ? "Shift Today" : "Shift Tomorrow";
-        const body = `${shift.title} at ${shift.workplaceName || "workplace"} - ${shift.startTime}`;
+        const body = `${shift.title} at ${shift.workplaceName || "workplace"} - ${shift.startTime} (${tzAbbr})`;
         try {
           await sendPushNotifications([shift.workerUserId], title, body, {
             type: "shift_reminder",
@@ -5491,6 +9671,7 @@ async function registerRoutes(app2) {
             workerId: shift.workerUserId,
             reminderType
           });
+          lileeReminders.push({ name: shift.workerName || "Worker", title: shift.title || "", location: shift.workplaceName || "workplace", date: shift.date || "", time: shift.startTime || "", tzAbbr, label: isToday ? "Today" : "Tomorrow" });
           await db.insert(appNotifications).values({
             userId: shift.workerUserId,
             title,
@@ -5498,8 +9679,42 @@ async function registerRoutes(app2) {
             type: "shift_reminder",
             data: JSON.stringify({ shiftId: shift.id })
           });
+          const workerDisplay = shift.workerName || "there";
+          const workerSmsType = `${reminderType}_sms`;
+          const existingWorkerSms = await db.select().from(sentReminders).where(and3(
+            eq4(sentReminders.shiftId, shift.id),
+            eq4(sentReminders.workerId, shift.workerUserId),
+            eq4(sentReminders.reminderType, workerSmsType)
+          )).limit(1);
+          if (existingWorkerSms.length === 0 && shift.workerPhone) {
+            const workerMsg = isToday ? `Hi ${workerDisplay}, reminder: you're working TODAY \u2014 ${shift.title} at ${shift.workplaceName || "your workplace"} at ${shift.startTime} ${tzAbbr}. See you there!` : `Hi ${workerDisplay}, reminder: you have a shift TOMORROW \u2014 ${shift.title} at ${shift.workplaceName || "your workplace"} at ${shift.startTime} ${tzAbbr}. Reply if you have any questions.`;
+            try {
+              const wRes = await sendSMS(shift.workerPhone, workerMsg);
+              await logSMS({ phoneNumber: shift.workerPhone, direction: "outbound", message: workerMsg, shiftId: shift.id, status: wRes.success ? "sent" : "failed" });
+              await db.insert(sentReminders).values({ shiftId: shift.id, workerId: shift.workerUserId, reminderType: workerSmsType });
+              console.log(`[Reminder] Worker SMS sent to ${shift.workerName} (${shift.workerPhone}) \u2014 ${shift.title} on ${shift.date}`);
+            } catch (wErr) {
+              console.error(`[Reminder] Worker SMS failed for shift ${shift.id}:`, wErr);
+            }
+          }
         } catch (err) {
           console.error(`Failed to send reminder for shift ${shift.id}:`, err);
+        }
+      }
+      if (lileeReminders.length > 0) {
+        try {
+          const dateLabel = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", { timeZone: "America/Toronto", month: "short", day: "numeric", year: "numeric" });
+          const groupLabels = [...new Set(lileeReminders.map((r) => r.label))].join(" & ");
+          const lines = lileeReminders.map((r) => `\u2022 ${r.name} \u2192 ${r.location}, ${r.time} ${r.tzAbbr}`).join("\n");
+          const summary = `[WFC] Shift Reminders \u2014 ${dateLabel}
+${groupLabels} (${lileeReminders.length} worker${lileeReminders.length !== 1 ? "s" : ""}):
+
+${lines}`;
+          const lileeRes = await sendSMS(GM_LILEE_PHONE, summary);
+          await logSMS({ phoneNumber: GM_LILEE_PHONE, direction: "outbound", message: summary, status: lileeRes.success ? "sent" : "failed" });
+          console.log(`[Reminder] Consolidated report sent to Lilee \u2014 ${lileeReminders.length} workers`);
+        } catch (lileeErr) {
+          console.error("[Reminder] Failed to send consolidated Lilee report:", lileeErr);
         }
       }
     } catch (error) {
@@ -5514,10 +9729,10 @@ async function registerRoutes(app2) {
       const currentMin = nowToronto.getMinutes();
       const currentTimeMinutes = currentHour * 60 + currentMin;
       const todayShifts = await db.select().from(shifts).where(
-        and(
-          eq(shifts.date, todayStr),
-          eq(shifts.status, "scheduled"),
-          not(isNull(shifts.workerUserId))
+        and3(
+          eq4(shifts.date, todayStr),
+          eq4(shifts.status, "scheduled"),
+          not(isNull2(shifts.workerUserId))
         )
       );
       for (const shift of todayShifts) {
@@ -5526,24 +9741,24 @@ async function registerRoutes(app2) {
         const shiftStartMinutes = h * 60 + m;
         const minutesLate = currentTimeMinutes - shiftStartMinutes;
         if (minutesLate < 15 || minutesLate > 120) continue;
-        const existingTito = await db.select({ id: titoLogs.id }).from(titoLogs).where(and(
-          eq(titoLogs.shiftId, shift.id),
-          eq(titoLogs.workerId, shift.workerUserId),
-          not(isNull(titoLogs.timeIn))
+        const existingTito = await db.select({ id: titoLogs.id }).from(titoLogs).where(and3(
+          eq4(titoLogs.shiftId, shift.id),
+          eq4(titoLogs.workerId, shift.workerUserId),
+          not(isNull2(titoLogs.timeIn))
         )).limit(1);
         if (existingTito.length > 0) continue;
-        const alreadyNotified = await db.select({ id: sentReminders.id }).from(sentReminders).where(and(
-          eq(sentReminders.shiftId, shift.id),
-          eq(sentReminders.workerId, shift.workerUserId),
-          eq(sentReminders.reminderType, minutesLate >= 30 ? "noshow_hr" : "missed_worker")
+        const alreadyNotified = await db.select({ id: sentReminders.id }).from(sentReminders).where(and3(
+          eq4(sentReminders.shiftId, shift.id),
+          eq4(sentReminders.workerId, shift.workerUserId),
+          eq4(sentReminders.reminderType, minutesLate >= 30 ? "noshow_hr" : "missed_worker")
         )).limit(1);
         if (alreadyNotified.length > 0) continue;
-        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, shift.workerUserId));
-        const [workplace] = shift.workplaceId ? await db.select({ name: workplaces.name }).from(workplaces).where(eq(workplaces.id, shift.workplaceId)) : [null];
+        const [worker] = await db.select({ fullName: users.fullName }).from(users).where(eq4(users.id, shift.workerUserId));
+        const [workplace] = shift.workplaceId ? await db.select({ name: workplaces.name }).from(workplaces).where(eq4(workplaces.id, shift.workplaceId)) : [null];
         const workerName = worker?.fullName || "Worker";
         const wpName = workplace?.name || "workplace";
         if (minutesLate >= 30) {
-          const hrAdmins = await db.select({ id: users.id }).from(users).where(and(inArray(users.role, ["admin", "hr"]), eq(users.isActive, true)));
+          const hrAdmins = await db.select({ id: users.id }).from(users).where(and3(inArray(users.role, ["admin", "hr"]), eq4(users.isActive, true)));
           const hrIds = hrAdmins.map((u) => u.id);
           for (const hrId of hrIds) {
             await db.insert(appNotifications).values({
@@ -5599,16 +9814,332 @@ async function registerRoutes(app2) {
       console.error("[MISSED-SHIFT] Detection error:", error);
     }
   }
-  setInterval(processMissedShiftDetection, 5 * 60 * 1e3);
-  processMissedShiftDetection();
-  processShiftReminders();
-  setInterval(processShiftReminders, 15 * 60 * 1e3);
+  const KNOWN_OPENPHONE_IDS = /* @__PURE__ */ new Set(["PNo1n737XV", "PNCQJAOZa0"]);
+  app2.post("/api/webhooks/openphone", async (req, res) => {
+    try {
+      const payload = req.body;
+      console.log("[OPENPHONE WEBHOOK] Received:", JSON.stringify(payload).substring(0, 500));
+      res.status(200).json({ received: true });
+      if (!payload?.type || payload.type !== "message.received") {
+        console.log("[OPENPHONE WEBHOOK] Ignoring non-message event:", payload?.type);
+        return;
+      }
+      const messageData = payload?.data?.object;
+      if (!messageData) {
+        console.log("[OPENPHONE WEBHOOK] No message data in payload");
+        return;
+      }
+      const phoneNumberId = messageData.phoneNumberId;
+      if (phoneNumberId && !KNOWN_OPENPHONE_IDS.has(phoneNumberId)) {
+        console.log(`[OPENPHONE WEBHOOK] Unknown phoneNumberId: ${phoneNumberId}, rejecting`);
+        return;
+      }
+      if (messageData.direction === "outgoing") {
+        console.log("[OPENPHONE WEBHOOK] Ignoring outgoing message");
+        return;
+      }
+      const senderPhone = messageData.from;
+      const messageBody = (messageData.body || messageData.content || messageData.text || "").trim();
+      const openphoneMessageId = messageData.id;
+      const mediaUrls = [];
+      if (Array.isArray(messageData.media)) {
+        for (const m of messageData.media) {
+          if (m?.url && typeof m.url === "string" && /^https?:\/\//i.test(m.url)) {
+            mediaUrls.push(m.url);
+          }
+        }
+      }
+      if (!senderPhone || !messageBody && mediaUrls.length === 0) {
+        console.log("[OPENPHONE WEBHOOK] Missing sender phone or message body");
+        return;
+      }
+      console.log(`[OPENPHONE WEBHOOK] From: ${senderPhone}, Body: "${messageBody}"${mediaUrls.length > 0 ? `, Media: ${mediaUrls.length} file(s)` : ""}`);
+      if (mediaUrls.length > 0) {
+        console.log(`[OPENPHONE WEBHOOK] Received ${mediaUrls.length} media attachment(s) from ${senderPhone}`);
+      }
+      const normalizedPhone = senderPhone.replace(/[^\d]/g, "");
+      const phoneVariants = [
+        senderPhone,
+        `+${normalizedPhone}`,
+        `+1${normalizedPhone}`,
+        normalizedPhone,
+        normalizedPhone.startsWith("1") ? normalizedPhone.substring(1) : normalizedPhone
+      ];
+      let worker = null;
+      for (const variant of phoneVariants) {
+        const [found] = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone }).from(users).where(and3(eq4(users.phone, variant), eq4(users.role, "worker")));
+        if (found) {
+          worker = found;
+          break;
+        }
+      }
+      if (!worker) {
+        const allWorkers = await db.select({ id: users.id, fullName: users.fullName, phone: users.phone }).from(users).where(and3(
+          eq4(users.role, "worker"),
+          eq4(users.isActive, true)
+        ));
+        worker = allWorkers.find((w) => {
+          if (!w.phone) return false;
+          const cleaned = w.phone.replace(/[^\d]/g, "");
+          return phoneVariants.some((v) => {
+            const vCleaned = v.replace(/[^\d]/g, "");
+            return cleaned === vCleaned || cleaned.endsWith(vCleaned) || vCleaned.endsWith(cleaned);
+          });
+        });
+      }
+      await logSMS({
+        phoneNumber: senderPhone,
+        direction: "inbound",
+        message: messageBody,
+        workerId: worker?.id || null,
+        status: worker ? "received" : "unknown_sender",
+        openphoneMessageId
+      });
+      const upperBody = messageBody.toUpperCase().trim();
+      const isShiftKeyword = ["ACCEPT SHIFT", "ACCEPT", "DECLINE SHIFT", "DECLINE"].includes(upperBody);
+      if (!isShiftKeyword) {
+        console.log(`[OPENPHONE WEBHOOK] Non-shift-keyword message from ${senderPhone} \u2014 logged only`);
+        return;
+      }
+      if (!worker) {
+        console.log(`[OPENPHONE WEBHOOK] Unknown sender ${senderPhone} sent shift keyword: "${messageBody}"`);
+        sendSMS(senderPhone, "Sorry, we couldn't identify your account. Please contact HR directly or use the WFConnect app.").catch((err) => console.error("[OPENPHONE] Reply SMS error:", err));
+        return;
+      }
+      let responseAction = null;
+      if (["ACCEPT SHIFT", "ACCEPT"].includes(upperBody)) {
+        responseAction = "accepted";
+      } else if (["DECLINE SHIFT", "DECLINE"].includes(upperBody)) {
+        responseAction = "declined";
+      }
+      const pendingOffers = await db.select({
+        offerId: shiftOffers.id,
+        shiftId: shiftOffers.shiftId,
+        status: shiftOffers.status,
+        shiftTitle: shifts.title,
+        shiftDate: shifts.date,
+        shiftStartTime: shifts.startTime,
+        workersNeeded: shifts.workersNeeded,
+        workplaceId: shifts.workplaceId
+      }).from(shiftOffers).innerJoin(shifts, eq4(shiftOffers.shiftId, shifts.id)).where(and3(
+        eq4(shiftOffers.workerId, worker.id),
+        eq4(shiftOffers.status, "pending")
+      )).orderBy(desc2(shiftOffers.offeredAt)).limit(1);
+      if (pendingOffers.length === 0) {
+        sendConfirmationSMS(
+          senderPhone,
+          `Hi ${worker.fullName}, you don't have any pending shift offers right now. Check the WFConnect app for more details.`,
+          worker.id
+        ).catch((err) => console.error("[OPENPHONE] Reply SMS error:", err));
+        return;
+      }
+      const offer = pendingOffers[0];
+      if (responseAction === "accepted") {
+        const acceptedCount = await db.select({ id: shiftOffers.id }).from(shiftOffers).where(and3(
+          eq4(shiftOffers.shiftId, offer.shiftId),
+          eq4(shiftOffers.status, "accepted"),
+          ne2(shiftOffers.id, offer.offerId)
+        ));
+        const needed = offer.workersNeeded || 1;
+        if (acceptedCount.length >= needed) {
+          await db.update(shiftOffers).set({ status: "cancelled", cancelReason: "Shift filled before SMS reply", cancelledAt: /* @__PURE__ */ new Date() }).where(eq4(shiftOffers.id, offer.offerId));
+          sendConfirmationSMS(
+            senderPhone,
+            `Sorry ${worker.fullName}, the shift "${offer.shiftTitle}" on ${offer.shiftDate} has already been filled.`,
+            worker.id
+          ).catch((err) => console.error("[OPENPHONE] Reply SMS error:", err));
+          return;
+        }
+        await db.update(shiftOffers).set({ status: "accepted", respondedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftOffers.id, offer.offerId));
+        const [currentShift] = await db.select().from(shifts).where(eq4(shifts.id, offer.shiftId));
+        if (currentShift && !currentShift.workerUserId) {
+          await db.update(shifts).set({ workerUserId: worker.id, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(shifts.id, offer.shiftId));
+        }
+        const newAcceptedCount = acceptedCount.length + 1;
+        if (newAcceptedCount >= needed) {
+          await db.update(shiftOffers).set({ status: "cancelled", cancelReason: "Shift filled - enough workers accepted", cancelledAt: /* @__PURE__ */ new Date() }).where(and3(
+            eq4(shiftOffers.shiftId, offer.shiftId),
+            eq4(shiftOffers.status, "pending")
+          ));
+        }
+        await db.insert(auditLog).values({
+          userId: worker.id,
+          action: "OFFER_ACCEPTED_VIA_SMS",
+          entityType: "shift_offer",
+          entityId: offer.offerId,
+          details: JSON.stringify({ shiftId: offer.shiftId, method: "sms" })
+        });
+        const adminUsers = await db.select({ id: users.id }).from(users).where(or(eq4(users.role, "admin"), eq4(users.role, "hr")));
+        for (const admin of adminUsers) {
+          await db.insert(appNotifications).values({
+            userId: admin.id,
+            type: "offer_accepted",
+            title: "Shift Offer Accepted (SMS)",
+            body: `${worker.fullName} accepted the shift "${offer.shiftTitle}" on ${offer.shiftDate} via SMS.`,
+            deepLink: `/shifts/${offer.shiftId}`
+          });
+        }
+        broadcast({ type: "offer_responded", data: { offerId: offer.offerId, status: "accepted", workerId: worker.id, method: "sms" } });
+        sendConfirmationSMS(
+          senderPhone,
+          `Confirmed! You've accepted the shift "${offer.shiftTitle}" on ${offer.shiftDate} at ${offer.shiftStartTime}. See the WFConnect app for details.`,
+          worker.id
+        ).catch((err) => console.error("[OPENPHONE] Reply SMS error:", err));
+      } else {
+        await db.update(shiftOffers).set({ status: "declined", respondedAt: /* @__PURE__ */ new Date() }).where(eq4(shiftOffers.id, offer.offerId));
+        await db.insert(auditLog).values({
+          userId: worker.id,
+          action: "OFFER_DECLINED_VIA_SMS",
+          entityType: "shift_offer",
+          entityId: offer.offerId,
+          details: JSON.stringify({ shiftId: offer.shiftId, method: "sms" })
+        });
+        broadcast({ type: "offer_responded", data: { offerId: offer.offerId, status: "declined", workerId: worker.id, method: "sms" } });
+        sendConfirmationSMS(
+          senderPhone,
+          `Got it, ${worker.fullName}. You've declined the shift "${offer.shiftTitle}" on ${offer.shiftDate}.`,
+          worker.id
+        ).catch((err) => console.error("[OPENPHONE] Reply SMS error:", err));
+      }
+    } catch (error) {
+      console.error("[OPENPHONE WEBHOOK] Error processing webhook:", error);
+      if (!res.headersSent) {
+        res.status(200).json({ received: true });
+      }
+    }
+  });
+  app2.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        res.status(400).json({ error: "Email is required" });
+        return;
+      }
+      const [user] = await db.select().from(users).where(eq4(users.email, email.toLowerCase()));
+      if (user && user.isActive) {
+        const resetToken = crypto2.randomBytes(32).toString("hex");
+        const resetExpiry = new Date(Date.now() + 60 * 60 * 1e3);
+        await db.update(users).set({ passwordResetToken: resetToken, passwordResetExpiry: resetExpiry, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(users.id, user.id));
+        const resetLink = `https://app.wfconnect.org?reset=${resetToken}`;
+        sendEmail({
+          to: user.email,
+          subject: "Reset your Workforce Connect password",
+          text: `Hi ${user.fullName},
+
+You requested a password reset. Click the link below to set a new password (expires in 1 hour):
+
+${resetLink}
+
+If you didn't request this, you can safely ignore this email.
+
+The WFConnect Team`,
+          html: `<p>Hi ${user.fullName},</p><p>You requested a password reset. Click the button below to set a new password (expires in 1 hour):</p><p><a href="${resetLink}" style="background:#2563EB;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Reset Password</a></p><p>If you didn't request this, you can safely ignore this email.</p><p>The WFConnect Team</p>`
+        }).catch((err) => console.error("[EMAIL] Password reset email error:", err));
+      }
+      res.json({ success: true, message: "If that email is registered and active, a reset link has been sent." });
+    } catch (error) {
+      console.error("Error in forgot-password:", error);
+      res.status(500).json({ error: "Failed to process request" });
+    }
+  });
+  app2.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        res.status(400).json({ error: "Token and new password are required" });
+        return;
+      }
+      if (newPassword.length < 8) {
+        res.status(400).json({ error: "Password must be at least 8 characters" });
+        return;
+      }
+      const [user] = await db.select().from(users).where(
+        and3(
+          eq4(users.passwordResetToken, token),
+          gte2(users.passwordResetExpiry, /* @__PURE__ */ new Date())
+        )
+      );
+      if (!user) {
+        res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+        return;
+      }
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await db.update(users).set({
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+        mustChangePassword: false,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq4(users.id, user.id));
+      res.json({ success: true, message: "Password reset successfully. You can now sign in." });
+    } catch (error) {
+      console.error("Error in reset-password:", error);
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+  app2.post("/api/admin/invite-user", checkRoles("admin"), async (req, res) => {
+    try {
+      const { email, fullName, role, businessName, phone } = req.body;
+      if (!email || !fullName || !role) {
+        res.status(400).json({ error: "Email, full name, and role are required" });
+        return;
+      }
+      if (!["hr", "client"].includes(role)) {
+        res.status(400).json({ error: "Invite flow is for HR and Client roles only" });
+        return;
+      }
+      const existingUser = await db.select().from(users).where(eq4(users.email, email.toLowerCase())).limit(1);
+      if (existingUser.length > 0) {
+        const existing = existingUser[0];
+        const roleLabel = existing.role.charAt(0).toUpperCase() + existing.role.slice(1);
+        const statusLabel = existing.isActive ? "active" : "inactive";
+        const hint = existing.isActive ? `You can manage their account in User Management.` : `You can reactivate their account in User Management.`;
+        res.status(409).json({
+          error: `An ${statusLabel} ${roleLabel} account already exists with this email. ${hint}`
+        });
+        return;
+      }
+      if (phone) {
+        const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.phone, phone)).limit(1);
+        if (phoneDuplicate) {
+          res.status(409).json({ error: `A user with phone ${phone} already exists.` });
+          return;
+        }
+      }
+      const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.fullName, fullName.trim())).limit(1);
+      if (fullNameDuplicate) {
+        res.status(409).json({ error: `A user with name "${fullName}" already exists.` });
+        return;
+      }
+      const firstName = fullName.trim().split(" ")[0];
+      const tempPassword = `${firstName}${Math.floor(1e3 + Math.random() * 9e3)}`;
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+      const [newUser] = await db.insert(users).values({
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        fullName: fullName.trim(),
+        role,
+        isActive: true,
+        mustChangePassword: true,
+        businessName: role === "client" ? businessName?.trim() || null : null,
+        onboardingStatus: null
+      }).returning();
+      broadcast({ type: "created", entity: "user" });
+      const { password: _, ...userWithoutPassword } = newUser;
+      res.status(201).json({ ...userWithoutPassword, tempPassword });
+    } catch (error) {
+      console.error("Error inviting user:", error);
+      res.status(500).json({ error: "Failed to invite user" });
+    }
+  });
   const httpServer = createServer(app2);
   return httpServer;
 }
 
 // server/payroll-hours.ts
-import { eq as eq2, and as and2, gte as gte2, lte as lte2, inArray as inArray2 } from "drizzle-orm";
+init_db();
+init_schema();
+import { eq as eq5, and as and4, gte as gte3, lte as lte3, inArray as inArray2 } from "drizzle-orm";
 import * as XLSX from "xlsx";
 import * as archiver from "archiver";
 function checkAdminRole() {
@@ -5704,12 +10235,12 @@ async function fetchLogsInRange(startDate, endDate, hotelId) {
   const startTs = /* @__PURE__ */ new Date(startDate + "T00:00:00.000Z");
   const endTs = /* @__PURE__ */ new Date(endDate + "T23:59:59.999Z");
   let conditions = [
-    eq2(titoLogs.status, "approved"),
-    gte2(titoLogs.timeIn, startTs),
-    lte2(titoLogs.timeIn, endTs)
+    eq5(titoLogs.status, "approved"),
+    gte3(titoLogs.timeIn, startTs),
+    lte3(titoLogs.timeIn, endTs)
   ];
   if (hotelId && hotelId !== "all") {
-    conditions.push(eq2(titoLogs.workplaceId, hotelId));
+    conditions.push(eq5(titoLogs.workplaceId, hotelId));
   }
   const rows = await db.select({
     logId: titoLogs.id,
@@ -5721,7 +10252,7 @@ async function fetchLogsInRange(startDate, endDate, hotelId) {
     timeIn: titoLogs.timeIn,
     timeOut: titoLogs.timeOut,
     status: titoLogs.status
-  }).from(titoLogs).innerJoin(users, eq2(titoLogs.workerId, users.id)).leftJoin(workplaces, eq2(titoLogs.workplaceId, workplaces.id)).where(and2(...conditions)).orderBy(titoLogs.timeIn);
+  }).from(titoLogs).innerJoin(users, eq5(titoLogs.workerId, users.id)).leftJoin(workplaces, eq5(titoLogs.workplaceId, workplaces.id)).where(and4(...conditions)).orderBy(titoLogs.timeIn);
   return rows.map((r) => ({
     logId: r.logId,
     workerId: r.workerId,
@@ -5961,7 +10492,7 @@ function rowsToBuffer(rows, format, sheetName = "Sheet1") {
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   return Buffer.from(XLSX.write(wb, { bookType: "xlsx", type: "buffer" }));
 }
-function sanitizeFileName(name) {
+function sanitizeFileName2(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/_+/g, "_");
 }
 function registerPayrollHoursRoutes(app2) {
@@ -6135,7 +10666,7 @@ function registerPayrollHoursRoutes(app2) {
           res.status(400).json({ error: "type must be invoiceSummary, invoiceDetailed, payrollTimesheet, or payrollPaymentSummary" });
           return;
       }
-      const hotelName = hotelId === "all" ? "AllHotels" : sanitizeFileName(groups[0]?.workplaceName || "Hotel");
+      const hotelName = hotelId === "all" ? "AllHotels" : sanitizeFileName2(groups[0]?.workplaceName || "Hotel");
       const fileName = `${filePrefix}_${hotelName}_${typeSuffix}.${format}`;
       const buffer = rowsToBuffer(rows, format, sheetName);
       try {
@@ -6159,6 +10690,121 @@ function registerPayrollHoursRoutes(app2) {
     } catch (error) {
       console.error("Error in export:", error);
       res.status(500).json({ error: "Failed to generate export" });
+    }
+  });
+  app2.post("/api/admin/hours/email", checkAdminRole(), async (req, res) => {
+    try {
+      const { to, mode, format: fmt, type, hotelId: hId, weekStart, year: yr, period: pd, subject } = req.body;
+      const format = fmt || "csv";
+      if (!to || typeof to !== "string" || !to.includes("@")) {
+        res.status(400).json({ error: "Valid email address is required" });
+        return;
+      }
+      if (!["csv", "xlsx"].includes(format)) {
+        res.status(400).json({ error: "format must be csv or xlsx" });
+        return;
+      }
+      const hotelId = hId || "all";
+      let startDate, endDate, windowLabel, filePrefix;
+      let periodYear = 2026, periodNumber = 0;
+      if (mode === "weekly") {
+        if (!weekStart) {
+          res.status(400).json({ error: "weekStart required" });
+          return;
+        }
+        const window = getWeeklyWindow(weekStart);
+        startDate = window.start;
+        endDate = window.end;
+        windowLabel = `Week: ${formatDateLabel(startDate)} - ${formatDateLabel(endDate)}`;
+        filePrefix = `WFC_Weekly_${weekStart}`;
+        periodYear = parseInt(weekStart.substring(0, 4));
+      } else if (mode === "cutoff") {
+        const year = parseInt(yr) || 2026;
+        const period = parseInt(pd);
+        const periods = getCutoffPeriods(year);
+        const p = periods.find((pp) => pp.period === period);
+        if (!p) {
+          res.status(400).json({ error: `Period ${period} not found` });
+          return;
+        }
+        startDate = p.startDate;
+        endDate = p.endDate;
+        windowLabel = `Period ${period}`;
+        filePrefix = `WFC_Payroll_${year}_Period-${String(period).padStart(2, "0")}`;
+        periodYear = year;
+        periodNumber = period;
+      } else {
+        res.status(400).json({ error: "mode must be weekly or cutoff" });
+        return;
+      }
+      const logs = await fetchLogsInRange(startDate, endDate, hotelId);
+      const workerIds = [...new Set(logs.map((l) => l.workerId))];
+      const paymentMap = await fetchPaymentProfilesFull(workerIds);
+      const groups = aggregateByHotel(logs, paymentMap);
+      const generatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      let rows;
+      let sheetName;
+      let typeSuffix;
+      switch (type) {
+        case "invoiceSummary":
+          rows = generateInvoiceSummaryRows(groups, startDate, endDate, generatedAt);
+          sheetName = "Invoice Summary";
+          typeSuffix = "InvoiceSummary";
+          break;
+        case "invoiceDetailed":
+          rows = generateDetailedRows(groups, windowLabel, startDate, endDate, generatedAt);
+          sheetName = "Invoice Detailed";
+          typeSuffix = "InvoiceDetailed";
+          break;
+        case "payrollTimesheet":
+          rows = generateTimesheetRows(groups, windowLabel, startDate, endDate, generatedAt);
+          sheetName = "Payroll Timesheet";
+          typeSuffix = "Timesheet";
+          break;
+        case "payrollPaymentSummary":
+          rows = generatePaymentSummaryRows(groups, windowLabel, startDate, endDate, generatedAt);
+          sheetName = "Payment Summary";
+          typeSuffix = "PaymentSummary";
+          break;
+        default:
+          res.status(400).json({ error: "type must be invoiceSummary, invoiceDetailed, payrollTimesheet, or payrollPaymentSummary" });
+          return;
+      }
+      const hotelName = hotelId === "all" ? "AllHotels" : sanitizeFileName2(groups[0]?.workplaceName || "Hotel");
+      const fileName = `${filePrefix}_${hotelName}_${typeSuffix}.${format}`;
+      const buffer = rowsToBuffer(rows, format, sheetName);
+      const emailSubject = subject || `WFConnect ${sheetName} - ${windowLabel} (${startDate} to ${endDate})`;
+      const bodyText = `Please find attached the ${sheetName} report for ${windowLabel} (${startDate} to ${endDate}).
+
+- WFConnect`;
+      let result;
+      if (format === "csv") {
+        result = await sendCSVEmail(to, emailSubject, bodyText, buffer.toString(), fileName);
+      } else {
+        result = await sendXLSXEmail(to, emailSubject, bodyText, buffer, fileName);
+      }
+      if (result.success) {
+        try {
+          await db.insert(exportAuditLogs).values({
+            adminUserId: req.headers["x-user-id"] || "unknown",
+            exportType: type,
+            fileFormat: format,
+            periodYear,
+            periodNumber,
+            workplaceId: hotelId === "all" ? null : hotelId,
+            workplaceName: hotelId === "all" ? "All Hotels" : groups[0]?.workplaceName || null,
+            fileName: `[EMAILED] ${fileName}`
+          });
+        } catch (auditErr) {
+          console.error("Audit log error (non-blocking):", auditErr);
+        }
+        res.json({ success: true, message: `${sheetName} sent to ${to}` });
+      } else {
+        res.status(500).json({ error: result.error || "Failed to send email" });
+      }
+    } catch (error) {
+      console.error("Error emailing hours export:", error);
+      res.status(500).json({ error: "Failed to email hours export" });
     }
   });
   app2.get("/api/admin/hours/export/all", checkAdminRole(), async (req, res) => {
@@ -6233,7 +10879,7 @@ function registerPayrollHoursRoutes(app2) {
             rows = generateTimesheetRows(singleGroup, windowLabel, startDate, endDate, generatedAt);
             typeSuffix = "Timesheet";
         }
-        const hotelFileName = `${filePrefix}_${sanitizeFileName(hotel.workplaceName)}_${typeSuffix}.${format}`;
+        const hotelFileName = `${filePrefix}_${sanitizeFileName2(hotel.workplaceName)}_${typeSuffix}.${format}`;
         const buffer = rowsToBuffer(rows, format, "Sheet1");
         archive.append(buffer, { name: hotelFileName });
       }
@@ -6260,12 +10906,27 @@ function registerPayrollHoursRoutes(app2) {
 }
 
 // server/index.ts
+init_db();
+init_schema();
 import * as fs from "fs";
 import * as path from "path";
 import bcrypt2 from "bcryptjs";
-import { eq as eq3 } from "drizzle-orm";
+import { eq as eq6, and as and5, isNull as isNull3, sql as sql5 } from "drizzle-orm";
 var app = express();
 var log = console.log;
+function escapeHtml(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function renderApplyTemplate(template) {
+  const clauseHtml = NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS.map((paragraph) => `<p class="clause-paragraph">${escapeHtml(paragraph)}</p>`).join("\n");
+  return template.replace(/__NON_SOLICITATION_TITLE__/g, escapeHtml(NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE)).replace(/__NON_SOLICITATION_BODY__/g, clauseHtml);
+}
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL] Unhandled Promise Rejection:", reason?.message || reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("[FATAL] Uncaught Exception:", error?.message || error);
+});
 var DEMO_USERS = [
   {
     id: "client-1",
@@ -6301,7 +10962,7 @@ var DEMO_USERS = [
 async function seedDemoUsers() {
   try {
     for (const demoUser of DEMO_USERS) {
-      const existing = await db.select().from(users).where(eq3(users.id, demoUser.id)).limit(1);
+      const existing = await db.select().from(users).where(eq6(users.id, demoUser.id)).limit(1);
       if (existing.length === 0) {
         const hashedPassword = await bcrypt2.hash(demoUser.password, 10);
         await db.insert(users).values({
@@ -6336,14 +10997,14 @@ var CAE_WORKPLACE = {
 };
 async function seedWorkplaces() {
   try {
-    const existing = await db.select().from(workplaces).where(eq3(workplaces.id, CAE_WORKPLACE.id)).limit(1);
+    const existing = await db.select().from(workplaces).where(eq6(workplaces.id, CAE_WORKPLACE.id)).limit(1);
     if (existing.length === 0) {
       await db.insert(workplaces).values(CAE_WORKPLACE);
       log(`Seeded workplace: ${CAE_WORKPLACE.name}`);
-      const adminExists = await db.select().from(users).where(eq3(users.id, "admin-1")).limit(1);
-      const workerExists = await db.select().from(users).where(eq3(users.id, "worker-1")).limit(1);
+      const adminExists = await db.select().from(users).where(eq6(users.id, "admin-1")).limit(1);
+      const workerExists = await db.select().from(users).where(eq6(users.id, "worker-1")).limit(1);
       if (adminExists.length > 0 && workerExists.length > 0) {
-        const assignmentExists = await db.select().from(workplaceAssignments).where(eq3(workplaceAssignments.workplaceId, CAE_WORKPLACE.id)).limit(1);
+        const assignmentExists = await db.select().from(workplaceAssignments).where(eq6(workplaceAssignments.workplaceId, CAE_WORKPLACE.id)).limit(1);
         if (assignmentExists.length === 0) {
           await db.insert(workplaceAssignments).values({
             id: "assignment-1",
@@ -6363,7 +11024,7 @@ async function seedWorkplaces() {
 }
 async function seedTimesheets() {
   try {
-    const existingTs = await db.select().from(timesheets).where(eq3(timesheets.id, "timesheet-demo-1")).limit(1);
+    const existingTs = await db.select().from(timesheets).where(eq6(timesheets.id, "timesheet-demo-1")).limit(1);
     if (existingTs.length === 0) {
       await db.insert(timesheets).values({
         id: "timesheet-demo-1",
@@ -6431,7 +11092,7 @@ async function seedTimesheets() {
       }
       log("Seeded demo timesheet: worker-1 Period 2 (submitted, 32.5h, $650)");
     }
-    const existingTs2 = await db.select().from(timesheets).where(eq3(timesheets.id, "timesheet-demo-2")).limit(1);
+    const existingTs2 = await db.select().from(timesheets).where(eq6(timesheets.id, "timesheet-demo-2")).limit(1);
     if (existingTs2.length === 0) {
       await db.insert(timesheets).values({
         id: "timesheet-demo-2",
@@ -6518,7 +11179,7 @@ async function seedTimesheets() {
 }
 async function seedProductionAdmin() {
   try {
-    const existingAdmin = await db.select().from(users).where(eq3(users.email, "admin@wfconnect.org")).limit(1);
+    const existingAdmin = await db.select().from(users).where(eq6(users.email, "admin@wfconnect.org")).limit(1);
     if (existingAdmin.length === 0) {
       const hashedPassword = await bcrypt2.hash("@1900Dundas", 10);
       await db.insert(users).values({
@@ -6536,6 +11197,83 @@ async function seedProductionAdmin() {
     }
   } catch (error) {
     log("Error seeding production admin:", error);
+  }
+}
+async function ensureWorkerApplicationsCompatibility() {
+  try {
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "agreement_version" text`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged" boolean`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged_at" timestamp`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "worker_pdf_generated_at" timestamp`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "internal_pdf_generated_at" timestamp`);
+    log("Ensured worker_applications compatibility columns");
+  } catch (error) {
+    log("Error ensuring worker_applications compatibility:", error);
+  }
+}
+async function backfillApprovedApplicationAccounts() {
+  try {
+    const approvedApps = await db.select({
+      id: workerApplications.id,
+      email: workerApplications.email,
+      fullName: workerApplications.fullName,
+      phone: workerApplications.phone,
+      preferredRoles: workerApplications.preferredRoles
+    }).from(workerApplications).where(eq6(workerApplications.status, "approved"));
+    let created = 0;
+    for (const app2 of approvedApps) {
+      if (!app2.email) continue;
+      const [existing] = await db.select({ id: users.id }).from(users).where(eq6(users.email, app2.email.toLowerCase())).limit(1);
+      if (existing) continue;
+      const crypto3 = await import("crypto");
+      const firstName = (app2.fullName || "worker").split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+      const phoneLast4 = (app2.phone || "0000").replace(/\D/g, "").slice(-4);
+      const tempPassword = `${firstName}${phoneLast4}`;
+      const hashedPassword = await bcrypt2.hash(tempPassword, 10);
+      await db.insert(users).values({
+        id: crypto3.randomUUID(),
+        email: app2.email.toLowerCase(),
+        password: hashedPassword,
+        fullName: app2.fullName || "Worker",
+        role: "worker",
+        phone: app2.phone || void 0,
+        isActive: true,
+        onboardingStatus: "AGREEMENT_PENDING",
+        workerRoles: app2.preferredRoles || void 0,
+        mustChangePassword: true,
+        timezone: "America/Toronto"
+      });
+      created++;
+    }
+    if (created > 0) {
+      log(`Backfilled ${created} user accounts from approved applications`);
+    }
+  } catch (error) {
+    log("Error backfilling approved application accounts:", error);
+  }
+}
+async function backfillWorkerPhones() {
+  try {
+    const workersWithoutPhone = await db.select({ id: users.id, email: users.email }).from(users).where(and5(eq6(users.role, "worker"), isNull3(users.phone)));
+    if (workersWithoutPhone.length === 0) {
+      return;
+    }
+    let backfilled = 0;
+    for (const worker of workersWithoutPhone) {
+      const [app2] = await db.select({ phone: workerApplications.phone }).from(workerApplications).where(and5(
+        eq6(workerApplications.email, worker.email),
+        eq6(workerApplications.status, "approved")
+      )).limit(1);
+      if (app2?.phone) {
+        await db.update(users).set({ phone: app2.phone }).where(eq6(users.id, worker.id));
+        backfilled++;
+      }
+    }
+    if (backfilled > 0) {
+      log(`Backfilled phone numbers for ${backfilled} workers from their applications`);
+    }
+  } catch (error) {
+    log("Error backfilling worker phones:", error);
   }
 }
 function setupCors(app2) {
@@ -6569,12 +11307,14 @@ function setupCors(app2) {
 function setupBodyParsing(app2) {
   app2.use(
     express.json({
+      limit: "30mb",
+      // Increased for base64 file uploads (photo + resume, each up to 10MB → ~13.3MB base64)
       verify: (req, _res, buf) => {
         req.rawBody = buf;
       }
     })
   );
-  app2.use(express.urlencoded({ extended: false }));
+  app2.use(express.urlencoded({ extended: false, limit: "30mb" }));
 }
 function setupRequestLogging(app2) {
   app2.use((req, res, next) => {
@@ -6686,8 +11426,40 @@ function configureExpoAndLanding(app2) {
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.sendFile(faviconPath);
   });
+  const applyFormPath = path.resolve(process.cwd(), "server", "templates", "apply-form.html");
+  const applyFormTemplate = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : null;
+  const applicantsPortalPath = path.resolve(process.cwd(), "server", "templates", "applicants-portal.html");
+  const applicantsPortalTemplate = fs.existsSync(applicantsPortalPath) ? fs.readFileSync(applicantsPortalPath, "utf-8") : null;
+  function isApplySubdomain(req) {
+    const host = (req.hostname || req.headers.host || "").toLowerCase();
+    return host.startsWith("apply.") || host.includes("apply.wfconnect");
+  }
+  if (applicantsPortalTemplate) {
+    app2.get("/applicants", (req, res, next) => {
+      if (!isApplySubdomain(req) && req.hostname !== "localhost" && !req.hostname?.includes("replit")) {
+        return next();
+      }
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      const googleClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "";
+      const rendered = applicantsPortalTemplate.replace("__GOOGLE_CLIENT_ID__", googleClientId);
+      return res.status(200).send(rendered);
+    });
+    log("Applicants admin portal available at /applicants and apply.wfconnect.org/applicants");
+  }
+  if (applyFormTemplate) {
+    log("Applicant lead portal available at apply.wfconnect.org/apply");
+  }
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
   const contractorGuideTemplate = fs.readFileSync(contractorGuidePath, "utf-8");
+  app2.get("/", (req, res) => {
+    if (isApplySubdomain(req)) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applyFormTemplate || "Apply form not found");
+    }
+    res.redirect("/guide");
+  });
   app2.get("/guide", (_req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
@@ -6720,11 +11492,20 @@ function configureExpoAndLanding(app2) {
     res.status(200).send(accountDeletionTemplate);
   });
   const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
-  const applyTemplate = fs.readFileSync(applyPath, "utf-8");
-  app2.get("/apply", (_req, res) => {
+  const applyTemplate = renderApplyTemplate(fs.readFileSync(applyPath, "utf-8"));
+  app2.get("/apply", (req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    if (isApplySubdomain(req) && applyFormTemplate) {
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applyFormTemplate);
+    }
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return res.status(200).send(applyTemplate);
+  });
+  app2.get("/contractor-apply", (_req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
-    res.status(200).send(applyTemplate);
+    return res.status(200).send(applyTemplate);
   });
   const paymentInfoPath = path.resolve(process.cwd(), "server", "templates", "payment-info.html");
   const paymentInfoTemplate = fs.readFileSync(paymentInfoPath, "utf-8");
@@ -6807,6 +11588,11 @@ function configureExpoAndLanding(app2) {
       res.setHeader("Cache-Control", "public, max-age=3600");
       return res.status(200).send(contractorGuideTemplate);
     }
+    if (isApplySubdomain(req) && applyFormTemplate) {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applyFormTemplate);
+    }
     return serveLandingPage({
       req,
       res,
@@ -6857,6 +11643,7 @@ function setupErrorHandler(app2) {
 }
 var isDemoMode = process.env.DEMO_MODE !== "false";
 (async () => {
+  await ensureWorkerApplicationsCompatibility();
   if (isDemoMode) {
     log("DEMO MODE enabled - seeding demo data...");
     await seedDemoUsers();
@@ -6865,6 +11652,8 @@ var isDemoMode = process.env.DEMO_MODE !== "false";
   } else {
     log("PRODUCTION MODE - skipping demo data seeding");
     await seedProductionAdmin();
+    await backfillWorkerPhones();
+    await backfillApprovedApplicationAccounts();
   }
   setupCors(app);
   setupBodyParsing(app);

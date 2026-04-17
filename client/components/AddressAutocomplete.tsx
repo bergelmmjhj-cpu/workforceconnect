@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   TextInput,
@@ -38,6 +38,7 @@ interface AddressAutocompleteProps {
   label?: string;
   value: string;
   onAddressSelect: (address: AddressData) => void;
+  onInputChange?: (value: string) => void;
   onClear?: () => void;
   error?: string;
   containerStyle?: ViewStyle;
@@ -51,6 +52,7 @@ export function AddressAutocomplete({
   label,
   value,
   onAddressSelect,
+  onInputChange,
   onClear,
   error,
   containerStyle,
@@ -66,6 +68,10 @@ export function AddressAutocomplete({
   const [showDropdown, setShowDropdown] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
 
   const fetchPredictions = useCallback(async (input: string) => {
     if (input.length < 2) {
@@ -92,6 +98,8 @@ export function AddressAutocomplete({
 
   const handleInputChange = (text: string) => {
     setInputValue(text);
+    onInputChange?.(text);
+    setShowDropdown(false);
     
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -110,6 +118,7 @@ export function AddressAutocomplete({
       const response = await apiRequest("GET", `/api/places/details/${prediction.place_id}`);
       const addressData: AddressData = await response.json();
       setInputValue(addressData.formattedAddress);
+      onInputChange?.(addressData.addressLine1 || addressData.formattedAddress);
       onAddressSelect(addressData);
       setPredictions([]);
     } catch (err) {
@@ -123,6 +132,8 @@ export function AddressAutocomplete({
     setInputValue("");
     setPredictions([]);
     setShowDropdown(false);
+    setApiError(null);
+    onInputChange?.("");
     onClear?.();
   };
 
@@ -228,7 +239,7 @@ export function AddressAutocomplete({
         <View style={styles.selectedIndicator}>
           <Feather name="check-circle" size={14} color={theme.success} />
           <ThemedText style={[styles.selectedText, { color: theme.success }]}>
-            Address selected with GPS coordinates
+            Address suggestion applied
           </ThemedText>
         </View>
       ) : null}

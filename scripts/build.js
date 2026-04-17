@@ -155,8 +155,8 @@ async function startMetro(expoPublicDomain) {
 
 async function downloadFile(url, outputPath) {
   const controller = new AbortController();
-  const fiveMinMS = 5 * 60 * 1_000;
-  const timeoutId = setTimeout(() => controller.abort(), fiveMinMS);
+  const fifteenMinMS = 15 * 60 * 1_000;
+  const timeoutId = setTimeout(() => controller.abort(), fifteenMinMS);
 
   try {
     console.log(`Downloading: ${url}`);
@@ -181,7 +181,7 @@ async function downloadFile(url, outputPath) {
     }
 
     if (error.name === "AbortError") {
-      throw new Error(`Download timeout after 5m: ${url}`);
+      throw new Error(`Download timeout after 15m: ${url}`);
     }
     throw error;
   } finally {
@@ -533,7 +533,11 @@ async function main() {
 
   await startMetro(domain);
 
-  const downloadTimeout = 300000;
+  const defaultDownloadTimeout = 15 * 60 * 1_000;
+  const configuredDownloadTimeout = Number(process.env.EXPO_STATIC_DOWNLOAD_TIMEOUT_MS);
+  const downloadTimeout = Number.isFinite(configuredDownloadTimeout) && configuredDownloadTimeout > 0
+    ? configuredDownloadTimeout
+    : defaultDownloadTimeout;
   const downloadPromise = downloadBundlesAndManifests(timestamp);
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {

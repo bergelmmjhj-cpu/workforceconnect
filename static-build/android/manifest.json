@@ -1,11 +1,11 @@
 {
-  "id": "798f02f7-f27b-4abe-809b-f6d2dadc5613",
-  "createdAt": "2026-03-19T12:49:23.196Z",
+  "id": "e23b6348-7768-42d0-bcf8-5808a2a6e676",
+  "createdAt": "2026-04-17T19:37:33.544Z",
   "runtimeVersion": "exposdk:54.0.0",
   "launchAsset": {
-    "key": "bundle-1773924563196-3301",
+    "key": "bundle-1776454653544-21743",
     "contentType": "application/javascript",
-    "url": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/1773924563196-3301/_expo/static/js/android/bundle.js"
+    "url": "https://localhost:5000/1776454653544-21743/_expo/static/js/android/bundle.js"
   },
   "assets": [],
   "metadata": {},
@@ -43,7 +43,7 @@
         "adaptiveIcon": {
           "backgroundColor": "#1E40AF",
           "foregroundImage": "./assets/images/icon.png",
-          "foregroundImageUrl": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/assets/./assets/images/icon.png"
+          "foregroundImageUrl": "http://127.0.0.1:8081/assets/./assets/images/icon.png"
         },
         "edgeToEdgeEnabled": true,
         "predictiveBackGestureEnabled": false
@@ -65,7 +65,9 @@
             }
           }
         ],
-        "expo-web-browser"
+        "expo-web-browser",
+        "@react-native-community/datetimepicker",
+        "expo-font"
       ],
       "experiments": {
         "reactCompiler": true
@@ -78,18 +80,22 @@
       "owner": "bergel",
       "_internal": {
         "isDebug": false,
-        "projectRoot": "/home/runner/workspace",
+        "projectRoot": "/workspaces/workforceconnect",
         "dynamicConfigPath": {},
-        "staticConfigPath": "/home/runner/workspace/app.json",
-        "packageJsonPath": "/home/runner/workspace/package.json",
+        "staticConfigPath": "/workspaces/workforceconnect/app.json",
+        "packageJsonPath": "/workspaces/workforceconnect/package.json",
         "pluginHistory": {
           "expo-splash-screen": {
             "name": "expo-splash-screen",
-            "version": "31.0.11"
+            "version": "31.0.13"
           },
           "expo-web-browser": {
             "name": "expo-web-browser",
-            "version": "15.0.9"
+            "version": "15.0.10"
+          },
+          "expo-font": {
+            "name": "expo-font",
+            "version": "14.0.11"
           }
         }
       },
@@ -102,20 +108,20 @@
       "androidStatusBar": {
         "backgroundColor": "#1E40AF"
       },
-      "iconUrl": "https://40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/assets/./assets/images/icon.png",
-      "hostUri": "40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/android"
+      "iconUrl": "http://127.0.0.1:8081/assets/./assets/images/icon.png",
+      "hostUri": "localhost:5000/android"
     },
     "expoGo": {
-      "debuggerHost": "40799e59-ded6-4fd8-b001-cb8d4962ea8c-00-3gwe4krechb0i.janeway.replit.dev/android",
+      "debuggerHost": "localhost:5000/android",
       "developer": {
         "tool": "expo-cli",
-        "projectRoot": "/home/runner/workspace"
+        "projectRoot": "/workspaces/workforceconnect"
       },
       "packagerOpts": {
         "dev": false
       },
       "mainModuleName": "client/index"
     },
-    "scopeKey": "@anonymous/workforce-connect-f78b54fa-c204-4044-83a8-358b618786e6"
+    "scopeKey": "@anonymous/workforce-connect-67adfcaf-70ae-41bd-9d7f-f246bf455506"
   }
 }

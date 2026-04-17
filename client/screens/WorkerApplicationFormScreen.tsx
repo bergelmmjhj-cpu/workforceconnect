@@ -444,6 +444,10 @@ export default function WorkerApplicationFormScreen() {
                   userRole={user?.role || "worker"}
                   userId={user?.id || ""}
                   isAddressSelected={isAddressSelected}
+                  onInputChange={(text) => {
+                    setFormData((p) => ({ ...p, street: text }));
+                    setIsAddressSelected(Boolean(text.trim()));
+                  }}
                   onAddressSelect={(address: AddressData) => {
                     setFormData((p) => ({
                       ...p,
@@ -466,22 +470,18 @@ export default function WorkerApplicationFormScreen() {
                     setIsAddressSelected(false);
                   }}
                 />
-                {isAddressSelected ? (
-                  <View style={styles.addressPreview}>
-                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
-                      Street: <ThemedText style={{ color: theme.text }}>{formData.street}</ThemedText>
-                    </ThemedText>
-                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
-                      City: <ThemedText style={{ color: theme.text }}>{formData.city}</ThemedText>
-                    </ThemedText>
-                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
-                      Province/State: <ThemedText style={{ color: theme.text }}>{formData.provinceState}</ThemedText>
-                    </ThemedText>
-                    <ThemedText style={[styles.addressPreviewLabel, { color: theme.textSecondary }]}>
-                      Postal/Zip: <ThemedText style={{ color: theme.text }}>{formData.postalZip}</ThemedText>
-                    </ThemedText>
-                  </View>
-                ) : null}
+                {renderInput("Street Address", formData.street, (v) =>
+                  setFormData((p) => ({ ...p, street: v })), { required: true, placeholder: "Street address" }
+                )}
+                {renderInput("City", formData.city, (v) =>
+                  setFormData((p) => ({ ...p, city: v })), { required: true, placeholder: "City" }
+                )}
+                {renderInput("Province/State", formData.provinceState, (v) =>
+                  setFormData((p) => ({ ...p, provinceState: v.toUpperCase() })), { required: true, placeholder: "ON" }
+                )}
+                {renderInput("Postal/Zip", formData.postalZip, (v) =>
+                  setFormData((p) => ({ ...p, postalZip: v.toUpperCase() })), { required: true, placeholder: "M5V 1A1" }
+                )}
                 {renderInput("Primary Language", formData.primaryLanguage, (v) =>
                   setFormData((p) => ({ ...p, primaryLanguage: v })), { required: true }
                 )}

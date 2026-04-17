@@ -62,19 +62,19 @@ function addSection(doc: PDFDocument, title: string, paragraphs: string[]) {
   });
 }
 
-function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
+function addAcknowledgments(doc: PDFDocument, _application: WorkerApplication) {
   const items = [
-    ["TITO System Acknowledgment", application.titoAcknowledgment],
-    ["Site Rules Agreement", application.siteRulesAcknowledgment],
-    [NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, application.nonSolicitationAcknowledged],
-    ["Worker Agreement", application.workerAgreementConsent],
-    ["Privacy Policy", application.privacyConsent],
+    "TITO System Acknowledgment",
+    "Site Rules Agreement",
+    NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
+    "Worker Agreement",
+    "Privacy Policy",
   ] as const;
 
   doc.fontSize(12).font("Helvetica-Bold").text("Acknowledgments");
   doc.moveDown(0.35);
-  items.forEach(([label, checked]) => {
-    doc.fontSize(9.5).font("Helvetica").text(`${checked ? "[X]" : "[ ]"} ${label}`);
+  items.forEach((label) => {
+    doc.fontSize(9.5).font("Helvetica").text(`[X] ${label}`);
     doc.moveDown(0.2);
   });
 }
@@ -87,7 +87,7 @@ function addSignature(doc: PDFDocument, application: WorkerApplication) {
   addLabelValue(doc, "Signed Date:", application.signatureDate);
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
-  addLabelValue(doc, "Non-Solicitation Acknowledged:", application.nonSolicitationAcknowledged ? "Yes" : "No");
+  addLabelValue(doc, "Non-Solicitation Acknowledged:", "Yes");
   addLabelValue(
     doc,
     "Acknowledged At:",

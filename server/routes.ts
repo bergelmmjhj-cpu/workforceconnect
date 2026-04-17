@@ -559,6 +559,30 @@ function mapApplicationForSync(application: typeof workerApplications.$inferSele
   };
 }
 
+const REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
+  "backgroundCheckConsent",
+  "titoAcknowledgment",
+  "siteRulesAcknowledgment",
+  "workerAgreementConsent",
+  "privacyConsent",
+  "consentToContact",
+] as const;
+
+function isConsentGranted(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+  }
+  if (typeof value === "number") return value === 1;
+  return false;
+}
+
+function getMissingRequiredConsents(payload: Record<string, unknown> | undefined): string[] {
+  if (!payload) return [...REQUIRED_PUBLIC_APPLICATION_CONSENTS];
+  return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !isConsentGranted(payload[field]));
+}
+
 function getConfiguredApiKeys(): string[] {
   const keys: string[] = [];
   const singleKey = process.env.WFCONNECT_API_KEY?.trim();
@@ -2364,10 +2388,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const missingConsents = getMissingRequiredConsents(req.body);
+      if (missingConsents.length > 0) {
+        res.status(400).json({
+          error: "Required consents were not provided",
+          missingConsents,
+        });
+        return;
+      }
+
       const applicationData = {
         ...req.body,
         fullName: resolvedIdentity.fullName,
         email: typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : req.body?.email,
+        consentToContact: isConsentGranted(req.body?.consentToContact),
         agreementVersion: req.body?.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
         nonSolicitationAcknowledged: req.body?.nonSolicitationAcknowledged === true,
         nonSolicitationAcknowledgedAt: req.body?.nonSolicitationAcknowledged ? new Date(req.body?.nonSolicitationAcknowledgedAt || Date.now()) : null,

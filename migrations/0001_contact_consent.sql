@@ -1,0 +1,1 @@
+ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "consent_to_contact" boolean DEFAULT false;

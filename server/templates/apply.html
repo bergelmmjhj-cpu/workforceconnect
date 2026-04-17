@@ -1102,6 +1102,11 @@
               <span class="checkbox-label bold">Privacy Policy <span style="color: var(--error);">*</span></span>
             </label>
             <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I consent to the collection, use, and protection of my personal data as outlined in the <a href="/privacy" style="color: var(--primary);">Privacy Policy</a>, in compliance with GDPR and PIPEDA regulations.</p>
+
+            <label class="checkbox-item" style="margin-top: 16px;">
+              <input type="checkbox" name="consentToContact" required>
+              <span class="checkbox-label bold">I agree to receive SMS messages, phone calls, and application-related updates from Workforce Connect. Standard message and data rates may apply. <span style="color: var(--error);">*</span></span>
+            </label>
             
             <label class="checkbox-item" style="margin-top: 16px;">
               <input type="checkbox" name="marketingConsent">
@@ -1230,7 +1235,7 @@
                 isValid = false;
               }
 
-              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'privacyConsent'].forEach(function(name) {
+              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'privacyConsent', 'consentToContact'].forEach(function(name) {
                 var checkbox = form.querySelector('input[name="' + name + '"]');
                 if (checkbox && !checkbox.checked) {
                   isValid = false;
@@ -1331,6 +1336,7 @@
           nonSolicitationAcknowledged: form.nonSolicitationAcknowledged.checked,
           nonSolicitationAcknowledgedAt: new Date().toISOString(),
           privacyConsent: form.privacyConsent.checked,
+          consentToContact: form.consentToContact.checked,
           marketingConsent: form.marketingConsent.checked,
           signature: form.signature.value,
           signatureDate: new Date().toISOString().split('T')[0]

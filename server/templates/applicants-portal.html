@@ -275,6 +275,7 @@ const GOOGLE_CLIENT_ID = '__GOOGLE_CLIENT_ID__';
 let currentUser = null;
 let applicants = [];
 let applicantsTotalCount = 0;
+let applicantsStats = { total: 0, new: 0, reviewing: 0, interviewed: 0, hired: 0, rejected: 0 };
 let searchTimer = null;
 let pending2FAUserId = null;
 let googleInitialized = false;
@@ -476,13 +477,42 @@ async function loadApplicants() {
     if (status !== 'all') params.set('status', status);
     params.set('limit', '200');
 
-    const resp = await apiFetch('/api/applicants?' + params.toString(), { headers: getHeaders() });
+    const statsParams = new URLSearchParams();
+    if (search) statsParams.set('search', search);
+
+    const [resp, statsResp] = await Promise.all([
+      apiFetch('/api/applicants?' + params.toString(), { headers: getHeaders() }),
+      apiFetch('/api/applicants/stats?' + statsParams.toString(), { headers: getHeaders() }),
+    ]);
     if (resp.status === 403 || resp.status === 401) { showLogin(); return; }
     if (!resp.ok) throw new Error('Failed to fetch');
 
     applicants = await resp.json();
-    const headerTotal = Number(resp.headers.get('X-Total-Count') || applicants.length || 0);
-    applicantsTotalCount = Number.isFinite(headerTotal) ? headerTotal : applicants.length;
+
+    if (statsResp.ok) {
+      const statsData = await statsResp.json();
+      applicantsStats = {
+        total: Number(statsData.total || 0),
+        new: Number(statsData.new || 0),
+        reviewing: Number(statsData.reviewing || 0),
+        interviewed: Number(statsData.interviewed || 0),
+        hired: Number(statsData.hired || 0),
+        rejected: Number(statsData.rejected || 0),
+      };
+      applicantsTotalCount = applicantsStats.total;
+    } else {
+      const headerTotal = Number(resp.headers.get('X-Total-Count') || applicants.length || 0);
+      applicantsTotalCount = Number.isFinite(headerTotal) ? headerTotal : applicants.length;
+      applicantsStats = {
+        total: applicantsTotalCount,
+        new: applicants.filter(a => a.status === 'new').length,
+        reviewing: applicants.filter(a => a.status === 'reviewing').length,
+        interviewed: applicants.filter(a => a.status === 'interviewed').length,
+        hired: applicants.filter(a => a.status === 'hired').length,
+        rejected: applicants.filter(a => a.status === 'rejected').length,
+      };
+    }
+
     renderStats();
     renderTable();
   } catch (err) {
@@ -491,8 +521,14 @@ async function loadApplicants() {
 }
 
 function renderStats() {
-  const counts = { total: applicantsTotalCount || applicants.length, new: 0, reviewing: 0, interviewed: 0, hired: 0, rejected: 0 };
-  applicants.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
+  const counts = {
+    total: applicantsStats.total || applicantsTotalCount || applicants.length,
+    new: applicantsStats.new || 0,
+    reviewing: applicantsStats.reviewing || 0,
+    interviewed: applicantsStats.interviewed || 0,
+    hired: applicantsStats.hired || 0,
+    rejected: applicantsStats.rejected || 0,
+  };
 
   const stats = [
     { num: counts.total, label: 'Total', color: 'var(--primary)' },
@@ -525,6 +561,9 @@ function parseLocationFallback(addressFull) {
 }
 
 function displayLocation(applicant) {
+  const normalizedDisplay = applicant.locationDisplay || applicant.location_display || '';
+  if (normalizedDisplay) return normalizedDisplay;
+
   const city = applicant.addressCity || applicant.address_city || '';
   const province = applicant.addressProvince || applicant.address_province || '';
   const structured = [city, province].filter(Boolean).join(', ');
@@ -534,7 +573,7 @@ function displayLocation(applicant) {
 }
 
 function displayPhone(applicant) {
-  const phone = applicant.phone || applicant.phone_number || applicant.mobilePhone || '';
+  const phone = applicant.phoneDisplay || applicant.phone_display || applicant.phone || applicant.phone_number || applicant.mobilePhone || '';
   return phone ? String(phone).trim() : '—';
 }
 

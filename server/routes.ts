@@ -712,6 +712,40 @@ function normalizePhoneForComparison(value: string): string {
   return digits;
 }
 
+function buildApplicantLocationDisplay(input: {
+  addressCity?: string | null;
+  addressProvince?: string | null;
+  addressFull?: string | null;
+}): string | null {
+  const city = normalizeOptionalText(input.addressCity);
+  const province = normalizeOptionalText(input.addressProvince);
+  const structuredLocation = [city, province?.toUpperCase()].filter(Boolean).join(", ");
+  if (structuredLocation) return structuredLocation;
+
+  const parsedAddress = parseLocalAddress(input.addressFull || "");
+  const parsedCity = normalizeOptionalText(parsedAddress.city);
+  const parsedProvince = normalizeOptionalText(parsedAddress.province);
+  const parsedLocation = [parsedCity, parsedProvince?.toUpperCase()].filter(Boolean).join(", ");
+  if (parsedLocation) return parsedLocation;
+
+  const fullAddress = normalizeOptionalText(input.addressFull);
+  if (fullAddress) {
+    const parts = fullAddress.split(",").map((part) => normalizeOptionalText(part)).filter(Boolean) as string[];
+    if (parts.length >= 2) {
+      return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+    }
+    return fullAddress;
+  }
+
+  return null;
+}
+
+function normalizeApplicantPhone(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = normalizeWhitespace(value);
+  return normalized.length > 0 ? normalized : null;
+}
+
 function makeSubmissionFingerprint(parts: Array<string | null | undefined>): string {
   const normalized = parts
     .map((part) => (part || "").trim().toLowerCase())
@@ -4080,11 +4114,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const normalizedRows = rows.map((row) => {
         const parsedAddress = parseLocalAddress(row.addressFull || "");
+        const locationDisplay = buildApplicantLocationDisplay({
+          addressCity: row.addressCity,
+          addressProvince: row.addressProvince,
+          addressFull: row.addressFull,
+        });
+        const phoneDisplay = normalizeApplicantPhone(row.phone);
+
         return {
           ...row,
-          phone: normalizeWhitespace(row.phone || ""),
+          phone: phoneDisplay || "",
+          phoneDisplay,
           addressCity: row.addressCity || parsedAddress.city || null,
           addressProvince: row.addressProvince || parsedAddress.province || null,
+          locationDisplay,
         };
       });
 
@@ -4111,12 +4154,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Strip file data from main response for speed
       const { photoData: _p, resumeData: _r, ...safe } = row;
       const parsedAddress = parseLocalAddress(safe.addressFull || "");
+      const locationDisplay = buildApplicantLocationDisplay({
+        addressCity: safe.addressCity,
+        addressProvince: safe.addressProvince,
+        addressFull: safe.addressFull,
+      });
+      const phoneDisplay = normalizeApplicantPhone(safe.phone);
       res.json({
         ...safe,
-        phone: normalizeWhitespace(safe.phone || ""),
+        phone: phoneDisplay || "",
+        phoneDisplay,
         addressCity: safe.addressCity || parsedAddress.city || null,
         addressProvince: safe.addressProvince || parsedAddress.province || null,
         addressPostalCode: safe.addressPostalCode || parsedAddress.postalCode || null,
+        locationDisplay,
         hasPhoto: !!_p,
         hasResume: !!_r,
       });
@@ -4140,6 +4191,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updated);
     } catch (error: any) {
       res.status(500).json({ error: "Failed to update status" });
+    }
+  });
+
+  app.get("/api/applicants/stats", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { search } = req.query;
+      const conditions = [];
+
+      if (search) {
+        const s = `%${search}%`;
+        conditions.push(sql`(${applicants.fullName} ILIKE ${s} OR ${applicants.phone} ILIKE ${s})`);
+      }
+
+      const grouped = await db.select({
+        status: applicants.status,
+        total: sql<number>`count(*)`,
+      })
+        .from(applicants)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .groupBy(applicants.status);
+
+      const [totalRow] = await db.select({
+        total: sql<number>`count(*)`,
+      })
+        .from(applicants)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      const counts: Record<string, number> = {
+        total: Number(totalRow?.total || 0),
+        new: 0,
+        reviewing: 0,
+        interviewed: 0,
+        hired: 0,
+        rejected: 0,
+      };
+
+      grouped.forEach((row) => {
+        const key = row.status || "";
+        if (counts[key] !== undefined) {
+          counts[key] = Number(row.total || 0);
+        }
+      });
+
+      res.json(counts);
+    } catch (error: any) {
+      console.error("[APPLICANTS] Stats error:", error);
+      res.status(500).json({ error: "Failed to fetch applicant stats" });
     }
   });
 

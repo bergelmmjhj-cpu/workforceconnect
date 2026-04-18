@@ -353,6 +353,14 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged_at" timestamp`);
     await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "worker_pdf_generated_at" timestamp`);
     await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "internal_pdf_generated_at" timestamp`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "promotional_consent" boolean`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
+    await db.execute(sql`UPDATE "worker_applications" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET NOT NULL`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "promotional_consent" boolean`);
+    await db.execute(sql`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
+    await db.execute(sql`UPDATE "applicants" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
+    await db.execute(sql`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET NOT NULL`);
     log("Ensured worker_applications compatibility columns");
   } catch (error) {
     log("Error ensuring worker_applications compatibility:", error);

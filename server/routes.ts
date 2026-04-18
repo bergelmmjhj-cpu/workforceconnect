@@ -583,6 +583,22 @@ function getMissingRequiredConsents(payload: Record<string, unknown> | undefined
   return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !isConsentGranted(payload[field]));
 }
 
+function normalizeJsonArrayField(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+  return "[]";
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function getConfiguredApiKeys(): string[] {
   const keys: string[] = [];
   const singleKey = process.env.WFCONNECT_API_KEY?.trim();
@@ -2397,14 +2413,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const promotionalConsent = isConsentGranted(req.body?.promotionalConsent) || isConsentGranted(req.body?.marketingConsent);
+      const nonSolicitationAcknowledged = isConsentGranted(req.body?.nonSolicitationAcknowledged);
+
       const applicationData = {
-        ...req.body,
         fullName: resolvedIdentity.fullName,
+        dateOfBirth: normalizeOptionalText(req.body?.dateOfBirth),
+        phone: typeof req.body?.phone === "string" ? req.body.phone.trim() : req.body?.phone,
         email: typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : req.body?.email,
+        address: typeof req.body?.address === "string" ? req.body.address.trim() : req.body?.address,
+        city: typeof req.body?.city === "string" ? req.body.city.trim() : req.body?.city,
+        province: typeof req.body?.province === "string" ? req.body.province.trim() : req.body?.province,
+        postalCode: typeof req.body?.postalCode === "string" ? req.body.postalCode.trim() : req.body?.postalCode,
+        workStatus: req.body?.workStatus,
+        backgroundCheckConsent: isConsentGranted(req.body?.backgroundCheckConsent),
+        preferredRoles: normalizeJsonArrayField(req.body?.preferredRoles),
+        otherRole: normalizeOptionalText(req.body?.otherRole),
+        availableDays: normalizeJsonArrayField(req.body?.availableDays),
+        preferredShifts: normalizeJsonArrayField(req.body?.preferredShifts),
+        unavailablePeriods: normalizeOptionalText(req.body?.unavailablePeriods),
+        yearsExperience: normalizeOptionalText(req.body?.yearsExperience),
+        experienceSummary: normalizeOptionalText(req.body?.experienceSummary),
+        skills: normalizeOptionalText(req.body?.skills),
+        desiredShiftLength: normalizeOptionalText(req.body?.desiredShiftLength),
+        maxTravelDistance: normalizeOptionalText(req.body?.maxTravelDistance),
+        emergencyContactName: req.body?.emergencyContactName,
+        emergencyContactRelationship: req.body?.emergencyContactRelationship,
+        emergencyContactPhone: req.body?.emergencyContactPhone,
+        paymentMethod: normalizeOptionalText(req.body?.paymentMethod),
+        bankName: normalizeOptionalText(req.body?.bankName),
+        bankInstitution: normalizeOptionalText(req.body?.bankInstitution),
+        bankTransit: normalizeOptionalText(req.body?.bankTransit),
+        bankAccount: normalizeOptionalText(req.body?.bankAccount),
+        etransferEmail: normalizeOptionalText(req.body?.etransferEmail),
+        titoAcknowledgment: isConsentGranted(req.body?.titoAcknowledgment),
+        siteRulesAcknowledgment: isConsentGranted(req.body?.siteRulesAcknowledgment),
+        workerAgreementConsent: isConsentGranted(req.body?.workerAgreementConsent),
         consentToContact: isConsentGranted(req.body?.consentToContact),
+        privacyConsent: isConsentGranted(req.body?.privacyConsent),
+        promotionalConsent,
+        marketingConsent: promotionalConsent,
+        signature: req.body?.signature,
+        signatureDate: req.body?.signatureDate,
         agreementVersion: req.body?.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
-        nonSolicitationAcknowledged: req.body?.nonSolicitationAcknowledged === true,
-        nonSolicitationAcknowledgedAt: req.body?.nonSolicitationAcknowledged ? new Date(req.body?.nonSolicitationAcknowledgedAt || Date.now()) : null,
+        nonSolicitationAcknowledged,
+        nonSolicitationAcknowledgedAt: nonSolicitationAcknowledged
+          ? new Date(req.body?.nonSolicitationAcknowledgedAt || Date.now())
+          : null,
         ip,
         userAgent,
       };

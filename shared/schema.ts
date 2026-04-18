@@ -252,6 +252,7 @@ export const workerApplications = pgTable("worker_applications", {
   internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
   privacyConsent: boolean("privacy_consent").default(false),
   consentToContact: boolean("consent_to_contact").default(false),
+  promotionalConsent: boolean("promotional_consent").notNull().default(false),
   marketingConsent: boolean("marketing_consent").default(false),
   
   // Electronic Signature

@@ -258,8 +258,17 @@ let autocompleteTimer;
 const addressInput = document.getElementById('address_full');
 const suggestionsBox = document.getElementById('address-suggestions');
 
+function clearResolvedAddressFields() {
+  document.getElementById('address_street').value = '';
+  document.getElementById('address_city').value = '';
+  document.getElementById('address_province').value = '';
+  document.getElementById('address_postal_code').value = '';
+  document.getElementById('address_country').value = 'Canada';
+}
+
 addressInput.addEventListener('input', () => {
   addressValidated = false;
+  clearResolvedAddressFields();
   clearTimeout(autocompleteTimer);
   const val = addressInput.value.trim();
   if (val.length < 3) { hideSuggestions(); return; }
@@ -271,6 +280,7 @@ addressInput.addEventListener('blur', () => { setTimeout(hideSuggestions, 200); 
 async function fetchSuggestions(input) {
   try {
     const resp = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}&country=CA`);
+    if (!resp.ok) { hideSuggestions(); return; }
     const data = await resp.json();
     if (!data.predictions || data.predictions.length === 0) { hideSuggestions(); return; }
     renderSuggestions(data.predictions);
@@ -296,11 +306,24 @@ async function selectPlace(placeId, description) {
   hideSuggestions();
   try {
     const resp = await fetch(`/api/places/details/${placeId}`);
+    if (!resp.ok) {
+      showError('address_full', 'Unable to validate address. Please select another suggestion.');
+      addressValidated = false;
+      clearResolvedAddressFields();
+      return;
+    }
     const data = await resp.json();
     if (data.country !== 'Canada') {
       showError('address_full', 'Only Canadian addresses are accepted');
       addressInput.value = '';
       addressValidated = false;
+      clearResolvedAddressFields();
+      return;
+    }
+    if (!data.city || !data.province) {
+      showError('address_full', 'Please choose an address suggestion that includes city and province.');
+      addressValidated = false;
+      clearResolvedAddressFields();
       return;
     }
     document.getElementById('address_street').value = data.addressLine1 || '';
@@ -310,7 +333,11 @@ async function selectPlace(placeId, description) {
     document.getElementById('address_country').value = 'Canada';
     clearError('address_full');
     addressValidated = true;
-  } catch { addressValidated = true; }
+  } catch {
+    showError('address_full', 'Address lookup failed. Please select a valid suggestion.');
+    addressValidated = false;
+    clearResolvedAddressFields();
+  }
 }
 
 // --- FILE UPLOAD ---
@@ -410,6 +437,10 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
 
   const address = document.getElementById('address_full').value.trim();
   if (!address) { showError('address_full', 'Please enter your address'); valid = false; } else clearError('address_full');
+  if (address && !addressValidated) {
+    showError('address_full', 'Please select a complete address from the suggestions list.');
+    valid = false;
+  }
 
   const applyingFor = document.getElementById('applying_for').value;
   if (!applyingFor) { showError('applying_for', 'Please select a position'); valid = false; } else clearError('applying_for');

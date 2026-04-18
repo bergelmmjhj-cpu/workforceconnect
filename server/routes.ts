@@ -183,6 +183,11 @@ function buildLocalAddressPredictions(input: string) {
   if (parsed.addressLine1 && parsed.city) {
     candidates.add([parsed.addressLine1, parsed.city, parsed.province, "Canada"].filter(Boolean).join(", "));
   }
+  if (!parsed.city || !parsed.province) {
+    ["Mississauga", "Toronto", "Brampton", "Etobicoke"].forEach((city) => {
+      candidates.add([parsed.addressLine1 || trimmed, city, "ON", "Canada"].filter(Boolean).join(", "));
+    });
+  }
 
   return Array.from(candidates)
     .filter(Boolean)
@@ -4001,15 +4006,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const now = new Date();
+      const parsedAddress = parseLocalAddress(addressFull);
+      const normalizedAddressCity = normalizeOptionalText(addressCity) || normalizeOptionalText(parsedAddress.city);
+      const normalizedAddressProvince = normalizeOptionalText(addressProvince) || normalizeOptionalText(parsedAddress.province);
+      const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
+      const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
+
       const [applicant] = await db.insert(applicants).values({
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(phone),
         addressFull: normalizeAddressText(addressFull),
         addressStreet: normalizeOptionalText(addressStreet),
-        addressCity: normalizeOptionalText(addressCity),
-        addressProvince: normalizeOptionalText(addressProvince)?.toUpperCase() || null,
-        addressPostalCode: normalizeOptionalText(addressPostalCode)?.toUpperCase() || null,
-        addressCountry: normalizeOptionalText(addressCountry) || "Canada",
+        addressCity: normalizedAddressCity,
+        addressProvince: normalizedAddressProvince?.toUpperCase() || null,
+        addressPostalCode: normalizedAddressPostalCode?.toUpperCase() || null,
+        addressCountry: normalizedAddressCountry,
         applyingFor: normalizeWhitespace(applyingFor),
         jobPostingSource: normalizeWhitespace(jobPostingSource),
         photoData: photoDataIn,
@@ -4067,7 +4078,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(desc(applicants.submittedAt))
         .limit(limitVal);
 
-      res.json(rows);
+      const normalizedRows = rows.map((row) => {
+        const parsedAddress = parseLocalAddress(row.addressFull || "");
+        return {
+          ...row,
+          phone: normalizeWhitespace(row.phone || ""),
+          addressCity: row.addressCity || parsedAddress.city || null,
+          addressProvince: row.addressProvince || parsedAddress.province || null,
+        };
+      });
+
+      res.json(normalizedRows);
     } catch (error: any) {
       console.error("[APPLICANTS] List error:", error);
       res.status(500).json({ error: "Failed to fetch applicants" });
@@ -4080,7 +4101,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!row) return res.status(404).json({ error: "Applicant not found" });
       // Strip file data from main response for speed
       const { photoData: _p, resumeData: _r, ...safe } = row;
-      res.json({ ...safe, hasPhoto: !!_p, hasResume: !!_r });
+      const parsedAddress = parseLocalAddress(safe.addressFull || "");
+      res.json({
+        ...safe,
+        phone: normalizeWhitespace(safe.phone || ""),
+        addressCity: safe.addressCity || parsedAddress.city || null,
+        addressProvince: safe.addressProvince || parsedAddress.province || null,
+        addressPostalCode: safe.addressPostalCode || parsedAddress.postalCode || null,
+        hasPhoto: !!_p,
+        hasResume: !!_r,
+      });
     } catch (error: any) {
       res.status(500).json({ error: "Failed to fetch applicant" });
     }

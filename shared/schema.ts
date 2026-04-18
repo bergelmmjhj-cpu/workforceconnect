@@ -1235,6 +1235,7 @@ export const applicants = pgTable("applicants", {
   resumeFilename: text("resume_filename"),
   resumeMimeType: text("resume_mime_type"),
   resumeFileSize: integer("resume_file_size"),
+  promotionalConsent: boolean("promotional_consent").default(false),
   status: text("status").notNull().default("new"), // new, reviewing, interviewed, hired, rejected
   adminNotes: text("admin_notes"),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),

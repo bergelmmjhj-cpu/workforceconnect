@@ -687,8 +687,10 @@ function configureExpoAndLanding(app: express.Application) {
   // Root path handler - domain-aware routing
   app.get("/", (req: Request, res: Response) => {
     if (isApplySubdomain(req)) {
-      // apply.wfconnect.org → public contractor application
-      return res.redirect("/contractor-apply");
+      // apply.wfconnect.org → standalone public worker application form
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.status(200).send(applyFormTemplate || "Apply form not found");
     }
     // guide.wfconnect.org and others → redirect to /guide
     res.redirect("/guide");
@@ -742,14 +744,15 @@ function configureExpoAndLanding(app: express.Application) {
   const applyPath = path.resolve(process.cwd(), "server", "templates", "apply.html");
   const applyTemplate = renderApplyTemplate(fs.readFileSync(applyPath, "utf-8"));
 
+  // Keep the simple apply form isolated from contractor onboarding routes.
   // Single subdomain-aware /apply route:
-  //   apply.wfconnect.org → apply.html      (public contractor application)
+  //   apply.wfconnect.org → apply-form.html (standalone worker application)
   //   everywhere else     → apply.html      (full worker registration form)
   app.get("/apply", (req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    if (isApplySubdomain(req)) {
+    if (isApplySubdomain(req) && applyFormTemplate) {
       res.setHeader("Cache-Control", "no-cache");
-      return res.status(200).send(applyTemplate);
+      return res.status(200).send(applyFormTemplate);
     }
     res.setHeader("Cache-Control", "public, max-age=3600");
     return res.status(200).send(applyTemplate);
@@ -881,11 +884,11 @@ function configureExpoAndLanding(app: express.Application) {
       return res.status(200).send(contractorGuideTemplate);
     }
 
-    // Apply subdomain — public contractor application
-    if (isApplySubdomain(req)) {
+    // Apply subdomain — standalone public worker application form
+    if (isApplySubdomain(req) && applyFormTemplate) {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache");
-      return res.status(200).send(applyTemplate);
+      return res.status(200).send(applyFormTemplate);
     }
 
     // Default - serve landing page

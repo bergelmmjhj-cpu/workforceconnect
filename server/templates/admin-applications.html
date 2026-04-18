@@ -1294,8 +1294,7 @@
         html += '<div class="detail-item"><div class="detail-label">Acknowledged At</div><div class="detail-value">' + formatDateValue(app.non_solicitation_acknowledged_at || app.nonSolicitationAcknowledgedAt) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Worker Agreement</div><div class="detail-value">' + ((app.worker_agreement_consent || app.workerAgreementConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Privacy Policy</div><div class="detail-value">' + ((app.privacy_consent || app.privacyConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Consent to Contact</div><div class="detail-value">' + ((app.consent_to_contact || app.consentToContact) ? 'Yes' : 'No') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Marketing Consent</div><div class="detail-value">' + ((app.marketing_consent || app.marketingConsent) ? 'Yes' : 'No') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Promotional Consent</div><div class="detail-value">' + ((app.promotional_consent || app.promotionalConsent || app.marketing_consent || app.marketingConsent) ? 'Yes' : 'No') + '</div></div>';
         html += '</div></div>';
 
         html += '<div class="detail-section">';

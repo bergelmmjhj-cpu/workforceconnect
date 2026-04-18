@@ -3654,7 +3654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fullName: fullNameIn, phone, addressFull, addressStreet, addressCity, addressProvince,
         addressPostalCode, addressCountry, applyingFor, jobPostingSource,
         photoData: photoDataIn, photoFilename, photoMimeType, photoFileSize,
-        resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize,
+        resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize, promotionalConsent,
       } = req.body;
 
       const resolvedIdentity = resolveWorkerIdentity({
@@ -3711,6 +3711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
+        promotionalConsent: promotionalConsent === true,
         status: "new",
         submittedAt: now,
       }).returning({ id: applicants.id });

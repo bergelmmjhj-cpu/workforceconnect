@@ -204,6 +204,13 @@
       </div>
     </div>
 
+    <div class="field" style="margin-top: 4px;">
+      <label style="display:flex; align-items:flex-start; gap:10px; font-weight:500; line-height:1.4; margin-bottom:0;">
+        <input type="checkbox" id="promotional_consent" name="promotional_consent" style="width:18px; height:18px; margin-top:2px; flex-shrink:0;" />
+        <span>I agree to receive promotional communications and updates</span>
+      </label>
+    </div>
+
     <!-- Submit -->
     <button type="submit" class="submit-btn" id="submit-btn">
       Submit Application
@@ -443,6 +450,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       resumeFilename: resumeData.filename,
       resumeMimeType: resumeData.mime,
       resumeFileSize: resumeData.size,
+      promotionalConsent: document.getElementById('promotional_consent').checked,
     };
 
     const resp = await fetch('/api/applicants', {

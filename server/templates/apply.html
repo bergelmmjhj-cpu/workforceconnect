@@ -1360,7 +1360,11 @@
             document.getElementById('successModal').classList.add('show');
           } else {
             var errorData = await response.json();
-            alert('Error: ' + (errorData.message || 'Failed to submit application. Please try again.'));
+            var serverMessage = errorData.error || errorData.message || 'Failed to submit application. Please try again.';
+            if (response.status === 409) {
+              serverMessage = serverMessage || 'A similar application was already submitted recently. Please wait before retrying.';
+            }
+            alert('Error: ' + serverMessage);
             submitBtn.disabled = false;
             submitBtn.textContent = 'Submit Application';
           }

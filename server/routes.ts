@@ -55,6 +55,7 @@ import { discordAlerts, appConfig, applicants } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
 import { WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION } from "../shared/contractor-guide-content";
 import { streamAgreementPdf } from "./lib/agreement-pdf";
+import { z } from "zod";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
 
@@ -568,6 +569,90 @@ const REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
   "consentToContact",
 ] as const;
 
+const consentLikeSchema = z.union([z.boolean(), z.string(), z.number()]);
+const listLikeSchema = z.union([z.string(), z.array(z.string())]);
+const nullableStringSchema = z.union([z.string(), z.null()]).optional();
+const nullableNumericLikeSchema = z.union([z.string(), z.number(), z.null()]).optional();
+const RECENT_SUBMISSION_WINDOW_MS = 90 * 1000;
+const recentSubmissionFingerprints = new Map<string, number>();
+
+const publicApplySubmissionSchema = z.object({
+  fullName: z.string().trim().min(1).optional(),
+  full_name: z.string().trim().min(1).optional(),
+  firstName: z.string().trim().min(1).optional(),
+  first_name: z.string().trim().min(1).optional(),
+  lastName: z.string().trim().min(1).optional(),
+  last_name: z.string().trim().min(1).optional(),
+  dateOfBirth: nullableStringSchema,
+  phone: z.string().trim().min(1),
+  email: z.string().email(),
+  address: z.string().trim().min(1),
+  city: z.string().trim().min(1),
+  province: z.string().trim().min(1),
+  postalCode: z.string().trim().min(1),
+  workStatus: z.string().trim().min(1),
+  backgroundCheckConsent: consentLikeSchema,
+  preferredRoles: listLikeSchema,
+  otherRole: nullableStringSchema,
+  availableDays: listLikeSchema,
+  preferredShifts: listLikeSchema,
+  unavailablePeriods: nullableStringSchema,
+  yearsExperience: nullableNumericLikeSchema,
+  experienceSummary: nullableStringSchema,
+  skills: nullableStringSchema,
+  desiredShiftLength: nullableNumericLikeSchema,
+  maxTravelDistance: nullableNumericLikeSchema,
+  emergencyContactName: z.string().trim().min(1),
+  emergencyContactRelationship: z.string().trim().min(1),
+  emergencyContactPhone: z.string().trim().min(1),
+  paymentMethod: nullableStringSchema,
+  bankName: nullableStringSchema,
+  bankInstitution: nullableStringSchema,
+  bankTransit: nullableStringSchema,
+  bankAccount: nullableStringSchema,
+  etransferEmail: nullableStringSchema,
+  titoAcknowledgment: consentLikeSchema,
+  siteRulesAcknowledgment: consentLikeSchema,
+  workerAgreementConsent: consentLikeSchema,
+  agreementVersion: nullableStringSchema,
+  nonSolicitationAcknowledged: consentLikeSchema.optional(),
+  nonSolicitationAcknowledgedAt: z.union([z.string(), z.number()]).optional(),
+  privacyConsent: consentLikeSchema,
+  consentToContact: consentLikeSchema,
+  marketingConsent: consentLikeSchema.optional(),
+  promotionalConsent: consentLikeSchema.optional(),
+  signature: z.string().trim().min(1),
+  signatureDate: z.string().trim().min(1),
+}).strict();
+
+const publicApplicantSubmissionSchema = z.object({
+  fullName: z.string().trim().min(1).optional(),
+  full_name: z.string().trim().min(1).optional(),
+  firstName: z.string().trim().min(1).optional(),
+  first_name: z.string().trim().min(1).optional(),
+  lastName: z.string().trim().min(1).optional(),
+  last_name: z.string().trim().min(1).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().trim().min(1),
+  addressFull: z.string().trim().min(1),
+  addressStreet: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressProvince: z.string().optional(),
+  addressPostalCode: z.string().optional(),
+  addressCountry: z.string().optional(),
+  applyingFor: z.string().trim().min(1),
+  jobPostingSource: z.string().trim().min(1),
+  photoData: z.string().trim().min(1),
+  photoFilename: z.string().optional(),
+  photoMimeType: z.string().optional(),
+  photoFileSize: z.number().int().nonnegative().optional(),
+  resumeData: z.string().trim().min(1),
+  resumeFilename: z.string().optional(),
+  resumeMimeType: z.string().optional(),
+  resumeFileSize: z.number().int().nonnegative().optional(),
+  promotionalConsent: consentLikeSchema.optional(),
+}).strict();
+
 function isConsentGranted(value: unknown): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -595,8 +680,54 @@ function normalizeJsonArrayField(value: unknown): string {
 
 function normalizeOptionalText(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const trimmed = value.trim();
+  const trimmed = normalizeWhitespace(value);
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function formatValidationIssues(issues: z.ZodIssue[]) {
+  return issues.slice(0, 10).map((issue) => ({
+    path: issue.path.join("."),
+    message: issue.message,
+  }));
+}
+
+function normalizeComparableText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizePhoneForComparison(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return digits.slice(1);
+  }
+  return digits;
+}
+
+function makeSubmissionFingerprint(parts: Array<string | null | undefined>): string {
+  const normalized = parts
+    .map((part) => (part || "").trim().toLowerCase())
+    .join("|");
+  return crypto.createHash("sha256").update(normalized).digest("hex");
+}
+
+function isRecentSubmissionFingerprint(fingerprint: string, now: number = Date.now()): boolean {
+  for (const [key, expiresAt] of recentSubmissionFingerprints.entries()) {
+    if (expiresAt <= now) {
+      recentSubmissionFingerprints.delete(key);
+    }
+  }
+
+  const existing = recentSubmissionFingerprints.get(fingerprint);
+  if (existing && existing > now) {
+    return true;
+  }
+
+  recentSubmissionFingerprints.set(fingerprint, now + RECENT_SUBMISSION_WINDOW_MS);
+  return false;
 }
 
 function getConfiguredApiKeys(): string[] {
@@ -2383,6 +2514,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Worker Application Form Submission
   app.post("/api/public/apply", async (req: Request, res: Response) => {
     try {
+      const parsedPayload = publicApplySubmissionSchema.safeParse(req.body ?? {});
+      if (!parsedPayload.success) {
+        res.status(400).json({
+          error: "Invalid submission payload",
+          issues: formatValidationIssues(parsedPayload.error.issues),
+        });
+        return;
+      }
+
+      const payload = parsedPayload.data;
       const ip = getClientIp(req);
       
       if (!checkRateLimit(ip)) {
@@ -2390,13 +2531,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const recentApplyFingerprint = makeSubmissionFingerprint([
+        ip,
+        payload.email,
+        payload.phone,
+        payload.signature,
+      ]);
+      if (isRecentSubmissionFingerprint(recentApplyFingerprint)) {
+        res.status(409).json({
+          error: "A similar application was submitted very recently. Please wait a moment before retrying.",
+        });
+        return;
+      }
+
       const userAgent = req.headers["user-agent"] || null;
       const resolvedIdentity = resolveWorkerIdentity({
-        fullName: req.body?.fullName ?? req.body?.full_name,
-        firstName: req.body?.firstName ?? req.body?.first_name,
-        lastName: req.body?.lastName ?? req.body?.last_name,
-        email: req.body?.email,
-        phone: req.body?.phone,
+        fullName: payload.fullName ?? payload.full_name,
+        firstName: payload.firstName ?? payload.first_name,
+        lastName: payload.lastName ?? payload.last_name,
+        email: payload.email,
+        phone: payload.phone,
       });
 
       if (!resolvedIdentity.fullName) {
@@ -2404,7 +2558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const missingConsents = getMissingRequiredConsents(req.body);
+      const missingConsents = getMissingRequiredConsents(payload as Record<string, unknown>);
       if (missingConsents.length > 0) {
         res.status(400).json({
           error: "Required consents were not provided",
@@ -2413,52 +2567,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const promotionalConsent = isConsentGranted(req.body?.promotionalConsent) || isConsentGranted(req.body?.marketingConsent);
-      const nonSolicitationAcknowledged = isConsentGranted(req.body?.nonSolicitationAcknowledged);
+      const promotionalConsent = isConsentGranted(payload.promotionalConsent) || isConsentGranted(payload.marketingConsent);
+      const nonSolicitationAcknowledged = isConsentGranted(payload.nonSolicitationAcknowledged);
+      const normalizedEmail = normalizeWhitespace(payload.email).toLowerCase();
+      const normalizedPhone = normalizePhoneForComparison(payload.phone);
+      const normalizedName = normalizeComparableText(resolvedIdentity.fullName);
+      const dedupeWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const recentApplications = await db
+        .select({
+          id: workerApplications.id,
+          fullName: workerApplications.fullName,
+          phone: workerApplications.phone,
+          email: workerApplications.email,
+          createdAt: workerApplications.createdAt,
+        })
+        .from(workerApplications)
+        .where(gte(workerApplications.createdAt, dedupeWindowStart))
+        .orderBy(desc(workerApplications.createdAt))
+        .limit(250);
+
+      const duplicateApplication = recentApplications.find((existingApplication) => {
+        const existingEmail = normalizeComparableText(existingApplication.email || "");
+        const existingPhone = normalizePhoneForComparison(existingApplication.phone || "");
+        const existingName = normalizeComparableText(existingApplication.fullName || "");
+
+        const isSameEmail = existingEmail.length > 0 && existingEmail === normalizedEmail;
+        const isSamePhoneAndName =
+          existingPhone.length > 0 &&
+          existingPhone === normalizedPhone &&
+          existingName.length > 0 &&
+          existingName === normalizedName;
+
+        return isSameEmail || isSamePhoneAndName;
+      });
+
+      if (duplicateApplication) {
+        res.status(409).json({
+          error: "A similar application was already submitted recently",
+          duplicateApplicationId: duplicateApplication.id,
+          submittedAt: duplicateApplication.createdAt,
+        });
+        return;
+      }
 
       const applicationData = {
         fullName: resolvedIdentity.fullName,
-        dateOfBirth: normalizeOptionalText(req.body?.dateOfBirth),
-        phone: typeof req.body?.phone === "string" ? req.body.phone.trim() : req.body?.phone,
-        email: typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : req.body?.email,
-        address: typeof req.body?.address === "string" ? req.body.address.trim() : req.body?.address,
-        city: typeof req.body?.city === "string" ? req.body.city.trim() : req.body?.city,
-        province: typeof req.body?.province === "string" ? req.body.province.trim() : req.body?.province,
-        postalCode: typeof req.body?.postalCode === "string" ? req.body.postalCode.trim() : req.body?.postalCode,
-        workStatus: req.body?.workStatus,
-        backgroundCheckConsent: isConsentGranted(req.body?.backgroundCheckConsent),
-        preferredRoles: normalizeJsonArrayField(req.body?.preferredRoles),
-        otherRole: normalizeOptionalText(req.body?.otherRole),
-        availableDays: normalizeJsonArrayField(req.body?.availableDays),
-        preferredShifts: normalizeJsonArrayField(req.body?.preferredShifts),
-        unavailablePeriods: normalizeOptionalText(req.body?.unavailablePeriods),
-        yearsExperience: normalizeOptionalText(req.body?.yearsExperience),
-        experienceSummary: normalizeOptionalText(req.body?.experienceSummary),
-        skills: normalizeOptionalText(req.body?.skills),
-        desiredShiftLength: normalizeOptionalText(req.body?.desiredShiftLength),
-        maxTravelDistance: normalizeOptionalText(req.body?.maxTravelDistance),
-        emergencyContactName: req.body?.emergencyContactName,
-        emergencyContactRelationship: req.body?.emergencyContactRelationship,
-        emergencyContactPhone: req.body?.emergencyContactPhone,
-        paymentMethod: normalizeOptionalText(req.body?.paymentMethod),
-        bankName: normalizeOptionalText(req.body?.bankName),
-        bankInstitution: normalizeOptionalText(req.body?.bankInstitution),
-        bankTransit: normalizeOptionalText(req.body?.bankTransit),
-        bankAccount: normalizeOptionalText(req.body?.bankAccount),
-        etransferEmail: normalizeOptionalText(req.body?.etransferEmail),
-        titoAcknowledgment: isConsentGranted(req.body?.titoAcknowledgment),
-        siteRulesAcknowledgment: isConsentGranted(req.body?.siteRulesAcknowledgment),
-        workerAgreementConsent: isConsentGranted(req.body?.workerAgreementConsent),
-        consentToContact: isConsentGranted(req.body?.consentToContact),
-        privacyConsent: isConsentGranted(req.body?.privacyConsent),
+        dateOfBirth: normalizeOptionalText(payload.dateOfBirth),
+        phone: normalizeWhitespace(payload.phone),
+        email: normalizedEmail,
+        address: normalizeWhitespace(payload.address),
+        city: normalizeWhitespace(payload.city),
+        province: normalizeWhitespace(payload.province).toUpperCase(),
+        postalCode: normalizeWhitespace(payload.postalCode).toUpperCase(),
+        workStatus: payload.workStatus,
+        backgroundCheckConsent: isConsentGranted(payload.backgroundCheckConsent),
+        preferredRoles: normalizeJsonArrayField(payload.preferredRoles),
+        otherRole: normalizeOptionalText(payload.otherRole),
+        availableDays: normalizeJsonArrayField(payload.availableDays),
+        preferredShifts: normalizeJsonArrayField(payload.preferredShifts),
+        unavailablePeriods: normalizeOptionalText(payload.unavailablePeriods),
+        yearsExperience: normalizeOptionalText(payload.yearsExperience),
+        experienceSummary: normalizeOptionalText(payload.experienceSummary),
+        skills: normalizeOptionalText(payload.skills),
+        desiredShiftLength: normalizeOptionalText(payload.desiredShiftLength),
+        maxTravelDistance: normalizeOptionalText(payload.maxTravelDistance),
+        emergencyContactName: payload.emergencyContactName,
+        emergencyContactRelationship: payload.emergencyContactRelationship,
+        emergencyContactPhone: payload.emergencyContactPhone,
+        paymentMethod: normalizeOptionalText(payload.paymentMethod),
+        bankName: normalizeOptionalText(payload.bankName),
+        bankInstitution: normalizeOptionalText(payload.bankInstitution),
+        bankTransit: normalizeOptionalText(payload.bankTransit),
+        bankAccount: normalizeOptionalText(payload.bankAccount),
+        etransferEmail: normalizeOptionalText(payload.etransferEmail),
+        titoAcknowledgment: isConsentGranted(payload.titoAcknowledgment),
+        siteRulesAcknowledgment: isConsentGranted(payload.siteRulesAcknowledgment),
+        workerAgreementConsent: isConsentGranted(payload.workerAgreementConsent),
+        consentToContact: isConsentGranted(payload.consentToContact),
+        privacyConsent: isConsentGranted(payload.privacyConsent),
         promotionalConsent,
         marketingConsent: promotionalConsent,
-        signature: req.body?.signature,
-        signatureDate: req.body?.signatureDate,
-        agreementVersion: req.body?.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+        signature: normalizeWhitespace(payload.signature),
+        signatureDate: normalizeWhitespace(payload.signatureDate),
+        agreementVersion: payload.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
         nonSolicitationAcknowledged,
         nonSolicitationAcknowledgedAt: nonSolicitationAcknowledged
-          ? new Date(req.body?.nonSolicitationAcknowledgedAt || Date.now())
+          ? new Date(payload.nonSolicitationAcknowledgedAt || Date.now())
           : null,
         ip,
         userAgent,
@@ -2466,7 +2661,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [newApplication] = await db.insert(workerApplications).values(applicationData).returning();
 
-      console.log(`Worker application submitted from: ${req.body.email}`);
+      console.log(`Worker application submitted from: ${payload.email}`);
       res.json({ ok: true, id: newApplication.id });
     } catch (error) {
       console.error("Error saving worker application:", error);
@@ -3705,18 +3900,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public submission — no auth required
   app.post("/api/applicants", async (req: Request, res: Response) => {
     try {
+      const parsedPayload = publicApplicantSubmissionSchema.safeParse(req.body ?? {});
+      if (!parsedPayload.success) {
+        return res.status(400).json({
+          error: "Invalid submission payload",
+          issues: formatValidationIssues(parsedPayload.error.issues),
+        });
+      }
+
+      const payload = parsedPayload.data;
+      const ip = getClientIp(req);
+      if (!checkRateLimit(ip)) {
+        return res.status(429).json({ error: "Too many requests. Please try again later." });
+      }
+
       const {
         fullName: fullNameIn, phone, addressFull, addressStreet, addressCity, addressProvince,
         addressPostalCode, addressCountry, applyingFor, jobPostingSource,
         photoData: photoDataIn, photoFilename, photoMimeType, photoFileSize,
         resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize, promotionalConsent,
-      } = req.body;
+      } = payload;
 
       const resolvedIdentity = resolveWorkerIdentity({
-        fullName: fullNameIn ?? req.body?.full_name,
-        firstName: req.body?.firstName ?? req.body?.first_name,
-        lastName: req.body?.lastName ?? req.body?.last_name,
-        email: req.body?.email,
+        fullName: fullNameIn ?? payload.full_name,
+        firstName: payload.firstName ?? payload.first_name,
+        lastName: payload.lastName ?? payload.last_name,
+        email: payload.email,
         phone,
       });
       const fullName = resolvedIdentity.fullName;
@@ -3746,18 +3955,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Resume exceeds 10 MB limit" });
       }
 
+      const recentApplicantFingerprint = makeSubmissionFingerprint([
+        ip,
+        fullName,
+        phone,
+        applyingFor,
+      ]);
+      if (isRecentSubmissionFingerprint(recentApplicantFingerprint)) {
+        return res.status(409).json({
+          error: "A similar application was submitted very recently. Please wait before retrying.",
+        });
+      }
+
+      const normalizedPhone = normalizePhoneForComparison(phone);
+      const normalizedName = normalizeComparableText(fullName);
+      const normalizedPosition = applyingFor.trim().toLowerCase();
+      const dedupeWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const recentApplicants = await db
+        .select({
+          id: applicants.id,
+          fullName: applicants.fullName,
+          phone: applicants.phone,
+          applyingFor: applicants.applyingFor,
+          submittedAt: applicants.submittedAt,
+        })
+        .from(applicants)
+        .where(gte(applicants.submittedAt, dedupeWindowStart))
+        .orderBy(desc(applicants.submittedAt))
+        .limit(250);
+
+      const duplicate = recentApplicants.find((existingApplicant) => {
+        const existingPhone = normalizePhoneForComparison(existingApplicant.phone || "");
+        const existingName = normalizeComparableText(existingApplicant.fullName || "");
+        const existingPosition = (existingApplicant.applyingFor || "").trim().toLowerCase();
+        return existingPhone === normalizedPhone && existingName === normalizedName && existingPosition === normalizedPosition;
+      });
+
+      if (duplicate) {
+        return res.status(409).json({
+          error: "A similar application was already submitted recently",
+          duplicateApplicantId: duplicate.id,
+          submittedAt: duplicate.submittedAt,
+        });
+      }
+
       const now = new Date();
       const [applicant] = await db.insert(applicants).values({
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        addressFull: addressFull.trim(),
-        addressStreet: addressStreet?.trim() || null,
-        addressCity: addressCity?.trim() || null,
-        addressProvince: addressProvince?.trim() || null,
-        addressPostalCode: addressPostalCode?.trim() || null,
-        addressCountry: addressCountry?.trim() || "Canada",
-        applyingFor: applyingFor.trim(),
-        jobPostingSource: jobPostingSource.trim(),
+        fullName: normalizeWhitespace(fullName),
+        phone: normalizeWhitespace(phone),
+        addressFull: normalizeAddressText(addressFull),
+        addressStreet: normalizeOptionalText(addressStreet),
+        addressCity: normalizeOptionalText(addressCity),
+        addressProvince: normalizeOptionalText(addressProvince)?.toUpperCase() || null,
+        addressPostalCode: normalizeOptionalText(addressPostalCode)?.toUpperCase() || null,
+        addressCountry: normalizeOptionalText(addressCountry) || "Canada",
+        applyingFor: normalizeWhitespace(applyingFor),
+        jobPostingSource: normalizeWhitespace(jobPostingSource),
         photoData: photoDataIn,
         photoFilename: photoFilename || null,
         photoMimeType: photoMimeType || null,

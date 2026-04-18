@@ -662,8 +662,15 @@ function configureExpoAndLanding(app: express.Application) {
   const applicantsPortalTemplate = fs.existsSync(applicantsPortalPath) ? fs.readFileSync(applicantsPortalPath, "utf-8") : null;
 
   function isApplySubdomain(req: Request): boolean {
-    const host = (req.hostname || req.headers.host || "").toLowerCase();
-    return host.startsWith("apply.") || host.includes("apply.wfconnect");
+    const forwardedHostHeader = req.headers["x-forwarded-host"];
+    const forwardedHost = Array.isArray(forwardedHostHeader)
+      ? forwardedHostHeader[0]
+      : forwardedHostHeader;
+    const rawHost = (forwardedHost || req.hostname || req.headers.host || "").toLowerCase();
+    const host = rawHost.split(",")[0]?.trim().split(":")[0] || "";
+
+    if (!host) return false;
+    return host === "apply.wfconnect.org" || host.startsWith("apply.");
   }
 
   if (applicantsPortalTemplate) {

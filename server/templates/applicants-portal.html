@@ -274,6 +274,7 @@
 const GOOGLE_CLIENT_ID = '__GOOGLE_CLIENT_ID__';
 let currentUser = null;
 let applicants = [];
+let applicantsTotalCount = 0;
 let searchTimer = null;
 let pending2FAUserId = null;
 let googleInitialized = false;
@@ -480,6 +481,8 @@ async function loadApplicants() {
     if (!resp.ok) throw new Error('Failed to fetch');
 
     applicants = await resp.json();
+    const headerTotal = Number(resp.headers.get('X-Total-Count') || applicants.length || 0);
+    applicantsTotalCount = Number.isFinite(headerTotal) ? headerTotal : applicants.length;
     renderStats();
     renderTable();
   } catch (err) {
@@ -488,7 +491,7 @@ async function loadApplicants() {
 }
 
 function renderStats() {
-  const counts = { total: applicants.length, new: 0, reviewing: 0, interviewed: 0, hired: 0, rejected: 0 };
+  const counts = { total: applicantsTotalCount || applicants.length, new: 0, reviewing: 0, interviewed: 0, hired: 0, rejected: 0 };
   applicants.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
 
   const stats = [
@@ -505,6 +508,36 @@ function renderStats() {
   ).join('');
 }
 
+function parseLocationFallback(addressFull) {
+  if (!addressFull) return '';
+  const raw = String(addressFull).trim();
+  if (!raw) return '';
+  const parts = raw.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 3) {
+    const city = parts[parts.length - 3] || '';
+    const province = parts[parts.length - 2] || '';
+    if (city || province) return [city, province].filter(Boolean).join(', ');
+  }
+  if (parts.length >= 2) {
+    return parts[parts.length - 2] || '';
+  }
+  return '';
+}
+
+function displayLocation(applicant) {
+  const city = applicant.addressCity || applicant.address_city || '';
+  const province = applicant.addressProvince || applicant.address_province || '';
+  const structured = [city, province].filter(Boolean).join(', ');
+  if (structured) return structured;
+  const fallback = parseLocationFallback(applicant.addressFull || applicant.address_full || '');
+  return fallback || '—';
+}
+
+function displayPhone(applicant) {
+  const phone = applicant.phone || applicant.phone_number || applicant.mobilePhone || '';
+  return phone ? String(phone).trim() : '—';
+}
+
 function renderTable() {
   const tbody = document.getElementById('table-body');
   if (applicants.length === 0) {
@@ -515,9 +548,10 @@ function renderTable() {
   tbody.innerHTML = applicants.map(a => {
     const date = new Date(a.submittedAt);
     const dateStr = date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
-    const city = [a.addressCity, a.addressProvince].filter(Boolean).join(', ') || '—';
+    const city = displayLocation(a);
+    const phone = displayPhone(a);
     return `<tr onclick="openDetail('${escAttr(a.id)}')">
-      <td><div class="applicant-name">${esc(a.fullName)}</div><div class="applicant-meta">${esc(a.phone)}</div></td>
+      <td><div class="applicant-name">${esc(a.fullName)}</div><div class="applicant-meta">${esc(phone)}</div></td>
       <td>${esc(a.applyingFor)}</td>
       <td class="hide-mobile">${esc(city)}</td>
       <td class="hide-mobile">${esc(a.jobPostingSource || '—')}</td>
@@ -557,7 +591,7 @@ async function openDetail(id) {
 
 function renderDetail(a) {
   document.getElementById('detail-name').textContent = a.fullName;
-  document.getElementById('detail-phone').textContent = a.phone;
+  document.getElementById('detail-phone').textContent = displayPhone(a);
 
   const date = new Date(a.submittedAt);
   const dateStr = date.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -568,7 +602,7 @@ function renderDetail(a) {
     <div class="detail-section">
       <div class="detail-section-title">Personal Information</div>
       <div class="detail-row"><div class="detail-label">Address</div><div class="detail-value">${esc(a.addressFull || '—')}</div></div>
-      <div class="detail-row"><div class="detail-label">City</div><div class="detail-value">${esc(a.addressCity || '—')}, ${esc(a.addressProvince || '')}</div></div>
+      <div class="detail-row"><div class="detail-label">City</div><div class="detail-value">${esc(displayLocation(a))}</div></div>
       <div class="detail-row"><div class="detail-label">Postal Code</div><div class="detail-value">${esc(a.addressPostalCode || '—')}</div></div>
     </div>
 

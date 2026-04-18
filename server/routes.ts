@@ -4088,6 +4088,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
+      const [countRow] = await db
+        .select({
+          total: sql<number>`count(*)`,
+        })
+        .from(applicants)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      res.setHeader("X-Total-Count", String(Number(countRow?.total || 0)));
+
       res.json(normalizedRows);
     } catch (error: any) {
       console.error("[APPLICANTS] List error:", error);

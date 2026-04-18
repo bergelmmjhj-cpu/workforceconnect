@@ -573,8 +573,25 @@ function displayLocation(applicant) {
 }
 
 function displayPhone(applicant) {
-  const phone = applicant.phoneDisplay || applicant.phone_display || applicant.phone || applicant.phone_number || applicant.mobilePhone || '';
-  return phone ? String(phone).trim() : '—';
+  const candidates = [
+    applicant.phone,
+    applicant.phoneNumber,
+    applicant.phone_number,
+    applicant.mobile,
+    applicant.contactNumber,
+    applicant.mobilePhone,
+    applicant.phoneDisplay,
+    applicant.phone_display,
+  ];
+
+  for (var i = 0; i < candidates.length; i++) {
+    var value = candidates[i];
+    if (value === null || value === undefined) continue;
+    var normalized = String(value).trim();
+    if (normalized.length > 0) return normalized;
+  }
+
+  return '—';
 }
 
 function renderTable() {

@@ -638,7 +638,11 @@ const publicApplicantSubmissionSchema = z.object({
   lastName: z.string().trim().min(1).optional(),
   last_name: z.string().trim().min(1).optional(),
   email: z.string().email().optional(),
-  phone: z.string().trim().min(1),
+  phone: z.string().trim().min(1).optional(),
+  phoneNumber: z.string().trim().min(1).optional(),
+  phone_number: z.string().trim().min(1).optional(),
+  mobile: z.string().trim().min(1).optional(),
+  contactNumber: z.string().trim().min(1).optional(),
   addressFull: z.string().trim().min(1),
   addressStreet: z.string().optional(),
   addressCity: z.string().optional(),
@@ -741,8 +745,8 @@ function buildApplicantLocationDisplay(input: {
 }
 
 function normalizeApplicantPhone(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = normalizeWhitespace(value);
+  if (value === null || value === undefined) return null;
+  const normalized = normalizeWhitespace(String(value));
   return normalized.length > 0 ? normalized : null;
 }
 
@@ -3954,23 +3958,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const {
-        fullName: fullNameIn, phone, addressFull, addressStreet, addressCity, addressProvince,
+        fullName: fullNameIn, addressFull, addressStreet, addressCity, addressProvince,
         addressPostalCode, addressCountry, applyingFor, jobPostingSource,
         photoData: photoDataIn, photoFilename, photoMimeType, photoFileSize,
         resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize, promotionalConsent,
       } = payload;
+
+      const canonicalPhone =
+        normalizeApplicantPhone(payload.phone) ||
+        normalizeApplicantPhone(payload.phoneNumber) ||
+        normalizeApplicantPhone(payload.phone_number) ||
+        normalizeApplicantPhone(payload.mobile) ||
+        normalizeApplicantPhone(payload.contactNumber);
+
+      if (!canonicalPhone) {
+        return res.status(400).json({ error: "Phone required" });
+      }
 
       const resolvedIdentity = resolveWorkerIdentity({
         fullName: fullNameIn ?? payload.full_name,
         firstName: payload.firstName ?? payload.first_name,
         lastName: payload.lastName ?? payload.last_name,
         email: payload.email,
-        phone,
+        phone: canonicalPhone,
       });
       const fullName = resolvedIdentity.fullName;
 
       if (!fullName?.trim()) return res.status(400).json({ error: "Full name required" });
-      if (!phone?.trim()) return res.status(400).json({ error: "Phone required" });
       if (!addressFull?.trim()) return res.status(400).json({ error: "Address required" });
       if (!applyingFor?.trim()) return res.status(400).json({ error: "Position required" });
       if (!jobPostingSource?.trim()) return res.status(400).json({ error: "Job posting source required" });
@@ -3997,7 +4011,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const recentApplicantFingerprint = makeSubmissionFingerprint([
         ip,
         fullName,
-        phone,
+        canonicalPhone,
         applyingFor,
       ]);
       if (isRecentSubmissionFingerprint(recentApplicantFingerprint)) {
@@ -4006,7 +4020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const normalizedPhone = normalizePhoneForComparison(phone);
+      const normalizedPhone = normalizePhoneForComparison(canonicalPhone);
       const normalizedName = normalizeComparableText(fullName);
       const normalizedPosition = applyingFor.trim().toLowerCase();
       const dedupeWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -4048,7 +4062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [applicant] = await db.insert(applicants).values({
         fullName: normalizeWhitespace(fullName),
-        phone: normalizeWhitespace(phone),
+        phone: normalizeWhitespace(canonicalPhone),
         addressFull: normalizeAddressText(addressFull),
         addressStreet: normalizeOptionalText(addressStreet),
         addressCity: normalizedAddressCity,
@@ -4070,7 +4084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         submittedAt: now,
       }).returning({ id: applicants.id });
 
-      console.log(`[APPLICANTS] New submission: ${fullName} (${phone}) for ${applyingFor}`);
+      console.log(`[APPLICANTS] New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
       res.json({ success: true, applicantId: applicant.id });
     } catch (error: any) {
       console.error("[APPLICANTS] Submission error:", error);
@@ -4124,6 +4138,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           ...row,
           phone: phoneDisplay || "",
+          phoneNumber: phoneDisplay || "",
+          phone_number: phoneDisplay || "",
           phoneDisplay,
           addressCity: row.addressCity || parsedAddress.city || null,
           addressProvince: row.addressProvince || parsedAddress.province || null,
@@ -4163,6 +4179,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         ...safe,
         phone: phoneDisplay || "",
+        phoneNumber: phoneDisplay || "",
+        phone_number: phoneDisplay || "",
         phoneDisplay,
         addressCity: safe.addressCity || parsedAddress.city || null,
         addressProvince: safe.addressProvince || parsedAddress.province || null,

@@ -469,6 +469,11 @@ function setupCors(app: express.Application) {
       });
     }
 
+    // Always allow wfconnect.org subdomains
+    origins.add("https://apply.wfconnect.org");
+    origins.add("https://wfconnect.org");
+    origins.add("https://www.wfconnect.org");
+
     const origin = req.header("origin");
 
     // Allow localhost origins for Expo web development (any port)

@@ -458,11 +458,13 @@ function parseSessionCookie(req: Request): { userId: string; role: string } | nu
 
 function setSessionCookie(res: Response, userId: string, role: string): void {
   const token = createSessionToken(userId, role);
-  res.setHeader("Set-Cookie", `wfc_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `wfc_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secure}`);
 }
 
 function clearSessionCookie(res: Response): void {
-  res.setHeader("Set-Cookie", "wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
 }
 
 const WORKER_APPLICATION_STATUSES = new Set(["pending", "reviewed", "approved", "rejected"]);

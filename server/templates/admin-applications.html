@@ -1018,7 +1018,7 @@
         authCredentials = btoa(username + ':' + password);
         
         try {
-          const response = await fetch('/api/admin/applications', {
+          const response = await fetch('/api/admin/auth-check', {
             headers: {
               'Authorization': 'Basic ' + authCredentials
             }
@@ -1029,6 +1029,14 @@
             document.getElementById('loginError').style.display = 'none';
             showDashboard();
           } else {
+            var loginMessage = 'Invalid credentials. Please try again.';
+            try {
+              var loginPayload = await response.json();
+              if (loginPayload && loginPayload.error) {
+                loginMessage = loginPayload.error;
+              }
+            } catch (_) {}
+            document.getElementById('loginError').textContent = loginMessage;
             document.getElementById('loginError').style.display = 'block';
             authCredentials = null;
           }
@@ -1067,6 +1075,13 @@
           } else if (response.status === 401) {
             sessionStorage.removeItem('wfconnect_admin_auth');
             location.reload();
+          } else {
+            var serverMessage = 'Server error while loading applications';
+            try {
+              var payload = await response.json();
+              if (payload && payload.error) serverMessage = payload.error;
+            } catch (_) {}
+            document.getElementById('applicationsTable').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error:</strong> ' + escapeHtml(serverMessage) + '</td></tr>';
           }
         } catch (error) {
           console.error('Error loading applications:', error);

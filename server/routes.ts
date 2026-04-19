@@ -2891,6 +2891,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all worker applications (supports Bearer API key, Basic auth, or session cookie)
+  app.get("/api/admin/auth-check", tryBearerApiKey, async (req: Request, res: Response) => {
+    try {
+      const apiKeyScopes: string[] | undefined = (req as any).apiKeyScopes;
+
+      if (apiKeyScopes !== undefined) {
+        if (!apiKeyScopes.includes("applications:read") && !apiKeyScopes.includes("*")) {
+          res.status(403).json({
+            error: "API key missing required scope: applications:read",
+            required_scope: "applications:read",
+            your_scopes: apiKeyScopes,
+          });
+          return;
+        }
+
+        res.json({ ok: true, auth: "bearer" });
+        return;
+      }
+
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Basic ")) {
+        if (!(await checkBasicAuthAdmin(req, res))) return;
+        res.json({ ok: true, auth: "basic" });
+        return;
+      }
+
+      const session = parseSessionCookie(req);
+      if (!session || !["admin", "hr"].includes(session.role)) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      res.json({ ok: true, auth: "session", role: session.role });
+    } catch (error) {
+      console.error("Error validating admin auth:", error);
+      res.status(500).json({ error: "Failed to validate authentication" });
+    }
+  });
+
   app.get("/api/admin/applications", tryBearerApiKey, async (req: Request, res: Response) => {
     try {
       const apiKeyScopes: string[] | undefined = (req as any).apiKeyScopes;

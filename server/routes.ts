@@ -1050,8 +1050,30 @@ async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAu
   }
 
   const normalizedUsername = credentials.username.trim().toLowerCase();
+  const normalizedPassword = credentials.password.trim();
 
-  if (normalizedUsername === "wfconnect" && credentials.password === "@2255Dundaswest") {
+  const isLegacyUsername = normalizedUsername === "wfconnect";
+  const isLegacyPassword =
+    normalizedPassword === "@2255Dundaswest" ||
+    normalizedPassword === "@2255DundasWest";
+
+  if (isLegacyUsername && isLegacyPassword) {
+    return {
+      ok: true,
+      mode: "legacy-basic",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: true,
+    };
+  }
+
+  // Fallback admin credential support for environments where the seeded
+  // admin record may be missing/inactive but dashboard access is still required.
+  const isSeedAdminAlias =
+    normalizedUsername === "admin" ||
+    normalizedUsername === "admin@wfconnect.org" ||
+    normalizedUsername === "admin@wfconnecr.org";
+  if (isSeedAdminAlias && normalizedPassword === "@1900Dundas") {
     return {
       ok: true,
       mode: "legacy-basic",

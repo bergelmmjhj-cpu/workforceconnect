@@ -1029,6 +1029,11 @@ function getAdminPortalCandidateEmails(username: string): string[] {
     candidates.add("admin@wfconnect.org");
   }
 
+  // Accept common admin aliases used in the legacy dashboard login form.
+  if (normalizedUsername === "admin" || normalizedUsername === "admin@wfconnecr.org") {
+    candidates.add("admin@wfconnect.org");
+  }
+
   return Array.from(candidates);
 }
 

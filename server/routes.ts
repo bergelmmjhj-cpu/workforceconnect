@@ -919,6 +919,13 @@ async function getWorkerApplicationAgreementSelect() {
     availableDays: workerApplications.availableDays,
     preferredShifts: workerApplications.preferredShifts,
     yearsExperience: workerApplications.yearsExperience,
+    backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+    paymentMethod: workerApplications.paymentMethod,
+    bankName: workerApplications.bankName,
+    bankInstitution: workerApplications.bankInstitution,
+    bankTransit: workerApplications.bankTransit,
+    bankAccount: workerApplications.bankAccount,
+    etransferEmail: workerApplications.etransferEmail,
     titoAcknowledgment: workerApplications.titoAcknowledgment,
     siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
     workerAgreementConsent: workerApplications.workerAgreementConsent,
@@ -1144,6 +1151,65 @@ function normalizePayrollReadiness(value: unknown, hasPaymentMethod: boolean, st
   return normalizeReadinessValue(value, PAYROLL_READINESS_VALUES, "not_ready") as typeof PAYROLL_READINESS_VALUES[number];
 }
 
+function normalizePaymentMethodValue(value: unknown): "direct_deposit" | "etransfer" | "both" | "" {
+  const normalized = normalizeOptionalText(typeof value === "string" ? value : null)?.toLowerCase();
+  if (!normalized) return "";
+
+  if (["both", "all", "any"].includes(normalized)) return "both";
+  if (["etransfer", "e-transfer", "interac", "interac e-transfer", "email_transfer"].includes(normalized)) return "etransfer";
+  if (["direct_deposit", "direct deposit", "bank", "bank_transfer"].includes(normalized)) return "direct_deposit";
+
+  return "";
+}
+
+function maskAccountNumber(value: unknown): string {
+  const raw = normalizeOptionalText(typeof value === "string" ? value : null);
+  if (!raw) return "Not provided";
+
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 4) return "****";
+  return `******${digits.slice(-4)}`;
+}
+
+function buildPaymentSummary(application: Record<string, unknown>) {
+  const normalizedMethod = normalizePaymentMethodValue(application.paymentMethod);
+  const bankName = normalizeOptionalText(typeof application.bankName === "string" ? application.bankName : null);
+  const bankInstitution = normalizeOptionalText(typeof application.bankInstitution === "string" ? application.bankInstitution : null);
+  const bankTransit = normalizeOptionalText(typeof application.bankTransit === "string" ? application.bankTransit : null);
+  const bankAccount = normalizeOptionalText(typeof application.bankAccount === "string" ? application.bankAccount : null);
+  const etransferEmail = normalizeOptionalText(typeof application.etransferEmail === "string" ? application.etransferEmail : null);
+  const payrollContactEmail = etransferEmail || normalizeOptionalText(typeof application.email === "string" ? application.email : null);
+
+  const hasDirectDepositDetails = Boolean(bankName && bankInstitution && bankTransit && bankAccount);
+  const hasEtransferDetails = Boolean(etransferEmail);
+
+  let methodLabel = "Not selected";
+  if (normalizedMethod === "direct_deposit") methodLabel = "Direct Deposit";
+  if (normalizedMethod === "etransfer") methodLabel = "Interac E-Transfer";
+  if (normalizedMethod === "both") methodLabel = "Direct Deposit + Interac E-Transfer";
+
+  let hasRequiredPaymentInfo = false;
+  if (normalizedMethod === "both") {
+    hasRequiredPaymentInfo = hasDirectDepositDetails && hasEtransferDetails;
+  } else if (normalizedMethod === "direct_deposit") {
+    hasRequiredPaymentInfo = hasDirectDepositDetails;
+  } else if (normalizedMethod === "etransfer") {
+    hasRequiredPaymentInfo = hasEtransferDetails;
+  }
+
+  return {
+    methodValue: normalizedMethod,
+    methodLabel,
+    bankName: bankName || "Not provided",
+    bankInstitution: bankInstitution || "Not provided",
+    bankTransit: bankTransit || "Not provided",
+    bankAccountMasked: maskAccountNumber(application.bankAccount),
+    etransferEmail: etransferEmail || "Not provided",
+    payrollContactEmail: payrollContactEmail || "Not provided",
+    hasRequiredPaymentInfo,
+  };
+}
+
 function normalizeApplicationSource(value: unknown): string {
   const normalized = normalizeOptionalText(typeof value === "string" ? value : null);
   return normalized || "Direct application";
@@ -1265,7 +1331,7 @@ function getApplicationLocationLabel(application: Record<string, unknown>): stri
 function normalizeDashboardApplication(application: Record<string, any>) {
   const workflowStatus = normalizeWorkerApplicationStatus(application.status);
   const missingDocumentsList = parseDocumentList(application.missingDocuments);
-  const hasPaymentMethod = Boolean(normalizeOptionalText(String(application.paymentMethod || "")));
+  const paymentSummary = buildPaymentSummary(application);
   const agreementSummary = getAgreementReviewSummary(application);
   const nextRecommendedAction = normalizeOptionalText(String(application.nextRecommendedAction || "")) || computeNextRecommendedAction({
     ...application,
@@ -1279,7 +1345,7 @@ function normalizeDashboardApplication(application: Record<string, any>) {
     statusLabel: getWorkerApplicationStatusLabel(workflowStatus),
     interviewStage: normalizeInterviewStage(application.interviewStage, workflowStatus),
     deploymentReadiness: normalizeDeploymentReadiness(application.deploymentReadiness, workflowStatus),
-    payrollReadiness: normalizePayrollReadiness(application.payrollReadiness, hasPaymentMethod, workflowStatus),
+    payrollReadiness: normalizePayrollReadiness(application.payrollReadiness, paymentSummary.hasRequiredPaymentInfo, workflowStatus),
     missingDocumentsList,
     applicationSource: normalizeApplicationSource(application.applicationSource),
     assignedRecruiter: normalizeOptionalText(String(application.assignedRecruiter || "")),
@@ -1287,6 +1353,7 @@ function normalizeDashboardApplication(application: Record<string, any>) {
     interviewNotes: normalizeOptionalText(String(application.interviewNotes || "")),
     nextRecommendedAction,
     agreementSummary,
+    paymentSummary,
     locationLabel: getApplicationLocationLabel(application),
     duplicateMatchName: normalizeNameForDuplicateComparison(application.fullName || application.full_name),
     normalizedEmail: normalizeComparableText(application.email || ""),

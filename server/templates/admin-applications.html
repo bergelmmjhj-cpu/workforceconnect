@@ -1544,7 +1544,12 @@
           <!-- Content loaded dynamically -->
         </div>
         <div class="modal-footer">
-          <button class="action-btn review" id="saveWorkflowBtn">Save Workflow</button>
+          <button class="action-btn review" id="assignRecruiterBtn">Assign Recruiter</button>
+          <button class="action-btn review" id="requestDocumentsBtn">Request Missing Documents</button>
+          <button class="action-btn review" id="previewWorkerBtn">Preview Worker Copy</button>
+          <button class="action-btn review" id="downloadWorkerBtn">Download Worker Copy</button>
+          <button class="action-btn review" id="previewInternalBtn">Preview Internal Copy</button>
+          <button class="action-btn review" id="downloadInternalBtn">Download Internal Copy</button>
           <button class="action-btn approve" id="approveBtn">Approve</button>
           <button class="action-btn reject" id="rejectBtn">Reject</button>
         </div>
@@ -1759,28 +1764,24 @@
             var createdAt = app.created_at || app.createdAt || '';
             var isSelected = selectedApplicationIds.includes(app.id);
             var agreementSummary = getAgreementSummary(app);
-            var missingAcks = getMissingAcknowledgments(app);
-            var missingDocuments = getMissingDocuments(app);
+            var paymentSummary = getPaymentSummary(app);
             var duplicateBadge = app.duplicateCount > 0 ? '<span class="duplicate-badge">+' + app.duplicateCount + ' related</span>' : '';
-            var workflowMeta = getInterviewStageLabel(app.interviewStage) + ' • ' + roles.slice(0, 2).join(', ');
             var recruiter = getAssignedRecruiterLabel(app);
             var readinessBadges = '<span class="readiness-badge ' + escapeHtml(app.deploymentReadiness || 'not_ready') + '">Deployment: ' + escapeHtml(getReadinessLabel(app.deploymentReadiness)) + '</span>' +
               '<span class="readiness-badge ' + escapeHtml(app.payrollReadiness || 'not_ready') + '">Payroll: ' + escapeHtml(getReadinessLabel(app.payrollReadiness)) + '</span>';
-            var agreementMicrocopy = agreementSummary.nonSolicitationLabel + ' • ' + agreementSummary.acceptedOnLabel;
-            var alertCopy = [];
-            if (missingAcks.length > 0) alertCopy.push(missingAcks.length + ' acknowledgment issues');
-            if (missingDocuments.length > 0) alertCopy.push(missingDocuments.length + ' missing documents');
+            var paymentState = paymentSummary.hasRequiredPaymentInfo ? 'Ready' : 'Missing Payment Information';
+            var paymentStateClass = paymentSummary.hasRequiredPaymentInfo ? 'ready' : 'missing_payment_info';
             
             return '<tr>' +
               '<td class="table-select-cell"><input type="checkbox" class="row-checkbox" ' + (isSelected ? 'checked' : '') + ' onchange="toggleApplicationSelection(\'' + app.id + '\', this.checked)"></td>' +
-              '<td><div class="applicant-cell"><div class="applicant-name-row"><span class="applicant-name">' + escapeHtml(fullName) + '</span>' + duplicateBadge + '</div><div class="applicant-meta">' + escapeHtml(email) + '</div><div class="cell-subtext">' + escapeHtml(phone || 'Phone pending') + '</div></div></td>' +
-              '<td><div class="workflow-cell"><span class="status-badge ' + status + '">' + escapeHtml(getStatusLabel(status)) + '</span><div class="cell-subtext">' + escapeHtml(workflowMeta.replace(/^ \u2022 /, '')) + '</div><div class="cell-microcopy">' + escapeHtml(alertCopy.join(' • ') || 'No open workflow alerts') + '</div></div></td>' +
-              '<td><div class="recruiter-cell"><div><strong>' + escapeHtml(recruiter) + '</strong></div><div class="cell-subtext">' + escapeHtml(getSourceLabel(app)) + '</div><div class="cell-microcopy">' + escapeHtml(app.recruiterNotes || 'Ownership note pending') + '</div></div></td>' +
-              '<td><div class="meta-stack"><div>' + escapeHtml(getLocationLabel(app)) + '</div><div class="cell-subtext">' + escapeHtml(roles.join(', ') || 'Roles not set') + '</div></div></td>' +
-              '<td><div class="agreement-cell"><div><strong>' + escapeHtml(agreementSummary.versionLabel) + '</strong></div><div class="cell-subtext">' + escapeHtml(agreementSummary.nonSolicitationLabel) + '</div><div class="cell-microcopy">' + escapeHtml(agreementMicrocopy) + '</div></div></td>' +
-              '<td><div class="readiness-cell">' + readinessBadges + '<div class="next-action">Next: ' + escapeHtml(getNextRecommendedAction(app)) + '</div></div></td>' +
-              '<td><div class="meta-stack"><div>' + (createdAt && new Date(createdAt).toLocaleDateString ? new Date(createdAt).toLocaleDateString() : createdAt) + '</div><div class="cell-subtext">' + escapeHtml(getInterviewStageLabel(app.interviewStage)) + '</div></div></td>' +
-              '<td><details class="action-menu"><summary>Actions ▾</summary><div class="action-menu-panel"><button class="action-menu-item" onclick="viewApplication(\'' + app.id + '\')">View Applicant</button><button class="action-menu-item" onclick="previewAgreementCopy(\'' + app.id + '\', \'worker\')">Preview Worker Copy</button><button class="action-menu-item" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Download Worker Copy</button><button class="action-menu-item" onclick="previewAgreementCopy(\'' + app.id + '\', \'internal\')">Preview Internal Copy</button><button class="action-menu-item" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Download Internal Copy</button><button class="action-menu-item danger" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></details></td>' +
+              '<td><div class="applicant-cell"><div class="applicant-name-row"><a href="#" class="applicant-name" onclick="viewApplication(\'' + app.id + '\');return false;">' + escapeHtml(fullName || 'Unnamed applicant') + '</a>' + duplicateBadge + '</div><div class="applicant-meta">' + escapeHtml(email || 'Email pending') + '</div><div class="cell-subtext">' + escapeHtml(phone || 'Phone pending') + '</div></div></td>' +
+              '<td><div class="workflow-cell"><span class="status-badge ' + status + '">' + escapeHtml(getStatusLabel(status)) + '</span><div class="cell-subtext">Interview: ' + escapeHtml(getInterviewStageLabel(app.interviewStage)) + '</div></div></td>' +
+              '<td><div class="recruiter-cell"><div><strong>' + escapeHtml(recruiter) + '</strong></div><div class="cell-subtext">' + escapeHtml(getSourceLabel(app)) + '</div></div></td>' +
+              '<td><div class="meta-stack"><div>' + escapeHtml(getLocationLabel(app)) + '</div><div class="cell-subtext">' + escapeHtml(roles.slice(0, 2).join(', ') || 'Roles pending') + '</div></div></td>' +
+              '<td><div class="agreement-cell"><div><strong>' + escapeHtml(agreementSummary.nonSolicitationLabel) + '</strong></div><div class="cell-subtext">' + escapeHtml(agreementSummary.acceptedOnLabel) + '</div></div></td>' +
+              '<td><div class="readiness-cell">' + readinessBadges + '<span class="readiness-badge ' + paymentStateClass + '">Payment: ' + escapeHtml(paymentState) + '</span></div></td>' +
+              '<td><div class="meta-stack"><div>' + (createdAt && new Date(createdAt).toLocaleDateString ? new Date(createdAt).toLocaleDateString() : createdAt) + '</div><div class="cell-subtext">Method: ' + escapeHtml(paymentSummary.methodLabel) + '</div></div></td>' +
+              '<td><details class="action-menu"><summary>Quick Actions ▾</summary><div class="action-menu-panel"><button class="action-menu-item" onclick="quickApprove(\'' + app.id + '\')">Approve</button><button class="action-menu-item danger" onclick="quickReject(\'' + app.id + '\')">Reject</button><button class="action-menu-item" onclick="quickAssignRecruiter(\'' + app.id + '\')">Assign Recruiter</button><button class="action-menu-item" onclick="quickRequestMissingDocuments(\'' + app.id + '\')">Request Missing Documents</button><button class="action-menu-item" onclick="previewAgreementCopy(\'' + app.id + '\', \'worker\')">Preview Worker Copy</button><button class="action-menu-item" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Download Worker Copy</button><button class="action-menu-item" onclick="previewAgreementCopy(\'' + app.id + '\', \'internal\')">Preview Internal Copy</button><button class="action-menu-item" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Download Internal Copy</button></div></details></td>' +
             '</tr>';
           }).join('');
           syncSelectionState();
@@ -1879,8 +1880,60 @@
         return {
           versionLabel: agreementVersion,
           nonSolicitationLabel: nonSolicitationLabel,
-          acceptedOnLabel: acknowledgedAt ? formatDateValue(acknowledgedAt) : 'Requires acknowledgment review',
+          acceptedOnLabel: acknowledgedAt ? formatDateValue(acknowledgedAt) : (nonSolicitationAcknowledged === true ? 'Acknowledgment date not recorded' : 'Requires acknowledgment review'),
           compactLabel: agreementVersion + ' • ' + nonSolicitationLabel
+        };
+      }
+
+      function formatPaymentMethodLabel(value) {
+        var normalized = (value || '').toString().trim().toLowerCase();
+        if (normalized === 'both') return 'Direct Deposit + Interac E-Transfer';
+        if (normalized === 'direct_deposit' || normalized === 'direct deposit') return 'Direct Deposit';
+        if (normalized === 'etransfer' || normalized === 'e-transfer' || normalized === 'interac') return 'Interac E-Transfer';
+        return 'Not selected';
+      }
+
+      function maskAccountNumber(value) {
+        if (!value) return 'Not provided';
+        var digits = String(value).replace(/\D/g, '');
+        if (!digits) return 'Not provided';
+        if (digits.length < 4) return '****';
+        return '******' + digits.slice(-4);
+      }
+
+      function getPaymentSummary(app) {
+        if (app.paymentSummary) return app.paymentSummary;
+
+        var paymentMethodRaw = getAppValue(app, 'paymentMethod', 'payment_method');
+        var bankName = getAppValue(app, 'bankName', 'bank_name');
+        var bankInstitution = getAppValue(app, 'bankInstitution', 'bank_institution');
+        var bankTransit = getAppValue(app, 'bankTransit', 'bank_transit');
+        var bankAccount = getAppValue(app, 'bankAccount', 'bank_account');
+        var etransferEmail = getAppValue(app, 'etransferEmail', 'etransfer_email');
+        var payrollContactEmail = etransferEmail || app.email || 'Not provided';
+
+        var normalizedMethod = (paymentMethodRaw || '').toString().trim().toLowerCase();
+        var hasDirectDeposit = Boolean(bankName && bankInstitution && bankTransit && bankAccount);
+        var hasEtransfer = Boolean(etransferEmail);
+        var hasRequiredPaymentInfo = false;
+
+        if (normalizedMethod === 'both') {
+          hasRequiredPaymentInfo = hasDirectDeposit && hasEtransfer;
+        } else if (normalizedMethod === 'direct_deposit' || normalizedMethod === 'direct deposit') {
+          hasRequiredPaymentInfo = hasDirectDeposit;
+        } else if (normalizedMethod === 'etransfer' || normalizedMethod === 'e-transfer' || normalizedMethod === 'interac') {
+          hasRequiredPaymentInfo = hasEtransfer;
+        }
+
+        return {
+          methodLabel: formatPaymentMethodLabel(paymentMethodRaw),
+          bankName: bankName || 'Not provided',
+          bankInstitution: bankInstitution || 'Not provided',
+          bankTransit: bankTransit || 'Not provided',
+          bankAccountMasked: maskAccountNumber(bankAccount),
+          etransferEmail: etransferEmail || 'Not provided',
+          payrollContactEmail: payrollContactEmail || 'Not provided',
+          hasRequiredPaymentInfo: hasRequiredPaymentInfo
         };
       }
 
@@ -2132,17 +2185,13 @@
 
       function renderApplicationDetail(app) {
         var roles = [];
-        var days = [];
-        var shifts = [];
         try {
           roles = JSON.parse(app.preferred_roles || app.preferredRoles || '[]');
-          days = JSON.parse(app.available_days || app.availableDays || '[]');
-          shifts = JSON.parse(app.preferred_shifts || app.preferredShifts || '[]');
         } catch (_) {}
 
         var currentStatus = normalizeStatus(app.status || 'new');
         var agreementSummary = getAgreementSummary(app);
-        var missingAcknowledgments = getMissingAcknowledgments(app);
+        var paymentSummary = getPaymentSummary(app);
         var missingDocuments = getMissingDocuments(app);
         var relatedApplications = Array.isArray(app.relatedApplications) ? app.relatedApplications : [];
         var assignedRecruiterValue = getAppValue(app, 'assignedRecruiter', 'assigned_recruiter') || '';
@@ -2154,19 +2203,6 @@
         var deploymentReadinessValue = (app.deploymentReadiness || 'not_ready').toString();
         var payrollReadinessValue = (app.payrollReadiness || 'not_ready').toString();
         var interviewStageValue = (app.interviewStage || 'not_started').toString();
-        var lastContactedAt = getAppValue(app, 'lastContactedAt', 'last_contacted_at');
-        var documentRequestSentAt = getAppValue(app, 'documentRequestSentAt', 'document_request_sent_at');
-        var missingDocumentChecklist = missingDocuments.map(function(item) {
-          return { label: item, stateLabel: 'Outstanding', statusClass: 'on_hold' };
-        });
-        var acknowledgmentChecklist = REQUIRED_ACK_RULES.map(function(rule) {
-          var accepted = getAppValue(app, rule.camel, rule.snake) === true;
-          return {
-            label: rule.label,
-            stateLabel: accepted ? 'Complete' : 'Review Needed',
-            statusClass: accepted ? 'approved' : 'on_hold'
-          };
-        });
         var workflowStatusOptions = [
           { value: 'new', label: 'New' },
           { value: 'reviewing', label: 'Reviewing' },
@@ -2195,82 +2231,94 @@
           { value: 'missing_payment_info', label: 'Missing Payment Info' },
           { value: 'ready', label: 'Ready' }
         ];
+        var acknowledgmentChecklist = REQUIRED_ACK_RULES.map(function(rule) {
+          var accepted = getAppValue(app, rule.camel, rule.snake) === true;
+          return {
+            label: rule.label,
+            stateLabel: accepted ? 'Accepted' : 'Incomplete',
+            statusClass: accepted ? 'approved' : 'on_hold'
+          };
+        });
+        var missingDocumentChecklist = missingDocuments.map(function(item) {
+          return { label: item, stateLabel: 'Outstanding', statusClass: 'on_hold' };
+        });
+
         var html = '';
 
-        html += '<div class="detail-hero">';
-        html += '<div class="detail-hero-card"><div class="detail-hero-label">Workflow Stage</div><div class="detail-hero-value">' + escapeHtml(getStatusLabel(currentStatus)) + '</div><div class="cell-subtext">Interview: ' + escapeHtml(getInterviewStageLabel(interviewStageValue)) + '</div></div>';
-        html += '<div class="detail-hero-card"><div class="detail-hero-label">Assigned Recruiter</div><div class="detail-hero-value">' + escapeHtml(getAssignedRecruiterLabel(app)) + '</div><div class="cell-subtext">Source: ' + escapeHtml(getSourceLabel(app)) + '</div></div>';
-        html += '<div class="detail-hero-card"><div class="detail-hero-label">Deployment and Payroll</div><div class="detail-hero-value">' + escapeHtml(getReadinessLabel(deploymentReadinessValue)) + '</div><div class="cell-subtext">Payroll: ' + escapeHtml(getReadinessLabel(payrollReadinessValue)) + '</div></div>';
-        html += '<div class="detail-hero-card"><div class="detail-hero-label">Next Recommended Action</div><div class="detail-hero-value">' + escapeHtml(nextActionValue) + '</div><div class="cell-subtext">Related submissions: ' + escapeHtml(String(app.duplicateCount || 0)) + '</div></div>';
-        html += '</div>';
-
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Recruiter Command Center</h3>';
-        html += '<p class="section-hint">Manage recruiter ownership, interview progression, deployment readiness, payroll readiness, and the next operational step from one place.</p>';
-        html += '<div class="workflow-form-grid">';
-        html += '<div class="workflow-form-field"><label class="filter-label" for="workflowStatusInput">Workflow Stage</label><select class="workflow-select" id="workflowStatusInput">' + buildOptionMarkup(workflowStatusOptions, currentStatus) + '</select></div>';
-        html += '<div class="workflow-form-field"><label class="filter-label" for="assignedRecruiterInput">Assigned Recruiter</label><input class="workflow-input" id="assignedRecruiterInput" value="' + escapeAttribute(assignedRecruiterValue) + '" placeholder="Recruiter name"></div>';
-        html += '<div class="workflow-form-field"><label class="filter-label" for="interviewStageInput">Interview Stage</label><select class="workflow-select" id="interviewStageInput">' + buildOptionMarkup(interviewStageOptions, interviewStageValue) + '</select></div>';
-        html += '<div class="workflow-form-field"><label class="filter-label" for="applicationSourceInput">Application Source</label><input class="workflow-input" id="applicationSourceInput" value="' + escapeAttribute(applicationSourceValue) + '" placeholder="Direct application"></div>';
-        html += '<div class="workflow-form-field"><label class="filter-label" for="deploymentReadinessInput">Deployment Readiness</label><select class="workflow-select" id="deploymentReadinessInput">' + buildOptionMarkup(readinessOptions, deploymentReadinessValue) + '</select></div>';
-        html += '<div class="workflow-form-field"><label class="filter-label" for="payrollReadinessInput">Payroll Readiness</label><select class="workflow-select" id="payrollReadinessInput">' + buildOptionMarkup(payrollOptions, payrollReadinessValue) + '</select></div>';
-        html += '<div class="workflow-form-field full"><label class="filter-label" for="nextRecommendedActionInput">Next Recommended Action</label><textarea class="workflow-textarea" id="nextRecommendedActionInput" placeholder="What should operations do next?">' + escapeHtml(nextActionValue) + '</textarea></div>';
-        html += '<div class="workflow-form-field full"><label class="filter-label" for="missingDocumentsInput">Missing Documents</label><textarea class="workflow-textarea" id="missingDocumentsInput" placeholder="Passport, SIN, void cheque">' + escapeHtml(missingDocuments.join('\n')) + '</textarea></div>';
-        html += '<div class="workflow-form-field full"><label class="filter-label" for="recruiterNotesInput">Recruiter Notes</label><textarea class="workflow-textarea" id="recruiterNotesInput" placeholder="Capture screening notes, fit, and concerns">' + escapeHtml(recruiterNotesValue) + '</textarea></div>';
-        html += '<div class="workflow-form-field full"><label class="filter-label" for="interviewNotesInput">Interview Notes</label><textarea class="workflow-textarea" id="interviewNotesInput" placeholder="Interview outcomes, scheduling notes, next contact">' + escapeHtml(interviewNotesValue) + '</textarea></div>';
-        html += '<div class="workflow-form-field full"><label class="filter-label" for="applicationNotesInput">General Application Notes</label><textarea class="workflow-textarea" id="applicationNotesInput" placeholder="Operational notes visible to HR, ops, and payroll">' + escapeHtml(generalNotesValue) + '</textarea></div>';
+        html += '<h3 class="detail-section-title">Applicant Identity</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.full_name || app.fullName || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Location</div><div class="detail-value">' + escapeHtml(getLocationLabel(app)) + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + escapeHtml(roles.join(', ') || 'Not provided') + '</div></div>';
         html += '</div></div>';
 
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Operational Checklist</h3>';
-        html += '<p class="section-hint">Use this section to understand approval blockers, document gaps, and whether the file is operationally clean.</p>';
+        html += '<h3 class="detail-section-title">Payment Information</h3>';
+        html += '<p class="section-hint">High-priority payroll verification fields. Missing fields are shown clearly for immediate follow-up.</p>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item full"><div class="detail-label">Required Acknowledgment Checklist</div><div class="detail-value">' + buildChecklistMarkup(acknowledgmentChecklist, 'All required acknowledgments complete') + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Missing Documents</div><div class="detail-value">' + buildChecklistMarkup(missingDocumentChecklist, 'No missing documents tracked') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Payment Method</div><div class="detail-value">' + escapeHtml(paymentSummary.methodLabel) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Payroll Contact Email</div><div class="detail-value">' + escapeHtml(paymentSummary.payrollContactEmail) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Bank Name</div><div class="detail-value">' + escapeHtml(paymentSummary.bankName) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Institution Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankInstitution) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Transit Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankTransit) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Account Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankAccountMasked) + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">E-Transfer Email</div><div class="detail-value">' + escapeHtml(paymentSummary.etransferEmail) + '</div></div>';
+        if (!paymentSummary.hasRequiredPaymentInfo) {
+          html += '<div class="detail-item full"><div class="detail-value" style="color:#b45309;font-weight:700;">Missing Payment Information</div></div>';
+        }
+        html += '</div></div>';
+
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Missing Documents</h3>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-item full"><div class="detail-value">' + buildChecklistMarkup(missingDocumentChecklist, 'No missing documents tracked') + '</div></div>';
         html += '</div></div>';
 
         html += '<div class="detail-section">';
         html += '<h3 class="detail-section-title">Agreement Status</h3>';
-        html += '<p class="section-hint">Agreement metadata is mapped into HR-readable states so older records do not show technical placeholder labels.</p>';
         html += '<div class="detail-grid">';
         html += '<div class="detail-item"><div class="detail-label">Agreement Version</div><div class="detail-value">' + escapeHtml(agreementSummary.versionLabel) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Non-Solicitation</div><div class="detail-value">' + escapeHtml(agreementSummary.nonSolicitationLabel) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Accepted On</div><div class="detail-value">' + escapeHtml(agreementSummary.acceptedOnLabel) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Acknowledged At</div><div class="detail-value">' + escapeHtml(agreementSummary.acceptedOnLabel) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Worker Copy Generated</div><div class="detail-value">' + escapeHtml(formatGeneratedAtValue(getAppValue(app, 'workerPdfGeneratedAt', 'worker_pdf_generated_at'))) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Internal Copy Generated</div><div class="detail-value">' + escapeHtml(formatGeneratedAtValue(getAppValue(app, 'internalPdfGeneratedAt', 'internal_pdf_generated_at'))) + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Required Acknowledgments</div><div class="detail-value">' + buildChecklistMarkup(acknowledgmentChecklist, 'All required acknowledgments complete') + '</div></div>';
         html += '<div class="detail-item full"><div class="detail-label">Agreement Copies</div><div class="detail-value"><div class="action-cell"><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'worker\')">Preview Worker Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Download Worker Copy</button><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'internal\')">Preview Internal Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Download Internal Copy</button></div></div></div>';
         html += '</div></div>';
 
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Duplicate Submission History</h3>';
-        html += '<p class="section-hint">Obvious duplicates are collapsed into one primary dashboard row. Related records remain visible here for audit and recruiter context.</p>';
-        html += buildDuplicateHistoryMarkup(relatedApplications);
-        html += '</div>';
+        html += '<h3 class="detail-section-title">Deployment Readiness</h3>';
+        html += '<div class="workflow-form-grid">';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="workflowStatusInput">Workflow Stage</label><select class="workflow-select" id="workflowStatusInput">' + buildOptionMarkup(workflowStatusOptions, currentStatus) + '</select></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="interviewStageInput">Interview Stage</label><select class="workflow-select" id="interviewStageInput">' + buildOptionMarkup(interviewStageOptions, interviewStageValue) + '</select></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="deploymentReadinessInput">Deployment Readiness</label><select class="workflow-select" id="deploymentReadinessInput">' + buildOptionMarkup(readinessOptions, deploymentReadinessValue) + '</select></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="payrollReadinessInput">Payroll Readiness</label><select class="workflow-select" id="payrollReadinessInput">' + buildOptionMarkup(payrollOptions, payrollReadinessValue) + '</select></div>';
+        html += '</div></div>';
 
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Applicant Profile</h3>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.full_name || app.fullName || '') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Location</div><div class="detail-value">' + escapeHtml(getLocationLabel(app)) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Work Status</div><div class="detail-value">' + escapeHtml(formatWorkStatus(app.work_status || app.workStatus || 'Not provided')) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">' + escapeHtml(app.date_of_birth || app.dateOfBirth || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Address</div><div class="detail-value">' + escapeHtml(app.address || '') + ', ' + escapeHtml(app.city || '') + ', ' + escapeHtml(app.province || '') + ' ' + escapeHtml(app.postal_code || app.postalCode || '') + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + escapeHtml(roles.join(', ') + ((app.other_role || app.otherRole) ? ' (' + (app.other_role || app.otherRole) + ')' : '') || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Available Days</div><div class="detail-value">' + escapeHtml(days.join(', ') || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Preferred Shifts</div><div class="detail-value">' + escapeHtml(shifts.join(', ') || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Experience</div><div class="detail-value">' + escapeHtml((app.years_experience || app.yearsExperience || 'Not specified') + ' years') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Shift Length Preference</div><div class="detail-value">' + escapeHtml((app.desired_shift_length || app.desiredShiftLength) ? (app.desired_shift_length || app.desiredShiftLength) + ' hours' : 'Not specified') + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Experience Summary</div><div class="detail-value">' + escapeHtml(app.experience_summary || app.experienceSummary || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Skills and Certifications</div><div class="detail-value">' + escapeHtml(app.skills || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Payment Method</div><div class="detail-value">' + escapeHtml((app.payment_method || app.paymentMethod) ? ((app.payment_method || app.paymentMethod) === 'direct_deposit' || (app.payment_method || app.paymentMethod) === 'both' ? 'Direct Deposit' : 'Interac E-Transfer') : 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Payroll Contact</div><div class="detail-value">' + escapeHtml(app.etransfer_email || app.etransferEmail || app.bank_name || app.bankName || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Last Contacted</div><div class="detail-value">' + escapeHtml(lastContactedAt ? formatDateValue(lastContactedAt) : 'Not contacted yet') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Document Request Sent</div><div class="detail-value">' + escapeHtml(documentRequestSentAt ? formatDateValue(documentRequestSentAt) : 'No request sent') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Submitted</div><div class="detail-value">' + escapeHtml(formatDateValue(app.created_at || app.createdAt)) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Electronic Signature</div><div class="detail-value">' + escapeHtml(app.signature || 'Not captured') + ' • ' + escapeHtml(app.signature_date || app.signatureDate || 'Date unavailable') + '</div></div>';
+        html += '<h3 class="detail-section-title">Recruiter Assignment</h3>';
+        html += '<div class="workflow-form-grid">';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="assignedRecruiterInput">Assigned Recruiter</label><input class="workflow-input" id="assignedRecruiterInput" value="' + escapeAttribute(assignedRecruiterValue) + '" placeholder="Recruiter name"></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="applicationSourceInput">Application Source</label><input class="workflow-input" id="applicationSourceInput" value="' + escapeAttribute(applicationSourceValue) + '" placeholder="Direct application"></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="nextRecommendedActionInput">Next Recommended Action</label><textarea class="workflow-textarea" id="nextRecommendedActionInput" placeholder="What should operations do next?">' + escapeHtml(nextActionValue) + '</textarea></div>';
         html += '</div></div>';
+
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Operational Notes</h3>';
+        html += '<div class="workflow-form-grid">';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="missingDocumentsInput">Missing Documents</label><textarea class="workflow-textarea" id="missingDocumentsInput" placeholder="Passport, SIN, void cheque">' + escapeHtml(missingDocuments.join('\n')) + '</textarea></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="recruiterNotesInput">Recruiter Notes</label><textarea class="workflow-textarea" id="recruiterNotesInput" placeholder="Capture screening notes and ownership updates">' + escapeHtml(recruiterNotesValue) + '</textarea></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="interviewNotesInput">Interview Notes</label><textarea class="workflow-textarea" id="interviewNotesInput" placeholder="Interview outcomes and scheduling details">' + escapeHtml(interviewNotesValue) + '</textarea></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="applicationNotesInput">General Application Notes</label><textarea class="workflow-textarea" id="applicationNotesInput" placeholder="Operational notes for HR, payroll, and ops">' + escapeHtml(generalNotesValue) + '</textarea></div>';
+        html += '</div></div>';
+
+        html += '<details class="detail-section"><summary class="detail-section-title" style="cursor:pointer;">Duplicate Submission History (Low Priority)</summary>';
+        html += '<p class="section-hint">Collapsed by default to reduce noise in the primary review workflow.</p>';
+        html += buildDuplicateHistoryMarkup(relatedApplications);
+        html += '</details>';
 
         document.getElementById('modalBody').innerHTML = html;
       }
@@ -2307,7 +2355,7 @@
           ? document.getElementById('approveBtn')
           : statusOverride === 'rejected'
             ? document.getElementById('rejectBtn')
-            : document.getElementById('saveWorkflowBtn');
+            : document.getElementById('assignRecruiterBtn');
         var originalLabel = triggerButton.textContent;
 
         triggerButton.disabled = true;
@@ -2352,6 +2400,68 @@
         } finally {
           triggerButton.disabled = false;
           triggerButton.textContent = originalLabel;
+        }
+      }
+
+      async function quickApprove(id) {
+        if (!confirm('Approve this applicant and send them into worker onboarding?')) return;
+        currentApplicationId = id;
+        await persistCurrentApplication('approved');
+      }
+
+      async function quickReject(id) {
+        if (!confirm('Reject this applicant record?')) return;
+        currentApplicationId = id;
+        await persistCurrentApplication('rejected');
+      }
+
+      async function quickAssignRecruiter(id) {
+        var recruiterName = prompt('Assign recruiter (name):');
+        if (!recruiterName) return;
+
+        try {
+          var response = await fetch('/api/admin/applications/' + id, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': 'Basic ' + authCredentials,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ assignedRecruiter: recruiterName.trim() })
+          });
+
+          if (!response.ok) {
+            var errorBody = await response.json().catch(function() { return null; });
+            throw new Error(errorBody && errorBody.error ? errorBody.error : 'Failed to assign recruiter');
+          }
+
+          await loadApplications();
+        } catch (error) {
+          alert(error.message || 'Failed to assign recruiter');
+        }
+      }
+
+      async function quickRequestMissingDocuments(id) {
+        var documentsInput = prompt('Enter missing documents (comma separated):');
+        if (documentsInput === null) return;
+
+        try {
+          var response = await fetch('/api/admin/applications/' + id, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': 'Basic ' + authCredentials,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ missingDocuments: parseDocumentList(documentsInput) })
+          });
+
+          if (!response.ok) {
+            var errorBody = await response.json().catch(function() { return null; });
+            throw new Error(errorBody && errorBody.error ? errorBody.error : 'Failed to update missing documents');
+          }
+
+          await loadApplications();
+        } catch (error) {
+          alert(error.message || 'Failed to update missing documents');
         }
       }
 
@@ -2509,8 +2619,42 @@
         }
       });
 
-      document.getElementById('saveWorkflowBtn').addEventListener('click', function() {
+      document.getElementById('assignRecruiterBtn').addEventListener('click', function() {
+        var recruiterName = getWorkflowFieldValue('assignedRecruiterInput').trim();
+        if (!recruiterName) {
+          alert('Enter recruiter name before assigning.');
+          return;
+        }
         persistCurrentApplication();
+      });
+
+      document.getElementById('requestDocumentsBtn').addEventListener('click', function() {
+        var missingDocs = parseDocumentList(getWorkflowFieldValue('missingDocumentsInput'));
+        if (missingDocs.length === 0) {
+          alert('Add at least one missing document before sending request.');
+          return;
+        }
+        persistCurrentApplication();
+      });
+
+      document.getElementById('previewWorkerBtn').addEventListener('click', function() {
+        if (!currentApplicationId) return;
+        previewAgreementCopy(currentApplicationId, 'worker');
+      });
+
+      document.getElementById('downloadWorkerBtn').addEventListener('click', function() {
+        if (!currentApplicationId) return;
+        downloadAgreementCopy(currentApplicationId, 'worker');
+      });
+
+      document.getElementById('previewInternalBtn').addEventListener('click', function() {
+        if (!currentApplicationId) return;
+        previewAgreementCopy(currentApplicationId, 'internal');
+      });
+
+      document.getElementById('downloadInternalBtn').addEventListener('click', function() {
+        if (!currentApplicationId) return;
+        downloadAgreementCopy(currentApplicationId, 'internal');
       });
 
       document.getElementById('approveBtn').addEventListener('click', function() {

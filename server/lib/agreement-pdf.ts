@@ -11,7 +11,9 @@ export type AgreementPdfVariant = "internal" | "worker";
 type PdfDisposition = "attachment" | "inline";
 
 const INTERNAL_COMPANY_NAME = "1001328662 Ontario Inc.";
-const INTERNAL_COMPANY_ADDRESS = "Mississauga, Ontario";
+const INTERNAL_COMPANY_ADDRESS = "1900 Dundas St. West, Mississauga L5K 1P9";
+const WORKER_COMPANY_NAME = "Workforce Connect";
+const WORKER_COMPANY_ADDRESS = "Mississauga, Ontario";
 
 function safeParseList(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -33,11 +35,12 @@ function sanitizeFileName(value: string): string {
 }
 
 function drawHeader(doc: PDFDocument, variant: AgreementPdfVariant) {
-  void variant;
+  const companyName = variant === "worker" ? WORKER_COMPANY_NAME : INTERNAL_COMPANY_NAME;
+  const companyAddress = variant === "worker" ? WORKER_COMPANY_ADDRESS : INTERNAL_COMPANY_ADDRESS;
 
-  doc.fontSize(18).font("Helvetica-Bold").text(INTERNAL_COMPANY_NAME, { align: "center" });
+  doc.fontSize(18).font("Helvetica-Bold").text(companyName, { align: "center" });
   doc.moveDown(0.2);
-  doc.fontSize(10).font("Helvetica").fillColor("#555555").text(INTERNAL_COMPANY_ADDRESS, { align: "center" });
+  doc.fontSize(10).font("Helvetica").fillColor("#555555").text(companyAddress, { align: "center" });
   doc.fillColor("#000000");
 
   doc.moveDown(1.2);
@@ -69,6 +72,7 @@ function isAccepted(value: unknown): boolean {
 
 function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
   const items: Array<{ label: string; accepted: boolean }> = [
+    { label: "Background Check Consent", accepted: isAccepted(application.backgroundCheckConsent) },
     { label: "TITO System Acknowledgment", accepted: isAccepted(application.titoAcknowledgment) },
     { label: "Site Rules Agreement", accepted: isAccepted(application.siteRulesAcknowledgment) },
     { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(application.nonSolicitationAcknowledged) },
@@ -89,6 +93,35 @@ function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
   });
 }
 
+function resolveAcknowledgedAtValue(application: WorkerApplication): string {
+  if (application.nonSolicitationAcknowledgedAt) {
+    return new Date(application.nonSolicitationAcknowledgedAt).toLocaleString("en-CA");
+  }
+
+  if (application.nonSolicitationAcknowledged === true && application.signatureDate) {
+    const parsed = new Date(application.signatureDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleString("en-CA");
+    }
+  }
+
+  return "Not recorded";
+}
+
+function addPaymentInformation(doc: PDFDocument, application: WorkerApplication) {
+  doc.moveDown(0.5);
+  doc.fontSize(12).font("Helvetica-Bold").text("Payment Information");
+  doc.moveDown(0.4);
+
+  const paymentMethod = application.paymentMethod || "Not provided";
+  addLabelValue(doc, "Payment Method:", paymentMethod);
+  addLabelValue(doc, "Bank Name:", application.bankName || "Not provided");
+  addLabelValue(doc, "Institution Number:", application.bankInstitution || "Not provided");
+  addLabelValue(doc, "Transit Number:", application.bankTransit || "Not provided");
+  addLabelValue(doc, "Account Number:", application.bankAccount ? `******${String(application.bankAccount).replace(/\D/g, "").slice(-4)}` : "Not provided");
+  addLabelValue(doc, "E-Transfer Email:", application.etransferEmail || "Not provided");
+}
+
 function addSignature(doc: PDFDocument, application: WorkerApplication) {
   doc.moveDown(0.5);
   doc.fontSize(12).font("Helvetica-Bold").text("Signature");
@@ -98,11 +131,7 @@ function addSignature(doc: PDFDocument, application: WorkerApplication) {
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
   addLabelValue(doc, "Non-Solicitation Acknowledged:", application.nonSolicitationAcknowledged ? "Yes" : "No");
-  addLabelValue(
-    doc,
-    "Acknowledged At:",
-    application.nonSolicitationAcknowledgedAt ? new Date(application.nonSolicitationAcknowledgedAt).toLocaleString("en-CA") : "Legacy / Unknown",
-  );
+  addLabelValue(doc, "Acknowledged At:", resolveAcknowledgedAtValue(application));
 }
 
 export function createAgreementPdfFileName(application: WorkerApplication, variant: AgreementPdfVariant): string {
@@ -157,9 +186,8 @@ export function streamAgreementPdf(
   });
 
   addAcknowledgments(doc, application);
+  addPaymentInformation(doc, application);
   addSignature(doc, application);
-
-  void variant;
 
   doc.end();
 }

@@ -348,6 +348,9 @@ async function seedProductionAdmin() {
 
 async function ensureWorkerApplicationsCompatibility() {
   try {
+    await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "consent_to_contact" boolean`);
+    await db.execute(sql`ALTER TABLE "worker_applications" ALTER COLUMN "consent_to_contact" SET DEFAULT false`);
+    await db.execute(sql`UPDATE "worker_applications" SET "consent_to_contact" = false WHERE "consent_to_contact" IS NULL`);
     await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "agreement_version" text`);
     await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged" boolean`);
     await db.execute(sql`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged_at" timestamp`);

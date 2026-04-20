@@ -3251,6 +3251,7 @@ function getMissingApprovalAcknowledgments(application) {
   return REQUIRED_APPROVAL_ACK_FIELDS.filter(({ field }) => application[field] !== true).map(({ label }) => label);
 }
 var WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
+  consentToContact: "consent_to_contact",
   agreementVersion: "agreement_version",
   nonSolicitationAcknowledged: "non_solicitation_acknowledged",
   nonSolicitationAcknowledgedAt: "non_solicitation_acknowledged_at",
@@ -3285,6 +3286,7 @@ async function getWorkerApplicationColumnSet() {
 async function getWorkerApplicationOptionalMetadataSelect() {
   const columnSet = await getWorkerApplicationColumnSet();
   return {
+    consentToContact: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.consentToContact) ? workerApplications.consentToContact : sql3`NULL`,
     agreementVersion: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.agreementVersion) ? workerApplications.agreementVersion : sql3`NULL`,
     nonSolicitationAcknowledged: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledged) ? workerApplications.nonSolicitationAcknowledged : sql3`NULL`,
     nonSolicitationAcknowledgedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledgedAt) ? workerApplications.nonSolicitationAcknowledgedAt : sql3`NULL`,
@@ -3310,7 +3312,6 @@ async function getWorkerApplicationAgreementSelect() {
     siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
     workerAgreementConsent: workerApplications.workerAgreementConsent,
     privacyConsent: workerApplications.privacyConsent,
-    consentToContact: workerApplications.consentToContact,
     marketingConsent: workerApplications.marketingConsent,
     ...await getWorkerApplicationOptionalMetadataSelect(),
     signature: workerApplications.signature,
@@ -5089,7 +5090,6 @@ The WFConnect Team`,
         titoAcknowledgment: workerApplications.titoAcknowledgment,
         siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
         workerAgreementConsent: workerApplications.workerAgreementConsent,
-        consentToContact: workerApplications.consentToContact,
         privacyConsent: workerApplications.privacyConsent,
         marketingConsent: workerApplications.marketingConsent,
         ...optionalMetadataSelect,
@@ -5324,7 +5324,6 @@ The WFConnect Team`,
         titoAcknowledgment: workerApplications.titoAcknowledgment,
         siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
         workerAgreementConsent: workerApplications.workerAgreementConsent,
-        consentToContact: workerApplications.consentToContact,
         privacyConsent: workerApplications.privacyConsent,
         marketingConsent: workerApplications.marketingConsent,
         ...optionalMetadataSelect,
@@ -5362,7 +5361,7 @@ The WFConnect Team`,
           siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
           workerAgreementConsent: workerApplications.workerAgreementConsent,
           privacyConsent: workerApplications.privacyConsent,
-          consentToContact: workerApplications.consentToContact,
+          consentToContact: optionalMetadataSelect.consentToContact,
           nonSolicitationAcknowledged: optionalMetadataSelect.nonSolicitationAcknowledged
         }).from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
         if (!approvalSource) {
@@ -11903,6 +11902,9 @@ async function seedProductionAdmin() {
 }
 async function ensureWorkerApplicationsCompatibility() {
   try {
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "consent_to_contact" boolean`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "consent_to_contact" SET DEFAULT false`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "consent_to_contact" = false WHERE "consent_to_contact" IS NULL`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "agreement_version" text`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged" boolean`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged_at" timestamp`);

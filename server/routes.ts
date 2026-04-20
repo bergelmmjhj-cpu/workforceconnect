@@ -767,6 +767,7 @@ function getMissingApprovalAcknowledgments(application: Partial<typeof workerApp
 }
 
 const WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
+  consentToContact: "consent_to_contact",
   agreementVersion: "agreement_version",
   nonSolicitationAcknowledged: "non_solicitation_acknowledged",
   nonSolicitationAcknowledgedAt: "non_solicitation_acknowledged_at",
@@ -819,6 +820,9 @@ async function getWorkerApplicationOptionalMetadataSelect() {
   const columnSet = await getWorkerApplicationColumnSet();
 
   return {
+    consentToContact: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.consentToContact)
+      ? workerApplications.consentToContact
+      : sql<boolean | null>`NULL`,
     agreementVersion: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.agreementVersion)
       ? workerApplications.agreementVersion
       : sql<string | null>`NULL`,
@@ -855,7 +859,6 @@ async function getWorkerApplicationAgreementSelect() {
     siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
     workerAgreementConsent: workerApplications.workerAgreementConsent,
     privacyConsent: workerApplications.privacyConsent,
-    consentToContact: workerApplications.consentToContact,
     marketingConsent: workerApplications.marketingConsent,
     ...(await getWorkerApplicationOptionalMetadataSelect()),
     signature: workerApplications.signature,
@@ -3123,7 +3126,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           titoAcknowledgment: workerApplications.titoAcknowledgment,
           siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
           workerAgreementConsent: workerApplications.workerAgreementConsent,
-          consentToContact: workerApplications.consentToContact,
           privacyConsent: workerApplications.privacyConsent,
           marketingConsent: workerApplications.marketingConsent,
           ...optionalMetadataSelect,
@@ -3406,7 +3408,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           titoAcknowledgment: workerApplications.titoAcknowledgment,
           siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
           workerAgreementConsent: workerApplications.workerAgreementConsent,
-          consentToContact: workerApplications.consentToContact,
           privacyConsent: workerApplications.privacyConsent,
           marketingConsent: workerApplications.marketingConsent,
           ...optionalMetadataSelect,
@@ -3454,7 +3455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
             workerAgreementConsent: workerApplications.workerAgreementConsent,
             privacyConsent: workerApplications.privacyConsent,
-            consentToContact: workerApplications.consentToContact,
+            consentToContact: optionalMetadataSelect.consentToContact,
             nonSolicitationAcknowledged: optionalMetadataSelect.nonSolicitationAcknowledged,
           })
           .from(workerApplications)

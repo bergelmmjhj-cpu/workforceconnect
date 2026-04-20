@@ -290,6 +290,8 @@ var init_schema = __esm({
       workerPdfGeneratedAt: timestamp("worker_pdf_generated_at"),
       internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
       privacyConsent: boolean("privacy_consent").default(false),
+      consentToContact: boolean("consent_to_contact").default(false),
+      promotionalConsent: boolean("promotional_consent").notNull().default(false),
       marketingConsent: boolean("marketing_consent").default(false),
       // Electronic Signature
       signature: text("signature").notNull(),
@@ -918,6 +920,7 @@ var init_schema = __esm({
       resumeFilename: text("resume_filename"),
       resumeMimeType: text("resume_mime_type"),
       resumeFileSize: integer("resume_file_size"),
+      promotionalConsent: boolean("promotional_consent").default(false),
       status: text("status").notNull().default("new"),
       // new, reviewing, interviewed, hired, rejected
       adminNotes: text("admin_notes"),
@@ -2581,18 +2584,25 @@ function addSection(doc, title, paragraphs) {
     doc.moveDown(0.35);
   });
 }
-function addAcknowledgments(doc, _application) {
+function isAccepted(value) {
+  return value === true;
+}
+function addAcknowledgments(doc, application) {
   const items = [
-    "TITO System Acknowledgment",
-    "Site Rules Agreement",
-    NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
-    "Worker Agreement",
-    "Privacy Policy"
+    { label: "TITO System Acknowledgment", accepted: isAccepted(application.titoAcknowledgment) },
+    { label: "Site Rules Agreement", accepted: isAccepted(application.siteRulesAcknowledgment) },
+    { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(application.nonSolicitationAcknowledged) },
+    { label: "Worker Agreement", accepted: isAccepted(application.workerAgreementConsent) },
+    { label: "Privacy Policy", accepted: isAccepted(application.privacyConsent) },
+    { label: "Consent To Contact", accepted: isAccepted(application.consentToContact) }
   ];
+  if (application.marketingConsent === true) {
+    items.push({ label: "Promotional Communications (Optional)", accepted: true });
+  }
   doc.fontSize(12).font("Helvetica-Bold").text("Acknowledgments");
   doc.moveDown(0.35);
-  items.forEach((label) => {
-    doc.fontSize(9.5).font("Helvetica").text(`[X] ${label}`);
+  items.forEach((item) => {
+    doc.fontSize(9.5).font("Helvetica").text(`[${item.accepted ? "X" : " "}] ${item.label}`);
     doc.moveDown(0.2);
   });
 }
@@ -2604,7 +2614,7 @@ function addSignature(doc, application) {
   addLabelValue(doc, "Signed Date:", application.signatureDate);
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
-  addLabelValue(doc, "Non-Solicitation Acknowledged:", "Yes");
+  addLabelValue(doc, "Non-Solicitation Acknowledged:", application.nonSolicitationAcknowledged ? "Yes" : "No");
   addLabelValue(
     doc,
     "Acknowledged At:",
@@ -2619,11 +2629,12 @@ function createAgreementPdfFileName(application, variant) {
   }
   return `Internal_Subcontractor_Agreement_${name}_${date2}.pdf`;
 }
-function streamAgreementPdf(res, application, variant) {
+function streamAgreementPdf(res, application, variant, options) {
   const fileName = createAgreementPdfFileName(application, variant);
+  const disposition = options?.disposition === "inline" ? "inline" : "attachment";
   const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 56, right: 56 } });
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  res.setHeader("Content-Disposition", `${disposition}; filename="${fileName}"`);
   doc.pipe(res);
   drawHeader(doc, variant);
   addSection(doc, "Worker Details", [
@@ -2656,6 +2667,7 @@ function streamAgreementPdf(res, application, variant) {
 }
 
 // server/routes.ts
+import { z as z2 } from "zod";
 var CANADIAN_PROVINCES = {
   AB: "Alberta",
   BC: "British Columbia",
@@ -2749,6 +2761,11 @@ function buildLocalAddressPredictions(input) {
   }
   if (parsed.addressLine1 && parsed.city) {
     candidates.add([parsed.addressLine1, parsed.city, parsed.province, "Canada"].filter(Boolean).join(", "));
+  }
+  if (!parsed.city || !parsed.province) {
+    ["Mississauga", "Toronto", "Brampton", "Etobicoke"].forEach((city) => {
+      candidates.add([parsed.addressLine1 || trimmed, city, "ON", "Canada"].filter(Boolean).join(", "));
+    });
   }
   return Array.from(candidates).filter(Boolean).slice(0, 5).map((description) => ({
     place_id: Buffer.from(description, "utf-8").toString("base64url"),
@@ -3057,6 +3074,280 @@ function mapApplicationForSync(application) {
     }
   };
 }
+var REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
+  "backgroundCheckConsent",
+  "titoAcknowledgment",
+  "siteRulesAcknowledgment",
+  "workerAgreementConsent",
+  "privacyConsent",
+  "consentToContact"
+];
+var consentLikeSchema = z2.union([z2.boolean(), z2.string(), z2.number()]);
+var listLikeSchema = z2.union([z2.string(), z2.array(z2.string())]);
+var nullableStringSchema = z2.union([z2.string(), z2.null()]).optional();
+var nullableNumericLikeSchema = z2.union([z2.string(), z2.number(), z2.null()]).optional();
+var RECENT_SUBMISSION_WINDOW_MS = 90 * 1e3;
+var recentSubmissionFingerprints = /* @__PURE__ */ new Map();
+var publicApplySubmissionSchema = z2.object({
+  fullName: z2.string().trim().min(1).optional(),
+  full_name: z2.string().trim().min(1).optional(),
+  firstName: z2.string().trim().min(1).optional(),
+  first_name: z2.string().trim().min(1).optional(),
+  lastName: z2.string().trim().min(1).optional(),
+  last_name: z2.string().trim().min(1).optional(),
+  dateOfBirth: nullableStringSchema,
+  phone: z2.string().trim().min(1),
+  email: z2.string().email(),
+  address: z2.string().trim().min(1),
+  city: z2.string().trim().min(1),
+  province: z2.string().trim().min(1),
+  postalCode: z2.string().trim().min(1),
+  workStatus: z2.string().trim().min(1),
+  backgroundCheckConsent: consentLikeSchema,
+  preferredRoles: listLikeSchema,
+  otherRole: nullableStringSchema,
+  availableDays: listLikeSchema,
+  preferredShifts: listLikeSchema,
+  unavailablePeriods: nullableStringSchema,
+  yearsExperience: nullableNumericLikeSchema,
+  experienceSummary: nullableStringSchema,
+  skills: nullableStringSchema,
+  desiredShiftLength: nullableNumericLikeSchema,
+  maxTravelDistance: nullableNumericLikeSchema,
+  emergencyContactName: z2.string().trim().min(1),
+  emergencyContactRelationship: z2.string().trim().min(1),
+  emergencyContactPhone: z2.string().trim().min(1),
+  paymentMethod: nullableStringSchema,
+  bankName: nullableStringSchema,
+  bankInstitution: nullableStringSchema,
+  bankTransit: nullableStringSchema,
+  bankAccount: nullableStringSchema,
+  etransferEmail: nullableStringSchema,
+  titoAcknowledgment: consentLikeSchema,
+  siteRulesAcknowledgment: consentLikeSchema,
+  workerAgreementConsent: consentLikeSchema,
+  agreementVersion: nullableStringSchema,
+  nonSolicitationAcknowledged: consentLikeSchema.optional(),
+  nonSolicitationAcknowledgedAt: z2.union([z2.string(), z2.number()]).optional(),
+  privacyConsent: consentLikeSchema,
+  consentToContact: consentLikeSchema,
+  marketingConsent: consentLikeSchema.optional(),
+  promotionalConsent: consentLikeSchema.optional(),
+  signature: z2.string().trim().min(1),
+  signatureDate: z2.string().trim().min(1)
+}).strict();
+var publicApplicantSubmissionSchema = z2.object({
+  fullName: z2.string().trim().min(1).optional(),
+  full_name: z2.string().trim().min(1).optional(),
+  firstName: z2.string().trim().min(1).optional(),
+  first_name: z2.string().trim().min(1).optional(),
+  lastName: z2.string().trim().min(1).optional(),
+  last_name: z2.string().trim().min(1).optional(),
+  email: z2.string().email().optional(),
+  phone: z2.string().trim().min(1).optional(),
+  phoneNumber: z2.string().trim().min(1).optional(),
+  phone_number: z2.string().trim().min(1).optional(),
+  mobile: z2.string().trim().min(1).optional(),
+  contactNumber: z2.string().trim().min(1).optional(),
+  addressFull: z2.string().trim().min(1),
+  addressStreet: z2.string().optional(),
+  addressCity: z2.string().optional(),
+  addressProvince: z2.string().optional(),
+  addressPostalCode: z2.string().optional(),
+  addressCountry: z2.string().optional(),
+  applyingFor: z2.string().trim().min(1),
+  jobPostingSource: z2.string().trim().min(1),
+  photoData: z2.string().trim().min(1),
+  photoFilename: z2.string().optional(),
+  photoMimeType: z2.string().optional(),
+  photoFileSize: z2.number().int().nonnegative().optional(),
+  resumeData: z2.string().trim().min(1),
+  resumeFilename: z2.string().optional(),
+  resumeMimeType: z2.string().optional(),
+  resumeFileSize: z2.number().int().nonnegative().optional(),
+  promotionalConsent: consentLikeSchema.optional()
+}).strict();
+function isConsentGranted(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+  }
+  if (typeof value === "number") return value === 1;
+  return false;
+}
+function getMissingRequiredConsents(payload) {
+  if (!payload) return [...REQUIRED_PUBLIC_APPLICATION_CONSENTS];
+  return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !isConsentGranted(payload[field]));
+}
+function normalizeJsonArrayField(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+  return "[]";
+}
+function normalizeOptionalText(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = normalizeWhitespace(value);
+  return trimmed.length > 0 ? trimmed : null;
+}
+function normalizeWhitespace(value) {
+  return value.trim().replace(/\s+/g, " ");
+}
+function formatValidationIssues(issues) {
+  return issues.slice(0, 10).map((issue) => ({
+    path: issue.path.join("."),
+    message: issue.message
+  }));
+}
+function normalizeComparableText(value) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+function normalizePhoneForComparison(value) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return digits.slice(1);
+  }
+  return digits;
+}
+function buildApplicantLocationDisplay(input) {
+  const city = normalizeOptionalText(input.addressCity);
+  const province = normalizeOptionalText(input.addressProvince);
+  const structuredLocation = [city, province?.toUpperCase()].filter(Boolean).join(", ");
+  if (structuredLocation) return structuredLocation;
+  const parsedAddress = parseLocalAddress(input.addressFull || "");
+  const parsedCity = normalizeOptionalText(parsedAddress.city);
+  const parsedProvince = normalizeOptionalText(parsedAddress.province);
+  const parsedLocation = [parsedCity, parsedProvince?.toUpperCase()].filter(Boolean).join(", ");
+  if (parsedLocation) return parsedLocation;
+  const fullAddress = normalizeOptionalText(input.addressFull);
+  if (fullAddress) {
+    const parts = fullAddress.split(",").map((part) => normalizeOptionalText(part)).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+    }
+    return fullAddress;
+  }
+  return null;
+}
+function normalizeApplicantPhone(value) {
+  if (value === null || value === void 0) return null;
+  const normalized = normalizeWhitespace(String(value));
+  return normalized.length > 0 ? normalized : null;
+}
+var REQUIRED_APPROVAL_ACK_FIELDS = [
+  { field: "backgroundCheckConsent", label: "Background Check Consent" },
+  { field: "titoAcknowledgment", label: "TITO Acknowledgment" },
+  { field: "siteRulesAcknowledgment", label: "Site Rules Acknowledgment" },
+  { field: "workerAgreementConsent", label: "Worker Agreement Consent" },
+  { field: "privacyConsent", label: "Privacy Consent" },
+  { field: "consentToContact", label: "Consent To Contact" },
+  { field: "nonSolicitationAcknowledged", label: "Non-Solicitation Acknowledgment" }
+];
+function getMissingApprovalAcknowledgments(application) {
+  return REQUIRED_APPROVAL_ACK_FIELDS.filter(({ field }) => application[field] !== true).map(({ label }) => label);
+}
+var WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
+  agreementVersion: "agreement_version",
+  nonSolicitationAcknowledged: "non_solicitation_acknowledged",
+  nonSolicitationAcknowledgedAt: "non_solicitation_acknowledged_at",
+  workerPdfGeneratedAt: "worker_pdf_generated_at",
+  internalPdfGeneratedAt: "internal_pdf_generated_at"
+};
+var workerApplicationColumnSetPromise = null;
+async function getWorkerApplicationColumnSet() {
+  if (!workerApplicationColumnSetPromise) {
+    workerApplicationColumnSetPromise = db.execute(sql3`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'worker_applications'
+    `).then((result) => {
+      const rows = Array.isArray(result) ? result : result && typeof result === "object" && "rows" in result && Array.isArray(result.rows) ? result.rows : [];
+      const columnSet = new Set(
+        rows.map((row) => row?.column_name).filter((columnName) => typeof columnName === "string" && columnName.length > 0)
+      );
+      const missingColumns = Object.values(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS).filter((columnName) => !columnSet.has(columnName));
+      if (missingColumns.length > 0) {
+        console.warn(`[WORKER_APPLICATIONS] Optional agreement metadata columns unavailable: ${missingColumns.join(", ")}`);
+      }
+      return columnSet;
+    }).catch((error) => {
+      console.warn("[WORKER_APPLICATIONS] Failed to inspect worker_applications columns; falling back to legacy-safe metadata projection", error);
+      return /* @__PURE__ */ new Set();
+    });
+  }
+  return workerApplicationColumnSetPromise;
+}
+async function getWorkerApplicationOptionalMetadataSelect() {
+  const columnSet = await getWorkerApplicationColumnSet();
+  return {
+    agreementVersion: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.agreementVersion) ? workerApplications.agreementVersion : sql3`NULL`,
+    nonSolicitationAcknowledged: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledged) ? workerApplications.nonSolicitationAcknowledged : sql3`NULL`,
+    nonSolicitationAcknowledgedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledgedAt) ? workerApplications.nonSolicitationAcknowledgedAt : sql3`NULL`,
+    workerPdfGeneratedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.workerPdfGeneratedAt) ? workerApplications.workerPdfGeneratedAt : sql3`NULL`,
+    internalPdfGeneratedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.internalPdfGeneratedAt) ? workerApplications.internalPdfGeneratedAt : sql3`NULL`
+  };
+}
+async function getWorkerApplicationAgreementSelect() {
+  return {
+    id: workerApplications.id,
+    fullName: workerApplications.fullName,
+    phone: workerApplications.phone,
+    email: workerApplications.email,
+    address: workerApplications.address,
+    city: workerApplications.city,
+    province: workerApplications.province,
+    postalCode: workerApplications.postalCode,
+    preferredRoles: workerApplications.preferredRoles,
+    availableDays: workerApplications.availableDays,
+    preferredShifts: workerApplications.preferredShifts,
+    yearsExperience: workerApplications.yearsExperience,
+    titoAcknowledgment: workerApplications.titoAcknowledgment,
+    siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+    workerAgreementConsent: workerApplications.workerAgreementConsent,
+    privacyConsent: workerApplications.privacyConsent,
+    consentToContact: workerApplications.consentToContact,
+    marketingConsent: workerApplications.marketingConsent,
+    ...await getWorkerApplicationOptionalMetadataSelect(),
+    signature: workerApplications.signature,
+    signatureDate: workerApplications.signatureDate,
+    createdAt: workerApplications.createdAt
+  };
+}
+function resolvePdfDisposition(value) {
+  if (typeof value === "string" && value.trim().toLowerCase() === "inline") {
+    return "inline";
+  }
+  return "attachment";
+}
+async function updateAgreementPdfTimestampFailSoft(applicationId, field) {
+  try {
+    await db.update(workerApplications).set({ [field]: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, applicationId));
+  } catch (timestampError) {
+    console.warn(`[AGREEMENT_PDF] Timestamp update failed for ${applicationId} (${field}); continuing with PDF stream`, timestampError);
+  }
+}
+function makeSubmissionFingerprint(parts) {
+  const normalized = parts.map((part) => (part || "").trim().toLowerCase()).join("|");
+  return crypto2.createHash("sha256").update(normalized).digest("hex");
+}
+function isRecentSubmissionFingerprint(fingerprint, now = Date.now()) {
+  for (const [key, expiresAt] of recentSubmissionFingerprints.entries()) {
+    if (expiresAt <= now) {
+      recentSubmissionFingerprints.delete(key);
+    }
+  }
+  const existing = recentSubmissionFingerprints.get(fingerprint);
+  if (existing && existing > now) {
+    return true;
+  }
+  recentSubmissionFingerprints.set(fingerprint, now + RECENT_SUBMISSION_WINDOW_MS);
+  return false;
+}
 function getConfiguredApiKeys() {
   const keys = [];
   const singleKey = process.env.WFCONNECT_API_KEY?.trim();
@@ -3237,6 +3528,9 @@ function getAdminPortalCandidateEmails(username) {
   if (normalizedUsername === "wfconnect") {
     candidates.add("admin@wfconnect.org");
   }
+  if (normalizedUsername === "admin" || normalizedUsername === "admin@wfconnecr.org") {
+    candidates.add("admin@wfconnect.org");
+  }
   return Array.from(candidates);
 }
 async function validateAdminPortalBasicAuth(req) {
@@ -3251,7 +3545,16 @@ async function validateAdminPortalBasicAuth(req) {
     };
   }
   const normalizedUsername = credentials.username.trim().toLowerCase();
-  if (normalizedUsername === "wfconnect" && credentials.password === "@2255Dundaswest") {
+  if (normalizedUsername === "wfconnect" && (credentials.password === "@2255Dundaswest" || credentials.password === "@2255DundasWest")) {
+    return {
+      ok: true,
+      mode: "legacy-basic",
+      normalizedUsername,
+      userFound: false,
+      passwordMatched: true
+    };
+  }
+  if ((normalizedUsername === "admin" || normalizedUsername === "admin@wfconnect.org" || normalizedUsername === "admin@wfconnecr.org") && credentials.password === "@1900Dundas") {
     return {
       ok: true,
       mode: "legacy-basic",
@@ -3353,7 +3656,8 @@ async function getWorkerApplicationForUser(userId) {
   if (!user) {
     return { user: null, application: null };
   }
-  const [application] = await db.select().from(workerApplications).where(sql3`lower(${workerApplications.email}) = ${user.email.toLowerCase()}`).orderBy(desc2(workerApplications.createdAt)).limit(1);
+  const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
+  const [application] = await db.select(workerApplicationAgreementSelect).from(workerApplications).where(sql3`lower(${workerApplications.email}) = ${user.email.toLowerCase()}`).orderBy(desc2(workerApplications.createdAt)).limit(1);
   return { user, application: application || null };
 }
 async function registerRoutes(app2) {
@@ -4469,35 +4773,128 @@ The WFConnect Team`,
   });
   app2.post("/api/public/apply", async (req, res) => {
     try {
+      const parsedPayload = publicApplySubmissionSchema.safeParse(req.body ?? {});
+      if (!parsedPayload.success) {
+        res.status(400).json({
+          error: "Invalid submission payload",
+          issues: formatValidationIssues(parsedPayload.error.issues)
+        });
+        return;
+      }
+      const payload = parsedPayload.data;
       const ip = getClientIp(req);
       if (!checkRateLimit(ip)) {
         res.status(429).json({ error: "Too many requests. Please try again later." });
         return;
       }
+      const recentApplyFingerprint = makeSubmissionFingerprint([
+        ip,
+        payload.email,
+        payload.phone,
+        payload.signature
+      ]);
+      if (isRecentSubmissionFingerprint(recentApplyFingerprint)) {
+        res.status(409).json({
+          error: "A similar application was submitted very recently. Please wait a moment before retrying."
+        });
+        return;
+      }
       const userAgent = req.headers["user-agent"] || null;
       const resolvedIdentity = resolveWorkerIdentity({
-        fullName: req.body?.fullName ?? req.body?.full_name,
-        firstName: req.body?.firstName ?? req.body?.first_name,
-        lastName: req.body?.lastName ?? req.body?.last_name,
-        email: req.body?.email,
-        phone: req.body?.phone
+        fullName: payload.fullName ?? payload.full_name,
+        firstName: payload.firstName ?? payload.first_name,
+        lastName: payload.lastName ?? payload.last_name,
+        email: payload.email,
+        phone: payload.phone
       });
       if (!resolvedIdentity.fullName) {
         res.status(400).json({ error: "Worker name is required" });
         return;
       }
+      const missingConsents = getMissingRequiredConsents(payload);
+      if (missingConsents.length > 0) {
+        res.status(400).json({
+          error: "Required consents were not provided",
+          missingConsents
+        });
+        return;
+      }
+      const promotionalConsent = isConsentGranted(payload.promotionalConsent) || isConsentGranted(payload.marketingConsent);
+      const nonSolicitationAcknowledged = isConsentGranted(payload.nonSolicitationAcknowledged);
+      const normalizedEmail = normalizeWhitespace(payload.email).toLowerCase();
+      const normalizedPhone = normalizePhoneForComparison(payload.phone);
+      const normalizedName = normalizeComparableText(resolvedIdentity.fullName);
+      const dedupeWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1e3);
+      const recentApplications = await db.select({
+        id: workerApplications.id,
+        fullName: workerApplications.fullName,
+        phone: workerApplications.phone,
+        email: workerApplications.email,
+        createdAt: workerApplications.createdAt
+      }).from(workerApplications).where(gte2(workerApplications.createdAt, dedupeWindowStart)).orderBy(desc2(workerApplications.createdAt)).limit(250);
+      const duplicateApplication = recentApplications.find((existingApplication) => {
+        const existingEmail = normalizeComparableText(existingApplication.email || "");
+        const existingPhone = normalizePhoneForComparison(existingApplication.phone || "");
+        const existingName = normalizeComparableText(existingApplication.fullName || "");
+        const isSameEmail = existingEmail.length > 0 && existingEmail === normalizedEmail;
+        const isSamePhoneAndName = existingPhone.length > 0 && existingPhone === normalizedPhone && existingName.length > 0 && existingName === normalizedName;
+        return isSameEmail || isSamePhoneAndName;
+      });
+      if (duplicateApplication) {
+        res.status(409).json({
+          error: "A similar application was already submitted recently",
+          duplicateApplicationId: duplicateApplication.id,
+          submittedAt: duplicateApplication.createdAt
+        });
+        return;
+      }
       const applicationData = {
-        ...req.body,
         fullName: resolvedIdentity.fullName,
-        email: typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : req.body?.email,
-        agreementVersion: req.body?.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
-        nonSolicitationAcknowledged: req.body?.nonSolicitationAcknowledged === true,
-        nonSolicitationAcknowledgedAt: req.body?.nonSolicitationAcknowledged ? new Date(req.body?.nonSolicitationAcknowledgedAt || Date.now()) : null,
+        dateOfBirth: normalizeOptionalText(payload.dateOfBirth),
+        phone: normalizeWhitespace(payload.phone),
+        email: normalizedEmail,
+        address: normalizeWhitespace(payload.address),
+        city: normalizeWhitespace(payload.city),
+        province: normalizeWhitespace(payload.province).toUpperCase(),
+        postalCode: normalizeWhitespace(payload.postalCode).toUpperCase(),
+        workStatus: payload.workStatus,
+        backgroundCheckConsent: isConsentGranted(payload.backgroundCheckConsent),
+        preferredRoles: normalizeJsonArrayField(payload.preferredRoles),
+        otherRole: normalizeOptionalText(payload.otherRole),
+        availableDays: normalizeJsonArrayField(payload.availableDays),
+        preferredShifts: normalizeJsonArrayField(payload.preferredShifts),
+        unavailablePeriods: normalizeOptionalText(payload.unavailablePeriods),
+        yearsExperience: normalizeOptionalText(payload.yearsExperience),
+        experienceSummary: normalizeOptionalText(payload.experienceSummary),
+        skills: normalizeOptionalText(payload.skills),
+        desiredShiftLength: normalizeOptionalText(payload.desiredShiftLength),
+        maxTravelDistance: normalizeOptionalText(payload.maxTravelDistance),
+        emergencyContactName: payload.emergencyContactName,
+        emergencyContactRelationship: payload.emergencyContactRelationship,
+        emergencyContactPhone: payload.emergencyContactPhone,
+        paymentMethod: normalizeOptionalText(payload.paymentMethod),
+        bankName: normalizeOptionalText(payload.bankName),
+        bankInstitution: normalizeOptionalText(payload.bankInstitution),
+        bankTransit: normalizeOptionalText(payload.bankTransit),
+        bankAccount: normalizeOptionalText(payload.bankAccount),
+        etransferEmail: normalizeOptionalText(payload.etransferEmail),
+        titoAcknowledgment: isConsentGranted(payload.titoAcknowledgment),
+        siteRulesAcknowledgment: isConsentGranted(payload.siteRulesAcknowledgment),
+        workerAgreementConsent: isConsentGranted(payload.workerAgreementConsent),
+        consentToContact: isConsentGranted(payload.consentToContact),
+        privacyConsent: isConsentGranted(payload.privacyConsent),
+        promotionalConsent,
+        marketingConsent: promotionalConsent,
+        signature: normalizeWhitespace(payload.signature),
+        signatureDate: normalizeWhitespace(payload.signatureDate),
+        agreementVersion: payload.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
+        nonSolicitationAcknowledged,
+        nonSolicitationAcknowledgedAt: nonSolicitationAcknowledged ? new Date(payload.nonSolicitationAcknowledgedAt || Date.now()) : null,
         ip,
         userAgent
       };
       const [newApplication] = await db.insert(workerApplications).values(applicationData).returning();
-      console.log(`Worker application submitted from: ${req.body.email}`);
+      console.log(`Worker application submitted from: ${payload.email}`);
       res.json({ ok: true, id: newApplication.id });
     } catch (error) {
       console.error("Error saving worker application:", error);
@@ -4602,6 +4999,38 @@ The WFConnect Team`,
       res.status(500).json({ error: "Failed to fetch worker sync payload" });
     }
   });
+  app2.get("/api/admin/auth-check", tryBearerApiKey, async (req, res) => {
+    try {
+      const apiKeyScopes = req.apiKeyScopes;
+      if (apiKeyScopes !== void 0) {
+        if (!apiKeyScopes.includes("applications:read") && !apiKeyScopes.includes("*")) {
+          res.status(403).json({
+            error: "API key missing required scope: applications:read",
+            required_scope: "applications:read",
+            your_scopes: apiKeyScopes
+          });
+          return;
+        }
+        res.json({ ok: true, auth: "bearer" });
+        return;
+      }
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Basic ")) {
+        if (!await checkBasicAuthAdmin(req, res)) return;
+        res.json({ ok: true, auth: "basic" });
+        return;
+      }
+      const session = parseSessionCookie(req);
+      if (!session || !["admin", "hr"].includes(session.role)) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      res.json({ ok: true, auth: "session", role: session.role });
+    } catch (error) {
+      console.error("Error validating admin auth:", error);
+      res.status(500).json({ error: "Failed to validate authentication" });
+    }
+  });
   app2.get("/api/admin/applications", tryBearerApiKey, async (req, res) => {
     try {
       const apiKeyScopes = req.apiKeyScopes;
@@ -4626,7 +5055,55 @@ The WFConnect Team`,
           }
         }
       }
-      const applications = await db.select().from(workerApplications).orderBy(desc2(workerApplications.createdAt));
+      const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+      const applications = await db.select({
+        id: workerApplications.id,
+        fullName: workerApplications.fullName,
+        phone: workerApplications.phone,
+        email: workerApplications.email,
+        address: workerApplications.address,
+        city: workerApplications.city,
+        province: workerApplications.province,
+        postalCode: workerApplications.postalCode,
+        dateOfBirth: workerApplications.dateOfBirth,
+        workStatus: workerApplications.workStatus,
+        backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+        preferredRoles: workerApplications.preferredRoles,
+        otherRole: workerApplications.otherRole,
+        availableDays: workerApplications.availableDays,
+        preferredShifts: workerApplications.preferredShifts,
+        unavailablePeriods: workerApplications.unavailablePeriods,
+        yearsExperience: workerApplications.yearsExperience,
+        experienceSummary: workerApplications.experienceSummary,
+        skills: workerApplications.skills,
+        desiredShiftLength: workerApplications.desiredShiftLength,
+        emergencyContactName: workerApplications.emergencyContactName,
+        emergencyContactRelationship: workerApplications.emergencyContactRelationship,
+        emergencyContactPhone: workerApplications.emergencyContactPhone,
+        paymentMethod: workerApplications.paymentMethod,
+        bankName: workerApplications.bankName,
+        bankInstitution: workerApplications.bankInstitution,
+        bankTransit: workerApplications.bankTransit,
+        bankAccount: workerApplications.bankAccount,
+        etransferEmail: workerApplications.etransferEmail,
+        titoAcknowledgment: workerApplications.titoAcknowledgment,
+        siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+        workerAgreementConsent: workerApplications.workerAgreementConsent,
+        consentToContact: workerApplications.consentToContact,
+        privacyConsent: workerApplications.privacyConsent,
+        marketingConsent: workerApplications.marketingConsent,
+        ...optionalMetadataSelect,
+        signature: workerApplications.signature,
+        signatureDate: workerApplications.signatureDate,
+        status: workerApplications.status,
+        reviewedBy: workerApplications.reviewedBy,
+        reviewedAt: workerApplications.reviewedAt,
+        notes: workerApplications.notes,
+        ip: workerApplications.ip,
+        userAgent: workerApplications.userAgent,
+        createdAt: workerApplications.createdAt,
+        updatedAt: workerApplications.updatedAt
+      }).from(workerApplications).orderBy(desc2(workerApplications.createdAt));
       const mappedApplications = applications.map((application) => {
         const identity = resolveWorkerIdentity({
           fullName: application.fullName,
@@ -4813,7 +5290,55 @@ The WFConnect Team`,
   app2.get("/api/admin/applications/:id", async (req, res) => {
     try {
       if (!await checkBasicAuthAdmin(req, res)) return;
-      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id));
+      const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+      const [application] = await db.select({
+        id: workerApplications.id,
+        fullName: workerApplications.fullName,
+        phone: workerApplications.phone,
+        email: workerApplications.email,
+        address: workerApplications.address,
+        city: workerApplications.city,
+        province: workerApplications.province,
+        postalCode: workerApplications.postalCode,
+        dateOfBirth: workerApplications.dateOfBirth,
+        workStatus: workerApplications.workStatus,
+        backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+        preferredRoles: workerApplications.preferredRoles,
+        otherRole: workerApplications.otherRole,
+        availableDays: workerApplications.availableDays,
+        preferredShifts: workerApplications.preferredShifts,
+        unavailablePeriods: workerApplications.unavailablePeriods,
+        yearsExperience: workerApplications.yearsExperience,
+        experienceSummary: workerApplications.experienceSummary,
+        skills: workerApplications.skills,
+        desiredShiftLength: workerApplications.desiredShiftLength,
+        emergencyContactName: workerApplications.emergencyContactName,
+        emergencyContactRelationship: workerApplications.emergencyContactRelationship,
+        emergencyContactPhone: workerApplications.emergencyContactPhone,
+        paymentMethod: workerApplications.paymentMethod,
+        bankName: workerApplications.bankName,
+        bankInstitution: workerApplications.bankInstitution,
+        bankTransit: workerApplications.bankTransit,
+        bankAccount: workerApplications.bankAccount,
+        etransferEmail: workerApplications.etransferEmail,
+        titoAcknowledgment: workerApplications.titoAcknowledgment,
+        siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+        workerAgreementConsent: workerApplications.workerAgreementConsent,
+        consentToContact: workerApplications.consentToContact,
+        privacyConsent: workerApplications.privacyConsent,
+        marketingConsent: workerApplications.marketingConsent,
+        ...optionalMetadataSelect,
+        signature: workerApplications.signature,
+        signatureDate: workerApplications.signatureDate,
+        status: workerApplications.status,
+        reviewedBy: workerApplications.reviewedBy,
+        reviewedAt: workerApplications.reviewedAt,
+        notes: workerApplications.notes,
+        ip: workerApplications.ip,
+        userAgent: workerApplications.userAgent,
+        createdAt: workerApplications.createdAt,
+        updatedAt: workerApplications.updatedAt
+      }).from(workerApplications).where(eq4(workerApplications.id, req.params.id));
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
@@ -4828,6 +5353,39 @@ The WFConnect Team`,
     try {
       if (!await checkBasicAuthAdmin(req, res)) return;
       const { status, notes } = req.body;
+      if (status === "approved") {
+        const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+        const [approvalSource] = await db.select({
+          id: workerApplications.id,
+          backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+          titoAcknowledgment: workerApplications.titoAcknowledgment,
+          siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+          workerAgreementConsent: workerApplications.workerAgreementConsent,
+          privacyConsent: workerApplications.privacyConsent,
+          consentToContact: workerApplications.consentToContact,
+          nonSolicitationAcknowledged: optionalMetadataSelect.nonSolicitationAcknowledged
+        }).from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
+        if (!approvalSource) {
+          res.status(404).json({ error: "Application not found" });
+          return;
+        }
+        const missingAcknowledgments = getMissingApprovalAcknowledgments(approvalSource);
+        if (missingAcknowledgments.length > 0) {
+          console.warn(`[APPROVAL] Blocked approval for ${approvalSource.id}: missing acknowledgments: ${missingAcknowledgments.join(", ")}`);
+          res.status(409).json({
+            code: "MISSING_REQUIRED_ACKNOWLEDGMENTS",
+            error: "Cannot approve application until all required acknowledgments are accepted",
+            missingAcknowledgments,
+            requiredAcknowledgments: REQUIRED_APPROVAL_ACK_FIELDS.map(({ label }) => label),
+            currentAcknowledgments: REQUIRED_APPROVAL_ACK_FIELDS.reduce((acc, { field, label }) => {
+              acc[label] = approvalSource[field] === true;
+              return acc;
+            }, {}),
+            legacyRecord: REQUIRED_APPROVAL_ACK_FIELDS.some(({ field }) => approvalSource[field] == null)
+          });
+          return;
+        }
+      }
       const [updatedApplication] = await db.update(workerApplications).set({
         status,
         notes,
@@ -5482,9 +6040,20 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
   });
   app2.post("/api/applicants", async (req, res) => {
     try {
+      const parsedPayload = publicApplicantSubmissionSchema.safeParse(req.body ?? {});
+      if (!parsedPayload.success) {
+        return res.status(400).json({
+          error: "Invalid submission payload",
+          issues: formatValidationIssues(parsedPayload.error.issues)
+        });
+      }
+      const payload = parsedPayload.data;
+      const ip = getClientIp(req);
+      if (!checkRateLimit(ip)) {
+        return res.status(429).json({ error: "Too many requests. Please try again later." });
+      }
       const {
         fullName: fullNameIn,
-        phone,
         addressFull,
         addressStreet,
         addressCity,
@@ -5500,18 +6069,22 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeData: resumeDataIn,
         resumeFilename,
         resumeMimeType,
-        resumeFileSize
-      } = req.body;
+        resumeFileSize,
+        promotionalConsent
+      } = payload;
+      const canonicalPhone = normalizeApplicantPhone(payload.phone) || normalizeApplicantPhone(payload.phoneNumber) || normalizeApplicantPhone(payload.phone_number) || normalizeApplicantPhone(payload.mobile) || normalizeApplicantPhone(payload.contactNumber);
+      if (!canonicalPhone) {
+        return res.status(400).json({ error: "Phone required" });
+      }
       const resolvedIdentity = resolveWorkerIdentity({
-        fullName: fullNameIn ?? req.body?.full_name,
-        firstName: req.body?.firstName ?? req.body?.first_name,
-        lastName: req.body?.lastName ?? req.body?.last_name,
-        email: req.body?.email,
-        phone
+        fullName: fullNameIn ?? payload.full_name,
+        firstName: payload.firstName ?? payload.first_name,
+        lastName: payload.lastName ?? payload.last_name,
+        email: payload.email,
+        phone: canonicalPhone
       });
       const fullName = resolvedIdentity.fullName;
       if (!fullName?.trim()) return res.status(400).json({ error: "Full name required" });
-      if (!phone?.trim()) return res.status(400).json({ error: "Phone required" });
       if (!addressFull?.trim()) return res.status(400).json({ error: "Address required" });
       if (!applyingFor?.trim()) return res.status(400).json({ error: "Position required" });
       if (!jobPostingSource?.trim()) return res.status(400).json({ error: "Job posting source required" });
@@ -5532,18 +6105,58 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       if (resumeFileSize && resumeFileSize > MAX_SIZE) {
         return res.status(400).json({ error: "Resume exceeds 10 MB limit" });
       }
+      const recentApplicantFingerprint = makeSubmissionFingerprint([
+        ip,
+        fullName,
+        canonicalPhone,
+        applyingFor
+      ]);
+      if (isRecentSubmissionFingerprint(recentApplicantFingerprint)) {
+        return res.status(409).json({
+          error: "A similar application was submitted very recently. Please wait before retrying."
+        });
+      }
+      const normalizedPhone = normalizePhoneForComparison(canonicalPhone);
+      const normalizedName = normalizeComparableText(fullName);
+      const normalizedPosition = applyingFor.trim().toLowerCase();
+      const dedupeWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1e3);
+      const recentApplicants = await db.select({
+        id: applicants.id,
+        fullName: applicants.fullName,
+        phone: applicants.phone,
+        applyingFor: applicants.applyingFor,
+        submittedAt: applicants.submittedAt
+      }).from(applicants).where(gte2(applicants.submittedAt, dedupeWindowStart)).orderBy(desc2(applicants.submittedAt)).limit(250);
+      const duplicate = recentApplicants.find((existingApplicant) => {
+        const existingPhone = normalizePhoneForComparison(existingApplicant.phone || "");
+        const existingName = normalizeComparableText(existingApplicant.fullName || "");
+        const existingPosition = (existingApplicant.applyingFor || "").trim().toLowerCase();
+        return existingPhone === normalizedPhone && existingName === normalizedName && existingPosition === normalizedPosition;
+      });
+      if (duplicate) {
+        return res.status(409).json({
+          error: "A similar application was already submitted recently",
+          duplicateApplicantId: duplicate.id,
+          submittedAt: duplicate.submittedAt
+        });
+      }
       const now = /* @__PURE__ */ new Date();
+      const parsedAddress = parseLocalAddress(addressFull);
+      const normalizedAddressCity = normalizeOptionalText(addressCity) || normalizeOptionalText(parsedAddress.city);
+      const normalizedAddressProvince = normalizeOptionalText(addressProvince) || normalizeOptionalText(parsedAddress.province);
+      const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
+      const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
       const [applicant] = await db.insert(applicants).values({
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        addressFull: addressFull.trim(),
-        addressStreet: addressStreet?.trim() || null,
-        addressCity: addressCity?.trim() || null,
-        addressProvince: addressProvince?.trim() || null,
-        addressPostalCode: addressPostalCode?.trim() || null,
-        addressCountry: addressCountry?.trim() || "Canada",
-        applyingFor: applyingFor.trim(),
-        jobPostingSource: jobPostingSource.trim(),
+        fullName: normalizeWhitespace(fullName),
+        phone: normalizeWhitespace(canonicalPhone),
+        addressFull: normalizeAddressText(addressFull),
+        addressStreet: normalizeOptionalText(addressStreet),
+        addressCity: normalizedAddressCity,
+        addressProvince: normalizedAddressProvince?.toUpperCase() || null,
+        addressPostalCode: normalizedAddressPostalCode?.toUpperCase() || null,
+        addressCountry: normalizedAddressCountry,
+        applyingFor: normalizeWhitespace(applyingFor),
+        jobPostingSource: normalizeWhitespace(jobPostingSource),
         photoData: photoDataIn,
         photoFilename: photoFilename || null,
         photoMimeType: photoMimeType || null,
@@ -5552,10 +6165,11 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
+        promotionalConsent: promotionalConsent === true,
         status: "new",
         submittedAt: now
       }).returning({ id: applicants.id });
-      console.log(`[APPLICANTS] New submission: ${fullName} (${phone}) for ${applyingFor}`);
+      console.log(`[APPLICANTS] New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
       res.json({ success: true, applicantId: applicant.id });
     } catch (error) {
       console.error("[APPLICANTS] Submission error:", error);
@@ -5590,7 +6204,30 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         status: applicants.status,
         submittedAt: applicants.submittedAt
       }).from(applicants).where(conditions.length > 0 ? and3(...conditions) : void 0).orderBy(desc2(applicants.submittedAt)).limit(limitVal);
-      res.json(rows);
+      const normalizedRows = rows.map((row) => {
+        const parsedAddress = parseLocalAddress(row.addressFull || "");
+        const locationDisplay = buildApplicantLocationDisplay({
+          addressCity: row.addressCity,
+          addressProvince: row.addressProvince,
+          addressFull: row.addressFull
+        });
+        const phoneDisplay = normalizeApplicantPhone(row.phone);
+        return {
+          ...row,
+          phone: phoneDisplay || "",
+          phoneNumber: phoneDisplay || "",
+          phone_number: phoneDisplay || "",
+          phoneDisplay,
+          addressCity: row.addressCity || parsedAddress.city || null,
+          addressProvince: row.addressProvince || parsedAddress.province || null,
+          locationDisplay
+        };
+      });
+      const [countRow] = await db.select({
+        total: sql3`count(*)`
+      }).from(applicants).where(conditions.length > 0 ? and3(...conditions) : void 0);
+      res.setHeader("X-Total-Count", String(Number(countRow?.total || 0)));
+      res.json(normalizedRows);
     } catch (error) {
       console.error("[APPLICANTS] List error:", error);
       res.status(500).json({ error: "Failed to fetch applicants" });
@@ -5601,7 +6238,26 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       const [row] = await db.select().from(applicants).where(eq4(applicants.id, req.params.id));
       if (!row) return res.status(404).json({ error: "Applicant not found" });
       const { photoData: _p, resumeData: _r, ...safe } = row;
-      res.json({ ...safe, hasPhoto: !!_p, hasResume: !!_r });
+      const parsedAddress = parseLocalAddress(safe.addressFull || "");
+      const locationDisplay = buildApplicantLocationDisplay({
+        addressCity: safe.addressCity,
+        addressProvince: safe.addressProvince,
+        addressFull: safe.addressFull
+      });
+      const phoneDisplay = normalizeApplicantPhone(safe.phone);
+      res.json({
+        ...safe,
+        phone: phoneDisplay || "",
+        phoneNumber: phoneDisplay || "",
+        phone_number: phoneDisplay || "",
+        phoneDisplay,
+        addressCity: safe.addressCity || parsedAddress.city || null,
+        addressProvince: safe.addressProvince || parsedAddress.province || null,
+        addressPostalCode: safe.addressPostalCode || parsedAddress.postalCode || null,
+        locationDisplay,
+        hasPhoto: !!_p,
+        hasResume: !!_r
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch applicant" });
     }
@@ -5616,6 +6272,41 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update status" });
+    }
+  });
+  app2.get("/api/applicants/stats", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { search } = req.query;
+      const conditions = [];
+      if (search) {
+        const s = `%${search}%`;
+        conditions.push(sql3`(${applicants.fullName} ILIKE ${s} OR ${applicants.phone} ILIKE ${s})`);
+      }
+      const grouped = await db.select({
+        status: applicants.status,
+        total: sql3`count(*)`
+      }).from(applicants).where(conditions.length > 0 ? and3(...conditions) : void 0).groupBy(applicants.status);
+      const [totalRow] = await db.select({
+        total: sql3`count(*)`
+      }).from(applicants).where(conditions.length > 0 ? and3(...conditions) : void 0);
+      const counts = {
+        total: Number(totalRow?.total || 0),
+        new: 0,
+        reviewing: 0,
+        interviewed: 0,
+        hired: 0,
+        rejected: 0
+      };
+      grouped.forEach((row) => {
+        const key = row.status || "";
+        if (counts[key] !== void 0) {
+          counts[key] = Number(row.total || 0);
+        }
+      });
+      res.json(counts);
+    } catch (error) {
+      console.error("[APPLICANTS] Stats error:", error);
+      res.status(500).json({ error: "Failed to fetch applicant stats" });
     }
   });
   app2.get("/api/applicants/:id/download/photo", checkRoles("admin", "hr"), async (req, res) => {
@@ -5661,8 +6352,10 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         res.status(403).json({ error: "Agreement is not available until onboarding is complete" });
         return;
       }
-      await db.update(workerApplications).set({ workerPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
-      streamAgreementPdf(res, application, "worker");
+      await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
+      streamAgreementPdf(res, application, "worker", {
+        disposition: resolvePdfDisposition(req.query.disposition)
+      });
     } catch (error) {
       console.error("Error generating agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -5673,13 +6366,16 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       if (!await hasAdminAgreementAccess(req, res)) {
         return;
       }
-      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
+      const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
+      const [application] = await db.select(workerApplicationAgreementSelect).from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
       }
-      await db.update(workerApplications).set({ internalPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
-      streamAgreementPdf(res, application, "internal");
+      await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
+      streamAgreementPdf(res, application, "internal", {
+        disposition: resolvePdfDisposition(req.query.disposition)
+      });
     } catch (error) {
       console.error("Error generating internal agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -5690,13 +6386,16 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       if (!await hasAdminAgreementAccess(req, res)) {
         return;
       }
-      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
+      const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
+      const [application] = await db.select(workerApplicationAgreementSelect).from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
       }
-      await db.update(workerApplications).set({ workerPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
-      streamAgreementPdf(res, application, "worker");
+      await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
+      streamAgreementPdf(res, application, "worker", {
+        disposition: resolvePdfDisposition(req.query.disposition)
+      });
     } catch (error) {
       console.error("Error generating worker agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -5707,13 +6406,16 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       if (!await hasAdminAgreementAccess(req, res)) {
         return;
       }
-      const [application] = await db.select().from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
+      const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
+      const [application] = await db.select(workerApplicationAgreementSelect).from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
       }
-      await db.update(workerApplications).set({ internalPdfGeneratedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
-      streamAgreementPdf(res, application, "internal");
+      await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
+      streamAgreementPdf(res, application, "internal", {
+        disposition: resolvePdfDisposition(req.query.disposition)
+      });
     } catch (error) {
       console.error("Error generating agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -11206,6 +11908,14 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged_at" timestamp`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "worker_pdf_generated_at" timestamp`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "internal_pdf_generated_at" timestamp`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "promotional_consent" boolean`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "promotional_consent" boolean`);
+    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
+    await db.execute(sql5`UPDATE "applicants" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET NOT NULL`);
     log("Ensured worker_applications compatibility columns");
   } catch (error) {
     log("Error ensuring worker_applications compatibility:", error);
@@ -11287,6 +11997,9 @@ function setupCors(app2) {
         origins.add(`https://${d.trim()}`);
       });
     }
+    origins.add("https://apply.wfconnect.org");
+    origins.add("https://wfconnect.org");
+    origins.add("https://www.wfconnect.org");
     const origin = req.header("origin");
     const isLocalhost = origin?.startsWith("http://localhost:") || origin?.startsWith("http://127.0.0.1:");
     if (origin && (origins.has(origin) || isLocalhost)) {
@@ -11431,8 +12144,12 @@ function configureExpoAndLanding(app2) {
   const applicantsPortalPath = path.resolve(process.cwd(), "server", "templates", "applicants-portal.html");
   const applicantsPortalTemplate = fs.existsSync(applicantsPortalPath) ? fs.readFileSync(applicantsPortalPath, "utf-8") : null;
   function isApplySubdomain(req) {
-    const host = (req.hostname || req.headers.host || "").toLowerCase();
-    return host.startsWith("apply.") || host.includes("apply.wfconnect");
+    const forwardedHostHeader = req.headers["x-forwarded-host"];
+    const forwardedHost = Array.isArray(forwardedHostHeader) ? forwardedHostHeader[0] : forwardedHostHeader;
+    const rawHost = (forwardedHost || req.hostname || req.headers.host || "").toLowerCase();
+    const host = rawHost.split(",")[0]?.trim().split(":")[0] || "";
+    if (!host) return false;
+    return host === "apply.wfconnect.org" || host.startsWith("apply.");
   }
   if (applicantsPortalTemplate) {
     app2.get("/applicants", (req, res, next) => {

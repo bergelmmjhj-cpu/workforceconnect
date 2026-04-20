@@ -750,6 +750,49 @@ function normalizeApplicantPhone(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+const REQUIRED_APPROVAL_ACK_FIELDS: Array<{ field: keyof typeof workerApplications.$inferSelect; label: string }> = [
+  { field: "backgroundCheckConsent", label: "Background Check Consent" },
+  { field: "titoAcknowledgment", label: "TITO Acknowledgment" },
+  { field: "siteRulesAcknowledgment", label: "Site Rules Acknowledgment" },
+  { field: "workerAgreementConsent", label: "Worker Agreement Consent" },
+  { field: "privacyConsent", label: "Privacy Consent" },
+  { field: "consentToContact", label: "Consent To Contact" },
+  { field: "nonSolicitationAcknowledged", label: "Non-Solicitation Acknowledgment" },
+];
+
+function getMissingApprovalAcknowledgments(application: Partial<typeof workerApplications.$inferSelect>): string[] {
+  return REQUIRED_APPROVAL_ACK_FIELDS
+    .filter(({ field }) => application[field] !== true)
+    .map(({ label }) => label);
+}
+
+const workerApplicationAgreementSelect = {
+  id: workerApplications.id,
+  fullName: workerApplications.fullName,
+  phone: workerApplications.phone,
+  email: workerApplications.email,
+  address: workerApplications.address,
+  city: workerApplications.city,
+  province: workerApplications.province,
+  postalCode: workerApplications.postalCode,
+  preferredRoles: workerApplications.preferredRoles,
+  availableDays: workerApplications.availableDays,
+  preferredShifts: workerApplications.preferredShifts,
+  yearsExperience: workerApplications.yearsExperience,
+  titoAcknowledgment: workerApplications.titoAcknowledgment,
+  siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+  workerAgreementConsent: workerApplications.workerAgreementConsent,
+  privacyConsent: workerApplications.privacyConsent,
+  consentToContact: workerApplications.consentToContact,
+  marketingConsent: workerApplications.marketingConsent,
+  agreementVersion: workerApplications.agreementVersion,
+  nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
+  nonSolicitationAcknowledgedAt: workerApplications.nonSolicitationAcknowledgedAt,
+  signature: workerApplications.signature,
+  signatureDate: workerApplications.signatureDate,
+  createdAt: workerApplications.createdAt,
+} as const;
+
 function makeSubmissionFingerprint(parts: Array<string | null | undefined>): string {
   const normalized = parts
     .map((part) => (part || "").trim().toLowerCase())
@@ -3299,6 +3342,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { status, notes } = req.body;
 
+      if (status === "approved") {
+        const [approvalSource] = await db
+          .select({
+            id: workerApplications.id,
+            backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+            titoAcknowledgment: workerApplications.titoAcknowledgment,
+            siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+            workerAgreementConsent: workerApplications.workerAgreementConsent,
+            privacyConsent: workerApplications.privacyConsent,
+            consentToContact: workerApplications.consentToContact,
+            nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
+          })
+          .from(workerApplications)
+          .where(eq(workerApplications.id, req.params.id))
+          .limit(1);
+
+        if (!approvalSource) {
+          res.status(404).json({ error: "Application not found" });
+          return;
+        }
+
+        const missingAcknowledgments = getMissingApprovalAcknowledgments(approvalSource);
+        if (missingAcknowledgments.length > 0) {
+          res.status(409).json({
+            error: "Cannot approve application until all required acknowledgments are accepted",
+            missingAcknowledgments,
+          });
+          return;
+        }
+      }
+
       const [updatedApplication] = await db.update(workerApplications)
         .set({
           status,
@@ -4484,7 +4558,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id)).limit(1);
+      const [application] = await db
+        .select(workerApplicationAgreementSelect)
+        .from(workerApplications)
+        .where(eq(workerApplications.id, req.params.id))
+        .limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
@@ -4507,7 +4585,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id)).limit(1);
+      const [application] = await db
+        .select(workerApplicationAgreementSelect)
+        .from(workerApplications)
+        .where(eq(workerApplications.id, req.params.id))
+        .limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
@@ -4530,7 +4612,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id)).limit(1);
+      const [application] = await db
+        .select(workerApplicationAgreementSelect)
+        .from(workerApplications)
+        .where(eq(workerApplications.id, req.params.id))
+        .limit(1);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;

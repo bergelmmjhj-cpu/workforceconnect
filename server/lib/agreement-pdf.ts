@@ -62,19 +62,28 @@ function addSection(doc: PDFDocument, title: string, paragraphs: string[]) {
   });
 }
 
-function addAcknowledgments(doc: PDFDocument, _application: WorkerApplication) {
-  const items = [
-    "TITO System Acknowledgment",
-    "Site Rules Agreement",
-    NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
-    "Worker Agreement",
-    "Privacy Policy",
-  ] as const;
+function isAccepted(value: unknown): boolean {
+  return value === true;
+}
+
+function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
+  const items: Array<{ label: string; accepted: boolean }> = [
+    { label: "TITO System Acknowledgment", accepted: isAccepted(application.titoAcknowledgment) },
+    { label: "Site Rules Agreement", accepted: isAccepted(application.siteRulesAcknowledgment) },
+    { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(application.nonSolicitationAcknowledged) },
+    { label: "Worker Agreement", accepted: isAccepted(application.workerAgreementConsent) },
+    { label: "Privacy Policy", accepted: isAccepted(application.privacyConsent) },
+    { label: "Consent To Contact", accepted: isAccepted(application.consentToContact) },
+  ];
+
+  if (application.marketingConsent === true) {
+    items.push({ label: "Promotional Communications (Optional)", accepted: true });
+  }
 
   doc.fontSize(12).font("Helvetica-Bold").text("Acknowledgments");
   doc.moveDown(0.35);
-  items.forEach((label) => {
-    doc.fontSize(9.5).font("Helvetica").text(`[X] ${label}`);
+  items.forEach((item) => {
+    doc.fontSize(9.5).font("Helvetica").text(`[${item.accepted ? "X" : " "}] ${item.label}`);
     doc.moveDown(0.2);
   });
 }
@@ -87,7 +96,7 @@ function addSignature(doc: PDFDocument, application: WorkerApplication) {
   addLabelValue(doc, "Signed Date:", application.signatureDate);
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
-  addLabelValue(doc, "Non-Solicitation Acknowledged:", "Yes");
+  addLabelValue(doc, "Non-Solicitation Acknowledged:", application.nonSolicitationAcknowledged ? "Yes" : "No");
   addLabelValue(
     doc,
     "Acknowledged At:",

@@ -788,10 +788,32 @@ const workerApplicationAgreementSelect = {
   agreementVersion: workerApplications.agreementVersion,
   nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
   nonSolicitationAcknowledgedAt: workerApplications.nonSolicitationAcknowledgedAt,
+  workerPdfGeneratedAt: workerApplications.workerPdfGeneratedAt,
+  internalPdfGeneratedAt: workerApplications.internalPdfGeneratedAt,
   signature: workerApplications.signature,
   signatureDate: workerApplications.signatureDate,
   createdAt: workerApplications.createdAt,
 } as const;
+
+function resolvePdfDisposition(value: unknown): "attachment" | "inline" {
+  if (typeof value === "string" && value.trim().toLowerCase() === "inline") {
+    return "inline";
+  }
+  return "attachment";
+}
+
+async function updateAgreementPdfTimestampFailSoft(
+  applicationId: string,
+  field: "workerPdfGeneratedAt" | "internalPdfGeneratedAt",
+): Promise<void> {
+  try {
+    await db.update(workerApplications)
+      .set({ [field]: new Date(), updatedAt: new Date() })
+      .where(eq(workerApplications.id, applicationId));
+  } catch (timestampError) {
+    console.warn(`[AGREEMENT_PDF] Timestamp update failed for ${applicationId} (${field}); continuing with PDF stream`, timestampError);
+  }
+}
 
 function makeSubmissionFingerprint(parts: Array<string | null | undefined>): string {
   const normalized = parts
@@ -3028,8 +3050,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           titoAcknowledgment: workerApplications.titoAcknowledgment,
           siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
           workerAgreementConsent: workerApplications.workerAgreementConsent,
+          consentToContact: workerApplications.consentToContact,
           privacyConsent: workerApplications.privacyConsent,
           marketingConsent: workerApplications.marketingConsent,
+          agreementVersion: workerApplications.agreementVersion,
+          nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
+          nonSolicitationAcknowledgedAt: workerApplications.nonSolicitationAcknowledgedAt,
+          workerPdfGeneratedAt: workerApplications.workerPdfGeneratedAt,
+          internalPdfGeneratedAt: workerApplications.internalPdfGeneratedAt,
           signature: workerApplications.signature,
           signatureDate: workerApplications.signatureDate,
           status: workerApplications.status,
@@ -3307,8 +3335,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           titoAcknowledgment: workerApplications.titoAcknowledgment,
           siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
           workerAgreementConsent: workerApplications.workerAgreementConsent,
+          consentToContact: workerApplications.consentToContact,
           privacyConsent: workerApplications.privacyConsent,
           marketingConsent: workerApplications.marketingConsent,
+          agreementVersion: workerApplications.agreementVersion,
+          nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
+          nonSolicitationAcknowledgedAt: workerApplications.nonSolicitationAcknowledgedAt,
+          workerPdfGeneratedAt: workerApplications.workerPdfGeneratedAt,
+          internalPdfGeneratedAt: workerApplications.internalPdfGeneratedAt,
           signature: workerApplications.signature,
           signatureDate: workerApplications.signatureDate,
           status: workerApplications.status,
@@ -3365,9 +3399,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const missingAcknowledgments = getMissingApprovalAcknowledgments(approvalSource);
         if (missingAcknowledgments.length > 0) {
+          console.warn(`[APPROVAL] Blocked approval for ${approvalSource.id}: missing acknowledgments: ${missingAcknowledgments.join(", ")}`);
           res.status(409).json({
+            code: "MISSING_REQUIRED_ACKNOWLEDGMENTS",
             error: "Cannot approve application until all required acknowledgments are accepted",
             missingAcknowledgments,
+            requiredAcknowledgments: REQUIRED_APPROVAL_ACK_FIELDS.map(({ label }) => label),
+            currentAcknowledgments: REQUIRED_APPROVAL_ACK_FIELDS.reduce((acc, { field, label }) => {
+              acc[label] = approvalSource[field] === true;
+              return acc;
+            }, {} as Record<string, boolean>),
+            legacyRecord: REQUIRED_APPROVAL_ACK_FIELDS.some(({ field }) => approvalSource[field] == null),
           });
           return;
         }
@@ -4541,11 +4583,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      await db.update(workerApplications)
-        .set({ workerPdfGeneratedAt: new Date(), updatedAt: new Date() })
-        .where(eq(workerApplications.id, application.id));
+      await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "worker");
+      streamAgreementPdf(res, application, "worker", {
+        disposition: resolvePdfDisposition(req.query.disposition),
+      });
     } catch (error) {
       console.error("Error generating agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -4568,11 +4610,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      await db.update(workerApplications)
-        .set({ internalPdfGeneratedAt: new Date(), updatedAt: new Date() })
-        .where(eq(workerApplications.id, application.id));
+      await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "internal");
+      streamAgreementPdf(res, application, "internal", {
+        disposition: resolvePdfDisposition(req.query.disposition),
+      });
     } catch (error) {
       console.error("Error generating internal agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -4595,11 +4637,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      await db.update(workerApplications)
-        .set({ workerPdfGeneratedAt: new Date(), updatedAt: new Date() })
-        .where(eq(workerApplications.id, application.id));
+      await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "worker");
+      streamAgreementPdf(res, application, "worker", {
+        disposition: resolvePdfDisposition(req.query.disposition),
+      });
     } catch (error) {
       console.error("Error generating worker agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });
@@ -4622,11 +4664,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      await db.update(workerApplications)
-        .set({ internalPdfGeneratedAt: new Date(), updatedAt: new Date() })
-        .where(eq(workerApplications.id, application.id));
+      await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "internal");
+      streamAgreementPdf(res, application, "internal", {
+        disposition: resolvePdfDisposition(req.query.disposition),
+      });
     } catch (error) {
       console.error("Error generating agreement PDF:", error);
       res.status(500).json({ error: "Failed to generate PDF" });

@@ -8,6 +8,7 @@ import {
 } from "../../shared/contractor-guide-content";
 
 export type AgreementPdfVariant = "internal" | "worker";
+type PdfDisposition = "attachment" | "inline";
 
 const INTERNAL_COMPANY_NAME = "1001328662 Ontario Inc.";
 const INTERNAL_COMPANY_ADDRESS = "Mississauga, Ontario";
@@ -113,12 +114,18 @@ export function createAgreementPdfFileName(application: WorkerApplication, varia
   return `Internal_Subcontractor_Agreement_${name}_${date}.pdf`;
 }
 
-export function streamAgreementPdf(res: Response, application: WorkerApplication, variant: AgreementPdfVariant) {
+export function streamAgreementPdf(
+  res: Response,
+  application: WorkerApplication,
+  variant: AgreementPdfVariant,
+  options?: { disposition?: PdfDisposition },
+) {
   const fileName = createAgreementPdfFileName(application, variant);
+  const disposition: PdfDisposition = options?.disposition === "inline" ? "inline" : "attachment";
   const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 56, right: 56 } });
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  res.setHeader("Content-Disposition", `${disposition}; filename="${fileName}"`);
   doc.pipe(res);
 
   drawHeader(doc, variant);

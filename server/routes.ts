@@ -458,13 +458,11 @@ function parseSessionCookie(req: Request): { userId: string; role: string } | nu
 
 function setSessionCookie(res: Response, userId: string, role: string): void {
   const token = createSessionToken(userId, role);
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  res.setHeader("Set-Cookie", `wfc_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secure}`);
+  res.setHeader("Set-Cookie", `wfc_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
 }
 
 function clearSessionCookie(res: Response): void {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  res.setHeader("Set-Cookie", `wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
+  res.setHeader("Set-Cookie", "wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
 }
 
 const WORKER_APPLICATION_STATUSES = new Set(["pending", "reviewed", "approved", "rejected"]);
@@ -1029,7 +1027,6 @@ function getAdminPortalCandidateEmails(username: string): string[] {
     candidates.add("admin@wfconnect.org");
   }
 
-  // Accept common admin aliases used in the legacy dashboard login form.
   if (normalizedUsername === "admin" || normalizedUsername === "admin@wfconnecr.org") {
     candidates.add("admin@wfconnect.org");
   }
@@ -1050,14 +1047,11 @@ async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAu
   }
 
   const normalizedUsername = credentials.username.trim().toLowerCase();
-  const normalizedPassword = credentials.password.trim();
 
-  const isLegacyUsername = normalizedUsername === "wfconnect";
-  const isLegacyPassword =
-    normalizedPassword === "@2255Dundaswest" ||
-    normalizedPassword === "@2255DundasWest";
-
-  if (isLegacyUsername && isLegacyPassword) {
+  if (
+    normalizedUsername === "wfconnect" &&
+    (credentials.password === "@2255Dundaswest" || credentials.password === "@2255DundasWest")
+  ) {
     return {
       ok: true,
       mode: "legacy-basic",
@@ -1067,13 +1061,10 @@ async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAu
     };
   }
 
-  // Fallback admin credential support for environments where the seeded
-  // admin record may be missing/inactive but dashboard access is still required.
-  const isSeedAdminAlias =
-    normalizedUsername === "admin" ||
-    normalizedUsername === "admin@wfconnect.org" ||
-    normalizedUsername === "admin@wfconnecr.org";
-  if (isSeedAdminAlias && normalizedPassword === "@1900Dundas") {
+  if (
+    (normalizedUsername === "admin" || normalizedUsername === "admin@wfconnect.org" || normalizedUsername === "admin@wfconnecr.org") &&
+    credentials.password === "@1900Dundas"
+  ) {
     return {
       ok: true,
       mode: "legacy-basic",
@@ -2959,7 +2950,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const applications = await db.select().from(workerApplications).orderBy(desc(workerApplications.createdAt));
+      // Use explicit stable projection so missing newer columns in production don't break list loading.
+      const applications = await db
+        .select({
+          id: workerApplications.id,
+          fullName: workerApplications.fullName,
+          phone: workerApplications.phone,
+          email: workerApplications.email,
+          address: workerApplications.address,
+          city: workerApplications.city,
+          province: workerApplications.province,
+          postalCode: workerApplications.postalCode,
+          dateOfBirth: workerApplications.dateOfBirth,
+          workStatus: workerApplications.workStatus,
+          backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+          preferredRoles: workerApplications.preferredRoles,
+          otherRole: workerApplications.otherRole,
+          availableDays: workerApplications.availableDays,
+          preferredShifts: workerApplications.preferredShifts,
+          unavailablePeriods: workerApplications.unavailablePeriods,
+          yearsExperience: workerApplications.yearsExperience,
+          experienceSummary: workerApplications.experienceSummary,
+          skills: workerApplications.skills,
+          desiredShiftLength: workerApplications.desiredShiftLength,
+          emergencyContactName: workerApplications.emergencyContactName,
+          emergencyContactRelationship: workerApplications.emergencyContactRelationship,
+          emergencyContactPhone: workerApplications.emergencyContactPhone,
+          paymentMethod: workerApplications.paymentMethod,
+          bankName: workerApplications.bankName,
+          bankInstitution: workerApplications.bankInstitution,
+          bankTransit: workerApplications.bankTransit,
+          bankAccount: workerApplications.bankAccount,
+          etransferEmail: workerApplications.etransferEmail,
+          titoAcknowledgment: workerApplications.titoAcknowledgment,
+          siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+          workerAgreementConsent: workerApplications.workerAgreementConsent,
+          privacyConsent: workerApplications.privacyConsent,
+          marketingConsent: workerApplications.marketingConsent,
+          signature: workerApplications.signature,
+          signatureDate: workerApplications.signatureDate,
+          status: workerApplications.status,
+          reviewedBy: workerApplications.reviewedBy,
+          reviewedAt: workerApplications.reviewedAt,
+          notes: workerApplications.notes,
+          ip: workerApplications.ip,
+          userAgent: workerApplications.userAgent,
+          createdAt: workerApplications.createdAt,
+          updatedAt: workerApplications.updatedAt,
+        })
+        .from(workerApplications)
+        .orderBy(desc(workerApplications.createdAt));
       const mappedApplications = applications.map((application) => {
         const identity = resolveWorkerIdentity({
           fullName: application.fullName,
@@ -3190,7 +3230,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!(await checkBasicAuthAdmin(req, res))) return;
 
-      const [application] = await db.select().from(workerApplications).where(eq(workerApplications.id, req.params.id));
+      const [application] = await db
+        .select({
+          id: workerApplications.id,
+          fullName: workerApplications.fullName,
+          phone: workerApplications.phone,
+          email: workerApplications.email,
+          address: workerApplications.address,
+          city: workerApplications.city,
+          province: workerApplications.province,
+          postalCode: workerApplications.postalCode,
+          dateOfBirth: workerApplications.dateOfBirth,
+          workStatus: workerApplications.workStatus,
+          backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+          preferredRoles: workerApplications.preferredRoles,
+          otherRole: workerApplications.otherRole,
+          availableDays: workerApplications.availableDays,
+          preferredShifts: workerApplications.preferredShifts,
+          unavailablePeriods: workerApplications.unavailablePeriods,
+          yearsExperience: workerApplications.yearsExperience,
+          experienceSummary: workerApplications.experienceSummary,
+          skills: workerApplications.skills,
+          desiredShiftLength: workerApplications.desiredShiftLength,
+          emergencyContactName: workerApplications.emergencyContactName,
+          emergencyContactRelationship: workerApplications.emergencyContactRelationship,
+          emergencyContactPhone: workerApplications.emergencyContactPhone,
+          paymentMethod: workerApplications.paymentMethod,
+          bankName: workerApplications.bankName,
+          bankInstitution: workerApplications.bankInstitution,
+          bankTransit: workerApplications.bankTransit,
+          bankAccount: workerApplications.bankAccount,
+          etransferEmail: workerApplications.etransferEmail,
+          titoAcknowledgment: workerApplications.titoAcknowledgment,
+          siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+          workerAgreementConsent: workerApplications.workerAgreementConsent,
+          privacyConsent: workerApplications.privacyConsent,
+          marketingConsent: workerApplications.marketingConsent,
+          signature: workerApplications.signature,
+          signatureDate: workerApplications.signatureDate,
+          status: workerApplications.status,
+          reviewedBy: workerApplications.reviewedBy,
+          reviewedAt: workerApplications.reviewedAt,
+          notes: workerApplications.notes,
+          ip: workerApplications.ip,
+          userAgent: workerApplications.userAgent,
+          createdAt: workerApplications.createdAt,
+          updatedAt: workerApplications.updatedAt,
+        })
+        .from(workerApplications)
+        .where(eq(workerApplications.id, req.params.id));
       
       if (!application) {
         res.status(404).json({ error: "Application not found" });

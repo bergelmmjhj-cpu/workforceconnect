@@ -316,6 +316,37 @@
         background: rgba(245, 158, 11, 0.15);
         color: #B45309;
       }
+
+      .status-badge.new {
+        background: rgba(59, 130, 246, 0.12);
+        color: #1D4ED8;
+      }
+
+      .status-badge.reviewing,
+      .status-badge.reviewed {
+        background: rgba(14, 165, 233, 0.12);
+        color: #0369A1;
+      }
+
+      .status-badge.contacted {
+        background: rgba(147, 51, 234, 0.12);
+        color: #7E22CE;
+      }
+
+      .status-badge.interview_scheduled {
+        background: rgba(244, 114, 182, 0.12);
+        color: #BE185D;
+      }
+
+      .status-badge.interviewed {
+        background: rgba(236, 72, 153, 0.12);
+        color: #9D174D;
+      }
+
+      .status-badge.ready_for_deployment {
+        background: rgba(16, 185, 129, 0.15);
+        color: #047857;
+      }
       
       .status-badge.reviewed {
         background: rgba(59, 130, 246, 0.15);
@@ -330,6 +361,391 @@
       .status-badge.rejected {
         background: rgba(239, 68, 68, 0.15);
         color: #B91C1C;
+      }
+
+      .status-badge.on_hold {
+        background: rgba(148, 163, 184, 0.18);
+        color: #475569;
+      }
+
+      .readiness-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-right: 6px;
+        margin-bottom: 6px;
+      }
+
+      .readiness-badge.ready {
+        background: rgba(16, 185, 129, 0.14);
+        color: #047857;
+      }
+
+      .readiness-badge.needs_review,
+      .readiness-badge.missing_payment_info {
+        background: rgba(245, 158, 11, 0.16);
+        color: #B45309;
+      }
+
+      .readiness-badge.not_ready {
+        background: rgba(148, 163, 184, 0.14);
+        color: #475569;
+      }
+
+      .operations-toolbar {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .bulk-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        background: linear-gradient(135deg, rgba(30, 64, 175, 0.06), rgba(14, 165, 233, 0.08));
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 12px;
+      }
+
+      .bulk-toolbar.hidden {
+        display: none;
+      }
+
+      .bulk-toolbar-left,
+      .bulk-toolbar-right {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .bulk-count {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--primary-dark);
+      }
+
+      .toolbar-input,
+      .toolbar-select,
+      .toolbar-btn {
+        min-height: 40px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      .toolbar-input,
+      .toolbar-select {
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        background: white;
+        color: var(--text-primary);
+      }
+
+      .toolbar-input {
+        min-width: 220px;
+      }
+
+      .toolbar-btn {
+        border: none;
+        padding: 0 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .toolbar-btn.primary {
+        background: var(--primary);
+        color: white;
+      }
+
+      .toolbar-btn.secondary {
+        background: white;
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+      }
+
+      .toolbar-btn.primary:hover {
+        background: var(--primary-dark);
+      }
+
+      .toolbar-btn.secondary:hover {
+        background: var(--background);
+      }
+
+      .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }
+
+      .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .filter-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-secondary);
+        font-weight: 700;
+      }
+
+      .table-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+      }
+
+      .table-tools {
+        display: grid;
+        gap: 14px;
+      }
+
+      .applicant-cell {
+        display: grid;
+        gap: 4px;
+      }
+
+      .applicant-name-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .applicant-name {
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+
+      .applicant-meta,
+      .cell-subtext,
+      .cell-microcopy {
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      .duplicate-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: rgba(14, 165, 233, 0.12);
+        color: #0C4A6E;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .workflow-cell,
+      .agreement-cell,
+      .readiness-cell,
+      .recruiter-cell {
+        display: grid;
+        gap: 6px;
+      }
+
+      .meta-stack {
+        display: grid;
+        gap: 4px;
+      }
+
+      .next-action {
+        font-size: 12px;
+        color: var(--primary-dark);
+        font-weight: 600;
+      }
+
+      .action-menu {
+        position: relative;
+      }
+
+      .action-menu summary {
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 36px;
+        padding: 0 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: white;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+
+      .action-menu summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .action-menu[open] summary {
+        border-color: rgba(30, 64, 175, 0.35);
+        box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.08);
+      }
+
+      .action-menu-panel {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 8px);
+        min-width: 220px;
+        padding: 8px;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+        z-index: 20;
+        display: grid;
+        gap: 4px;
+      }
+
+      .action-menu-item {
+        width: 100%;
+        border: none;
+        background: transparent;
+        text-align: left;
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        cursor: pointer;
+      }
+
+      .action-menu-item:hover {
+        background: var(--background);
+      }
+
+      .action-menu-item.danger {
+        color: var(--error);
+      }
+
+      .table-select-cell {
+        width: 42px;
+      }
+
+      .row-checkbox,
+      .header-checkbox {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--primary);
+        cursor: pointer;
+      }
+
+      .detail-hero {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin-bottom: 24px;
+      }
+
+      .detail-hero-card {
+        padding: 16px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(30, 64, 175, 0.06), rgba(255, 255, 255, 0.95));
+        border: 1px solid rgba(30, 64, 175, 0.12);
+      }
+
+      .detail-hero-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-secondary);
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+
+      .detail-hero-value {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+
+      .workflow-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .workflow-form-field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .workflow-form-field.full {
+        grid-column: span 2;
+      }
+
+      .workflow-input,
+      .workflow-select,
+      .workflow-textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 14px;
+        font-family: inherit;
+        background: white;
+      }
+
+      .workflow-textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      .checklist {
+        display: grid;
+        gap: 8px;
+      }
+
+      .checklist-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: var(--background);
+      }
+
+      .checklist-item strong {
+        font-size: 13px;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .history-item {
+        display: grid;
+        gap: 4px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: white;
+      }
+
+      .history-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-weight: 700;
+      }
+
+      .section-hint {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: -4px;
+        margin-bottom: 10px;
       }
       
       .view-btn {
@@ -817,6 +1233,14 @@
         .detail-grid {
           grid-template-columns: 1fr;
         }
+
+        .workflow-form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .workflow-form-field.full {
+          grid-column: span 1;
+        }
         
         .detail-item.full {
           grid-column: span 1;
@@ -831,7 +1255,12 @@
         }
         
         .search-input {
-          width: 150px;
+          width: 100%;
+        }
+
+        .action-menu-panel {
+          right: auto;
+          left: 0;
         }
       }
     </style>
@@ -881,13 +1310,29 @@
             <div class="stat-label">Total Applications</div>
             <div class="stat-value" id="totalCount">-</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-label">New</div>
+            <div class="stat-value" id="newCount">-</div>
+          </div>
           <div class="stat-card pending">
-            <div class="stat-label">Pending</div>
-            <div class="stat-value" id="pendingCount">-</div>
+            <div class="stat-label">Active Review</div>
+            <div class="stat-value" id="reviewCount">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Interview Pipeline</div>
+            <div class="stat-value" id="interviewCount">-</div>
+          </div>
+          <div class="stat-card approved">
+            <div class="stat-label">Ready For Deployment</div>
+            <div class="stat-value" id="deploymentCount">-</div>
           </div>
           <div class="stat-card approved">
             <div class="stat-label">Approved</div>
             <div class="stat-value" id="approvedCount">-</div>
+          </div>
+          <div class="stat-card rejected">
+            <div class="stat-label">On Hold</div>
+            <div class="stat-value" id="holdCount">-</div>
           </div>
           <div class="stat-card rejected">
             <div class="stat-label">Rejected</div>
@@ -895,9 +1340,43 @@
           </div>
         </div>
 
-        <div style="margin-bottom: 16px; text-align: right;">
-          <button id="bulkSmsBtn" onclick="sendBulkAppInstructions()" style="padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">Send App Instructions to All Workers</button>
-          <span id="bulkSmsResult" style="margin-left: 12px; font-size: 13px;"></span>
+        <div class="operations-toolbar">
+          <div class="bulk-toolbar hidden" id="bulkToolbar">
+            <div class="bulk-toolbar-left">
+              <span class="bulk-count" id="bulkSelectionCount">0 selected</span>
+              <select class="toolbar-select" id="bulkActionSelect">
+                <option value="">Bulk action</option>
+                <option value="update_status">Move status</option>
+                <option value="assign_recruiter">Assign recruiter</option>
+                <option value="request_documents">Request documents</option>
+                <option value="send_app_instructions">Send app instructions</option>
+              </select>
+              <select class="toolbar-select" id="bulkStatusSelect" style="display:none;">
+                <option value="new">New</option>
+                <option value="reviewing">Reviewing</option>
+                <option value="contacted">Contacted</option>
+                <option value="interview_scheduled">Interview Scheduled</option>
+                <option value="interviewed">Interviewed</option>
+                <option value="ready_for_deployment">Ready for Deployment</option>
+                <option value="approved">Approved</option>
+                <option value="on_hold">On Hold</option>
+                <option value="rejected">Rejected</option>
+              </select>
+              <input class="toolbar-input" id="bulkRecruiterInput" style="display:none;" placeholder="Assign recruiter">
+              <input class="toolbar-input" id="bulkDocumentsInput" style="display:none;" placeholder="Missing documents, comma separated">
+              <button class="toolbar-btn primary" id="runBulkActionBtn">Run Bulk Action</button>
+              <button class="toolbar-btn secondary" id="clearSelectionBtn">Clear Selection</button>
+            </div>
+            <div class="bulk-toolbar-right">
+              <button class="toolbar-btn secondary" id="exportSelectedBtn">Export Selected</button>
+              <span id="bulkActionResult" class="cell-subtext"></span>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button id="bulkSmsBtn" onclick="sendBulkAppInstructions()" class="toolbar-btn primary">Send App Instructions to All Workers</button>
+            <span id="bulkSmsResult" class="cell-subtext"></span>
+          </div>
         </div>
 
         <!-- API Keys Management Card -->
@@ -926,15 +1405,92 @@
         <div class="table-card">
           <div class="table-header">
             <h2 class="table-title">Applications</h2>
-            <div class="search-container">
-              <select class="filter-select" id="statusFilter">
-                <option value="">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="reviewed">Reviewed</option>
-                <option value="rejected">Rejected</option>
-              </select>
-              <input type="text" class="search-input" id="searchInput" placeholder="Search name, email, skill, location...">
+            <div class="table-tools">
+              <div class="filter-grid">
+                <div class="filter-group">
+                  <label class="filter-label" for="statusFilter">Workflow Stage</label>
+                  <select class="filter-select" id="statusFilter">
+                    <option value="">All stages</option>
+                    <option value="new">New</option>
+                    <option value="reviewing">Reviewing</option>
+                    <option value="contacted">Contacted</option>
+                    <option value="interview_scheduled">Interview Scheduled</option>
+                    <option value="interviewed">Interviewed</option>
+                    <option value="ready_for_deployment">Ready for Deployment</option>
+                    <option value="approved">Approved</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="recruiterFilter">Recruiter</label>
+                  <select class="filter-select" id="recruiterFilter">
+                    <option value="">All recruiters</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="cityFilter">City</label>
+                  <select class="filter-select" id="cityFilter">
+                    <option value="">All cities</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="sourceFilter">Source</label>
+                  <select class="filter-select" id="sourceFilter">
+                    <option value="">All sources</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="agreementFilter">Agreement Status</label>
+                  <select class="filter-select" id="agreementFilter">
+                    <option value="">All agreement states</option>
+                    <option value="accepted">Non-Solicitation Accepted</option>
+                    <option value="review_needed">Requires acknowledgment review</option>
+                    <option value="previous">Previous agreement on file</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="missingAckFilter">Acknowledgments</label>
+                  <select class="filter-select" id="missingAckFilter">
+                    <option value="">All records</option>
+                    <option value="missing">Needs acknowledgment review</option>
+                    <option value="complete">All required acknowledgments complete</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="deploymentFilter">Deployment Readiness</label>
+                  <select class="filter-select" id="deploymentFilter">
+                    <option value="">All deployment states</option>
+                    <option value="ready">Ready</option>
+                    <option value="needs_review">Needs review</option>
+                    <option value="not_ready">Not ready</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="payrollFilter">Payroll Readiness</label>
+                  <select class="filter-select" id="payrollFilter">
+                    <option value="">All payroll states</option>
+                    <option value="ready">Ready</option>
+                    <option value="missing_payment_info">Missing payment info</option>
+                    <option value="not_ready">Not ready</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="interviewFilter">Interview Stage</label>
+                  <select class="filter-select" id="interviewFilter">
+                    <option value="">All interview stages</option>
+                    <option value="not_started">Not started</option>
+                    <option value="screening">Screening</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="completed">Completed</option>
+                    <option value="no_show">No show</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label" for="searchInput">Search</label>
+                  <input type="text" class="search-input" id="searchInput" placeholder="Name, email, phone, role, notes, location...">
+                </div>
+              </div>
             </div>
           </div>
           
@@ -942,19 +1498,20 @@
             <table>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Phone</th>
+                  <th class="table-select-cell"><input type="checkbox" class="header-checkbox" id="selectAllApplications"></th>
+                  <th>Applicant</th>
+                  <th>Workflow</th>
+                  <th>Recruiter</th>
                   <th>Location</th>
-                  <th>Roles</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                  <th>Action</th>
+                  <th>Agreement</th>
+                  <th>Readiness</th>
+                  <th>Submitted</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="applicationsTable">
                 <tr>
-                  <td colspan="8" class="loading">Loading applications...</td>
+                  <td colspan="9" class="loading">Loading applications...</td>
                 </tr>
               </tbody>
             </table>
@@ -987,10 +1544,7 @@
           <!-- Content loaded dynamically -->
         </div>
         <div class="modal-footer">
-          <textarea class="notes-input" id="notesInput" placeholder="Add notes about this application..."></textarea>
-        </div>
-        <div class="modal-footer">
-          <button class="action-btn review" id="reviewBtn">Mark as Reviewed</button>
+          <button class="action-btn review" id="saveWorkflowBtn">Save Workflow</button>
           <button class="action-btn approve" id="approveBtn">Approve</button>
           <button class="action-btn reject" id="rejectBtn">Reject</button>
         </div>
@@ -1000,7 +1554,10 @@
     <script>
       let authCredentials = null;
       let applications = [];
+      let filteredApplications = [];
       let currentApplicationId = null;
+      let currentApplicationDetails = null;
+      let selectedApplicationIds = [];
 
       // Check for saved session
       const savedAuth = sessionStorage.getItem('wfconnect_admin_auth');
@@ -1070,8 +1627,11 @@
           
           if (response.ok) {
             applications = await response.json();
+            filteredApplications = applications.slice();
+            selectedApplicationIds = [];
+            populateFilterOptions();
             updateStats();
-            renderTable(applications);
+            filterApplications();
           } else if (response.status === 401) {
             sessionStorage.removeItem('wfconnect_admin_auth');
             location.reload();
@@ -1081,26 +1641,107 @@
               var payload = await response.json();
               if (payload && payload.error) serverMessage = payload.error;
             } catch (_) {}
-            document.getElementById('applicationsTable').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error:</strong> ' + escapeHtml(serverMessage) + '</td></tr>';
+            document.getElementById('applicationsTable').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error:</strong> ' + escapeHtml(serverMessage) + '</td></tr>';
           }
         } catch (error) {
           console.error('Error loading applications:', error);
-          document.getElementById('applicationsTable').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error loading data:</strong> ' + escapeHtml(error.message) + '</td></tr>';
+          document.getElementById('applicationsTable').innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error loading data:</strong> ' + escapeHtml(error.message) + '</td></tr>';
         }
       }
 
       function updateStats() {
         document.getElementById('totalCount').textContent = applications.length;
-        document.getElementById('pendingCount').textContent = applications.filter(a => a.status === 'pending').length;
-        document.getElementById('approvedCount').textContent = applications.filter(a => a.status === 'approved').length;
-        document.getElementById('rejectedCount').textContent = applications.filter(a => a.status === 'rejected').length;
+        document.getElementById('newCount').textContent = applications.filter(a => normalizeStatus(a.status) === 'new').length;
+        document.getElementById('reviewCount').textContent = applications.filter(function(a) {
+          var status = normalizeStatus(a.status);
+          return status === 'reviewing' || status === 'contacted';
+        }).length;
+        document.getElementById('interviewCount').textContent = applications.filter(function(a) {
+          var status = normalizeStatus(a.status);
+          return status === 'interview_scheduled' || status === 'interviewed';
+        }).length;
+        document.getElementById('deploymentCount').textContent = applications.filter(a => normalizeStatus(a.status) === 'ready_for_deployment').length;
+        document.getElementById('approvedCount').textContent = applications.filter(a => normalizeStatus(a.status) === 'approved').length;
+        document.getElementById('holdCount').textContent = applications.filter(a => normalizeStatus(a.status) === 'on_hold').length;
+        document.getElementById('rejectedCount').textContent = applications.filter(a => normalizeStatus(a.status) === 'rejected').length;
+      }
+
+      function populateFilterOptions() {
+        populateSelectOptions('recruiterFilter', applications.map(function(app) { return getAssignedRecruiterLabel(app); }).filter(function(value) { return value && value !== 'Unassigned'; }));
+        populateSelectOptions('cityFilter', applications.map(function(app) { return getLocationLabel(app).split(',')[0]; }).filter(Boolean));
+        populateSelectOptions('sourceFilter', applications.map(function(app) { return getSourceLabel(app); }).filter(Boolean));
+      }
+
+      function populateSelectOptions(selectId, values) {
+        var select = document.getElementById(selectId);
+        var firstOption = select.querySelector('option');
+        var uniqueValues = Array.from(new Set(values.map(function(value) { return String(value).trim(); }).filter(Boolean))).sort();
+        select.innerHTML = firstOption ? firstOption.outerHTML : '';
+        uniqueValues.forEach(function(value) {
+          var option = document.createElement('option');
+          option.value = value;
+          option.textContent = value;
+          select.appendChild(option);
+        });
+      }
+
+      function syncSelectionState() {
+        selectedApplicationIds = selectedApplicationIds.filter(function(id) {
+          return applications.some(function(app) { return app.id === id; });
+        });
+
+        var selectAll = document.getElementById('selectAllApplications');
+        if (selectAll) {
+          var visibleIds = filteredApplications.map(function(app) { return app.id; });
+          var allVisibleSelected = visibleIds.length > 0 && visibleIds.every(function(id) { return selectedApplicationIds.includes(id); });
+          var someVisibleSelected = visibleIds.some(function(id) { return selectedApplicationIds.includes(id); });
+          selectAll.checked = allVisibleSelected;
+          selectAll.indeterminate = !allVisibleSelected && someVisibleSelected;
+        }
+
+        updateBulkToolbar();
+      }
+
+      function updateBulkToolbar() {
+        var bulkToolbar = document.getElementById('bulkToolbar');
+        var count = selectedApplicationIds.length;
+        document.getElementById('bulkSelectionCount').textContent = count + ' selected';
+        bulkToolbar.classList.toggle('hidden', count === 0);
+      }
+
+      function toggleApplicationSelection(id, checked) {
+        if (checked) {
+          if (!selectedApplicationIds.includes(id)) {
+            selectedApplicationIds.push(id);
+          }
+        } else {
+          selectedApplicationIds = selectedApplicationIds.filter(function(existingId) { return existingId !== id; });
+        }
+        syncSelectionState();
+      }
+
+      function toggleSelectAll(checked) {
+        if (checked) {
+          var visibleIds = filteredApplications.map(function(app) { return app.id; });
+          visibleIds.forEach(function(id) {
+            if (!selectedApplicationIds.includes(id)) {
+              selectedApplicationIds.push(id);
+            }
+          });
+        } else {
+          var visibleSet = new Set(filteredApplications.map(function(app) { return app.id; }));
+          selectedApplicationIds = selectedApplicationIds.filter(function(id) { return !visibleSet.has(id); });
+        }
+        renderTable(filteredApplications);
       }
 
       function renderTable(data) {
         const tbody = document.getElementById('applicationsTable');
+        filteredApplications = data.slice();
         
         if (data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div><p>No applications found</p></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div><p>No applications found</p></td></tr>';
+          syncSelectionState();
           return;
         }
         
@@ -1108,39 +1749,44 @@
           tbody.innerHTML = data.map(function(app) {
             var roles = [];
             try {
-              roles = JSON.parse(app.preferred_roles || '[]');
+              roles = JSON.parse(app.preferred_roles || app.preferredRoles || '[]');
             } catch(e) {}
             
             var fullName = app.full_name || app.fullName || '';
             var email = app.email || '';
             var phone = app.phone || '';
-            var city = app.city || '';
-            var province = app.province || '';
-            var status = app.status || 'unknown';
+            var status = normalizeStatus(app.status || 'new');
             var createdAt = app.created_at || app.createdAt || '';
-            var hasPayment = app.payment_method || app.paymentMethod;
-            var agreementVersion = getAppValue(app, 'agreementVersion', 'agreement_version');
-            var clauseAccepted = getAppValue(app, 'nonSolicitationAcknowledged', 'non_solicitation_acknowledged');
-            var clauseStatus = clauseAccepted === true
-              ? 'Clause accepted'
-              : clauseAccepted === false
-                ? 'Clause not accepted'
-                : 'Legacy acceptance unavailable';
+            var isSelected = selectedApplicationIds.includes(app.id);
+            var agreementSummary = getAgreementSummary(app);
+            var missingAcks = getMissingAcknowledgments(app);
+            var missingDocuments = getMissingDocuments(app);
+            var duplicateBadge = app.duplicateCount > 0 ? '<span class="duplicate-badge">+' + app.duplicateCount + ' related</span>' : '';
+            var workflowMeta = getInterviewStageLabel(app.interviewStage) + ' • ' + roles.slice(0, 2).join(', ');
+            var recruiter = getAssignedRecruiterLabel(app);
+            var readinessBadges = '<span class="readiness-badge ' + escapeHtml(app.deploymentReadiness || 'not_ready') + '">Deployment: ' + escapeHtml(getReadinessLabel(app.deploymentReadiness)) + '</span>' +
+              '<span class="readiness-badge ' + escapeHtml(app.payrollReadiness || 'not_ready') + '">Payroll: ' + escapeHtml(getReadinessLabel(app.payrollReadiness)) + '</span>';
+            var agreementMicrocopy = agreementSummary.nonSolicitationLabel + ' • ' + agreementSummary.acceptedOnLabel;
+            var alertCopy = [];
+            if (missingAcks.length > 0) alertCopy.push(missingAcks.length + ' acknowledgment issues');
+            if (missingDocuments.length > 0) alertCopy.push(missingDocuments.length + ' missing documents');
             
             return '<tr>' +
-              '<td><strong>' + escapeHtml(fullName) + '</strong></td>' +
-              '<td>' + escapeHtml(email) + '</td>' +
-              '<td>' + escapeHtml(phone) + '</td>' +
-              '<td>' + escapeHtml(city) + ', ' + escapeHtml(province) + '</td>' +
-              '<td>' + roles.slice(0, 2).join(', ') + (roles.length > 2 ? '...' : '') + '</td>' +
-              '<td><span class="status-badge ' + status + '">' + status + '</span>' + (!hasPayment ? ' <span class="status-badge" style="background: #FEF3C7; color: #92400E; font-size: 11px;">No Payment Info</span>' : '') + '<div style="margin-top:6px;font-size:12px;color:var(--text-secondary);">' + formatAgreementVersion(agreementVersion) + ' • ' + clauseStatus + '</div></td>' +
-              '<td>' + (new Date(createdAt).toLocaleDateString ? new Date(createdAt).toLocaleDateString() : createdAt) + '</td>' +
-              '<td><div class="action-cell"><button class="view-btn" onclick="viewApplication(\'' + app.id + '\')">View</button><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'worker\')">Preview Worker</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Worker Copy</button><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'internal\')">Preview Internal</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Internal Copy</button><button class="delete-btn" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></td>' +
+              '<td class="table-select-cell"><input type="checkbox" class="row-checkbox" ' + (isSelected ? 'checked' : '') + ' onchange="toggleApplicationSelection(\'' + app.id + '\', this.checked)"></td>' +
+              '<td><div class="applicant-cell"><div class="applicant-name-row"><span class="applicant-name">' + escapeHtml(fullName) + '</span>' + duplicateBadge + '</div><div class="applicant-meta">' + escapeHtml(email) + '</div><div class="cell-subtext">' + escapeHtml(phone || 'Phone pending') + '</div></div></td>' +
+              '<td><div class="workflow-cell"><span class="status-badge ' + status + '">' + escapeHtml(getStatusLabel(status)) + '</span><div class="cell-subtext">' + escapeHtml(workflowMeta.replace(/^ \u2022 /, '')) + '</div><div class="cell-microcopy">' + escapeHtml(alertCopy.join(' • ') || 'No open workflow alerts') + '</div></div></td>' +
+              '<td><div class="recruiter-cell"><div><strong>' + escapeHtml(recruiter) + '</strong></div><div class="cell-subtext">' + escapeHtml(getSourceLabel(app)) + '</div><div class="cell-microcopy">' + escapeHtml(app.recruiterNotes || 'Ownership note pending') + '</div></div></td>' +
+              '<td><div class="meta-stack"><div>' + escapeHtml(getLocationLabel(app)) + '</div><div class="cell-subtext">' + escapeHtml(roles.join(', ') || 'Roles not set') + '</div></div></td>' +
+              '<td><div class="agreement-cell"><div><strong>' + escapeHtml(agreementSummary.versionLabel) + '</strong></div><div class="cell-subtext">' + escapeHtml(agreementSummary.nonSolicitationLabel) + '</div><div class="cell-microcopy">' + escapeHtml(agreementMicrocopy) + '</div></div></td>' +
+              '<td><div class="readiness-cell">' + readinessBadges + '<div class="next-action">Next: ' + escapeHtml(getNextRecommendedAction(app)) + '</div></div></td>' +
+              '<td><div class="meta-stack"><div>' + (createdAt && new Date(createdAt).toLocaleDateString ? new Date(createdAt).toLocaleDateString() : createdAt) + '</div><div class="cell-subtext">' + escapeHtml(getInterviewStageLabel(app.interviewStage)) + '</div></div></td>' +
+              '<td><details class="action-menu"><summary>Actions ▾</summary><div class="action-menu-panel"><button class="action-menu-item" onclick="viewApplication(\'' + app.id + '\')">View Applicant</button><button class="action-menu-item" onclick="previewAgreementCopy(\'' + app.id + '\', \'worker\')">Preview Worker Copy</button><button class="action-menu-item" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Download Worker Copy</button><button class="action-menu-item" onclick="previewAgreementCopy(\'' + app.id + '\', \'internal\')">Preview Internal Copy</button><button class="action-menu-item" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Download Internal Copy</button><button class="action-menu-item danger" onclick="confirmDeleteApplication(\'' + app.id + '\', \'' + escapeHtml(fullName).replace(/'/g, "\\'") + '\')">Delete</button></div></details></td>' +
             '</tr>';
           }).join('');
+          syncSelectionState();
         } catch (error) {
           console.error('Error rendering table:', error);
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error rendering applications:</strong> ' + escapeHtml(error.message) + '</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:#ef4444;"><strong>Error rendering applications:</strong> ' + escapeHtml(error.message) + '</td></tr>';
         }
       }
 
@@ -1159,12 +1805,127 @@
         return null;
       }
 
+      function normalizeStatus(status) {
+        var normalized = (status || '').toString().trim().toLowerCase();
+        if (normalized === 'pending') return 'new';
+        if (normalized === 'reviewed') return 'reviewing';
+        return normalized || 'new';
+      }
+
+      function getStatusLabel(status) {
+        var map = {
+          new: 'New',
+          reviewing: 'Reviewing',
+          contacted: 'Contacted',
+          interview_scheduled: 'Interview Scheduled',
+          interviewed: 'Interviewed',
+          ready_for_deployment: 'Ready for Deployment',
+          approved: 'Approved',
+          rejected: 'Rejected',
+          on_hold: 'On Hold'
+        };
+        return map[normalizeStatus(status)] || 'New';
+      }
+
+      function getInterviewStageLabel(stage) {
+        var map = {
+          not_started: 'Not Started',
+          screening: 'Screening',
+          scheduled: 'Scheduled',
+          completed: 'Completed',
+          no_show: 'No Show'
+        };
+        return map[(stage || '').toString().trim().toLowerCase()] || 'Not Started';
+      }
+
+      function getReadinessLabel(value) {
+        var map = {
+          ready: 'Ready',
+          needs_review: 'Needs Review',
+          missing_payment_info: 'Missing Payment Info',
+          not_ready: 'Not Ready'
+        };
+        return map[(value || '').toString().trim().toLowerCase()] || 'Not Ready';
+      }
+
+      function parseDocumentList(value) {
+        if (Array.isArray(value)) {
+          return value.filter(Boolean).map(function(item) { return String(item); });
+        }
+        if (!value) return [];
+        if (typeof value === 'string') {
+          try {
+            var parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) {
+              return parsed.filter(Boolean).map(function(item) { return String(item); });
+            }
+          } catch (_) {}
+          return value.split(/\n|,/).map(function(item) { return item.trim(); }).filter(Boolean);
+        }
+        return [];
+      }
+
+      function getAgreementSummary(app) {
+        if (app.agreementSummary) return app.agreementSummary;
+        var agreementVersion = getAppValue(app, 'agreementVersion', 'agreement_version') || 'Previous agreement on file';
+        var nonSolicitationAcknowledged = getAppValue(app, 'nonSolicitationAcknowledged', 'non_solicitation_acknowledged');
+        var acknowledgedAt = getAppValue(app, 'nonSolicitationAcknowledgedAt', 'non_solicitation_acknowledged_at');
+        var nonSolicitationLabel = 'Requires acknowledgment review';
+        if (nonSolicitationAcknowledged === true) {
+          nonSolicitationLabel = 'Non-Solicitation Accepted';
+        } else if (nonSolicitationAcknowledged === false) {
+          nonSolicitationLabel = 'Non-Solicitation Not Accepted';
+        }
+        return {
+          versionLabel: agreementVersion,
+          nonSolicitationLabel: nonSolicitationLabel,
+          acceptedOnLabel: acknowledgedAt ? formatDateValue(acknowledgedAt) : 'Requires acknowledgment review',
+          compactLabel: agreementVersion + ' • ' + nonSolicitationLabel
+        };
+      }
+
+      function getAgreementFilterValue(app) {
+        var agreementSummary = getAgreementSummary(app);
+        if (agreementSummary.versionLabel === 'Previous agreement on file') return 'previous';
+        if (agreementSummary.nonSolicitationLabel === 'Non-Solicitation Accepted') return 'accepted';
+        return 'review_needed';
+      }
+
+      function getLocationLabel(app) {
+        return app.locationLabel || [app.city || '', app.province || ''].filter(Boolean).join(', ') || 'Location pending';
+      }
+
+      function getSourceLabel(app) {
+        return app.applicationSource || app.application_source || 'Direct application';
+      }
+
+      function getAssignedRecruiterLabel(app) {
+        return app.assignedRecruiter || app.assigned_recruiter || 'Unassigned';
+      }
+
+      function getMissingAcknowledgments(app) {
+        if (Array.isArray(app.missingAcknowledgments)) return app.missingAcknowledgments;
+        return REQUIRED_ACK_RULES
+          .filter(function(rule) {
+            return getAppValue(app, rule.camel, rule.snake) !== true;
+          })
+          .map(function(rule) { return rule.label; });
+      }
+
+      function getMissingDocuments(app) {
+        return Array.isArray(app.missingDocumentsList) ? app.missingDocumentsList : parseDocumentList(app.missingDocuments || app.missing_documents);
+      }
+
+      function getNextRecommendedAction(app) {
+        return app.nextRecommendedAction || app.next_recommended_action || 'Review application details';
+      }
+
       function formatAgreementVersion(value) {
-        return value ? escapeHtml(String(value)) : 'Pre-versioned agreement';
+        return value ? escapeHtml(String(value)) : 'Previous agreement on file';
       }
 
       function formatLegacyValue(value) {
-        return value ? escapeHtml(String(value)) : 'Legacy record (not captured)';
+        return value ? escapeHtml(String(value)) : 'Older application record';
       }
 
       function formatDateValue(value) {
@@ -1181,7 +1942,7 @@
       function formatAcknowledgmentState(value) {
         if (value === true) return 'Accepted';
         if (value === false) return 'Not accepted';
-        return 'Acceptance status unavailable (legacy record)';
+        return 'Requires acknowledgment review';
       }
 
       function isLegacyAcknowledgmentValue(value) {
@@ -1199,11 +1960,7 @@
       ];
 
       function getMissingRequiredAcknowledgments(app) {
-        return REQUIRED_ACK_RULES
-          .filter(function(rule) {
-            return getAppValue(app, rule.camel, rule.snake) !== true;
-          })
-          .map(function(rule) { return rule.label; });
+        return getMissingAcknowledgments(app);
       }
 
       function isTruthyConsent(value) {
@@ -1219,6 +1976,14 @@
       function filterApplications() {
         var query = document.getElementById('searchInput').value.toLowerCase();
         var statusFilter = document.getElementById('statusFilter').value;
+        var recruiterFilter = document.getElementById('recruiterFilter').value;
+        var cityFilter = document.getElementById('cityFilter').value;
+        var sourceFilter = document.getElementById('sourceFilter').value;
+        var agreementFilter = document.getElementById('agreementFilter').value;
+        var missingAckFilter = document.getElementById('missingAckFilter').value;
+        var deploymentFilter = document.getElementById('deploymentFilter').value;
+        var payrollFilter = document.getElementById('payrollFilter').value;
+        var interviewFilter = document.getElementById('interviewFilter').value;
         
         var filtered = applications.filter(function(app) {
           var roles = [];
@@ -1227,11 +1992,14 @@
           var fullName = app.full_name || app.fullName || '';
           var email = app.email || '';
           var phone = app.phone || '';
-          var address = app.address || '';
-          var postalCode = app.postal_code || app.postalCode || '';
-          var skills = app.skills || '';
-          var locationStr = ((app.city || '') + ' ' + (app.province || '') + ' ' + address + ' ' + postalCode).toLowerCase();
-          var skillsStr = skills.toLowerCase();
+          var skills = (app.skills || '').toLowerCase();
+          var locationStr = getLocationLabel(app).toLowerCase();
+          var recruiter = getAssignedRecruiterLabel(app);
+          var source = getSourceLabel(app);
+          var agreementState = getAgreementFilterValue(app);
+          var missingAcks = getMissingAcknowledgments(app).length > 0;
+          var nextAction = getNextRecommendedAction(app).toLowerCase();
+          var missingDocuments = getMissingDocuments(app).join(' ').toLowerCase();
           
           var matchesQuery = !query ||
             fullName.toLowerCase().includes(query) ||
@@ -1239,24 +2007,130 @@
             (phone && phone.includes(query)) ||
             rolesStr.includes(query) ||
             locationStr.includes(query) ||
-            skillsStr.includes(query);
+            skills.includes(query) ||
+            recruiter.toLowerCase().includes(query) ||
+            nextAction.includes(query) ||
+            missingDocuments.includes(query);
           
-          var matchesStatus = !statusFilter || app.status === statusFilter;
+          var matchesStatus = !statusFilter || normalizeStatus(app.status) === statusFilter;
+          var matchesRecruiter = !recruiterFilter || recruiter === recruiterFilter;
+          var matchesCity = !cityFilter || getLocationLabel(app).split(',')[0] === cityFilter;
+          var matchesSource = !sourceFilter || source === sourceFilter;
+          var matchesAgreement = !agreementFilter || agreementState === agreementFilter;
+          var matchesMissingAck = !missingAckFilter || (missingAckFilter === 'missing' ? missingAcks : !missingAcks);
+          var matchesDeployment = !deploymentFilter || (app.deploymentReadiness || 'not_ready') === deploymentFilter;
+          var matchesPayroll = !payrollFilter || (app.payrollReadiness || 'not_ready') === payrollFilter;
+          var matchesInterview = !interviewFilter || (app.interviewStage || 'not_started') === interviewFilter;
           
-          return matchesQuery && matchesStatus;
+          return matchesQuery && matchesStatus && matchesRecruiter && matchesCity && matchesSource && matchesAgreement && matchesMissingAck && matchesDeployment && matchesPayroll && matchesInterview;
         });
         renderTable(filtered);
       }
 
       document.getElementById('searchInput').addEventListener('input', filterApplications);
       document.getElementById('statusFilter').addEventListener('change', filterApplications);
+      document.getElementById('recruiterFilter').addEventListener('change', filterApplications);
+      document.getElementById('cityFilter').addEventListener('change', filterApplications);
+      document.getElementById('sourceFilter').addEventListener('change', filterApplications);
+      document.getElementById('agreementFilter').addEventListener('change', filterApplications);
+      document.getElementById('missingAckFilter').addEventListener('change', filterApplications);
+      document.getElementById('deploymentFilter').addEventListener('change', filterApplications);
+      document.getElementById('payrollFilter').addEventListener('change', filterApplications);
+      document.getElementById('interviewFilter').addEventListener('change', filterApplications);
+      document.getElementById('selectAllApplications').addEventListener('change', function() {
+        toggleSelectAll(this.checked);
+      });
+      document.getElementById('clearSelectionBtn').addEventListener('click', function() {
+        selectedApplicationIds = [];
+        renderTable(filteredApplications);
+      });
+      document.getElementById('bulkActionSelect').addEventListener('change', function() {
+        var action = this.value;
+        document.getElementById('bulkStatusSelect').style.display = action === 'update_status' ? 'inline-flex' : 'none';
+        document.getElementById('bulkRecruiterInput').style.display = action === 'assign_recruiter' ? 'inline-flex' : 'none';
+        document.getElementById('bulkDocumentsInput').style.display = action === 'request_documents' ? 'inline-flex' : 'none';
+      });
 
-      // View application details
-      function viewApplication(id) {
+      function escapeAttribute(text) {
+        if (text === null || text === undefined) return '';
+        return String(text)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      function buildOptionMarkup(options, currentValue) {
+        return options.map(function(option) {
+          var value = option.value;
+          var label = option.label;
+          return '<option value="' + escapeAttribute(value) + '"' + (String(currentValue || '') === String(value) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+        }).join('');
+      }
+
+      function buildChecklistMarkup(items, emptyLabel) {
+        if (!items.length) {
+          return '<div class="checklist"><div class="checklist-item"><strong>' + escapeHtml(emptyLabel) + '</strong><span class="status-badge approved">Clear</span></div></div>';
+        }
+
+        return '<div class="checklist">' + items.map(function(item) {
+          return '<div class="checklist-item"><strong>' + escapeHtml(item.label) + '</strong><span class="status-badge ' + escapeAttribute(item.statusClass || 'reviewing') + '">' + escapeHtml(item.stateLabel) + '</span></div>';
+        }).join('') + '</div>';
+      }
+
+      function buildDuplicateHistoryMarkup(relatedApplications) {
+        if (!relatedApplications.length) {
+          return '<div class="history-list"><div class="history-item"><div class="cell-subtext">No related applicant submissions are linked to this dashboard record.</div></div></div>';
+        }
+
+        return '<div class="history-list">' + relatedApplications.map(function(item) {
+          var source = item.applicationSource || item.application_source || 'Direct application';
+          return '<div class="history-item">' +
+            '<div class="history-title"><span>' + escapeHtml(item.fullName || 'Applicant record') + '</span><span class="status-badge ' + escapeAttribute(normalizeStatus(item.status)) + '">' + escapeHtml(item.statusLabel || getStatusLabel(item.status)) + '</span></div>' +
+            '<div class="cell-subtext">' + escapeHtml(item.email || 'Email pending') + ' • ' + escapeHtml(item.phone || 'Phone pending') + '</div>' +
+            '<div class="cell-microcopy">Submitted: ' + escapeHtml(formatDateValue(item.createdAt)) + ' • Source: ' + escapeHtml(source) + '</div>' +
+          '</div>';
+        }).join('') + '</div>';
+      }
+
+      function getWorkflowFieldValue(id) {
+        var element = document.getElementById(id);
+        return element ? element.value : '';
+      }
+
+      async function viewApplication(id) {
         currentApplicationId = id;
-        var app = applications.find(function(a) { return a.id === id; });
-        if (!app) return;
-        
+        currentApplicationDetails = null;
+        document.getElementById('modalBody').innerHTML = '<div class="detail-section"><h3 class="detail-section-title">Loading applicant...</h3><p class="section-hint">Fetching recruiter workflow details and related history.</p></div>';
+        document.getElementById('detailModal').classList.add('show');
+
+        try {
+          var response = await fetch('/api/admin/applications/' + id, {
+            headers: {
+              'Authorization': 'Basic ' + authCredentials
+            }
+          });
+
+          if (!response.ok) {
+            var errorMessage = 'Failed to load application details';
+            try {
+              var errorPayload = await response.json();
+              if (errorPayload && errorPayload.error) {
+                errorMessage = errorPayload.error;
+              }
+            } catch (_) {}
+            throw new Error(errorMessage);
+          }
+
+          currentApplicationDetails = await response.json();
+          renderApplicationDetail(currentApplicationDetails);
+        } catch (error) {
+          document.getElementById('modalBody').innerHTML = '<div class="detail-section"><h3 class="detail-section-title">Unable to load applicant</h3><p class="section-hint" style="color: var(--error);">' + escapeHtml(error.message || 'Unknown error') + '</p></div>';
+        }
+      }
+
+      function renderApplicationDetail(app) {
         var roles = [];
         var days = [];
         var shifts = [];
@@ -1264,154 +2138,358 @@
           roles = JSON.parse(app.preferred_roles || app.preferredRoles || '[]');
           days = JSON.parse(app.available_days || app.availableDays || '[]');
           shifts = JSON.parse(app.preferred_shifts || app.preferredShifts || '[]');
-        } catch(e) {}
-        
+        } catch (_) {}
+
+        var currentStatus = normalizeStatus(app.status || 'new');
+        var agreementSummary = getAgreementSummary(app);
+        var missingAcknowledgments = getMissingAcknowledgments(app);
+        var missingDocuments = getMissingDocuments(app);
+        var relatedApplications = Array.isArray(app.relatedApplications) ? app.relatedApplications : [];
+        var assignedRecruiterValue = getAppValue(app, 'assignedRecruiter', 'assigned_recruiter') || '';
+        var applicationSourceValue = getAppValue(app, 'applicationSource', 'application_source') || 'Direct application';
+        var recruiterNotesValue = getAppValue(app, 'recruiterNotes', 'recruiter_notes') || '';
+        var interviewNotesValue = getAppValue(app, 'interviewNotes', 'interview_notes') || '';
+        var nextActionValue = getNextRecommendedAction(app);
+        var generalNotesValue = app.notes || '';
+        var deploymentReadinessValue = (app.deploymentReadiness || 'not_ready').toString();
+        var payrollReadinessValue = (app.payrollReadiness || 'not_ready').toString();
+        var interviewStageValue = (app.interviewStage || 'not_started').toString();
+        var lastContactedAt = getAppValue(app, 'lastContactedAt', 'last_contacted_at');
+        var documentRequestSentAt = getAppValue(app, 'documentRequestSentAt', 'document_request_sent_at');
+        var missingDocumentChecklist = missingDocuments.map(function(item) {
+          return { label: item, stateLabel: 'Outstanding', statusClass: 'on_hold' };
+        });
+        var acknowledgmentChecklist = REQUIRED_ACK_RULES.map(function(rule) {
+          var accepted = getAppValue(app, rule.camel, rule.snake) === true;
+          return {
+            label: rule.label,
+            stateLabel: accepted ? 'Complete' : 'Review Needed',
+            statusClass: accepted ? 'approved' : 'on_hold'
+          };
+        });
+        var workflowStatusOptions = [
+          { value: 'new', label: 'New' },
+          { value: 'reviewing', label: 'Reviewing' },
+          { value: 'contacted', label: 'Contacted' },
+          { value: 'interview_scheduled', label: 'Interview Scheduled' },
+          { value: 'interviewed', label: 'Interviewed' },
+          { value: 'ready_for_deployment', label: 'Ready for Deployment' },
+          { value: 'approved', label: 'Approved' },
+          { value: 'on_hold', label: 'On Hold' },
+          { value: 'rejected', label: 'Rejected' }
+        ];
+        var interviewStageOptions = [
+          { value: 'not_started', label: 'Not Started' },
+          { value: 'screening', label: 'Screening' },
+          { value: 'scheduled', label: 'Scheduled' },
+          { value: 'completed', label: 'Completed' },
+          { value: 'no_show', label: 'No Show' }
+        ];
+        var readinessOptions = [
+          { value: 'not_ready', label: 'Not Ready' },
+          { value: 'needs_review', label: 'Needs Review' },
+          { value: 'ready', label: 'Ready' }
+        ];
+        var payrollOptions = [
+          { value: 'not_ready', label: 'Not Ready' },
+          { value: 'missing_payment_info', label: 'Missing Payment Info' },
+          { value: 'ready', label: 'Ready' }
+        ];
         var html = '';
-        
-        // Personal Details
+
+        html += '<div class="detail-hero">';
+        html += '<div class="detail-hero-card"><div class="detail-hero-label">Workflow Stage</div><div class="detail-hero-value">' + escapeHtml(getStatusLabel(currentStatus)) + '</div><div class="cell-subtext">Interview: ' + escapeHtml(getInterviewStageLabel(interviewStageValue)) + '</div></div>';
+        html += '<div class="detail-hero-card"><div class="detail-hero-label">Assigned Recruiter</div><div class="detail-hero-value">' + escapeHtml(getAssignedRecruiterLabel(app)) + '</div><div class="cell-subtext">Source: ' + escapeHtml(getSourceLabel(app)) + '</div></div>';
+        html += '<div class="detail-hero-card"><div class="detail-hero-label">Deployment and Payroll</div><div class="detail-hero-value">' + escapeHtml(getReadinessLabel(deploymentReadinessValue)) + '</div><div class="cell-subtext">Payroll: ' + escapeHtml(getReadinessLabel(payrollReadinessValue)) + '</div></div>';
+        html += '<div class="detail-hero-card"><div class="detail-hero-label">Next Recommended Action</div><div class="detail-hero-value">' + escapeHtml(nextActionValue) + '</div><div class="cell-subtext">Related submissions: ' + escapeHtml(String(app.duplicateCount || 0)) + '</div></div>';
+        html += '</div>';
+
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Personal Details</h3>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.full_name || app.fullName || '') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">' + (app.date_of_birth || app.dateOfBirth || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone) + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Address</div><div class="detail-value">' + escapeHtml(app.address || '') + ', ' + escapeHtml(app.city || '') + ', ' + escapeHtml(app.province || '') + ' ' + escapeHtml(app.postal_code || app.postalCode || '') + '</div></div>';
-        html += '</div></div>';
-        
-        // Work Eligibility
-        html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Work Eligibility</h3>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Work Status</div><div class="detail-value">' + formatWorkStatus(app.work_status || app.workStatus || '') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Background Check Consent</div><div class="detail-value">' + ((app.background_check_consent || app.backgroundCheckConsent) ? 'Yes' : 'No') + '</div></div>';
-        html += '</div></div>';
-        
-        // Roles & Availability
-        html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Roles & Availability</h3>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + roles.join(', ') + ((app.other_role || app.otherRole) ? ' (' + (app.other_role || app.otherRole) + ')' : '') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Available Days</div><div class="detail-value">' + days.join(', ') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Preferred Shifts</div><div class="detail-value">' + shifts.join(', ') + '</div></div>';
-        var unavail = app.unavailable_periods || app.unavailablePeriods;
-        if (unavail) {
-          html += '<div class="detail-item full"><div class="detail-label">Unavailable Periods</div><div class="detail-value">' + escapeHtml(unavail) + '</div></div>';
-        }
-        html += '</div></div>';
-        
-        // Experience
-        html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Experience</h3>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Years of Experience</div><div class="detail-value">' + (app.years_experience || app.yearsExperience || 'Not specified') + '</div></div>';
-        var shiftLen = app.desired_shift_length || app.desiredShiftLength;
-        html += '<div class="detail-item"><div class="detail-label">Shift Length Preference</div><div class="detail-value">' + (shiftLen ? shiftLen + ' hours' : 'Not specified') + '</div></div>';
-        var expSum = app.experience_summary || app.experienceSummary;
-        if (expSum) {
-          html += '<div class="detail-item full"><div class="detail-label">Experience Summary</div><div class="detail-value">' + escapeHtml(expSum) + '</div></div>';
-        }
-        if (app.skills) {
-          html += '<div class="detail-item full"><div class="detail-label">Skills & Certifications</div><div class="detail-value">' + escapeHtml(app.skills) + '</div></div>';
-        }
-        html += '</div></div>';
-        
-        // Emergency Contact
-        html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Emergency Contact</h3>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Name</div><div class="detail-value">' + escapeHtml(app.emergency_contact_name || app.emergencyContactName || '') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Relationship</div><div class="detail-value">' + escapeHtml(app.emergency_contact_relationship || app.emergencyContactRelationship || '') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.emergency_contact_phone || app.emergencyContactPhone || '') + '</div></div>';
-        html += '</div></div>';
-        
-        // Payment Information
-        html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Payment Information</h3>';
-        html += '<div class="detail-grid">';
-        var payMethod = app.payment_method || app.paymentMethod;
-        if (payMethod) {
-          html += '<div class="detail-item"><div class="detail-label">Payment Method</div><div class="detail-value">' + (payMethod === 'direct_deposit' || payMethod === 'both' ? 'Direct Deposit' : 'Interac E-Transfer') + '</div></div>';
-        }
-        var bankName = app.bank_name || app.bankName;
-        if (bankName) {
-          html += '<div class="detail-item"><div class="detail-label">Bank Name</div><div class="detail-value">' + escapeHtml(bankName) + '</div></div>';
-        }
-        var bankInst = app.bank_institution || app.bankInstitution;
-        if (bankInst) {
-          html += '<div class="detail-item"><div class="detail-label">Institution #</div><div class="detail-value">' + escapeHtml(bankInst) + '</div></div>';
-        }
-        var bankTran = app.bank_transit || app.bankTransit;
-        if (bankTran) {
-          html += '<div class="detail-item"><div class="detail-label">Transit #</div><div class="detail-value">' + escapeHtml(bankTran) + '</div></div>';
-        }
-        var bankAcct = app.bank_account || app.bankAccount;
-        if (bankAcct) {
-          html += '<div class="detail-item"><div class="detail-label">Account #</div><div class="detail-value">' + escapeHtml(bankAcct) + '</div></div>';
-        }
-        var etEmail = app.etransfer_email || app.etransferEmail;
-        if (etEmail) {
-          html += '<div class="detail-item"><div class="detail-label">E-Transfer Email</div><div class="detail-value">' + escapeHtml(etEmail) + '</div></div>';
-        }
-        if (!payMethod) {
-          html += '<div class="detail-item full"><div class="detail-label">Status</div><div class="detail-value" style="color: var(--warning); font-weight: 600;">Payment information not provided</div></div>';
-        }
-        html += '</div></div>';
-        
-        // Acknowledgments
-        html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Acknowledgments</h3>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">TITO Acknowledgment</div><div class="detail-value">' + ((app.tito_acknowledgment || app.titoAcknowledgment) ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Site Rules</div><div class="detail-value">' + ((app.site_rules_acknowledgment || app.siteRulesAcknowledgment) ? 'Agreed' : 'Not agreed') + '</div></div>';
-        var nonSolicitationValue = getAppValue(app, 'nonSolicitationAcknowledged', 'non_solicitation_acknowledged');
-        html += '<div class="detail-item"><div class="detail-label">Non-Solicitation Clause</div><div class="detail-value">' + formatAcknowledgmentState(nonSolicitationValue) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Acknowledged At</div><div class="detail-value">' + formatDateValue(getAppValue(app, 'nonSolicitationAcknowledgedAt', 'non_solicitation_acknowledged_at')) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Worker Agreement</div><div class="detail-value">' + ((app.worker_agreement_consent || app.workerAgreementConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Privacy Policy</div><div class="detail-value">' + ((app.privacy_consent || app.privacyConsent) ? 'Agreed' : 'Not agreed') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Promotional Consent</div><div class="detail-value">' + (isTruthyConsent(app.promotional_consent) || isTruthyConsent(app.promotionalConsent) || isTruthyConsent(app.marketing_consent) || isTruthyConsent(app.marketingConsent) ? 'Yes' : 'No') + '</div></div>';
-        var missingAcknowledgments = getMissingRequiredAcknowledgments(app);
-        if (missingAcknowledgments.length > 0) {
-          html += '<div class="detail-item full"><div class="detail-label">Missing Required Acknowledgments</div><div class="detail-value" style="color: var(--danger); font-weight: 600;">' + escapeHtml(missingAcknowledgments.join(', ')) + '</div></div>';
-        }
-        if (isLegacyAcknowledgmentValue(nonSolicitationValue)) {
-          html += '<div class="detail-item full"><div class="detail-label">Legacy Status</div><div class="detail-value" style="color: var(--warning);">This record predates full acknowledgment tracking. Missing acknowledgments must be remediated before approval.</div></div>';
-        }
+        html += '<h3 class="detail-section-title">Recruiter Command Center</h3>';
+        html += '<p class="section-hint">Manage recruiter ownership, interview progression, deployment readiness, payroll readiness, and the next operational step from one place.</p>';
+        html += '<div class="workflow-form-grid">';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="workflowStatusInput">Workflow Stage</label><select class="workflow-select" id="workflowStatusInput">' + buildOptionMarkup(workflowStatusOptions, currentStatus) + '</select></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="assignedRecruiterInput">Assigned Recruiter</label><input class="workflow-input" id="assignedRecruiterInput" value="' + escapeAttribute(assignedRecruiterValue) + '" placeholder="Recruiter name"></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="interviewStageInput">Interview Stage</label><select class="workflow-select" id="interviewStageInput">' + buildOptionMarkup(interviewStageOptions, interviewStageValue) + '</select></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="applicationSourceInput">Application Source</label><input class="workflow-input" id="applicationSourceInput" value="' + escapeAttribute(applicationSourceValue) + '" placeholder="Direct application"></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="deploymentReadinessInput">Deployment Readiness</label><select class="workflow-select" id="deploymentReadinessInput">' + buildOptionMarkup(readinessOptions, deploymentReadinessValue) + '</select></div>';
+        html += '<div class="workflow-form-field"><label class="filter-label" for="payrollReadinessInput">Payroll Readiness</label><select class="workflow-select" id="payrollReadinessInput">' + buildOptionMarkup(payrollOptions, payrollReadinessValue) + '</select></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="nextRecommendedActionInput">Next Recommended Action</label><textarea class="workflow-textarea" id="nextRecommendedActionInput" placeholder="What should operations do next?">' + escapeHtml(nextActionValue) + '</textarea></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="missingDocumentsInput">Missing Documents</label><textarea class="workflow-textarea" id="missingDocumentsInput" placeholder="Passport, SIN, void cheque">' + escapeHtml(missingDocuments.join('\n')) + '</textarea></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="recruiterNotesInput">Recruiter Notes</label><textarea class="workflow-textarea" id="recruiterNotesInput" placeholder="Capture screening notes, fit, and concerns">' + escapeHtml(recruiterNotesValue) + '</textarea></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="interviewNotesInput">Interview Notes</label><textarea class="workflow-textarea" id="interviewNotesInput" placeholder="Interview outcomes, scheduling notes, next contact">' + escapeHtml(interviewNotesValue) + '</textarea></div>';
+        html += '<div class="workflow-form-field full"><label class="filter-label" for="applicationNotesInput">General Application Notes</label><textarea class="workflow-textarea" id="applicationNotesInput" placeholder="Operational notes visible to HR, ops, and payroll">' + escapeHtml(generalNotesValue) + '</textarea></div>';
         html += '</div></div>';
 
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Agreement Files</h3>';
+        html += '<h3 class="detail-section-title">Operational Checklist</h3>';
+        html += '<p class="section-hint">Use this section to understand approval blockers, document gaps, and whether the file is operationally clean.</p>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Agreement Version</div><div class="detail-value">' + formatAgreementVersion(getAppValue(app, 'agreementVersion', 'agreement_version')) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Worker PDF Generated</div><div class="detail-value">' + formatGeneratedAtValue(getAppValue(app, 'workerPdfGeneratedAt', 'worker_pdf_generated_at')) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Internal PDF Generated</div><div class="detail-value">' + formatGeneratedAtValue(getAppValue(app, 'internalPdfGeneratedAt', 'internal_pdf_generated_at')) + '</div></div>';
-        html += '<div class="detail-item full"><div class="detail-label">Copies</div><div class="detail-value"><div class="action-cell"><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'worker\')">Preview Worker Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Download Worker Copy</button><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'internal\')">Preview Internal Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Download Internal Copy</button></div></div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Required Acknowledgment Checklist</div><div class="detail-value">' + buildChecklistMarkup(acknowledgmentChecklist, 'All required acknowledgments complete') + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Missing Documents</div><div class="detail-value">' + buildChecklistMarkup(missingDocumentChecklist, 'No missing documents tracked') + '</div></div>';
         html += '</div></div>';
-        
-        // Signature
+
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Electronic Signature</h3>';
+        html += '<h3 class="detail-section-title">Agreement Status</h3>';
+        html += '<p class="section-hint">Agreement metadata is mapped into HR-readable states so older records do not show technical placeholder labels.</p>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Signature</div><div class="detail-value" style="font-style: italic;">' + escapeHtml(app.signature || '') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Signed Date</div><div class="detail-value">' + escapeHtml(app.signature_date || app.signatureDate || '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Agreement Version</div><div class="detail-value">' + escapeHtml(agreementSummary.versionLabel) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Non-Solicitation</div><div class="detail-value">' + escapeHtml(agreementSummary.nonSolicitationLabel) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Accepted On</div><div class="detail-value">' + escapeHtml(agreementSummary.acceptedOnLabel) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Worker Copy Generated</div><div class="detail-value">' + escapeHtml(formatGeneratedAtValue(getAppValue(app, 'workerPdfGeneratedAt', 'worker_pdf_generated_at'))) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Internal Copy Generated</div><div class="detail-value">' + escapeHtml(formatGeneratedAtValue(getAppValue(app, 'internalPdfGeneratedAt', 'internal_pdf_generated_at'))) + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Agreement Copies</div><div class="detail-value"><div class="action-cell"><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'worker\')">Preview Worker Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'worker\')">Download Worker Copy</button><button class="pdf-btn" onclick="previewAgreementCopy(\'' + app.id + '\', \'internal\')">Preview Internal Copy</button><button class="pdf-btn" onclick="downloadAgreementCopy(\'' + app.id + '\', \'internal\')">Download Internal Copy</button></div></div></div>';
         html += '</div></div>';
-        
-        // Metadata
+
         html += '<div class="detail-section">';
-        html += '<h3 class="detail-section-title">Application Info</h3>';
+        html += '<h3 class="detail-section-title">Duplicate Submission History</h3>';
+        html += '<p class="section-hint">Obvious duplicates are collapsed into one primary dashboard row. Related records remain visible here for audit and recruiter context.</p>';
+        html += buildDuplicateHistoryMarkup(relatedApplications);
+        html += '</div>';
+
+        html += '<div class="detail-section">';
+        html += '<h3 class="detail-section-title">Applicant Profile</h3>';
         html += '<div class="detail-grid">';
-        html += '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-value"><span class="status-badge ' + app.status + '">' + app.status + '</span></div></div>';
-        var createdAt = app.created_at || app.createdAt;
-        html += '<div class="detail-item"><div class="detail-label">Submitted</div><div class="detail-value">' + (createdAt && new Date(createdAt).toLocaleString ? new Date(createdAt).toLocaleString() : createdAt) + '</div></div>';
-        var notes = app.notes || '';
-        if (notes) {
-          html += '<div class="detail-item full"><div class="detail-label">Notes</div><div class="detail-value">' + escapeHtml(notes) + '</div></div>';
-        }
+        html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.full_name || app.fullName || '') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Location</div><div class="detail-value">' + escapeHtml(getLocationLabel(app)) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Work Status</div><div class="detail-value">' + escapeHtml(formatWorkStatus(app.work_status || app.workStatus || 'Not provided')) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Date of Birth</div><div class="detail-value">' + escapeHtml(app.date_of_birth || app.dateOfBirth || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Address</div><div class="detail-value">' + escapeHtml(app.address || '') + ', ' + escapeHtml(app.city || '') + ', ' + escapeHtml(app.province || '') + ' ' + escapeHtml(app.postal_code || app.postalCode || '') + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + escapeHtml(roles.join(', ') + ((app.other_role || app.otherRole) ? ' (' + (app.other_role || app.otherRole) + ')' : '') || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Available Days</div><div class="detail-value">' + escapeHtml(days.join(', ') || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Preferred Shifts</div><div class="detail-value">' + escapeHtml(shifts.join(', ') || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Experience</div><div class="detail-value">' + escapeHtml((app.years_experience || app.yearsExperience || 'Not specified') + ' years') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Shift Length Preference</div><div class="detail-value">' + escapeHtml((app.desired_shift_length || app.desiredShiftLength) ? (app.desired_shift_length || app.desiredShiftLength) + ' hours' : 'Not specified') + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Experience Summary</div><div class="detail-value">' + escapeHtml(app.experience_summary || app.experienceSummary || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item full"><div class="detail-label">Skills and Certifications</div><div class="detail-value">' + escapeHtml(app.skills || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Payment Method</div><div class="detail-value">' + escapeHtml((app.payment_method || app.paymentMethod) ? ((app.payment_method || app.paymentMethod) === 'direct_deposit' || (app.payment_method || app.paymentMethod) === 'both' ? 'Direct Deposit' : 'Interac E-Transfer') : 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Payroll Contact</div><div class="detail-value">' + escapeHtml(app.etransfer_email || app.etransferEmail || app.bank_name || app.bankName || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Last Contacted</div><div class="detail-value">' + escapeHtml(lastContactedAt ? formatDateValue(lastContactedAt) : 'Not contacted yet') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Document Request Sent</div><div class="detail-value">' + escapeHtml(documentRequestSentAt ? formatDateValue(documentRequestSentAt) : 'No request sent') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Submitted</div><div class="detail-value">' + escapeHtml(formatDateValue(app.created_at || app.createdAt)) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Electronic Signature</div><div class="detail-value">' + escapeHtml(app.signature || 'Not captured') + ' • ' + escapeHtml(app.signature_date || app.signatureDate || 'Date unavailable') + '</div></div>';
         html += '</div></div>';
-        
+
         document.getElementById('modalBody').innerHTML = html;
-        document.getElementById('notesInput').value = notes;
-        document.getElementById('detailModal').classList.add('show');
+      }
+
+      function collectWorkflowPayload(statusOverride) {
+        var payload = {
+          notes: getWorkflowFieldValue('applicationNotesInput').trim(),
+          assignedRecruiter: getWorkflowFieldValue('assignedRecruiterInput').trim(),
+          recruiterNotes: getWorkflowFieldValue('recruiterNotesInput').trim(),
+          interviewStage: getWorkflowFieldValue('interviewStageInput'),
+          interviewNotes: getWorkflowFieldValue('interviewNotesInput').trim(),
+          deploymentReadiness: getWorkflowFieldValue('deploymentReadinessInput'),
+          payrollReadiness: getWorkflowFieldValue('payrollReadinessInput'),
+          missingDocuments: parseDocumentList(getWorkflowFieldValue('missingDocumentsInput')),
+          nextRecommendedAction: getWorkflowFieldValue('nextRecommendedActionInput').trim(),
+          applicationSource: getWorkflowFieldValue('applicationSourceInput').trim(),
+          status: statusOverride || getWorkflowFieldValue('workflowStatusInput')
+        };
+
+        return payload;
+      }
+
+      function closeDetailModal() {
+        document.getElementById('detailModal').classList.remove('show');
+        currentApplicationId = null;
+        currentApplicationDetails = null;
+      }
+
+      async function persistCurrentApplication(statusOverride) {
+        if (!currentApplicationId) return;
+
+        var applicationId = currentApplicationId;
+        var triggerButton = statusOverride === 'approved'
+          ? document.getElementById('approveBtn')
+          : statusOverride === 'rejected'
+            ? document.getElementById('rejectBtn')
+            : document.getElementById('saveWorkflowBtn');
+        var originalLabel = triggerButton.textContent;
+
+        triggerButton.disabled = true;
+        triggerButton.textContent = 'Saving...';
+
+        try {
+          var response = await fetch('/api/admin/applications/' + applicationId, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': 'Basic ' + authCredentials,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(collectWorkflowPayload(statusOverride))
+          });
+
+          if (!response.ok) {
+            var responseBody = null;
+            try {
+              responseBody = await response.json();
+            } catch (_) {}
+            var errorMessage = responseBody && responseBody.error ? responseBody.error : 'Failed to update applicant workflow';
+            if (responseBody && Array.isArray(responseBody.missingAcknowledgments) && responseBody.missingAcknowledgments.length > 0) {
+              errorMessage += ': ' + responseBody.missingAcknowledgments.join(', ');
+            }
+            if (responseBody && Array.isArray(responseBody.blockedApplications) && responseBody.blockedApplications.length > 0) {
+              errorMessage += ': ' + responseBody.blockedApplications.map(function(item) { return item.fullName + ' (' + item.missingAcknowledgments.join(', ') + ')'; }).join('; ');
+            }
+            throw new Error(errorMessage);
+          }
+
+          if (statusOverride) {
+            closeDetailModal();
+          }
+
+          await loadApplications();
+
+          if (!statusOverride) {
+            await viewApplication(applicationId);
+          }
+        } catch (error) {
+          alert(error.message || 'Failed to update applicant workflow');
+        } finally {
+          triggerButton.disabled = false;
+          triggerButton.textContent = originalLabel;
+        }
+      }
+
+      function renderBulkActionResult(message, isError) {
+        var result = document.getElementById('bulkActionResult');
+        result.textContent = message;
+        result.style.color = isError ? '#dc2626' : '#047857';
+      }
+
+      async function runBulkAction() {
+        if (selectedApplicationIds.length === 0) {
+          renderBulkActionResult('Select at least one applicant record.', true);
+          return;
+        }
+
+        var action = document.getElementById('bulkActionSelect').value;
+        if (!action) {
+          renderBulkActionResult('Choose a bulk action first.', true);
+          return;
+        }
+
+        var payload = {
+          action: action,
+          ids: selectedApplicationIds.slice()
+        };
+
+        if (action === 'update_status') {
+          payload.status = document.getElementById('bulkStatusSelect').value;
+        }
+
+        if (action === 'assign_recruiter') {
+          payload.assignedRecruiter = document.getElementById('bulkRecruiterInput').value.trim();
+        }
+
+        if (action === 'request_documents') {
+          payload.requestedDocuments = parseDocumentList(document.getElementById('bulkDocumentsInput').value);
+        }
+
+        var runButton = document.getElementById('runBulkActionBtn');
+        var originalLabel = runButton.textContent;
+        runButton.disabled = true;
+        runButton.textContent = 'Running...';
+        renderBulkActionResult('Processing bulk action...', false);
+
+        try {
+          var response = await fetch('/api/admin/applications/bulk', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Basic ' + authCredentials,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          var responseBody = null;
+          try {
+            responseBody = await response.json();
+          } catch (_) {}
+
+          if (!response.ok) {
+            var bulkError = responseBody && responseBody.error ? responseBody.error : 'Failed to process bulk action';
+            if (responseBody && Array.isArray(responseBody.blockedApplications) && responseBody.blockedApplications.length > 0) {
+              bulkError += ': ' + responseBody.blockedApplications.map(function(item) { return item.fullName + ' (' + item.missingAcknowledgments.join(', ') + ')'; }).join('; ');
+            }
+            throw new Error(bulkError);
+          }
+
+          var successMessage = 'Bulk action completed.';
+          if (action === 'update_status') {
+            successMessage = 'Moved ' + (responseBody.updated || 0) + ' applicant records to ' + getStatusLabel(responseBody.status || document.getElementById('bulkStatusSelect').value) + '.';
+          } else if (action === 'assign_recruiter') {
+            successMessage = 'Assigned ' + escapeHtml(responseBody.assignedRecruiter || document.getElementById('bulkRecruiterInput').value.trim()) + ' to ' + (responseBody.updated || 0) + ' applicant records.';
+          } else if (action === 'request_documents') {
+            successMessage = 'Requested documents for ' + (responseBody.emailed || 0) + ' applicants; ' + (responseBody.skipped || 0) + ' skipped.';
+          } else if (action === 'send_app_instructions') {
+            successMessage = 'Sent app instructions to ' + (responseBody.sent || 0) + ' applicants; ' + (responseBody.notReady || 0) + ' not ready.';
+          }
+
+          selectedApplicationIds = [];
+          await loadApplications();
+          document.getElementById('bulkActionSelect').value = '';
+          document.getElementById('bulkStatusSelect').style.display = 'none';
+          document.getElementById('bulkRecruiterInput').style.display = 'none';
+          document.getElementById('bulkDocumentsInput').style.display = 'none';
+          document.getElementById('bulkRecruiterInput').value = '';
+          document.getElementById('bulkDocumentsInput').value = '';
+          renderBulkActionResult(successMessage, false);
+        } catch (error) {
+          renderBulkActionResult(error.message || 'Failed to process bulk action', true);
+        } finally {
+          runButton.disabled = false;
+          runButton.textContent = originalLabel;
+        }
+      }
+
+      function buildCsvValue(value) {
+        return '"' + String(value === null || value === undefined ? '' : value).replace(/"/g, '""') + '"';
+      }
+
+      function exportSelectedApplications() {
+        if (selectedApplicationIds.length === 0) {
+          renderBulkActionResult('Select applicant rows before exporting.', true);
+          return;
+        }
+
+        var selectedApplications = applications.filter(function(app) {
+          return selectedApplicationIds.includes(app.id);
+        });
+        var headers = ['Applicant', 'Email', 'Phone', 'Workflow Stage', 'Recruiter', 'Source', 'Location', 'Agreement Status', 'Deployment Readiness', 'Payroll Readiness', 'Next Recommended Action'];
+        var rows = selectedApplications.map(function(app) {
+          var agreementSummary = getAgreementSummary(app);
+          return [
+            app.full_name || app.fullName || '',
+            app.email || '',
+            app.phone || '',
+            getStatusLabel(app.status),
+            getAssignedRecruiterLabel(app),
+            getSourceLabel(app),
+            getLocationLabel(app),
+            agreementSummary.nonSolicitationLabel,
+            getReadinessLabel(app.deploymentReadiness),
+            getReadinessLabel(app.payrollReadiness),
+            getNextRecommendedAction(app)
+          ];
+        });
+        var csv = [headers].concat(rows).map(function(row) {
+          return row.map(buildCsvValue).join(',');
+        }).join('\n');
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var url = window.URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = 'applicant-dashboard-export-' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        renderBulkActionResult('Exported ' + selectedApplications.length + ' applicant records.', false);
       }
 
       function formatWorkStatus(status) {
@@ -1423,69 +2501,32 @@
         return map[status] || status;
       }
 
-      // Close modal
-      document.getElementById('closeModal').addEventListener('click', function() {
-        document.getElementById('detailModal').classList.remove('show');
-        currentApplicationId = null;
-      });
+      document.getElementById('closeModal').addEventListener('click', closeDetailModal);
 
       document.getElementById('detailModal').addEventListener('click', function(e) {
         if (e.target === this) {
-          this.classList.remove('show');
-          currentApplicationId = null;
+          closeDetailModal();
         }
       });
 
-      // Status update handlers
-      async function updateStatus(status) {
-        if (!currentApplicationId) return;
-        
-        var notes = document.getElementById('notesInput').value;
-        
-        try {
-          var response = await fetch('/api/admin/applications/' + currentApplicationId, {
-            method: 'PATCH',
-            headers: {
-              'Authorization': 'Basic ' + authCredentials,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ status: status, notes: notes })
-          });
-          
-          if (response.ok) {
-            document.getElementById('detailModal').classList.remove('show');
-            loadApplications();
-          } else {
-            var responseBody = null;
-            try {
-              responseBody = await response.json();
-            } catch (_) {}
-            var errorMessage = responseBody && responseBody.error ? responseBody.error : 'Failed to update status';
-            if (responseBody && Array.isArray(responseBody.missingAcknowledgments) && responseBody.missingAcknowledgments.length > 0) {
-              errorMessage += ': ' + responseBody.missingAcknowledgments.join(', ');
-            }
-            alert(errorMessage);
-          }
-        } catch (error) {
-          alert('Error updating status');
-        }
-      }
-
-      document.getElementById('reviewBtn').addEventListener('click', function() {
-        updateStatus('reviewed');
+      document.getElementById('saveWorkflowBtn').addEventListener('click', function() {
+        persistCurrentApplication();
       });
 
       document.getElementById('approveBtn').addEventListener('click', function() {
-        if (confirm('Are you sure you want to approve this application?')) {
-          updateStatus('approved');
+        if (confirm('Approve this applicant and send them into worker onboarding?')) {
+          persistCurrentApplication('approved');
         }
       });
 
       document.getElementById('rejectBtn').addEventListener('click', function() {
-        if (confirm('Are you sure you want to reject this application?')) {
-          updateStatus('rejected');
+        if (confirm('Reject this applicant record?')) {
+          persistCurrentApplication('rejected');
         }
       });
+
+      document.getElementById('runBulkActionBtn').addEventListener('click', runBulkAction);
+      document.getElementById('exportSelectedBtn').addEventListener('click', exportSelectedApplications);
 
       function getAgreementRoute(id, kind, previewMode) {
         var route = kind === 'internal'

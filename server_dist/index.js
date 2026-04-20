@@ -293,6 +293,18 @@ var init_schema = __esm({
       consentToContact: boolean("consent_to_contact").default(false),
       promotionalConsent: boolean("promotional_consent").notNull().default(false),
       marketingConsent: boolean("marketing_consent").default(false),
+      // Operations workflow
+      applicationSource: text("application_source"),
+      assignedRecruiter: text("assigned_recruiter"),
+      recruiterNotes: text("recruiter_notes"),
+      interviewStage: text("interview_stage"),
+      interviewNotes: text("interview_notes"),
+      deploymentReadiness: text("deployment_readiness"),
+      payrollReadiness: text("payroll_readiness"),
+      missingDocuments: text("missing_documents"),
+      nextRecommendedAction: text("next_recommended_action"),
+      documentRequestSentAt: timestamp("document_request_sent_at"),
+      lastContactedAt: timestamp("last_contacted_at"),
       // Electronic Signature
       signature: text("signature").notNull(),
       // Typed full name as signature
@@ -3002,7 +3014,19 @@ function setSessionCookie(res, userId, role) {
 function clearSessionCookie(res) {
   res.setHeader("Set-Cookie", "wfc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
 }
-var WORKER_APPLICATION_STATUSES = /* @__PURE__ */ new Set(["pending", "reviewed", "approved", "rejected"]);
+var WORKER_APPLICATION_STATUSES = /* @__PURE__ */ new Set([
+  "pending",
+  "reviewed",
+  "new",
+  "reviewing",
+  "contacted",
+  "interview_scheduled",
+  "interviewed",
+  "ready_for_deployment",
+  "approved",
+  "rejected",
+  "on_hold"
+]);
 function normalizeText(value) {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -3252,11 +3276,24 @@ function getMissingApprovalAcknowledgments(application) {
 }
 var WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
   consentToContact: "consent_to_contact",
+  marketingConsent: "marketing_consent",
+  promotionalConsent: "promotional_consent",
   agreementVersion: "agreement_version",
   nonSolicitationAcknowledged: "non_solicitation_acknowledged",
   nonSolicitationAcknowledgedAt: "non_solicitation_acknowledged_at",
   workerPdfGeneratedAt: "worker_pdf_generated_at",
-  internalPdfGeneratedAt: "internal_pdf_generated_at"
+  internalPdfGeneratedAt: "internal_pdf_generated_at",
+  applicationSource: "application_source",
+  assignedRecruiter: "assigned_recruiter",
+  recruiterNotes: "recruiter_notes",
+  interviewStage: "interview_stage",
+  interviewNotes: "interview_notes",
+  deploymentReadiness: "deployment_readiness",
+  payrollReadiness: "payroll_readiness",
+  missingDocuments: "missing_documents",
+  nextRecommendedAction: "next_recommended_action",
+  documentRequestSentAt: "document_request_sent_at",
+  lastContactedAt: "last_contacted_at"
 };
 var workerApplicationColumnSetPromise = null;
 async function getWorkerApplicationColumnSet() {
@@ -3273,11 +3310,11 @@ async function getWorkerApplicationColumnSet() {
       );
       const missingColumns = Object.values(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS).filter((columnName) => !columnSet.has(columnName));
       if (missingColumns.length > 0) {
-        console.warn(`[WORKER_APPLICATIONS] Optional agreement metadata columns unavailable: ${missingColumns.join(", ")}`);
+        console.warn(`[WORKER_APPLICATIONS] Optional dashboard columns unavailable: ${missingColumns.join(", ")}`);
       }
       return columnSet;
     }).catch((error) => {
-      console.warn("[WORKER_APPLICATIONS] Failed to inspect worker_applications columns; falling back to legacy-safe metadata projection", error);
+      console.warn("[WORKER_APPLICATIONS] Failed to inspect worker_applications columns; falling back to legacy-safe dashboard projection", error);
       return /* @__PURE__ */ new Set();
     });
   }
@@ -3287,11 +3324,24 @@ async function getWorkerApplicationOptionalMetadataSelect() {
   const columnSet = await getWorkerApplicationColumnSet();
   return {
     consentToContact: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.consentToContact) ? workerApplications.consentToContact : sql3`NULL`,
+    marketingConsent: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.marketingConsent) ? workerApplications.marketingConsent : sql3`NULL`,
+    promotionalConsent: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.promotionalConsent) ? workerApplications.promotionalConsent : sql3`NULL`,
     agreementVersion: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.agreementVersion) ? workerApplications.agreementVersion : sql3`NULL`,
     nonSolicitationAcknowledged: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledged) ? workerApplications.nonSolicitationAcknowledged : sql3`NULL`,
     nonSolicitationAcknowledgedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledgedAt) ? workerApplications.nonSolicitationAcknowledgedAt : sql3`NULL`,
     workerPdfGeneratedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.workerPdfGeneratedAt) ? workerApplications.workerPdfGeneratedAt : sql3`NULL`,
-    internalPdfGeneratedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.internalPdfGeneratedAt) ? workerApplications.internalPdfGeneratedAt : sql3`NULL`
+    internalPdfGeneratedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.internalPdfGeneratedAt) ? workerApplications.internalPdfGeneratedAt : sql3`NULL`,
+    applicationSource: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.applicationSource) ? workerApplications.applicationSource : sql3`NULL`,
+    assignedRecruiter: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.assignedRecruiter) ? workerApplications.assignedRecruiter : sql3`NULL`,
+    recruiterNotes: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.recruiterNotes) ? workerApplications.recruiterNotes : sql3`NULL`,
+    interviewStage: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.interviewStage) ? workerApplications.interviewStage : sql3`NULL`,
+    interviewNotes: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.interviewNotes) ? workerApplications.interviewNotes : sql3`NULL`,
+    deploymentReadiness: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.deploymentReadiness) ? workerApplications.deploymentReadiness : sql3`NULL`,
+    payrollReadiness: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.payrollReadiness) ? workerApplications.payrollReadiness : sql3`NULL`,
+    missingDocuments: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.missingDocuments) ? workerApplications.missingDocuments : sql3`NULL`,
+    nextRecommendedAction: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nextRecommendedAction) ? workerApplications.nextRecommendedAction : sql3`NULL`,
+    documentRequestSentAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.documentRequestSentAt) ? workerApplications.documentRequestSentAt : sql3`NULL`,
+    lastContactedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.lastContactedAt) ? workerApplications.lastContactedAt : sql3`NULL`
   };
 }
 async function getWorkerApplicationAgreementSelect() {
@@ -3312,12 +3362,469 @@ async function getWorkerApplicationAgreementSelect() {
     siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
     workerAgreementConsent: workerApplications.workerAgreementConsent,
     privacyConsent: workerApplications.privacyConsent,
-    marketingConsent: workerApplications.marketingConsent,
     ...await getWorkerApplicationOptionalMetadataSelect(),
     signature: workerApplications.signature,
     signatureDate: workerApplications.signatureDate,
     createdAt: workerApplications.createdAt
   };
+}
+var WORKER_APPLICATION_WORKFLOW_STATUSES = [
+  "new",
+  "reviewing",
+  "contacted",
+  "interview_scheduled",
+  "interviewed",
+  "ready_for_deployment",
+  "approved",
+  "rejected",
+  "on_hold"
+];
+var WORKER_APPLICATION_STATUS_ALIASES = {
+  pending: "new",
+  reviewed: "reviewing"
+};
+var INTERVIEW_STAGE_VALUES = ["not_started", "screening", "scheduled", "completed", "no_show"];
+var READINESS_VALUES = ["not_ready", "needs_review", "ready"];
+var PAYROLL_READINESS_VALUES = ["not_ready", "missing_payment_info", "ready"];
+var BULK_APPLICATION_ACTIONS = ["update_status", "assign_recruiter", "request_documents", "send_app_instructions"];
+var adminApplicationUpdateSchema = z2.object({
+  status: z2.string().optional(),
+  notes: z2.string().optional(),
+  assignedRecruiter: z2.string().optional().nullable(),
+  recruiterNotes: z2.string().optional().nullable(),
+  interviewStage: z2.string().optional().nullable(),
+  interviewNotes: z2.string().optional().nullable(),
+  deploymentReadiness: z2.string().optional().nullable(),
+  payrollReadiness: z2.string().optional().nullable(),
+  missingDocuments: z2.union([z2.string(), z2.array(z2.string())]).optional().nullable(),
+  nextRecommendedAction: z2.string().optional().nullable(),
+  applicationSource: z2.string().optional().nullable()
+}).strict();
+var adminApplicationBulkActionSchema = z2.object({
+  action: z2.enum(BULK_APPLICATION_ACTIONS),
+  ids: z2.array(z2.string().trim().min(1)).min(1),
+  status: z2.string().optional(),
+  assignedRecruiter: z2.string().optional().nullable(),
+  requestedDocuments: z2.union([z2.string(), z2.array(z2.string())]).optional().nullable(),
+  recruiterNotes: z2.string().optional().nullable()
+}).strict();
+function normalizeWorkerApplicationStatus(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return "new";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (WORKER_APPLICATION_WORKFLOW_STATUSES.includes(normalized)) {
+    return normalized;
+  }
+  return WORKER_APPLICATION_STATUS_ALIASES[normalized] || "new";
+}
+function getWorkerApplicationStatusLabel(status) {
+  switch (normalizeWorkerApplicationStatus(status)) {
+    case "new":
+      return "New";
+    case "reviewing":
+      return "Reviewing";
+    case "contacted":
+      return "Contacted";
+    case "interview_scheduled":
+      return "Interview Scheduled";
+    case "interviewed":
+      return "Interviewed";
+    case "ready_for_deployment":
+      return "Ready for Deployment";
+    case "approved":
+      return "Approved";
+    case "rejected":
+      return "Rejected";
+    case "on_hold":
+      return "On Hold";
+    default:
+      return "New";
+  }
+}
+function getWorkerApplicationStatusPriority(status) {
+  switch (normalizeWorkerApplicationStatus(status)) {
+    case "approved":
+      return 90;
+    case "ready_for_deployment":
+      return 80;
+    case "interviewed":
+      return 70;
+    case "interview_scheduled":
+      return 60;
+    case "contacted":
+      return 50;
+    case "reviewing":
+      return 40;
+    case "new":
+      return 30;
+    case "on_hold":
+      return 20;
+    case "rejected":
+      return 10;
+    default:
+      return 0;
+  }
+}
+function normalizeNameForDuplicateComparison(value) {
+  return normalizeComparableText(value || "").replace(/[^a-z\s]/g, " ").split(/\s+/).filter((token) => token.length > 1).join(" ");
+}
+function parseDocumentList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeWhitespace(String(item))).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => normalizeWhitespace(String(item))).filter(Boolean);
+      }
+    } catch {
+    }
+    return trimmed.split(/\n|,/).map((item) => normalizeWhitespace(item)).filter(Boolean);
+  }
+  return [];
+}
+function serializeDocumentList(value) {
+  const items = Array.from(new Set(parseDocumentList(value)));
+  return items.length > 0 ? JSON.stringify(items) : null;
+}
+function normalizeInterviewStage(value, status) {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (INTERVIEW_STAGE_VALUES.includes(normalized)) {
+      return normalized;
+    }
+  }
+  const normalizedStatus = normalizeWorkerApplicationStatus(status);
+  if (normalizedStatus === "interview_scheduled") return "scheduled";
+  if (normalizedStatus === "interviewed") return "completed";
+  if (normalizedStatus === "contacted" || normalizedStatus === "reviewing") return "screening";
+  return "not_started";
+}
+function normalizeReadinessValue(value, allowedValues, fallback) {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (allowedValues.includes(normalized)) {
+      return normalized;
+    }
+  }
+  return fallback;
+}
+function normalizeDeploymentReadiness(value, status) {
+  const normalizedStatus = normalizeWorkerApplicationStatus(status);
+  if (normalizedStatus === "ready_for_deployment" || normalizedStatus === "approved") {
+    return normalizeReadinessValue(value, READINESS_VALUES, "ready");
+  }
+  if (normalizedStatus === "interviewed") {
+    return normalizeReadinessValue(value, READINESS_VALUES, "needs_review");
+  }
+  return normalizeReadinessValue(value, READINESS_VALUES, "not_ready");
+}
+function normalizePayrollReadiness(value, hasPaymentMethod, status) {
+  const normalizedStatus = normalizeWorkerApplicationStatus(status);
+  if (normalizedStatus === "approved" && hasPaymentMethod) {
+    return normalizeReadinessValue(value, PAYROLL_READINESS_VALUES, "ready");
+  }
+  if (!hasPaymentMethod) {
+    return normalizeReadinessValue(value, PAYROLL_READINESS_VALUES, "missing_payment_info");
+  }
+  return normalizeReadinessValue(value, PAYROLL_READINESS_VALUES, "not_ready");
+}
+function normalizeApplicationSource(value) {
+  const normalized = normalizeOptionalText(typeof value === "string" ? value : null);
+  return normalized || "Direct application";
+}
+function getAgreementReviewSummary(application) {
+  const agreementVersion = normalizeOptionalText(String(application.agreementVersion || "")) || "Previous agreement on file";
+  const nonSolicitationAcknowledged = application.nonSolicitationAcknowledged;
+  const acknowledgedAt = application.nonSolicitationAcknowledgedAt;
+  let nonSolicitationLabel = "Requires acknowledgment review";
+  if (nonSolicitationAcknowledged === true) {
+    nonSolicitationLabel = "Non-Solicitation Accepted";
+  } else if (nonSolicitationAcknowledged === false) {
+    nonSolicitationLabel = "Non-Solicitation Not Accepted";
+  }
+  let acceptedOnLabel = "Acknowledgment date not available";
+  if (acknowledgedAt) {
+    const date2 = new Date(String(acknowledgedAt));
+    acceptedOnLabel = Number.isNaN(date2.getTime()) ? "Acknowledgment date not available" : date2.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+  } else if (nonSolicitationAcknowledged !== true) {
+    acceptedOnLabel = "Requires acknowledgment review";
+  }
+  return {
+    versionLabel: agreementVersion,
+    nonSolicitationLabel,
+    acceptedOnLabel,
+    compactLabel: `${agreementVersion} \u2022 ${nonSolicitationLabel}`
+  };
+}
+function computeNextRecommendedAction(application) {
+  const missingDocuments = parseDocumentList(application.missingDocuments);
+  if (missingDocuments.length > 0) {
+    return "Request missing documents and confirm receipt";
+  }
+  const missingAcknowledgments = getMissingApprovalAcknowledgments(application);
+  if (missingAcknowledgments.length > 0) {
+    return "Resolve required acknowledgment review";
+  }
+  const status = normalizeWorkerApplicationStatus(application.status);
+  if (!normalizeOptionalText(String(application.assignedRecruiter || ""))) {
+    return "Assign recruiter ownership";
+  }
+  switch (status) {
+    case "new":
+      return "Begin applicant review and outreach";
+    case "reviewing":
+      return "Contact applicant and validate fit";
+    case "contacted":
+      return "Schedule interview";
+    case "interview_scheduled":
+      return "Complete interview and record notes";
+    case "interviewed":
+      return "Assess deployment readiness";
+    case "ready_for_deployment":
+      return "Confirm payroll readiness and approval";
+    case "approved":
+      return "Send app instructions and confirm onboarding";
+    case "on_hold":
+      return "Resolve blocker and resume review";
+    case "rejected":
+      return "Archive record and retain notes";
+    default:
+      return "Review application details";
+  }
+}
+function getApplicationTimestampMs(value) {
+  if (!value) return 0;
+  const timestamp2 = new Date(String(value)).getTime();
+  return Number.isNaN(timestamp2) ? 0 : timestamp2;
+}
+function getApplicationLocationLabel(application) {
+  const city = normalizeOptionalText(String(application.city || ""));
+  const province = normalizeOptionalText(String(application.province || ""));
+  return [city, province].filter(Boolean).join(", ") || "Location pending";
+}
+function normalizeDashboardApplication(application) {
+  const workflowStatus = normalizeWorkerApplicationStatus(application.status);
+  const missingDocumentsList = parseDocumentList(application.missingDocuments);
+  const hasPaymentMethod = Boolean(normalizeOptionalText(String(application.paymentMethod || "")));
+  const agreementSummary = getAgreementReviewSummary(application);
+  const nextRecommendedAction = normalizeOptionalText(String(application.nextRecommendedAction || "")) || computeNextRecommendedAction({
+    ...application,
+    status: workflowStatus,
+    missingDocuments: application.missingDocuments
+  });
+  return {
+    ...application,
+    status: workflowStatus,
+    statusLabel: getWorkerApplicationStatusLabel(workflowStatus),
+    interviewStage: normalizeInterviewStage(application.interviewStage, workflowStatus),
+    deploymentReadiness: normalizeDeploymentReadiness(application.deploymentReadiness, workflowStatus),
+    payrollReadiness: normalizePayrollReadiness(application.payrollReadiness, hasPaymentMethod, workflowStatus),
+    missingDocumentsList,
+    applicationSource: normalizeApplicationSource(application.applicationSource),
+    assignedRecruiter: normalizeOptionalText(String(application.assignedRecruiter || "")),
+    recruiterNotes: normalizeOptionalText(String(application.recruiterNotes || "")),
+    interviewNotes: normalizeOptionalText(String(application.interviewNotes || "")),
+    nextRecommendedAction,
+    agreementSummary,
+    locationLabel: getApplicationLocationLabel(application),
+    duplicateMatchName: normalizeNameForDuplicateComparison(application.fullName || application.full_name),
+    normalizedEmail: normalizeComparableText(application.email || ""),
+    normalizedPhone: normalizePhoneForComparison(application.phone || ""),
+    updatedAtMs: getApplicationTimestampMs(application.updatedAt || application.updated_at || application.createdAt || application.created_at),
+    createdAtMs: getApplicationTimestampMs(application.createdAt || application.created_at)
+  };
+}
+function choosePrimaryApplicationForGroup(applications) {
+  return [...applications].sort((left, right) => {
+    const statusDelta = getWorkerApplicationStatusPriority(right.status) - getWorkerApplicationStatusPriority(left.status);
+    if (statusDelta !== 0) return statusDelta;
+    return (right.updatedAtMs || right.createdAtMs || 0) - (left.updatedAtMs || left.createdAtMs || 0);
+  })[0];
+}
+function groupApplicationsByDuplicateSignals(applications) {
+  const parents = applications.map((_, index2) => index2);
+  const find = (index2) => {
+    if (parents[index2] !== index2) {
+      parents[index2] = find(parents[index2]);
+    }
+    return parents[index2];
+  };
+  const union = (left, right) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) {
+      parents[rightRoot] = leftRoot;
+    }
+  };
+  const emailMap = /* @__PURE__ */ new Map();
+  const phoneMap = /* @__PURE__ */ new Map();
+  const nameMap = /* @__PURE__ */ new Map();
+  applications.forEach((application, index2) => {
+    if (application.normalizedPhone) {
+      const existing = phoneMap.get(application.normalizedPhone);
+      if (existing !== void 0) union(existing, index2);
+      else phoneMap.set(application.normalizedPhone, index2);
+    }
+    if (application.normalizedEmail) {
+      const existing = emailMap.get(application.normalizedEmail);
+      if (existing !== void 0) union(existing, index2);
+      else emailMap.set(application.normalizedEmail, index2);
+    }
+    if (!application.normalizedPhone && !application.normalizedEmail && application.duplicateMatchName) {
+      const existing = nameMap.get(application.duplicateMatchName);
+      if (existing !== void 0) union(existing, index2);
+      else nameMap.set(application.duplicateMatchName, index2);
+    }
+  });
+  const groups = /* @__PURE__ */ new Map();
+  applications.forEach((application, index2) => {
+    const root = find(index2);
+    const group = groups.get(root) || [];
+    group.push(application);
+    groups.set(root, group);
+  });
+  return Array.from(groups.values());
+}
+function buildDashboardApplications(applications) {
+  const normalizedApplications = applications.map(normalizeDashboardApplication);
+  const groups = groupApplicationsByDuplicateSignals(normalizedApplications);
+  return groups.map((group) => {
+    const primary = choosePrimaryApplicationForGroup(group);
+    const relatedApplications = group.filter((application) => application.id !== primary.id).sort((left, right) => right.createdAtMs - left.createdAtMs).map((application) => ({
+      id: application.id,
+      fullName: application.fullName,
+      email: application.email,
+      phone: application.phone,
+      status: application.status,
+      statusLabel: application.statusLabel,
+      createdAt: application.createdAt,
+      applicationSource: application.applicationSource
+    }));
+    return {
+      ...primary,
+      duplicateCount: group.length - 1,
+      relatedApplications,
+      mergedApplicationIds: group.map((application) => application.id)
+    };
+  }).sort((left, right) => right.updatedAtMs - left.updatedAtMs);
+}
+function findDashboardApplicationGroup(applications, applicationId) {
+  const groups = buildDashboardApplications(applications);
+  return groups.find((application) => application.id === applicationId || application.mergedApplicationIds.includes(applicationId)) || null;
+}
+async function getWorkerApplicationAdminSelect() {
+  const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+  return {
+    id: workerApplications.id,
+    fullName: workerApplications.fullName,
+    phone: workerApplications.phone,
+    email: workerApplications.email,
+    address: workerApplications.address,
+    city: workerApplications.city,
+    province: workerApplications.province,
+    postalCode: workerApplications.postalCode,
+    dateOfBirth: workerApplications.dateOfBirth,
+    workStatus: workerApplications.workStatus,
+    backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+    preferredRoles: workerApplications.preferredRoles,
+    otherRole: workerApplications.otherRole,
+    availableDays: workerApplications.availableDays,
+    preferredShifts: workerApplications.preferredShifts,
+    unavailablePeriods: workerApplications.unavailablePeriods,
+    yearsExperience: workerApplications.yearsExperience,
+    experienceSummary: workerApplications.experienceSummary,
+    skills: workerApplications.skills,
+    desiredShiftLength: workerApplications.desiredShiftLength,
+    emergencyContactName: workerApplications.emergencyContactName,
+    emergencyContactRelationship: workerApplications.emergencyContactRelationship,
+    emergencyContactPhone: workerApplications.emergencyContactPhone,
+    paymentMethod: workerApplications.paymentMethod,
+    bankName: workerApplications.bankName,
+    bankInstitution: workerApplications.bankInstitution,
+    bankTransit: workerApplications.bankTransit,
+    bankAccount: workerApplications.bankAccount,
+    etransferEmail: workerApplications.etransferEmail,
+    titoAcknowledgment: workerApplications.titoAcknowledgment,
+    siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+    workerAgreementConsent: workerApplications.workerAgreementConsent,
+    privacyConsent: workerApplications.privacyConsent,
+    ...optionalMetadataSelect,
+    signature: workerApplications.signature,
+    signatureDate: workerApplications.signatureDate,
+    status: workerApplications.status,
+    reviewedBy: workerApplications.reviewedBy,
+    reviewedAt: workerApplications.reviewedAt,
+    notes: workerApplications.notes,
+    ip: workerApplications.ip,
+    userAgent: workerApplications.userAgent,
+    createdAt: workerApplications.createdAt,
+    updatedAt: workerApplications.updatedAt
+  };
+}
+async function ensureApprovedApplicationUserAccount(application) {
+  if (!application.email) {
+    return;
+  }
+  const normalizedEmail = application.email.toLowerCase();
+  const [existingUser] = await db.select({ id: users.id }).from(users).where(eq4(users.email, normalizedEmail)).limit(1);
+  if (existingUser) {
+    const updateData = {
+      onboardingStatus: "AGREEMENT_PENDING",
+      updatedAt: /* @__PURE__ */ new Date()
+    };
+    if (application.phone) {
+      updateData.phone = application.phone;
+    }
+    await db.update(users).set(updateData).where(eq4(users.id, existingUser.id));
+    console.log(`[APPROVAL] Updated existing user ${application.email} to AGREEMENT_PENDING`);
+    return;
+  }
+  if (application.phone) {
+    const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.phone, application.phone)).limit(1);
+    if (phoneDuplicate) {
+      throw new Error(`A worker with phone ${application.phone} already exists.`);
+    }
+  }
+  const fullNameToUse = application.fullName || "Worker";
+  const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.fullName, fullNameToUse)).limit(1);
+  if (fullNameDuplicate) {
+    throw new Error(`A worker named "${fullNameToUse}" already exists.`);
+  }
+  const firstName = fullNameToUse.split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
+  const phoneLast4 = (application.phone || "0000").replace(/\D/g, "").slice(-4);
+  const tempPassword = `${firstName}${phoneLast4}`;
+  const hashedPassword = await bcrypt.hash(tempPassword, 10);
+  await db.insert(users).values({
+    id: crypto2.randomUUID(),
+    email: normalizedEmail,
+    password: hashedPassword,
+    fullName: fullNameToUse,
+    role: "worker",
+    phone: application.phone || void 0,
+    isActive: true,
+    onboardingStatus: "AGREEMENT_PENDING",
+    workerRoles: application.preferredRoles || void 0,
+    mustChangePassword: true,
+    timezone: "America/Toronto"
+  });
+  console.log(`[APPROVAL] Created user account for ${application.email}`);
+  if (application.phone) {
+    try {
+      const smsMessage = `Welcome to WFConnect! Your application has been approved. Download the app and log in with:
+Email: ${application.email}
+Password: ${tempPassword}
+Please change your password after first login.`;
+      await sendSMS(application.phone, smsMessage);
+      console.log(`[APPROVAL] Welcome SMS sent to ${application.phone}`);
+    } catch (smsError) {
+      console.error("[APPROVAL] Failed to send welcome SMS:", smsError);
+    }
+  }
 }
 function resolvePdfDisposition(value) {
   if (typeof value === "string" && value.trim().toLowerCase() === "inline") {
@@ -5056,54 +5563,8 @@ The WFConnect Team`,
           }
         }
       }
-      const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
-      const applications = await db.select({
-        id: workerApplications.id,
-        fullName: workerApplications.fullName,
-        phone: workerApplications.phone,
-        email: workerApplications.email,
-        address: workerApplications.address,
-        city: workerApplications.city,
-        province: workerApplications.province,
-        postalCode: workerApplications.postalCode,
-        dateOfBirth: workerApplications.dateOfBirth,
-        workStatus: workerApplications.workStatus,
-        backgroundCheckConsent: workerApplications.backgroundCheckConsent,
-        preferredRoles: workerApplications.preferredRoles,
-        otherRole: workerApplications.otherRole,
-        availableDays: workerApplications.availableDays,
-        preferredShifts: workerApplications.preferredShifts,
-        unavailablePeriods: workerApplications.unavailablePeriods,
-        yearsExperience: workerApplications.yearsExperience,
-        experienceSummary: workerApplications.experienceSummary,
-        skills: workerApplications.skills,
-        desiredShiftLength: workerApplications.desiredShiftLength,
-        emergencyContactName: workerApplications.emergencyContactName,
-        emergencyContactRelationship: workerApplications.emergencyContactRelationship,
-        emergencyContactPhone: workerApplications.emergencyContactPhone,
-        paymentMethod: workerApplications.paymentMethod,
-        bankName: workerApplications.bankName,
-        bankInstitution: workerApplications.bankInstitution,
-        bankTransit: workerApplications.bankTransit,
-        bankAccount: workerApplications.bankAccount,
-        etransferEmail: workerApplications.etransferEmail,
-        titoAcknowledgment: workerApplications.titoAcknowledgment,
-        siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
-        workerAgreementConsent: workerApplications.workerAgreementConsent,
-        privacyConsent: workerApplications.privacyConsent,
-        marketingConsent: workerApplications.marketingConsent,
-        ...optionalMetadataSelect,
-        signature: workerApplications.signature,
-        signatureDate: workerApplications.signatureDate,
-        status: workerApplications.status,
-        reviewedBy: workerApplications.reviewedBy,
-        reviewedAt: workerApplications.reviewedAt,
-        notes: workerApplications.notes,
-        ip: workerApplications.ip,
-        userAgent: workerApplications.userAgent,
-        createdAt: workerApplications.createdAt,
-        updatedAt: workerApplications.updatedAt
-      }).from(workerApplications).orderBy(desc2(workerApplications.createdAt));
+      const workerApplicationAdminSelect = await getWorkerApplicationAdminSelect();
+      const applications = await db.select(workerApplicationAdminSelect).from(workerApplications).orderBy(desc2(workerApplications.createdAt));
       const mappedApplications = applications.map((application) => {
         const identity = resolveWorkerIdentity({
           fullName: application.fullName,
@@ -5118,7 +5579,7 @@ The WFConnect Team`,
           last_name: identity.lastName
         };
       });
-      res.json(mappedApplications);
+      res.json(buildDashboardApplications(mappedApplications));
     } catch (error) {
       console.error("Error fetching applications:", error);
       res.status(500).json({ error: "Failed to fetch applications" });
@@ -5290,54 +5751,23 @@ The WFConnect Team`,
   app2.get("/api/admin/applications/:id", async (req, res) => {
     try {
       if (!await checkBasicAuthAdmin(req, res)) return;
-      const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
-      const [application] = await db.select({
-        id: workerApplications.id,
-        fullName: workerApplications.fullName,
-        phone: workerApplications.phone,
-        email: workerApplications.email,
-        address: workerApplications.address,
-        city: workerApplications.city,
-        province: workerApplications.province,
-        postalCode: workerApplications.postalCode,
-        dateOfBirth: workerApplications.dateOfBirth,
-        workStatus: workerApplications.workStatus,
-        backgroundCheckConsent: workerApplications.backgroundCheckConsent,
-        preferredRoles: workerApplications.preferredRoles,
-        otherRole: workerApplications.otherRole,
-        availableDays: workerApplications.availableDays,
-        preferredShifts: workerApplications.preferredShifts,
-        unavailablePeriods: workerApplications.unavailablePeriods,
-        yearsExperience: workerApplications.yearsExperience,
-        experienceSummary: workerApplications.experienceSummary,
-        skills: workerApplications.skills,
-        desiredShiftLength: workerApplications.desiredShiftLength,
-        emergencyContactName: workerApplications.emergencyContactName,
-        emergencyContactRelationship: workerApplications.emergencyContactRelationship,
-        emergencyContactPhone: workerApplications.emergencyContactPhone,
-        paymentMethod: workerApplications.paymentMethod,
-        bankName: workerApplications.bankName,
-        bankInstitution: workerApplications.bankInstitution,
-        bankTransit: workerApplications.bankTransit,
-        bankAccount: workerApplications.bankAccount,
-        etransferEmail: workerApplications.etransferEmail,
-        titoAcknowledgment: workerApplications.titoAcknowledgment,
-        siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
-        workerAgreementConsent: workerApplications.workerAgreementConsent,
-        privacyConsent: workerApplications.privacyConsent,
-        marketingConsent: workerApplications.marketingConsent,
-        ...optionalMetadataSelect,
-        signature: workerApplications.signature,
-        signatureDate: workerApplications.signatureDate,
-        status: workerApplications.status,
-        reviewedBy: workerApplications.reviewedBy,
-        reviewedAt: workerApplications.reviewedAt,
-        notes: workerApplications.notes,
-        ip: workerApplications.ip,
-        userAgent: workerApplications.userAgent,
-        createdAt: workerApplications.createdAt,
-        updatedAt: workerApplications.updatedAt
-      }).from(workerApplications).where(eq4(workerApplications.id, req.params.id));
+      const workerApplicationAdminSelect = await getWorkerApplicationAdminSelect();
+      const applications = await db.select(workerApplicationAdminSelect).from(workerApplications).orderBy(desc2(workerApplications.createdAt));
+      const mappedApplications = applications.map((application2) => {
+        const identity = resolveWorkerIdentity({
+          fullName: application2.fullName,
+          email: application2.email,
+          phone: application2.phone
+        });
+        return {
+          ...application2,
+          fullName: identity.fullName,
+          full_name: identity.fullName,
+          first_name: identity.firstName,
+          last_name: identity.lastName
+        };
+      });
+      const application = findDashboardApplicationGroup(mappedApplications, req.params.id);
       if (!application) {
         res.status(404).json({ error: "Application not found" });
         return;
@@ -5351,8 +5781,38 @@ The WFConnect Team`,
   app2.patch("/api/admin/applications/:id", async (req, res) => {
     try {
       if (!await checkBasicAuthAdmin(req, res)) return;
-      const { status, notes } = req.body;
-      if (status === "approved") {
+      const parsedPayload = adminApplicationUpdateSchema.safeParse(req.body ?? {});
+      if (!parsedPayload.success) {
+        res.status(400).json({
+          error: "Invalid application update payload",
+          issues: formatValidationIssues(parsedPayload.error.issues)
+        });
+        return;
+      }
+      const payload = parsedPayload.data;
+      const requestedStatus = normalizeOptionalText(payload.status);
+      const normalizedRequestedStatus = requestedStatus ? requestedStatus.toLowerCase() : null;
+      if (normalizedRequestedStatus && !WORKER_APPLICATION_STATUSES.has(normalizedRequestedStatus)) {
+        res.status(400).json({ error: "Invalid application status" });
+        return;
+      }
+      const [existingApplication] = await db.select({
+        id: workerApplications.id,
+        status: workerApplications.status,
+        email: workerApplications.email,
+        phone: workerApplications.phone,
+        fullName: workerApplications.fullName,
+        preferredRoles: workerApplications.preferredRoles,
+        paymentMethod: workerApplications.paymentMethod
+      }).from(workerApplications).where(eq4(workerApplications.id, req.params.id)).limit(1);
+      if (!existingApplication) {
+        res.status(404).json({ error: "Application not found" });
+        return;
+      }
+      const nextStatus = normalizedRequestedStatus ? normalizeWorkerApplicationStatus(normalizedRequestedStatus) : void 0;
+      const previousStatus = normalizeWorkerApplicationStatus(existingApplication.status);
+      const effectiveStatus = nextStatus || previousStatus;
+      if (nextStatus === "approved" && previousStatus !== "approved") {
         const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
         const [approvalSource] = await db.select({
           id: workerApplications.id,
@@ -5385,76 +5845,69 @@ The WFConnect Team`,
           return;
         }
       }
-      const [updatedApplication] = await db.update(workerApplications).set({
-        status,
-        notes,
-        reviewedAt: /* @__PURE__ */ new Date(),
+      const updateData = {
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq4(workerApplications.id, req.params.id)).returning();
+      };
+      if (nextStatus) {
+        updateData.status = nextStatus;
+      }
+      if (payload.notes !== void 0) {
+        updateData.notes = normalizeOptionalText(payload.notes);
+      }
+      if (payload.assignedRecruiter !== void 0) {
+        updateData.assignedRecruiter = normalizeOptionalText(payload.assignedRecruiter);
+      }
+      if (payload.recruiterNotes !== void 0) {
+        updateData.recruiterNotes = normalizeOptionalText(payload.recruiterNotes);
+      }
+      if (payload.interviewStage !== void 0) {
+        updateData.interviewStage = normalizeInterviewStage(payload.interviewStage, effectiveStatus);
+      }
+      if (payload.interviewNotes !== void 0) {
+        updateData.interviewNotes = normalizeOptionalText(payload.interviewNotes);
+      }
+      if (payload.deploymentReadiness !== void 0) {
+        updateData.deploymentReadiness = normalizeDeploymentReadiness(payload.deploymentReadiness, effectiveStatus);
+      } else if (nextStatus === "ready_for_deployment" || nextStatus === "approved") {
+        updateData.deploymentReadiness = normalizeDeploymentReadiness(void 0, effectiveStatus);
+      }
+      if (payload.payrollReadiness !== void 0) {
+        updateData.payrollReadiness = normalizePayrollReadiness(payload.payrollReadiness, Boolean(existingApplication.paymentMethod), effectiveStatus);
+      } else if (nextStatus === "approved") {
+        updateData.payrollReadiness = normalizePayrollReadiness(void 0, Boolean(existingApplication.paymentMethod), effectiveStatus);
+      }
+      if (payload.missingDocuments !== void 0) {
+        updateData.missingDocuments = serializeDocumentList(payload.missingDocuments);
+      }
+      if (payload.nextRecommendedAction !== void 0) {
+        updateData.nextRecommendedAction = normalizeOptionalText(payload.nextRecommendedAction);
+      }
+      if (payload.applicationSource !== void 0) {
+        updateData.applicationSource = normalizeApplicationSource(payload.applicationSource);
+      }
+      if (nextStatus && nextStatus !== previousStatus) {
+        updateData.reviewedAt = /* @__PURE__ */ new Date();
+      }
+      if (nextStatus === "contacted") {
+        updateData.lastContactedAt = /* @__PURE__ */ new Date();
+      }
+      const [updatedApplication] = await db.update(workerApplications).set(updateData).where(eq4(workerApplications.id, req.params.id)).returning();
       if (!updatedApplication) {
         res.status(404).json({ error: "Application not found" });
         return;
       }
-      if (status === "approved" && updatedApplication.email) {
+      if (nextStatus === "approved" && previousStatus !== "approved" && updatedApplication.email) {
         try {
-          const [existingUser] = await db.select({ id: users.id }).from(users).where(eq4(users.email, updatedApplication.email.toLowerCase())).limit(1);
-          if (existingUser) {
-            const updateData = {
-              onboardingStatus: "AGREEMENT_PENDING",
-              updatedAt: /* @__PURE__ */ new Date()
-            };
-            if (updatedApplication.phone) {
-              updateData.phone = updatedApplication.phone;
-            }
-            await db.update(users).set(updateData).where(eq4(users.id, existingUser.id));
-            console.log(`[APPROVAL] Updated existing user ${updatedApplication.email} to AGREEMENT_PENDING`);
-          } else {
-            if (updatedApplication.phone) {
-              const [phoneDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.phone, updatedApplication.phone)).limit(1);
-              if (phoneDuplicate) {
-                res.status(409).json({ error: `A worker with phone ${updatedApplication.phone} already exists.` });
-                return;
-              }
-            }
-            const fullNameToUse = updatedApplication.fullName || "Worker";
-            const [fullNameDuplicate] = await db.select({ id: users.id }).from(users).where(eq4(users.fullName, fullNameToUse)).limit(1);
-            if (fullNameDuplicate) {
-              res.status(409).json({ error: `A worker named "${fullNameToUse}" already exists.` });
-              return;
-            }
-            const firstName = fullNameToUse.split(" ")[0].toLowerCase().replace(/[^a-z]/g, "");
-            const phoneLast4 = (updatedApplication.phone || "0000").replace(/\D/g, "").slice(-4);
-            const tempPassword = `${firstName}${phoneLast4}`;
-            const hashedPassword = await bcrypt.hash(tempPassword, 10);
-            await db.insert(users).values({
-              id: crypto2.randomUUID(),
-              email: updatedApplication.email.toLowerCase(),
-              password: hashedPassword,
-              fullName: fullNameToUse,
-              role: "worker",
-              phone: updatedApplication.phone || void 0,
-              isActive: true,
-              onboardingStatus: "AGREEMENT_PENDING",
-              workerRoles: updatedApplication.preferredRoles || void 0,
-              mustChangePassword: true,
-              timezone: "America/Toronto"
-            });
-            console.log(`[APPROVAL] Created user account for ${updatedApplication.email}`);
-            if (updatedApplication.phone) {
-              try {
-                const smsMessage = `Welcome to WFConnect! Your application has been approved. Download the app and log in with:
-Email: ${updatedApplication.email}
-Password: ${tempPassword}
-Please change your password after first login.`;
-                await sendSMS(updatedApplication.phone, smsMessage);
-                console.log(`[APPROVAL] Welcome SMS sent to ${updatedApplication.phone}`);
-              } catch (smsError) {
-                console.error("[APPROVAL] Failed to send welcome SMS:", smsError);
-              }
-            }
-          }
+          await ensureApprovedApplicationUserAccount({
+            email: updatedApplication.email,
+            phone: updatedApplication.phone,
+            fullName: updatedApplication.fullName,
+            preferredRoles: updatedApplication.preferredRoles
+          });
         } catch (linkError) {
           console.error("Failed to create/update user on approval:", linkError);
+          res.status(409).json({ error: linkError instanceof Error ? linkError.message : "Failed to link approved worker account" });
+          return;
         }
       }
       res.json(updatedApplication);
@@ -5475,6 +5928,199 @@ Please change your password after first login.`;
     } catch (error) {
       console.error("Error deleting application:", error);
       res.status(500).json({ error: "Failed to delete application" });
+    }
+  });
+  app2.post("/api/admin/applications/bulk", async (req, res) => {
+    try {
+      if (!await checkBasicAuthAdmin(req, res)) return;
+      const parsedPayload = adminApplicationBulkActionSchema.safeParse(req.body ?? {});
+      if (!parsedPayload.success) {
+        res.status(400).json({
+          error: "Invalid bulk action payload",
+          issues: formatValidationIssues(parsedPayload.error.issues)
+        });
+        return;
+      }
+      const payload = parsedPayload.data;
+      const uniqueIds = Array.from(new Set(payload.ids));
+      const selectedApplications = await db.select({
+        id: workerApplications.id,
+        email: workerApplications.email,
+        phone: workerApplications.phone,
+        fullName: workerApplications.fullName,
+        preferredRoles: workerApplications.preferredRoles,
+        paymentMethod: workerApplications.paymentMethod,
+        status: workerApplications.status
+      }).from(workerApplications).where(inArray(workerApplications.id, uniqueIds));
+      if (selectedApplications.length === 0) {
+        res.status(404).json({ error: "No matching applications found" });
+        return;
+      }
+      if (payload.action === "assign_recruiter") {
+        const assignedRecruiter = normalizeOptionalText(payload.assignedRecruiter);
+        if (!assignedRecruiter) {
+          res.status(400).json({ error: "Assigned recruiter is required" });
+          return;
+        }
+        await db.update(workerApplications).set({
+          assignedRecruiter,
+          recruiterNotes: normalizeOptionalText(payload.recruiterNotes),
+          reviewedAt: /* @__PURE__ */ new Date(),
+          updatedAt: /* @__PURE__ */ new Date()
+        }).where(inArray(workerApplications.id, uniqueIds));
+        res.json({ success: true, updated: selectedApplications.length, assignedRecruiter });
+        return;
+      }
+      if (payload.action === "update_status") {
+        const requestedStatus = normalizeOptionalText(payload.status);
+        const normalizedRequestedStatus = requestedStatus ? requestedStatus.toLowerCase() : null;
+        if (!normalizedRequestedStatus || !WORKER_APPLICATION_STATUSES.has(normalizedRequestedStatus)) {
+          res.status(400).json({ error: "A valid target status is required" });
+          return;
+        }
+        const nextStatus = normalizeWorkerApplicationStatus(normalizedRequestedStatus);
+        if (nextStatus === "approved") {
+          const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+          const approvalSources = await db.select({
+            id: workerApplications.id,
+            fullName: workerApplications.fullName,
+            backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+            titoAcknowledgment: workerApplications.titoAcknowledgment,
+            siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+            workerAgreementConsent: workerApplications.workerAgreementConsent,
+            privacyConsent: workerApplications.privacyConsent,
+            consentToContact: optionalMetadataSelect.consentToContact,
+            nonSolicitationAcknowledged: optionalMetadataSelect.nonSolicitationAcknowledged
+          }).from(workerApplications).where(inArray(workerApplications.id, uniqueIds));
+          const blockedApplications = approvalSources.map((application) => ({
+            id: application.id,
+            fullName: application.fullName,
+            missingAcknowledgments: getMissingApprovalAcknowledgments(application)
+          })).filter((application) => application.missingAcknowledgments.length > 0);
+          if (blockedApplications.length > 0) {
+            res.status(409).json({
+              error: "Some applications require acknowledgment review before approval",
+              blockedApplications
+            });
+            return;
+          }
+        }
+        let updated = 0;
+        for (const application of selectedApplications) {
+          const effectiveStatus = nextStatus;
+          await db.update(workerApplications).set({
+            status: effectiveStatus,
+            reviewedAt: /* @__PURE__ */ new Date(),
+            updatedAt: /* @__PURE__ */ new Date(),
+            lastContactedAt: effectiveStatus === "contacted" ? /* @__PURE__ */ new Date() : void 0,
+            deploymentReadiness: effectiveStatus === "ready_for_deployment" || effectiveStatus === "approved" ? normalizeDeploymentReadiness(void 0, effectiveStatus) : void 0,
+            payrollReadiness: effectiveStatus === "approved" ? normalizePayrollReadiness(void 0, Boolean(application.paymentMethod), effectiveStatus) : void 0
+          }).where(eq4(workerApplications.id, application.id));
+          if (effectiveStatus === "approved") {
+            await ensureApprovedApplicationUserAccount(application);
+          }
+          updated += 1;
+        }
+        res.json({ success: true, updated, status: nextStatus });
+        return;
+      }
+      if (payload.action === "request_documents") {
+        const requestedDocuments = parseDocumentList(payload.requestedDocuments);
+        if (requestedDocuments.length === 0) {
+          res.status(400).json({ error: "Requested documents are required" });
+          return;
+        }
+        const serializedDocuments = serializeDocumentList(requestedDocuments);
+        let emailed = 0;
+        let skipped = 0;
+        for (const application of selectedApplications) {
+          await db.update(workerApplications).set({
+            missingDocuments: serializedDocuments,
+            documentRequestSentAt: /* @__PURE__ */ new Date(),
+            nextRecommendedAction: "Await requested documents",
+            updatedAt: /* @__PURE__ */ new Date()
+          }).where(eq4(workerApplications.id, application.id));
+          if (!application.email) {
+            skipped += 1;
+            continue;
+          }
+          try {
+            await sendEmail({
+              to: application.email,
+              subject: "Additional documents needed for your Workforce Connect application",
+              text: `Hi ${application.fullName || "there"},
+
+We need the following documents to continue your Workforce Connect application:
+- ${requestedDocuments.join("\n- ")}
+
+Please reply with the requested items at your earliest convenience.
+
+WFConnect Recruitment`,
+              html: `<p>Hi ${application.fullName || "there"},</p><p>We need the following documents to continue your Workforce Connect application:</p><ul>${requestedDocuments.map((item) => `<li>${item}</li>`).join("")}</ul><p>Please reply with the requested items at your earliest convenience.</p><p>WFConnect Recruitment</p>`
+            });
+            emailed += 1;
+          } catch (emailError) {
+            console.error(`[APPLICATIONS] Failed to request documents for ${application.email}:`, emailError);
+            skipped += 1;
+          }
+        }
+        res.json({ success: true, updated: selectedApplications.length, emailed, skipped, requestedDocuments });
+        return;
+      }
+      if (payload.action === "send_app_instructions") {
+        let sent = 0;
+        let skipped = 0;
+        let notReady = 0;
+        for (const application of selectedApplications) {
+          const currentStatus = normalizeWorkerApplicationStatus(application.status);
+          if (!["approved", "ready_for_deployment"].includes(currentStatus)) {
+            notReady += 1;
+            continue;
+          }
+          const [existingUser] = application.email ? await db.select({ id: users.id, email: users.email, mustChangePassword: users.mustChangePassword }).from(users).where(eq4(users.email, application.email.toLowerCase())).limit(1) : [];
+          const smsMessage = existingUser?.mustChangePassword ? `WFConnect App is now available! Download from App Store or Google Play. Log in with:
+Email: ${application.email}
+Your temporary password was sent when your application was approved. Change your password after first login.` : `WFConnect App is now available! Download from App Store or Google Play and log in with your approved email: ${application.email}`;
+          try {
+            if (application.phone) {
+              const result = await sendSMS(application.phone, smsMessage);
+              if (result.success) {
+                await logSMS({
+                  phoneNumber: application.phone,
+                  direction: "outbound",
+                  message: smsMessage,
+                  workerId: existingUser?.id,
+                  status: "sent",
+                  openphoneMessageId: result.messageId
+                });
+                sent += 1;
+              } else {
+                skipped += 1;
+              }
+            } else if (application.email) {
+              await sendEmail({
+                to: application.email,
+                subject: "Your Workforce Connect app instructions",
+                text: smsMessage,
+                html: `<p>${smsMessage.replace(/\n/g, "<br>")}</p>`
+              });
+              sent += 1;
+            } else {
+              skipped += 1;
+            }
+            await db.update(workerApplications).set({ lastContactedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq4(workerApplications.id, application.id));
+          } catch (sendError) {
+            console.error(`[APPLICATIONS] Failed to send app instructions for ${application.id}:`, sendError);
+            skipped += 1;
+          }
+        }
+        res.json({ success: true, sent, skipped, notReady, selected: selectedApplications.length });
+        return;
+      }
+      res.status(400).json({ error: "Unsupported bulk action" });
+    } catch (error) {
+      console.error("Error processing bulk application action:", error);
+      res.status(500).json({ error: "Failed to process bulk action" });
     }
   });
   app2.post("/api/admin/send-app-instructions", async (req, res) => {
@@ -11905,6 +12551,9 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "consent_to_contact" boolean`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "consent_to_contact" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "worker_applications" SET "consent_to_contact" = false WHERE "consent_to_contact" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "marketing_consent" boolean`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "marketing_consent" SET DEFAULT false`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "marketing_consent" = false WHERE "marketing_consent" IS NULL`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "agreement_version" text`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged" boolean`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "non_solicitation_acknowledged_at" timestamp`);
@@ -11914,6 +12563,21 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "worker_applications" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "application_source" text`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "application_source" = 'Direct application' WHERE "application_source" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "assigned_recruiter" text`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "recruiter_notes" text`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "interview_stage" text`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "interview_stage" = 'not_started' WHERE "interview_stage" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "interview_notes" text`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "deployment_readiness" text`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "deployment_readiness" = 'not_ready' WHERE "deployment_readiness" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "payroll_readiness" text`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "payroll_readiness" = 'not_ready' WHERE "payroll_readiness" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "missing_documents" text`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "next_recommended_action" text`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "document_request_sent_at" timestamp`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "last_contacted_at" timestamp`);
     await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "promotional_consent" boolean`);
     await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "applicants" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);

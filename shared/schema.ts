@@ -254,6 +254,19 @@ export const workerApplications = pgTable("worker_applications", {
   consentToContact: boolean("consent_to_contact").default(false),
   promotionalConsent: boolean("promotional_consent").notNull().default(false),
   marketingConsent: boolean("marketing_consent").default(false),
+
+  // Operations workflow
+  applicationSource: text("application_source"),
+  assignedRecruiter: text("assigned_recruiter"),
+  recruiterNotes: text("recruiter_notes"),
+  interviewStage: text("interview_stage"),
+  interviewNotes: text("interview_notes"),
+  deploymentReadiness: text("deployment_readiness"),
+  payrollReadiness: text("payroll_readiness"),
+  missingDocuments: text("missing_documents"),
+  nextRecommendedAction: text("next_recommended_action"),
+  documentRequestSentAt: timestamp("document_request_sent_at"),
+  lastContactedAt: timestamp("last_contacted_at"),
   
   // Electronic Signature
   signature: text("signature").notNull(), // Typed full name as signature

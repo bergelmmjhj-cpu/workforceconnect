@@ -766,34 +766,103 @@ function getMissingApprovalAcknowledgments(application: Partial<typeof workerApp
     .map(({ label }) => label);
 }
 
-const workerApplicationAgreementSelect = {
-  id: workerApplications.id,
-  fullName: workerApplications.fullName,
-  phone: workerApplications.phone,
-  email: workerApplications.email,
-  address: workerApplications.address,
-  city: workerApplications.city,
-  province: workerApplications.province,
-  postalCode: workerApplications.postalCode,
-  preferredRoles: workerApplications.preferredRoles,
-  availableDays: workerApplications.availableDays,
-  preferredShifts: workerApplications.preferredShifts,
-  yearsExperience: workerApplications.yearsExperience,
-  titoAcknowledgment: workerApplications.titoAcknowledgment,
-  siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
-  workerAgreementConsent: workerApplications.workerAgreementConsent,
-  privacyConsent: workerApplications.privacyConsent,
-  consentToContact: workerApplications.consentToContact,
-  marketingConsent: workerApplications.marketingConsent,
-  agreementVersion: workerApplications.agreementVersion,
-  nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
-  nonSolicitationAcknowledgedAt: workerApplications.nonSolicitationAcknowledgedAt,
-  workerPdfGeneratedAt: workerApplications.workerPdfGeneratedAt,
-  internalPdfGeneratedAt: workerApplications.internalPdfGeneratedAt,
-  signature: workerApplications.signature,
-  signatureDate: workerApplications.signatureDate,
-  createdAt: workerApplications.createdAt,
+const WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
+  agreementVersion: "agreement_version",
+  nonSolicitationAcknowledged: "non_solicitation_acknowledged",
+  nonSolicitationAcknowledgedAt: "non_solicitation_acknowledged_at",
+  workerPdfGeneratedAt: "worker_pdf_generated_at",
+  internalPdfGeneratedAt: "internal_pdf_generated_at",
 } as const;
+
+let workerApplicationColumnSetPromise: Promise<Set<string>> | null = null;
+
+async function getWorkerApplicationColumnSet(): Promise<Set<string>> {
+  if (!workerApplicationColumnSetPromise) {
+    workerApplicationColumnSetPromise = db.execute(sql<{ column_name: string }>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'worker_applications'
+    `)
+      .then((result: unknown) => {
+        const rows = Array.isArray(result)
+          ? result
+          : result && typeof result === "object" && "rows" in result && Array.isArray((result as { rows?: unknown[] }).rows)
+            ? (result as { rows: Array<{ column_name?: string }> }).rows
+            : [];
+
+        const columnSet = new Set(
+          rows
+            .map((row) => row?.column_name)
+            .filter((columnName): columnName is string => typeof columnName === "string" && columnName.length > 0),
+        );
+
+        const missingColumns = Object.values(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS)
+          .filter((columnName) => !columnSet.has(columnName));
+
+        if (missingColumns.length > 0) {
+          console.warn(`[WORKER_APPLICATIONS] Optional agreement metadata columns unavailable: ${missingColumns.join(", ")}`);
+        }
+
+        return columnSet;
+      })
+      .catch((error) => {
+        console.warn("[WORKER_APPLICATIONS] Failed to inspect worker_applications columns; falling back to legacy-safe metadata projection", error);
+        return new Set<string>();
+      });
+  }
+
+  return workerApplicationColumnSetPromise;
+}
+
+async function getWorkerApplicationOptionalMetadataSelect() {
+  const columnSet = await getWorkerApplicationColumnSet();
+
+  return {
+    agreementVersion: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.agreementVersion)
+      ? workerApplications.agreementVersion
+      : sql<string | null>`NULL`,
+    nonSolicitationAcknowledged: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledged)
+      ? workerApplications.nonSolicitationAcknowledged
+      : sql<boolean | null>`NULL`,
+    nonSolicitationAcknowledgedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nonSolicitationAcknowledgedAt)
+      ? workerApplications.nonSolicitationAcknowledgedAt
+      : sql<Date | null>`NULL`,
+    workerPdfGeneratedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.workerPdfGeneratedAt)
+      ? workerApplications.workerPdfGeneratedAt
+      : sql<Date | null>`NULL`,
+    internalPdfGeneratedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.internalPdfGeneratedAt)
+      ? workerApplications.internalPdfGeneratedAt
+      : sql<Date | null>`NULL`,
+  };
+}
+
+async function getWorkerApplicationAgreementSelect() {
+  return {
+    id: workerApplications.id,
+    fullName: workerApplications.fullName,
+    phone: workerApplications.phone,
+    email: workerApplications.email,
+    address: workerApplications.address,
+    city: workerApplications.city,
+    province: workerApplications.province,
+    postalCode: workerApplications.postalCode,
+    preferredRoles: workerApplications.preferredRoles,
+    availableDays: workerApplications.availableDays,
+    preferredShifts: workerApplications.preferredShifts,
+    yearsExperience: workerApplications.yearsExperience,
+    titoAcknowledgment: workerApplications.titoAcknowledgment,
+    siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
+    workerAgreementConsent: workerApplications.workerAgreementConsent,
+    privacyConsent: workerApplications.privacyConsent,
+    consentToContact: workerApplications.consentToContact,
+    marketingConsent: workerApplications.marketingConsent,
+    ...(await getWorkerApplicationOptionalMetadataSelect()),
+    signature: workerApplications.signature,
+    signatureDate: workerApplications.signatureDate,
+    createdAt: workerApplications.createdAt,
+  } as const;
+}
 
 function resolvePdfDisposition(value: unknown): "attachment" | "inline" {
   if (typeof value === "string" && value.trim().toLowerCase() === "inline") {
@@ -1252,8 +1321,10 @@ async function getWorkerApplicationForUser(userId: string) {
     return { user: null, application: null };
   }
 
+  const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
+
   const [application] = await db
-    .select()
+    .select(workerApplicationAgreementSelect)
     .from(workerApplications)
     .where(sql`lower(${workerApplications.email}) = ${user.email.toLowerCase()}`)
     .orderBy(desc(workerApplications.createdAt))
@@ -3015,7 +3086,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Use explicit stable projection so missing newer columns in production don't break list loading.
+      const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+
+      // Use an explicit legacy-safe projection so schema drift cannot break dashboard loading.
       const applications = await db
         .select({
           id: workerApplications.id,
@@ -3053,11 +3126,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           consentToContact: workerApplications.consentToContact,
           privacyConsent: workerApplications.privacyConsent,
           marketingConsent: workerApplications.marketingConsent,
-          agreementVersion: workerApplications.agreementVersion,
-          nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
-          nonSolicitationAcknowledgedAt: workerApplications.nonSolicitationAcknowledgedAt,
-          workerPdfGeneratedAt: workerApplications.workerPdfGeneratedAt,
-          internalPdfGeneratedAt: workerApplications.internalPdfGeneratedAt,
+          ...optionalMetadataSelect,
           signature: workerApplications.signature,
           signatureDate: workerApplications.signatureDate,
           status: workerApplications.status,
@@ -3301,6 +3370,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!(await checkBasicAuthAdmin(req, res))) return;
 
+      const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+
       const [application] = await db
         .select({
           id: workerApplications.id,
@@ -3338,11 +3409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           consentToContact: workerApplications.consentToContact,
           privacyConsent: workerApplications.privacyConsent,
           marketingConsent: workerApplications.marketingConsent,
-          agreementVersion: workerApplications.agreementVersion,
-          nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
-          nonSolicitationAcknowledgedAt: workerApplications.nonSolicitationAcknowledgedAt,
-          workerPdfGeneratedAt: workerApplications.workerPdfGeneratedAt,
-          internalPdfGeneratedAt: workerApplications.internalPdfGeneratedAt,
+          ...optionalMetadataSelect,
           signature: workerApplications.signature,
           signatureDate: workerApplications.signatureDate,
           status: workerApplications.status,
@@ -3377,6 +3444,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status, notes } = req.body;
 
       if (status === "approved") {
+        const optionalMetadataSelect = await getWorkerApplicationOptionalMetadataSelect();
+
         const [approvalSource] = await db
           .select({
             id: workerApplications.id,
@@ -3386,7 +3455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             workerAgreementConsent: workerApplications.workerAgreementConsent,
             privacyConsent: workerApplications.privacyConsent,
             consentToContact: workerApplications.consentToContact,
-            nonSolicitationAcknowledged: workerApplications.nonSolicitationAcknowledged,
+            nonSolicitationAcknowledged: optionalMetadataSelect.nonSolicitationAcknowledged,
           })
           .from(workerApplications)
           .where(eq(workerApplications.id, req.params.id))
@@ -4600,6 +4669,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
+
       const [application] = await db
         .select(workerApplicationAgreementSelect)
         .from(workerApplications)
@@ -4627,6 +4698,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
+
       const [application] = await db
         .select(workerApplicationAgreementSelect)
         .from(workerApplications)
@@ -4653,6 +4726,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!(await hasAdminAgreementAccess(req, res))) {
         return;
       }
+
+      const workerApplicationAgreementSelect = await getWorkerApplicationAgreementSelect();
 
       const [application] = await db
         .select(workerApplicationAgreementSelect)

@@ -55,6 +55,7 @@ import { discordAlerts, appConfig, applicants } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
 import { WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION } from "../shared/contractor-guide-content";
 import { streamAgreementPdf } from "./lib/agreement-pdf";
+import { resolveAcknowledgmentFields, resolvePaymentFields } from "./lib/worker-application-resolution";
 import { z } from "zod";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
@@ -547,6 +548,7 @@ function mapApplicationForSync(application: typeof workerApplications.$inferSele
 
   const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
   const isActive = application.status === "approved";
+  const payment = resolvePaymentFields(application as unknown as Record<string, unknown>);
 
   return {
     identityResolved: identity.hasIdentity,
@@ -566,12 +568,12 @@ function mapApplicationForSync(application: typeof workerApplications.$inferSele
       applying_for: workerType,
       is_active: isActive,
       active: isActive,
-      payment_method: application.paymentMethod,
-      bank_name: application.bankName,
-      bank_institution: application.bankInstitution,
-      bank_transit: application.bankTransit,
-      bank_account: application.bankAccount,
-      etransfer_email: application.etransferEmail,
+      payment_method: payment.paymentMethod,
+      bank_name: payment.bankName,
+      bank_institution: payment.bankInstitution,
+      bank_transit: payment.bankTransit,
+      bank_account: payment.bankAccount,
+      etransfer_email: payment.etransferEmail,
       notes: application.notes,
     },
   };
@@ -623,11 +625,34 @@ const publicApplySubmissionSchema = z.object({
   emergencyContactRelationship: z.string().trim().min(1),
   emergencyContactPhone: z.string().trim().min(1),
   paymentMethod: nullableStringSchema,
+  payment_method: nullableStringSchema,
   bankName: nullableStringSchema,
+  bank_name: nullableStringSchema,
   bankInstitution: nullableStringSchema,
+  bank_institution: nullableStringSchema,
+  institutionNumber: nullableStringSchema,
+  institution_number: nullableStringSchema,
   bankTransit: nullableStringSchema,
+  bank_transit: nullableStringSchema,
+  transitNumber: nullableStringSchema,
+  transit_number: nullableStringSchema,
   bankAccount: nullableStringSchema,
+  bank_account: nullableStringSchema,
+  accountNumber: nullableStringSchema,
+  account_number: nullableStringSchema,
   etransferEmail: nullableStringSchema,
+  etransfer_email: nullableStringSchema,
+  eTransferEmail: nullableStringSchema,
+  e_transfer_email: nullableStringSchema,
+  directDepositEmail: nullableStringSchema,
+  bankingInfo: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+  banking_info: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+  paymentInfo: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+  payment_info: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+  paymentDetails: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+  payment_details: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+  bankInfo: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+  bank_info: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
   titoAcknowledgment: consentLikeSchema,
   siteRulesAcknowledgment: consentLikeSchema,
   workerAgreementConsent: consentLikeSchema,
@@ -686,7 +711,18 @@ function isConsentGranted(value: unknown): boolean {
 
 function getMissingRequiredConsents(payload: Record<string, unknown> | undefined): string[] {
   if (!payload) return [...REQUIRED_PUBLIC_APPLICATION_CONSENTS];
-  return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !isConsentGranted(payload[field]));
+
+  const resolved = resolveAcknowledgmentFields(payload);
+  const consentValues: Record<(typeof REQUIRED_PUBLIC_APPLICATION_CONSENTS)[number], boolean> = {
+    backgroundCheckConsent: resolved.backgroundCheckConsent,
+    titoAcknowledgment: resolved.titoAcknowledgment,
+    siteRulesAcknowledgment: resolved.siteRulesAcknowledgment,
+    workerAgreementConsent: resolved.workerAgreementConsent,
+    privacyConsent: resolved.privacyConsent,
+    consentToContact: resolved.consentToContact,
+  };
+
+  return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);
 }
 
 function normalizeJsonArrayField(value: unknown): string {
@@ -773,8 +809,19 @@ const REQUIRED_APPROVAL_ACK_FIELDS: Array<{ field: keyof typeof workerApplicatio
 ];
 
 function getMissingApprovalAcknowledgments(application: Partial<typeof workerApplications.$inferSelect>): string[] {
+  const resolved = resolveAcknowledgmentFields(application as unknown as Record<string, unknown>);
+  const fieldToResolvedKey: Record<string, keyof typeof resolved> = {
+    backgroundCheckConsent: "backgroundCheckConsent",
+    titoAcknowledgment: "titoAcknowledgment",
+    siteRulesAcknowledgment: "siteRulesAcknowledgment",
+    workerAgreementConsent: "workerAgreementConsent",
+    privacyConsent: "privacyConsent",
+    consentToContact: "consentToContact",
+    nonSolicitationAcknowledged: "nonSolicitationAcknowledged",
+  };
+
   return REQUIRED_APPROVAL_ACK_FIELDS
-    .filter(({ field }) => application[field] !== true)
+    .filter(({ field }) => !resolved[fieldToResolvedKey[field]])
     .map(({ label }) => label);
 }
 
@@ -798,6 +845,15 @@ const WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
   nextRecommendedAction: "next_recommended_action",
   documentRequestSentAt: "document_request_sent_at",
   lastContactedAt: "last_contacted_at",
+  institutionNumber: "institution_number",
+  transitNumber: "transit_number",
+  accountNumber: "account_number",
+  eTransferEmail: "e_transfer_email",
+  directDepositEmail: "direct_deposit_email",
+  paymentInfo: "payment_info",
+  paymentDetails: "payment_details",
+  bankingInfo: "banking_info",
+  bankInfo: "bank_info",
 } as const;
 
 let workerApplicationColumnSetPromise: Promise<Set<string>> | null = null;
@@ -902,6 +958,33 @@ async function getWorkerApplicationOptionalMetadataSelect() {
     lastContactedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.lastContactedAt)
       ? workerApplications.lastContactedAt
       : sql<Date | null>`NULL`,
+    institutionNumber: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.institutionNumber)
+      ? sql<string | null>`"worker_applications"."institution_number"`
+      : sql<string | null>`NULL`,
+    transitNumber: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.transitNumber)
+      ? sql<string | null>`"worker_applications"."transit_number"`
+      : sql<string | null>`NULL`,
+    accountNumber: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.accountNumber)
+      ? sql<string | null>`"worker_applications"."account_number"`
+      : sql<string | null>`NULL`,
+    eTransferEmail: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.eTransferEmail)
+      ? sql<string | null>`"worker_applications"."e_transfer_email"`
+      : sql<string | null>`NULL`,
+    directDepositEmail: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.directDepositEmail)
+      ? sql<string | null>`"worker_applications"."direct_deposit_email"`
+      : sql<string | null>`NULL`,
+    paymentInfo: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.paymentInfo)
+      ? sql<string | null>`"worker_applications"."payment_info"`
+      : sql<string | null>`NULL`,
+    paymentDetails: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.paymentDetails)
+      ? sql<string | null>`"worker_applications"."payment_details"`
+      : sql<string | null>`NULL`,
+    bankingInfo: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.bankingInfo)
+      ? sql<string | null>`"worker_applications"."banking_info"`
+      : sql<string | null>`NULL`,
+    bankInfo: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.bankInfo)
+      ? sql<string | null>`"worker_applications"."bank_info"`
+      : sql<string | null>`NULL`,
   };
 }
 
@@ -1172,12 +1255,13 @@ function maskAccountNumber(value: unknown): string {
 }
 
 function buildPaymentSummary(application: Record<string, unknown>) {
-  const normalizedMethod = normalizePaymentMethodValue(application.paymentMethod);
-  const bankName = normalizeOptionalText(typeof application.bankName === "string" ? application.bankName : null);
-  const bankInstitution = normalizeOptionalText(typeof application.bankInstitution === "string" ? application.bankInstitution : null);
-  const bankTransit = normalizeOptionalText(typeof application.bankTransit === "string" ? application.bankTransit : null);
-  const bankAccount = normalizeOptionalText(typeof application.bankAccount === "string" ? application.bankAccount : null);
-  const etransferEmail = normalizeOptionalText(typeof application.etransferEmail === "string" ? application.etransferEmail : null);
+  const resolved = resolvePaymentFields(application);
+  const normalizedMethod = normalizePaymentMethodValue(resolved.paymentMethod);
+  const bankName = normalizeOptionalText(resolved.bankName);
+  const bankInstitution = normalizeOptionalText(resolved.bankInstitution);
+  const bankTransit = normalizeOptionalText(resolved.bankTransit);
+  const bankAccount = normalizeOptionalText(resolved.bankAccount);
+  const etransferEmail = normalizeOptionalText(resolved.etransferEmail);
   const payrollContactEmail = etransferEmail || normalizeOptionalText(typeof application.email === "string" ? application.email : null);
 
   const hasDirectDepositDetails = Boolean(bankName && bankInstitution && bankTransit && bankAccount);
@@ -1203,7 +1287,7 @@ function buildPaymentSummary(application: Record<string, unknown>) {
     bankName: bankName || "Not provided",
     bankInstitution: bankInstitution || "Not provided",
     bankTransit: bankTransit || "Not provided",
-    bankAccountMasked: maskAccountNumber(application.bankAccount),
+    bankAccountMasked: maskAccountNumber(resolved.bankAccount),
     etransferEmail: etransferEmail || "Not provided",
     payrollContactEmail: payrollContactEmail || "Not provided",
     hasRequiredPaymentInfo,
@@ -3485,7 +3569,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const promotionalConsent = isConsentGranted(payload.promotionalConsent) || isConsentGranted(payload.marketingConsent);
-      const nonSolicitationAcknowledged = isConsentGranted(payload.nonSolicitationAcknowledged);
+      const resolvedAcknowledgments = resolveAcknowledgmentFields(payload as unknown as Record<string, unknown>);
+      const resolvedPayment = resolvePaymentFields(payload as unknown as Record<string, unknown>);
+      const nonSolicitationAcknowledged = resolvedAcknowledgments.nonSolicitationAcknowledged;
       const normalizedEmail = normalizeWhitespace(payload.email).toLowerCase();
       const normalizedPhone = normalizePhoneForComparison(payload.phone);
       const normalizedName = normalizeComparableText(resolvedIdentity.fullName);
@@ -3552,17 +3638,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emergencyContactName: payload.emergencyContactName,
         emergencyContactRelationship: payload.emergencyContactRelationship,
         emergencyContactPhone: payload.emergencyContactPhone,
-        paymentMethod: normalizeOptionalText(payload.paymentMethod),
-        bankName: normalizeOptionalText(payload.bankName),
-        bankInstitution: normalizeOptionalText(payload.bankInstitution),
-        bankTransit: normalizeOptionalText(payload.bankTransit),
-        bankAccount: normalizeOptionalText(payload.bankAccount),
-        etransferEmail: normalizeOptionalText(payload.etransferEmail),
-        titoAcknowledgment: isConsentGranted(payload.titoAcknowledgment),
-        siteRulesAcknowledgment: isConsentGranted(payload.siteRulesAcknowledgment),
-        workerAgreementConsent: isConsentGranted(payload.workerAgreementConsent),
-        consentToContact: isConsentGranted(payload.consentToContact),
-        privacyConsent: isConsentGranted(payload.privacyConsent),
+        paymentMethod: normalizeOptionalText(resolvedPayment.paymentMethod),
+        bankName: normalizeOptionalText(resolvedPayment.bankName),
+        bankInstitution: normalizeOptionalText(resolvedPayment.bankInstitution),
+        bankTransit: normalizeOptionalText(resolvedPayment.bankTransit),
+        bankAccount: normalizeOptionalText(resolvedPayment.bankAccount),
+        etransferEmail: normalizeOptionalText(resolvedPayment.etransferEmail),
+        titoAcknowledgment: resolvedAcknowledgments.titoAcknowledgment,
+        siteRulesAcknowledgment: resolvedAcknowledgments.siteRulesAcknowledgment,
+        workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
+        consentToContact: resolvedAcknowledgments.consentToContact,
+        privacyConsent: resolvedAcknowledgments.privacyConsent,
         promotionalConsent,
         marketingConsent: promotionalConsent,
         signature: normalizeWhitespace(payload.signature),

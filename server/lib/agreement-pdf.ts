@@ -6,6 +6,7 @@ import {
   WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
   workforceSubcontractorAgreementSections,
 } from "../../shared/contractor-guide-content";
+import { logMissingPaymentIfNeeded, resolveAcknowledgmentFields, resolvePaymentFields } from "./worker-application-resolution";
 
 export type AgreementPdfVariant = "internal" | "worker";
 type PdfDisposition = "attachment" | "inline";
@@ -71,17 +72,19 @@ function isAccepted(value: unknown): boolean {
 }
 
 function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
+  const resolved = resolveAcknowledgmentFields(application as unknown as Record<string, unknown>);
+
   const items: Array<{ label: string; accepted: boolean }> = [
-    { label: "Background Check Consent", accepted: isAccepted(application.backgroundCheckConsent) },
-    { label: "TITO System Acknowledgment", accepted: isAccepted(application.titoAcknowledgment) },
-    { label: "Site Rules Agreement", accepted: isAccepted(application.siteRulesAcknowledgment) },
-    { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(application.nonSolicitationAcknowledged) },
-    { label: "Worker Agreement", accepted: isAccepted(application.workerAgreementConsent) },
-    { label: "Privacy Policy", accepted: isAccepted(application.privacyConsent) },
-    { label: "Consent To Contact", accepted: isAccepted(application.consentToContact) },
+    { label: "Background Check Consent", accepted: isAccepted(resolved.backgroundCheckConsent) },
+    { label: "TITO System Acknowledgment", accepted: isAccepted(resolved.titoAcknowledgment) },
+    { label: "Site Rules Agreement", accepted: isAccepted(resolved.siteRulesAcknowledgment) },
+    { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(resolved.nonSolicitationAcknowledged) },
+    { label: "Worker Agreement", accepted: isAccepted(resolved.workerAgreementConsent) },
+    { label: "Privacy Policy", accepted: isAccepted(resolved.privacyConsent) },
+    { label: "Consent To Contact", accepted: isAccepted(resolved.consentToContact) },
   ];
 
-  if (application.marketingConsent === true) {
+  if (resolved.marketingConsent === true) {
     items.push({ label: "Promotional Communications (Optional)", accepted: true });
   }
 
@@ -108,18 +111,23 @@ function resolveAcknowledgedAtValue(application: WorkerApplication): string {
   return "Not recorded";
 }
 
-function addPaymentInformation(doc: PDFDocument, application: WorkerApplication) {
+function addPaymentInformation(doc: PDFDocument, application: WorkerApplication, variant: AgreementPdfVariant) {
   doc.moveDown(0.5);
   doc.fontSize(12).font("Helvetica-Bold").text("Payment Information");
   doc.moveDown(0.4);
 
-  const paymentMethod = application.paymentMethod || "Not provided";
+  const resolved = resolvePaymentFields(application as unknown as Record<string, unknown>);
+  if (!resolved.paymentMethod && !resolved.bankName && !resolved.bankInstitution && !resolved.bankTransit && !resolved.bankAccount && !resolved.etransferEmail) {
+    logMissingPaymentIfNeeded(application.id, variant);
+  }
+
+  const paymentMethod = resolved.paymentMethod || "Not provided";
   addLabelValue(doc, "Payment Method:", paymentMethod);
-  addLabelValue(doc, "Bank Name:", application.bankName || "Not provided");
-  addLabelValue(doc, "Institution Number:", application.bankInstitution || "Not provided");
-  addLabelValue(doc, "Transit Number:", application.bankTransit || "Not provided");
-  addLabelValue(doc, "Account Number:", application.bankAccount ? `******${String(application.bankAccount).replace(/\D/g, "").slice(-4)}` : "Not provided");
-  addLabelValue(doc, "E-Transfer Email:", application.etransferEmail || "Not provided");
+  addLabelValue(doc, "Bank Name:", resolved.bankName || "Not provided");
+  addLabelValue(doc, "Institution Number:", resolved.bankInstitution || "Not provided");
+  addLabelValue(doc, "Transit Number:", resolved.bankTransit || "Not provided");
+  addLabelValue(doc, "Account Number:", resolved.bankAccount ? `******${String(resolved.bankAccount).replace(/\D/g, "").slice(-4)}` : "Not provided");
+  addLabelValue(doc, "E-Transfer Email:", resolved.etransferEmail || "Not provided");
 }
 
 function addSignature(doc: PDFDocument, application: WorkerApplication) {
@@ -186,7 +194,7 @@ export function streamAgreementPdf(
   });
 
   addAcknowledgments(doc, application);
-  addPaymentInformation(doc, application);
+  addPaymentInformation(doc, application, variant);
   addSignature(doc, application);
 
   doc.end();

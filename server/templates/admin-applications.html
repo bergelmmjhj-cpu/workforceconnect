@@ -1904,12 +1904,75 @@
       function getPaymentSummary(app) {
         if (app.paymentSummary) return app.paymentSummary;
 
-        var paymentMethodRaw = getAppValue(app, 'paymentMethod', 'payment_method');
-        var bankName = getAppValue(app, 'bankName', 'bank_name');
-        var bankInstitution = getAppValue(app, 'bankInstitution', 'bank_institution');
-        var bankTransit = getAppValue(app, 'bankTransit', 'bank_transit');
-        var bankAccount = getAppValue(app, 'bankAccount', 'bank_account');
-        var etransferEmail = getAppValue(app, 'etransferEmail', 'etransfer_email');
+        function firstNonEmpty() {
+          for (var i = 0; i < arguments.length; i += 1) {
+            var value = arguments[i];
+            if (value !== null && value !== undefined && String(value).trim() !== '') {
+              return String(value).trim();
+            }
+          }
+          return '';
+        }
+
+        function readNested(obj, keys) {
+          if (!obj || typeof obj !== 'object') return '';
+          for (var i = 0; i < keys.length; i += 1) {
+            var value = obj[keys[i]];
+            if (value !== null && value !== undefined && String(value).trim() !== '') {
+              return String(value).trim();
+            }
+          }
+          return '';
+        }
+
+        function parseObjectLike(value) {
+          if (!value) return null;
+          if (typeof value === 'object') return value;
+          if (typeof value === 'string') {
+            try {
+              var parsed = JSON.parse(value);
+              if (parsed && typeof parsed === 'object') return parsed;
+            } catch (_) {}
+          }
+          return null;
+        }
+
+        var nestedPayment = parseObjectLike(firstNonEmpty(
+          getAppValue(app, 'paymentInfo', 'payment_info'),
+          getAppValue(app, 'paymentDetails', 'payment_details'),
+          getAppValue(app, 'bankingInfo', 'banking_info'),
+          getAppValue(app, 'bankInfo', 'bank_info')
+        ));
+
+        var paymentMethodRaw = firstNonEmpty(
+          getAppValue(app, 'paymentMethod', 'payment_method'),
+          nestedPayment ? readNested(nestedPayment, ['paymentMethod', 'payment_method', 'method']) : ''
+        );
+        var bankName = firstNonEmpty(
+          getAppValue(app, 'bankName', 'bank_name'),
+          nestedPayment ? readNested(nestedPayment, ['bankName', 'bank_name', 'bank']) : ''
+        );
+        var bankInstitution = firstNonEmpty(
+          getAppValue(app, 'bankInstitution', 'bank_institution'),
+          getAppValue(app, 'institutionNumber', 'institution_number'),
+          nestedPayment ? readNested(nestedPayment, ['bankInstitution', 'bank_institution', 'institutionNumber', 'institution_number', 'institution']) : ''
+        );
+        var bankTransit = firstNonEmpty(
+          getAppValue(app, 'bankTransit', 'bank_transit'),
+          getAppValue(app, 'transitNumber', 'transit_number'),
+          nestedPayment ? readNested(nestedPayment, ['bankTransit', 'bank_transit', 'transitNumber', 'transit_number', 'transit']) : ''
+        );
+        var bankAccount = firstNonEmpty(
+          getAppValue(app, 'bankAccount', 'bank_account'),
+          getAppValue(app, 'accountNumber', 'account_number'),
+          nestedPayment ? readNested(nestedPayment, ['bankAccount', 'bank_account', 'accountNumber', 'account_number', 'account']) : ''
+        );
+        var etransferEmail = firstNonEmpty(
+          getAppValue(app, 'etransferEmail', 'etransfer_email'),
+          getAppValue(app, 'eTransferEmail', 'e_transfer_email'),
+          getAppValue(app, 'directDepositEmail', 'direct_deposit_email'),
+          nestedPayment ? readNested(nestedPayment, ['etransferEmail', 'etransfer_email', 'eTransferEmail', 'e_transfer_email', 'directDepositEmail', 'direct_deposit_email']) : ''
+        );
         var payrollContactEmail = etransferEmail || app.email || 'Not provided';
 
         var normalizedMethod = (paymentMethodRaw || '').toString().trim().toLowerCase();

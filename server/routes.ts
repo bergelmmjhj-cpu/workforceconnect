@@ -55,7 +55,7 @@ import { discordAlerts, appConfig, applicants } from "../shared/schema";
 import { sendDiscordNotification, acknowledgeAlert } from "./services/discord";
 import { WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION } from "../shared/contractor-guide-content";
 import { streamAgreementPdf } from "./lib/agreement-pdf";
-import { resolveAcknowledgmentFields, resolvePaymentFields } from "./lib/worker-application-resolution";
+import { arePaymentFieldsMissing, resolveAcknowledgmentFields, resolvePaymentFields } from "./lib/worker-application-resolution";
 import { z } from "zod";
 
 type UserRole = "admin" | "hr" | "client" | "worker";
@@ -1684,6 +1684,107 @@ async function updateAgreementPdfTimestampFailSoft(
   } catch (timestampError) {
     console.warn(`[AGREEMENT_PDF] Timestamp update failed for ${applicationId} (${field}); continuing with PDF stream`, timestampError);
   }
+}
+
+const paymentProfileFallbackWarnings = new Set<string>();
+const legacyAcknowledgmentFallbackWarnings = new Set<string>();
+
+function warnOnce(cache: Set<string>, key: string, message: string): void {
+  if (cache.has(key)) return;
+  cache.add(key);
+  console.warn(message);
+}
+
+function hasTextValue(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function mergeTextFieldIfMissing(target: Record<string, unknown>, field: string, value: unknown): void {
+  const current = target[field];
+  if (hasTextValue(current)) return;
+  if (hasTextValue(value)) {
+    target[field] = String(value).trim();
+  }
+}
+
+async function hydrateAgreementPdfApplication(
+  applicationInput: Record<string, unknown>,
+  options?: { workerUserId?: string | null },
+): Promise<Record<string, unknown>> {
+  const hydrated: Record<string, unknown> = { ...applicationInput };
+
+  if (arePaymentFieldsMissing(hydrated)) {
+    let workerUserId = options?.workerUserId || null;
+
+    if (!workerUserId && hasTextValue(hydrated.email)) {
+      const normalizedEmail = String(hydrated.email).trim().toLowerCase();
+      const [user] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(sql`lower(${users.email}) = ${normalizedEmail}`)
+        .limit(1);
+      workerUserId = user?.id || null;
+    }
+
+    if (workerUserId) {
+      const [paymentProfile] = await db
+        .select({
+          paymentMethod: paymentProfiles.paymentMethod,
+          bankName: paymentProfiles.bankName,
+          bankInstitution: paymentProfiles.bankInstitution,
+          bankTransit: paymentProfiles.bankTransit,
+          bankAccount: paymentProfiles.bankAccount,
+          etransferEmail: paymentProfiles.etransferEmail,
+        })
+        .from(paymentProfiles)
+        .where(eq(paymentProfiles.workerUserId, workerUserId))
+        .limit(1);
+
+      if (paymentProfile) {
+        mergeTextFieldIfMissing(hydrated, "paymentMethod", paymentProfile.paymentMethod);
+        mergeTextFieldIfMissing(hydrated, "bankName", paymentProfile.bankName);
+        mergeTextFieldIfMissing(hydrated, "bankInstitution", paymentProfile.bankInstitution);
+        mergeTextFieldIfMissing(hydrated, "bankTransit", paymentProfile.bankTransit);
+        mergeTextFieldIfMissing(hydrated, "bankAccount", paymentProfile.bankAccount);
+        mergeTextFieldIfMissing(hydrated, "etransferEmail", paymentProfile.etransferEmail);
+
+        warnOnce(
+          paymentProfileFallbackWarnings,
+          `${String(hydrated.id || "unknown")}:payment-profile-fallback`,
+          `[AGREEMENT_PDF] Applied payment profile fallback for record ${String(hydrated.id || "unknown")}`,
+        );
+      }
+    }
+  }
+
+  const acknowledgmentState = resolveAcknowledgmentFields(hydrated);
+  const hasAnyRequiredAcknowledgment = acknowledgmentState.backgroundCheckConsent
+    || acknowledgmentState.titoAcknowledgment
+    || acknowledgmentState.siteRulesAcknowledgment
+    || acknowledgmentState.workerAgreementConsent
+    || acknowledgmentState.privacyConsent
+    || acknowledgmentState.consentToContact
+    || acknowledgmentState.nonSolicitationAcknowledged;
+
+  const hasSignature = hasTextValue(hydrated.signature) && hasTextValue(hydrated.signatureDate);
+
+  if (!hasAnyRequiredAcknowledgment && hasSignature) {
+    hydrated.backgroundCheckConsent = true;
+    hydrated.titoAcknowledgment = true;
+    hydrated.siteRulesAcknowledgment = true;
+    hydrated.workerAgreementConsent = true;
+    hydrated.privacyConsent = true;
+    hydrated.consentToContact = true;
+    hydrated.nonSolicitationAcknowledged = true;
+
+    warnOnce(
+      legacyAcknowledgmentFallbackWarnings,
+      `${String(hydrated.id || "unknown")}:legacy-ack-fallback`,
+      `[AGREEMENT_PDF] Applied legacy acknowledgment fallback for signed record ${String(hydrated.id || "unknown")}`,
+    );
+  }
+
+  return hydrated;
 }
 
 function makeSubmissionFingerprint(parts: Array<string | null | undefined>): string {
@@ -5659,9 +5760,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application as unknown as Record<string, unknown>,
+        { workerUserId: user.id },
+      );
+
       await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "worker", {
+      streamAgreementPdf(res, hydratedApplication as any, "worker", {
         disposition: resolvePdfDisposition(req.query.disposition),
       });
     } catch (error) {
@@ -5688,9 +5794,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application as unknown as Record<string, unknown>,
+      );
+
       await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "internal", {
+      streamAgreementPdf(res, hydratedApplication as any, "internal", {
         disposition: resolvePdfDisposition(req.query.disposition),
       });
     } catch (error) {
@@ -5717,9 +5827,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application as unknown as Record<string, unknown>,
+      );
+
       await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "worker", {
+      streamAgreementPdf(res, hydratedApplication as any, "worker", {
         disposition: resolvePdfDisposition(req.query.disposition),
       });
     } catch (error) {
@@ -5746,9 +5860,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application as unknown as Record<string, unknown>,
+      );
+
       await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
 
-      streamAgreementPdf(res, application, "internal", {
+      streamAgreementPdf(res, hydratedApplication as any, "internal", {
         disposition: resolvePdfDisposition(req.query.disposition),
       });
     } catch (error) {

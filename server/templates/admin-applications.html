@@ -2011,6 +2011,32 @@
         return app.locationLabel || [app.city || '', app.province || ''].filter(Boolean).join(', ') || 'Location pending';
       }
 
+      function getLocationDetailLabel(app) {
+        var fullAddress = String(app.address || app.addressFull || '').trim();
+        var city = String(app.city || app.addressCity || '').trim();
+        var province = String(app.province || app.addressProvince || '').trim();
+        var postalCode = String(app.postalCode || app.addressPostalCode || '').trim();
+
+        if (fullAddress) {
+          var normalizedAddress = fullAddress.toLowerCase();
+          var trailingParts = [];
+
+          if (city && normalizedAddress.indexOf(city.toLowerCase()) === -1) {
+            trailingParts.push(city);
+          }
+          if (province && normalizedAddress.indexOf(province.toLowerCase()) === -1) {
+            trailingParts.push(province);
+          }
+          if (postalCode && normalizedAddress.indexOf(postalCode.toLowerCase()) === -1) {
+            trailingParts.push(postalCode);
+          }
+
+          return [fullAddress].concat(trailingParts).join(', ');
+        }
+
+        return [city, province, postalCode].filter(Boolean).join(', ') || getLocationLabel(app);
+      }
+
       function getSourceLabel(app) {
         return app.applicationSource || app.application_source || 'Direct application';
       }
@@ -2314,7 +2340,7 @@
         html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.full_name || app.fullName || 'Not provided') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email || 'Not provided') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone || 'Not provided') + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Location</div><div class="detail-value">' + escapeHtml(getLocationLabel(app)) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Location</div><div class="detail-value">' + escapeHtml(getLocationDetailLabel(app)) + '</div></div>';
         html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + escapeHtml(roles.join(', ') || 'Not provided') + '</div></div>';
         html += '</div></div>';
 
@@ -2643,7 +2669,7 @@
             getStatusLabel(app.status),
             getAssignedRecruiterLabel(app),
             getSourceLabel(app),
-            getLocationLabel(app),
+            getLocationDetailLabel(app),
             agreementSummary.nonSolicitationLabel,
             getReadinessLabel(app.deploymentReadiness),
             getReadinessLabel(app.payrollReadiness),

@@ -696,6 +696,8 @@ const publicApplicantSubmissionSchema = z.object({
   resumeFilename: z.string().optional(),
   resumeMimeType: z.string().optional(),
   resumeFileSize: z.number().int().nonnegative().optional(),
+  smsConsent: consentLikeSchema.optional(),
+  marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
 }).strict();
 
@@ -5409,7 +5411,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fullName: fullNameIn, addressFull, addressStreet, addressCity, addressProvince,
         addressPostalCode, addressCountry, applyingFor, jobPostingSource,
         photoData: photoDataIn, photoFilename, photoMimeType, photoFileSize,
-        resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize, promotionalConsent,
+        resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize,
+        smsConsent, marketingConsent, promotionalConsent,
       } = payload;
 
       const canonicalPhone =
@@ -5438,6 +5441,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!jobPostingSource?.trim()) return res.status(400).json({ error: "Job posting source required" });
       if (!photoDataIn) return res.status(400).json({ error: "Photo required" });
       if (!resumeDataIn) return res.status(400).json({ error: "Resume required" });
+
+      const smsConsentGranted = isConsentGranted(smsConsent);
+      if (!smsConsentGranted) {
+        return res.status(400).json({
+          error: "SMS text/call consent is required to submit this application",
+        });
+      }
+      const marketingConsentGranted = isConsentGranted(marketingConsent) || isConsentGranted(promotionalConsent);
 
       const PHOTO_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
       const RESUME_TYPES = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
@@ -5527,7 +5538,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
-        promotionalConsent: promotionalConsent === true,
+        smsConsent: smsConsentGranted,
+        smsConsentAt: smsConsentGranted ? now : null,
+        marketingConsent: marketingConsentGranted,
+        marketingConsentAt: marketingConsentGranted ? now : null,
+        promotionalConsent: marketingConsentGranted,
         status: "new",
         submittedAt: now,
       }).returning({ id: applicants.id });
@@ -5567,6 +5582,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         photoMimeType: applicants.photoMimeType,
         resumeFilename: applicants.resumeFilename,
         resumeMimeType: applicants.resumeMimeType,
+        smsConsent: applicants.smsConsent,
+        smsConsentAt: applicants.smsConsentAt,
+        marketingConsent: applicants.marketingConsent,
+        marketingConsentAt: applicants.marketingConsentAt,
+        promotionalConsent: applicants.promotionalConsent,
         status: applicants.status,
         submittedAt: applicants.submittedAt,
       }).from(applicants)

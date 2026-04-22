@@ -72,6 +72,43 @@
       border: none; border-radius: 12px; font-size: 17px; font-weight: 700;
       cursor: pointer; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px;
     }
+    .consent-block {
+      margin: 8px 0 14px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+    }
+    .consent-disclosure {
+      font-size: 14px;
+      line-height: 1.55;
+      color: #273244;
+      margin-bottom: 14px;
+    }
+    .consent-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      line-height: 1.45;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+    .consent-row:last-of-type { margin-bottom: 0; }
+    .consent-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+    .consent-optional { font-weight: 400; }
+    .consent-error {
+      color: var(--error);
+      font-size: 12px;
+      margin-top: 8px;
+      display: none;
+    }
+    .consent-error.show { display: block; }
     .submit-btn:hover:not(:disabled) { background: var(--primary-dark); }
     .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .spinner { width: 20px; height: 20px; border: 2.5px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -88,6 +125,9 @@
     @media (max-width: 480px) {
       .card { padding: 20px; }
       .card-title { font-size: 15px; }
+      .consent-block { padding: 12px; }
+      .consent-disclosure { font-size: 13px; }
+      .consent-row { font-size: 13px; }
     }
   </style>
 </head>
@@ -204,11 +244,22 @@
       </div>
     </div>
 
-    <div class="field" style="margin-top: 4px;">
-      <label style="display:flex; align-items:flex-start; gap:10px; font-weight:500; line-height:1.4; margin-bottom:0;">
-        <input type="checkbox" id="promotional_consent" name="promotional_consent" style="width:18px; height:18px; margin-top:2px; flex-shrink:0;" />
-        <span>I agree to receive promotional communications and updates</span>
+    <div class="consent-block">
+      <p class="consent-disclosure">
+        By providing your phone number and submitting this application, you consent to receive SMS text messages and phone calls regarding your application, interview scheduling, job offers, shift opportunities, and employment-related communication from Workforce Connect. Message and data rates may apply. Reply STOP to opt out at any time.
+      </p>
+
+      <label class="consent-row">
+        <input type="checkbox" id="sms_consent" name="sms_consent" />
+        <span>I agree to receive SMS text messages and phone calls regarding my job application, interview scheduling, job offers, shift opportunities, and employment-related communication. <span class="req">*</span></span>
       </label>
+
+      <label class="consent-row consent-optional">
+        <input type="checkbox" id="marketing_consent" name="marketing_consent" />
+        <span>I agree to receive promotional communications and updates (optional)</span>
+      </label>
+
+      <div class="consent-error" id="err-sms-consent">Please agree to receive employment-related SMS text messages and phone calls to submit your application.</div>
     </div>
 
     <!-- Submit -->
@@ -450,9 +501,17 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
 
   if (!photoData) { showError('photo', 'Please upload a profile photo'); valid = false; } else clearError('photo');
   if (!resumeData) { showError('resume', 'Please upload your resume'); valid = false; } else clearError('resume');
+  const smsConsentChecked = document.getElementById('sms_consent').checked;
+  const smsConsentError = document.getElementById('err-sms-consent');
+  if (!smsConsentChecked) {
+    smsConsentError.classList.add('show');
+    valid = false;
+  } else {
+    smsConsentError.classList.remove('show');
+  }
 
   if (!valid) {
-    document.querySelector('.field-error.show')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.querySelector('.field-error.show, .consent-error.show')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
 
@@ -481,7 +540,9 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       resumeFilename: resumeData.filename,
       resumeMimeType: resumeData.mime,
       resumeFileSize: resumeData.size,
-      promotionalConsent: document.getElementById('promotional_consent').checked,
+      smsConsent: smsConsentChecked,
+      marketingConsent: document.getElementById('marketing_consent').checked,
+      promotionalConsent: document.getElementById('marketing_consent').checked,
     };
 
     const resp = await fetch('/api/applicants', {

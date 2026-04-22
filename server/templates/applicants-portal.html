@@ -626,6 +626,15 @@ function escAttr(str) {
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function formatConsentStatus(value, at) {
+  const accepted = value === true;
+  if (!accepted) return 'Not accepted';
+  if (!at) return 'Accepted';
+  const dt = new Date(at);
+  if (isNaN(dt.getTime())) return 'Accepted';
+  return 'Accepted (' + dt.toLocaleString('en-CA') + ')';
+}
+
 // Detail panel
 async function openDetail(id) {
   const overlay = document.getElementById('detail-overlay');
@@ -667,6 +676,12 @@ function renderDetail(a) {
       <div class="detail-row"><div class="detail-label">Position</div><div class="detail-value">${esc(a.applyingFor)}</div></div>
       <div class="detail-row"><div class="detail-label">Source</div><div class="detail-value">${esc(a.jobPostingSource || '—')}</div></div>
       <div class="detail-row"><div class="detail-label">Submitted</div><div class="detail-value">${dateStr}</div></div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Consent</div>
+      <div class="detail-row"><div class="detail-label">SMS / Calls</div><div class="detail-value">${esc(formatConsentStatus(a.smsConsent, a.smsConsentAt))}</div></div>
+      <div class="detail-row"><div class="detail-label">Marketing</div><div class="detail-value">${esc(formatConsentStatus(a.marketingConsent, a.marketingConsentAt))}</div></div>
     </div>
 
     <div class="detail-section">

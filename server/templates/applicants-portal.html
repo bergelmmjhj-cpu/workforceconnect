@@ -464,6 +464,28 @@ async function logout() {
   showLogin();
 }
 
+async function parseApiErrorMessage(resp, fallbackMessage) {
+  let detail = '';
+  try {
+    const payload = await resp.clone().json();
+    if (payload && typeof payload === 'object') {
+      if (typeof payload.detail === 'string' && payload.detail.trim()) {
+        detail = payload.detail.trim();
+      } else if (typeof payload.error === 'string' && payload.error.trim()) {
+        detail = payload.error.trim();
+      } else if (typeof payload.message === 'string' && payload.message.trim()) {
+        detail = payload.message.trim();
+      }
+    }
+  } catch {}
+
+  if (detail) return detail;
+  if (typeof resp.statusText === 'string' && resp.statusText.trim()) {
+    return `${fallbackMessage} (${resp.status} ${resp.statusText})`;
+  }
+  return fallbackMessage;
+}
+
 // Load applicants
 async function loadApplicants() {
   const search = document.getElementById('search-input').value.trim();
@@ -485,7 +507,10 @@ async function loadApplicants() {
       apiFetch('/api/applicants/stats?' + statsParams.toString(), { headers: getHeaders() }),
     ]);
     if (resp.status === 403 || resp.status === 401) { showLogin(); return; }
-    if (!resp.ok) throw new Error('Failed to fetch');
+    if (!resp.ok) {
+      const msg = await parseApiErrorMessage(resp, 'Failed to load applicants');
+      throw new Error(msg);
+    }
 
     applicants = await resp.json();
 
@@ -516,7 +541,9 @@ async function loadApplicants() {
     renderStats();
     renderTable();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="6" class="no-data"><div class="no-data-icon">&#9888;</div><div class="no-data-text">Failed to load applicants</div></td></tr>';
+    const message = (err && err.message) ? err.message : 'Failed to load applicants';
+    tbody.innerHTML = `<tr><td colspan="6" class="no-data"><div class="no-data-icon">&#9888;</div><div class="no-data-text">${esc(message)}</div></td></tr>`;
+    showToast(message, 'error');
   }
 }
 
@@ -646,11 +673,16 @@ async function openDetail(id) {
 
   try {
     const resp = await apiFetch('/api/applicants/' + id, { headers: getHeaders() });
-    if (!resp.ok) throw new Error('Failed');
+    if (!resp.ok) {
+      const msg = await parseApiErrorMessage(resp, 'Failed to load applicant details');
+      throw new Error(msg);
+    }
     const data = await resp.json();
     renderDetail(data);
-  } catch {
-    document.getElementById('detail-body').innerHTML = '<div class="no-data"><div class="no-data-text">Failed to load details</div></div>';
+  } catch (err) {
+    const message = (err && err.message) ? err.message : 'Failed to load details';
+    document.getElementById('detail-body').innerHTML = `<div class="no-data"><div class="no-data-text">${esc(message)}</div></div>`;
+    showToast(message, 'error');
   }
 }
 

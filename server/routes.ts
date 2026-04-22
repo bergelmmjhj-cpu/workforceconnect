@@ -800,6 +800,77 @@ function normalizeApplicantPhone(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+const APPLICANT_OPTIONAL_CONSENT_COLUMNS = {
+  smsConsent: "sms_consent",
+  smsConsentAt: "sms_consent_at",
+  marketingConsent: "marketing_consent",
+  marketingConsentAt: "marketing_consent_at",
+  promotionalConsent: "promotional_consent",
+} as const;
+
+let applicantsColumnSetPromise: Promise<Set<string>> | null = null;
+
+async function getApplicantsColumnSet(): Promise<Set<string>> {
+  if (!applicantsColumnSetPromise) {
+    applicantsColumnSetPromise = db.execute(sql<{ column_name: string }>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'applicants'
+    `)
+      .then((result: unknown) => {
+        const rows = Array.isArray(result)
+          ? result
+          : result && typeof result === "object" && "rows" in result && Array.isArray((result as { rows?: unknown[] }).rows)
+            ? (result as { rows: Array<{ column_name?: string }> }).rows
+            : [];
+
+        const columnSet = new Set(
+          rows
+            .map((row) => row?.column_name)
+            .filter((columnName): columnName is string => typeof columnName === "string" && columnName.length > 0),
+        );
+
+        const missingColumns = Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS)
+          .filter((columnName) => !columnSet.has(columnName));
+
+        if (missingColumns.length > 0) {
+          console.warn(`[APPLICANTS] Optional consent columns unavailable: ${missingColumns.join(", ")}`);
+        }
+
+        return columnSet;
+      })
+      .catch((error) => {
+        console.warn("[APPLICANTS] Failed to inspect applicants columns; falling back to legacy-safe projection", error);
+        return new Set<string>();
+      });
+  }
+
+  return applicantsColumnSetPromise;
+}
+
+async function getApplicantOptionalConsentSelect() {
+  const columnSet = await getApplicantsColumnSet();
+
+  return {
+    smsConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsent)
+      ? applicants.smsConsent
+      : sql<boolean | null>`NULL`,
+    smsConsentAt: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsentAt)
+      ? applicants.smsConsentAt
+      : sql<Date | null>`NULL`,
+    marketingConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsent)
+      ? applicants.marketingConsent
+      : sql<boolean | null>`NULL`,
+    marketingConsentAt: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsentAt)
+      ? applicants.marketingConsentAt
+      : sql<Date | null>`NULL`,
+    promotionalConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent)
+      ? applicants.promotionalConsent
+      : sql<boolean | null>`NULL`,
+  };
+}
+
 const REQUIRED_APPROVAL_ACK_FIELDS: Array<{ field: keyof typeof workerApplications.$inferSelect; label: string }> = [
   { field: "backgroundCheckConsent", label: "Background Check Consent" },
   { field: "titoAcknowledgment", label: "TITO Acknowledgment" },
@@ -5519,7 +5590,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
       const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
 
-      const [applicant] = await db.insert(applicants).values({
+      const applicantColumnSet = await getApplicantsColumnSet();
+      const insertValues: Record<string, unknown> = {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
         addressFull: normalizeAddressText(addressFull),
@@ -5538,20 +5610,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
-        smsConsent: smsConsentGranted,
-        smsConsentAt: smsConsentGranted ? now : null,
-        marketingConsent: marketingConsentGranted,
-        marketingConsentAt: marketingConsentGranted ? now : null,
-        promotionalConsent: marketingConsentGranted,
         status: "new",
         submittedAt: now,
-      }).returning({ id: applicants.id });
+      };
+
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsent)) {
+        insertValues.smsConsent = smsConsentGranted;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsentAt)) {
+        insertValues.smsConsentAt = smsConsentGranted ? now : null;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsent)) {
+        insertValues.marketingConsent = marketingConsentGranted;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsentAt)) {
+        insertValues.marketingConsentAt = marketingConsentGranted ? now : null;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent)) {
+        insertValues.promotionalConsent = marketingConsentGranted;
+      }
+
+      const [applicant] = await db.insert(applicants).values(insertValues as any).returning({ id: applicants.id });
 
       console.log(`[APPLICANTS] New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
       res.json({ success: true, applicantId: applicant.id });
     } catch (error: any) {
-      console.error("[APPLICANTS] Submission error:", error);
-      res.status(500).json({ error: "Failed to submit application" });
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      console.error("[APPLICANTS] Submission error:", { detail, error });
+      res.status(500).json({ error: "Failed to submit application", detail });
     }
   });
 
@@ -5582,11 +5668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         photoMimeType: applicants.photoMimeType,
         resumeFilename: applicants.resumeFilename,
         resumeMimeType: applicants.resumeMimeType,
-        smsConsent: applicants.smsConsent,
-        smsConsentAt: applicants.smsConsentAt,
-        marketingConsent: applicants.marketingConsent,
-        marketingConsentAt: applicants.marketingConsentAt,
-        promotionalConsent: applicants.promotionalConsent,
+        ...(await getApplicantOptionalConsentSelect()),
         status: applicants.status,
         submittedAt: applicants.submittedAt,
       }).from(applicants)
@@ -5602,6 +5684,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           addressFull: row.addressFull,
         });
         const phoneDisplay = normalizeApplicantPhone(row.phone);
+        const normalizedSmsConsent = isConsentGranted(row.smsConsent);
+        const normalizedPromotionalConsent = isConsentGranted(row.promotionalConsent);
+        const normalizedMarketingConsent = row.marketingConsent == null
+          ? normalizedPromotionalConsent
+          : isConsentGranted(row.marketingConsent);
 
         return {
           ...row,
@@ -5611,6 +5698,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           phoneDisplay,
           addressCity: row.addressCity || parsedAddress.city || null,
           addressProvince: row.addressProvince || parsedAddress.province || null,
+          smsConsent: normalizedSmsConsent,
+          smsConsentAt: row.smsConsentAt || null,
+          marketingConsent: normalizedMarketingConsent,
+          marketingConsentAt: row.marketingConsentAt || null,
+          promotionalConsent: normalizedPromotionalConsent,
           locationDisplay,
         };
       });
@@ -5626,14 +5718,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(normalizedRows);
     } catch (error: any) {
-      console.error("[APPLICANTS] List error:", error);
-      res.status(500).json({ error: "Failed to fetch applicants" });
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      console.error("[APPLICANTS] List error:", {
+        detail,
+        query: { search: req.query.search, status: req.query.status, limit: req.query.limit },
+        error,
+      });
+      res.status(500).json({ error: "Failed to fetch applicants", detail });
     }
   });
 
   app.get("/api/applicants/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
-      const [row] = await db.select().from(applicants).where(eq(applicants.id, req.params.id));
+      const applicantId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!applicantId) {
+        return res.status(400).json({ error: "Invalid applicant id" });
+      }
+
+      const [row] = await db.select({
+        id: applicants.id,
+        fullName: applicants.fullName,
+        phone: applicants.phone,
+        addressFull: applicants.addressFull,
+        addressCity: applicants.addressCity,
+        addressProvince: applicants.addressProvince,
+        addressPostalCode: applicants.addressPostalCode,
+        applyingFor: applicants.applyingFor,
+        jobPostingSource: applicants.jobPostingSource,
+        photoData: applicants.photoData,
+        photoFilename: applicants.photoFilename,
+        resumeData: applicants.resumeData,
+        resumeFilename: applicants.resumeFilename,
+        status: applicants.status,
+        submittedAt: applicants.submittedAt,
+        ...(await getApplicantOptionalConsentSelect()),
+      }).from(applicants).where(eq(applicants.id, applicantId));
       if (!row) return res.status(404).json({ error: "Applicant not found" });
       // Strip file data from main response for speed
       const { photoData: _p, resumeData: _r, ...safe } = row;
@@ -5644,6 +5763,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         addressFull: safe.addressFull,
       });
       const phoneDisplay = normalizeApplicantPhone(safe.phone);
+      const normalizedSmsConsent = isConsentGranted(safe.smsConsent);
+      const normalizedPromotionalConsent = isConsentGranted(safe.promotionalConsent);
+      const normalizedMarketingConsent = safe.marketingConsent == null
+        ? normalizedPromotionalConsent
+        : isConsentGranted(safe.marketingConsent);
+
       res.json({
         ...safe,
         phone: phoneDisplay || "",
@@ -5653,12 +5778,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         addressCity: safe.addressCity || parsedAddress.city || null,
         addressProvince: safe.addressProvince || parsedAddress.province || null,
         addressPostalCode: safe.addressPostalCode || parsedAddress.postalCode || null,
+        smsConsent: normalizedSmsConsent,
+        smsConsentAt: safe.smsConsentAt || null,
+        marketingConsent: normalizedMarketingConsent,
+        marketingConsentAt: safe.marketingConsentAt || null,
+        promotionalConsent: normalizedPromotionalConsent,
         locationDisplay,
         hasPhoto: !!_p,
         hasResume: !!_r,
       });
     } catch (error: any) {
-      res.status(500).json({ error: "Failed to fetch applicant" });
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      console.error("[APPLICANTS] Detail error:", { applicantId: req.params.id, detail, error });
+      res.status(500).json({ error: "Failed to fetch applicant", detail });
     }
   });
 

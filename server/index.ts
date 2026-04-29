@@ -382,6 +382,14 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql`UPDATE "applicants" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
     await db.execute(sql`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET NOT NULL`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_data" text`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_filename" text`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_mime_type" text`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_file_size" integer`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_data" text`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_filename" text`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_mime_type" text`);
+    await db.execute(sql`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_file_size" integer`);
     log("Ensured worker_applications compatibility columns");
   } catch (error) {
     log("Error ensuring worker_applications compatibility:", error);

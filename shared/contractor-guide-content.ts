@@ -95,6 +95,7 @@ export const workforceSubcontractorAgreementSections: AgreementSection[] = [
     paragraphs: [
       "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
       "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company’s then-current payroll cycle and operational procedures.",
+      "Payment dates are not fixed or guaranteed. Payment timing depends on approved hours, verification, payroll processing, banking timelines, and operational requirements. Delays caused by client approval, disputes, delayed client payment, or delayed client fund release may affect contractor payment timing and shall not constitute breach by the Company.",
     ],
   },
   {

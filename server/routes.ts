@@ -5906,6 +5906,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete worker application by ID (admin only)
+  app.delete("/api/admin/worker-applications/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const [deleted] = await db.delete(workerApplications)
+        .where(eq(workerApplications.id, req.params.id))
+        .returning({ id: workerApplications.id });
+
+      if (!deleted) {
+        res.status(404).json({ ok: false, error: "Worker application not found" });
+        return;
+      }
+
+      res.json({ ok: true, deleted: true });
+    } catch (error: any) {
+      console.error("[DELETE /api/admin/worker-applications/:id]", error);
+      res.status(500).json({ ok: false, error: "Failed to delete worker application" });
+    }
+  });
+
+  // Delete applicant by ID (admin only)
+  app.delete("/api/admin/applicants/:id", checkRoles("admin"), async (req: Request, res: Response) => {
+    try {
+      const [deleted] = await db.delete(applicants)
+        .where(eq(applicants.id, req.params.id))
+        .returning({ id: applicants.id });
+
+      if (!deleted) {
+        res.status(404).json({ ok: false, error: "Applicant not found" });
+        return;
+      }
+
+      res.json({ ok: true, deleted: true });
+    } catch (error: any) {
+      console.error("[DELETE /api/admin/applicants/:id]", error);
+      res.status(500).json({ ok: false, error: "Failed to delete applicant" });
+    }
+  });
+
   app.get("/api/agreements/me/download", async (req: Request, res: Response) => {
     try {
       const userId = req.headers["x-user-id"] as string;

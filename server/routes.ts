@@ -3830,7 +3830,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
         consentToContact: resolvedAcknowledgments.consentToContact,
         privacyConsent: resolvedAcknowledgments.privacyConsent,
-        independentContractorStatusAcknowledged: resolvedAcknowledgments.independentContractorStatusAcknowledged,
         paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,

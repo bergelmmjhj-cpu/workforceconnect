@@ -1096,6 +1096,12 @@
               <span class="checkbox-label bold">Worker Agreement <span style="color: var(--error);">*</span></span>
             </label>
             <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I have read and agree to the <a href="/guide" style="color: var(--primary);">Contractor Payment & Processing Guide</a> and understand that I will be working as an independent subcontractor, NOT as an employee.</p>
+
+            <label class="checkbox-item" style="margin-top: 16px;">
+              <input type="checkbox" name="independentContractorStatusAcknowledged" required>
+              <span class="checkbox-label bold">Independent Contractor Status Acknowledgment <span style="color: var(--error);">*</span></span>
+            </label>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I understand that I am an independent contractor, not an employee, and I am responsible for my own taxes, benefits, and business operations.</p>
             
             <label class="checkbox-item" style="margin-top: 16px;">
               <input type="checkbox" name="privacyConsent" required>
@@ -1235,7 +1241,7 @@
                 isValid = false;
               }
 
-              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'privacyConsent', 'consentToContact'].forEach(function(name) {
+              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'independentContractorStatusAcknowledged', 'privacyConsent', 'consentToContact'].forEach(function(name) {
                 var checkbox = form.querySelector('input[name="' + name + '"]');
                 if (checkbox && !checkbox.checked) {
                   isValid = false;
@@ -1332,7 +1338,8 @@
           titoAcknowledgment: form.titoAcknowledgment.checked,
           siteRulesAcknowledgment: form.siteRulesAcknowledgment.checked,
           workerAgreementConsent: form.workerAgreementConsent.checked,
-          agreementVersion: 'v3.0',
+          agreementVersion: 'v3.2',
+          independentContractorStatusAcknowledged: form.independentContractorStatusAcknowledged.checked,
           nonSolicitationAcknowledged: form.nonSolicitationAcknowledged.checked,
           nonSolicitationAcknowledgedAt: new Date().toISOString(),
           privacyConsent: form.privacyConsent.checked,

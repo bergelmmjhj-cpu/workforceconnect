@@ -42,7 +42,7 @@ export interface AgreementSection {
   paragraphs: string[];
 }
 
-export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.1";
+export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.2";
 export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE = "2026-04-30";
 
 export const NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE = "Non-Solicitation / Direct Hiring Clause";
@@ -54,6 +54,11 @@ export const NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS = [
   "In the event that the Contractor accepts such employment or engagement without the Company’s prior written consent, the Contractor agrees to pay the Company a placement fee equivalent to three (3) months of full-time hours calculated at the Contractor’s most recent agreed hourly rate. The parties acknowledge and agree that this amount represents a genuine pre-estimate of damages and is not intended to be a penalty.",
   "The Contractor acknowledges that the duration, scope, and nature of this clause are reasonable and necessary to protect the Company’s legitimate business interests, including its client relationships and investment in securing and maintaining such clients.",
 ];
+
+export const INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_LABEL = "Independent Contractor Status Acknowledgment";
+
+export const INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_TEXT =
+  "I understand that I am an independent contractor, not an employee, and I am responsible for my own taxes, benefits, and business operations.";
 
 export const CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH =
   "Client Payment Dependency: The Contractor acknowledges and agrees that the Company’s ability to process payments is dependent on receiving payment from its clients. In the event of non-payment or delayed payment by a client, the Contractor’s payment may be correspondingly delayed. The Contractor accepts that such delays are outside the Company’s control and do not constitute a breach of this Agreement, provided that payment for approved hours is made once client funds are received.";
@@ -74,9 +79,13 @@ export const workforceSubcontractorAgreementSections: AgreementSection[] = [
     id: "relationship",
     title: "2. Independent Contractor Relationship",
     paragraphs: [
-      "The Contractor performs services as an independent subcontractor and not as an employee, agent, partner, or representative of the Company unless required by applicable law.",
-      "The Contractor understands that they are not entitled to Employment Insurance, Canada Pension Plan contributions, vacation pay, overtime pay, benefits, or any similar employee entitlements unless expressly required by law.",
-      "The Contractor is solely responsible for filing and remitting all taxes, source deductions, premiums, and statutory contributions arising from amounts paid under this Agreement.",
+      "The Contractor is engaged as an independent contractor and not as an employee, agent, or representative of the Company. Nothing in this Agreement shall be interpreted as creating an employment, partnership, or joint venture relationship.",
+      "The Contractor has full discretion over whether to accept or decline assignments and retains control over the manner and means of performing accepted work, subject only to client site requirements and applicable laws.",
+      "The Contractor is free to perform services for other businesses, including competitors of the Company, and is not required to work exclusively for the Company.",
+      "The Contractor is not entitled to Employment Insurance, Canada Pension Plan contributions, vacation pay, overtime pay, termination pay, or any other employment-related benefits, except as required by law.",
+      "The Contractor assumes all responsibility for income taxes, HST (if applicable), and statutory remittances arising from payments received.",
+      "The Contractor acknowledges that they operate as an independent business and assume the risk of profit or loss.",
+      "The Contractor may operate under their own business name and is responsible for maintaining any required licenses, registrations, or insurance.",
     ],
   },
   {
@@ -93,12 +102,23 @@ export const workforceSubcontractorAgreementSections: AgreementSection[] = [
     paragraphs: [
       "The Contractor acknowledges that no minimum hours, recurring shifts, or ongoing assignments are guaranteed under this Agreement.",
       "Assignments are based on client demand, may vary by location, role, and duration, and may be reassigned, rescheduled, shortened, or cancelled by the Company or the client.",
+      "The Company is not obligated to provide assignments, and the Contractor is not obligated to accept any assignment offered.",
+      "The Contractor is free to accept or decline assignments and may provide services to other entities at any time.",
+    ],
+  },
+  {
+    id: "control-performance",
+    title: "4A. Control and Performance of Work",
+    paragraphs: [
+      "The Company does not control the manner or methods by which the Contractor performs services. The Contractor is responsible for determining how work is completed, subject only to the required outcome and client site policies such as safety and compliance standards.",
+      "The Company may communicate assignment requirements, but does not supervise or direct the Contractor as an employer would.",
     ],
   },
   {
     id: "compensation",
     title: "5. Compensation",
     paragraphs: [
+      "Payment is based on completed and approved assignments and does not constitute a salary or wage. No retainer, minimum compensation, or guaranteed income is provided.",
       "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
       "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company’s then-current payroll cycle and operational procedures.",
       CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH,
@@ -140,6 +160,7 @@ export const workforceSubcontractorAgreementSections: AgreementSection[] = [
     id: "equipment",
     title: "10. Equipment / Damages",
     paragraphs: [
+      "Unless otherwise specified for a particular assignment, the Contractor is responsible for providing their own tools, transportation, and work-related materials. Use of client or Company equipment does not create an employment relationship.",
       "The Contractor is responsible for exercising reasonable care with Company and client property, equipment, uniforms, keys, and keycards issued for an assignment.",
       "The Contractor may be held responsible, to the extent permitted by law, for losses or damages caused by negligence, including lost keycards, access devices, or client property damage.",
     ],

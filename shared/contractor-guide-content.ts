@@ -66,6 +66,9 @@ export const CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH =
 export const NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH =
   "No Guaranteed Payment Date: The Contractor acknowledges that no fixed or guaranteed payment date has been promised, and payment timelines may vary depending on client remittance and operational processing.";
 
+export const PAYROLL_PROCESSING_TIMELINE_PARAGRAPH =
+  "Payroll Processing Timeline: The Company follows a bi-weekly cutoff for timesheet submission; however, payment release is not immediate. Timesheets and total hours are reviewed, verified, and processed by the Company's accounting team, which may take up to one (1) week following the cutoff. Payment is generally issued in the subsequent week, subject to client remittance, banking timelines, and operational processing. This timeline is an estimate only and does not constitute a guaranteed payment date.";
+
 export const workforceSubcontractorAgreementSections: AgreementSection[] = [
   {
     id: "parties",
@@ -121,9 +124,9 @@ export const workforceSubcontractorAgreementSections: AgreementSection[] = [
       "Payment is based on completed and approved assignments and does not constitute a salary or wage. No retainer, minimum compensation, or guaranteed income is provided.",
       "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
       "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company’s then-current payroll cycle and operational procedures.",
+      PAYROLL_PROCESSING_TIMELINE_PARAGRAPH,
       CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH,
       NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH,
-      "Payment dates are not fixed or guaranteed. Payment timing depends on approved hours, verification, payroll processing, banking timelines, and operational requirements. Delays caused by client approval, disputes, delayed client payment, or delayed client fund release may affect contractor payment timing and shall not constitute breach by the Company.",
     ],
   },
   {

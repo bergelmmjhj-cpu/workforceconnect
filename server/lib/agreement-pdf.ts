@@ -7,7 +7,7 @@ import {
   WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
   workforceSubcontractorAgreementSections,
 } from "../../shared/contractor-guide-content";
-import { logMissingPaymentIfNeeded, resolveAcknowledgmentFields, resolvePaymentFields } from "./worker-application-resolution";
+import { logMissingPaymentIfNeeded, resolveAcknowledgmentFieldsForPdf, resolvePaymentFields } from "./worker-application-resolution";
 
 export type AgreementPdfVariant = "internal" | "worker";
 type PdfDisposition = "attachment" | "inline";
@@ -73,7 +73,7 @@ function isAccepted(value: unknown): boolean {
 }
 
 function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
-  const resolved = resolveAcknowledgmentFields(application as unknown as Record<string, unknown>);
+  const resolved = resolveAcknowledgmentFieldsForPdf(application as unknown as Record<string, unknown>);
 
   const items: Array<{ label: string; accepted: boolean }> = [
     { label: "Background Check Consent", accepted: isAccepted(resolved.backgroundCheckConsent) },
@@ -132,6 +132,8 @@ function addPaymentInformation(doc: PDFDocument, application: WorkerApplication,
 }
 
 function addSignature(doc: PDFDocument, application: WorkerApplication) {
+  const resolved = resolveAcknowledgmentFieldsForPdf(application as unknown as Record<string, unknown>);
+
   doc.moveDown(0.5);
   doc.fontSize(12).font("Helvetica-Bold").text("Signature");
   doc.moveDown(0.4);
@@ -139,7 +141,7 @@ function addSignature(doc: PDFDocument, application: WorkerApplication) {
   addLabelValue(doc, "Signed Date:", application.signatureDate);
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
-  addLabelValue(doc, "Non-Solicitation Acknowledged:", application.nonSolicitationAcknowledged ? "Yes" : "No");
+  addLabelValue(doc, "Non-Solicitation Acknowledged:", resolved.nonSolicitationAcknowledged ? "Yes" : "No");
   addLabelValue(doc, "Acknowledged At:", resolveAcknowledgedAtValue(application));
 }
 
@@ -160,6 +162,18 @@ export function streamAgreementPdf(
 ) {
   const fileName = createAgreementPdfFileName(application, variant);
   const disposition: PdfDisposition = options?.disposition === "inline" ? "inline" : "attachment";
+
+  // Log resolved acknowledgment fields so we can see what was inferred vs stored.
+  const resolvedForLog = resolveAcknowledgmentFieldsForPdf(application as unknown as Record<string, unknown>);
+  console.info(
+    `[AGREEMENT_PDF] Generating ${variant} PDF for record ${application.id || "unknown"} (${application.fullName || "unknown"}) — ` +
+    `nonSolicitation=${resolvedForLog.nonSolicitationAcknowledged} (stored=${application.nonSolicitationAcknowledged ?? "null/undefined"}) ` +
+    `paymentTerms=${resolvedForLog.paymentTermsAcknowledged} ` +
+    `marketingConsent=${resolvedForLog.marketingConsent} ` +
+    `agreementVersion=${application.agreementVersion || "(none)"} ` +
+    `signed=${Boolean(application.signature && application.signatureDate)}`,
+  );
+
   const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 56, right: 56 } });
 
   res.setHeader("Content-Type", "application/pdf");

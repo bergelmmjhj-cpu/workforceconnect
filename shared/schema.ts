@@ -248,7 +248,6 @@ export const workerApplications = pgTable("worker_applications", {
   agreementVersion: text("agreement_version"),
   nonSolicitationAcknowledged: boolean("non_solicitation_acknowledged"),
   nonSolicitationAcknowledgedAt: timestamp("non_solicitation_acknowledged_at"),
-  independentContractorStatusAcknowledged: boolean("independent_contractor_status_acknowledged").default(false),
   workerPdfGeneratedAt: timestamp("worker_pdf_generated_at"),
   internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
   privacyConsent: boolean("privacy_consent").default(false),

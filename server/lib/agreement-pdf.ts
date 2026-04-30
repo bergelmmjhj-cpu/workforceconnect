@@ -2,7 +2,6 @@ import PDFDocument from "pdfkit";
 import type { Response } from "express";
 import type { WorkerApplication } from "../../shared/schema";
 import {
-  INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_LABEL,
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
   PAYMENT_TERMS_ACKNOWLEDGMENT_LABEL,
   WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
@@ -81,7 +80,6 @@ function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
     { label: "TITO System Acknowledgment", accepted: isAccepted(resolved.titoAcknowledgment) },
     { label: "Site Rules Agreement", accepted: isAccepted(resolved.siteRulesAcknowledgment) },
     { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(resolved.nonSolicitationAcknowledged) },
-    { label: INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_LABEL, accepted: isAccepted(resolved.independentContractorStatusAcknowledged) },
     { label: "Worker Agreement", accepted: isAccepted(resolved.workerAgreementConsent) },
     { label: "Privacy Policy", accepted: isAccepted(resolved.privacyConsent) },
     { label: PAYMENT_TERMS_ACKNOWLEDGMENT_LABEL, accepted: isAccepted(resolved.paymentTermsAcknowledged) },

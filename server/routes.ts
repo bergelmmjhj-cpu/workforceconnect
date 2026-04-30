@@ -659,7 +659,6 @@ const publicApplySubmissionSchema = z.object({
   agreementVersion: nullableStringSchema,
   nonSolicitationAcknowledged: consentLikeSchema.optional(),
   nonSolicitationAcknowledgedAt: z.union([z.string(), z.number()]).optional(),
-  independentContractorStatusAcknowledged: consentLikeSchema.optional(),
   privacyConsent: consentLikeSchema,
   consentToContact: consentLikeSchema.optional(),
   smsConsent: consentLikeSchema.optional(),

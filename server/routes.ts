@@ -5605,7 +5605,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
       const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
 
-      const applicantColumnSet = await getApplicantsColumnSet();
       const insertValues: Record<string, unknown> = {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
@@ -5628,22 +5627,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "new",
         submittedAt: now,
       };
-
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsent)) {
-        insertValues.smsConsent = smsConsentGranted;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsentAt)) {
-        insertValues.smsConsentAt = smsConsentGranted ? now : null;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsent)) {
-        insertValues.marketingConsent = marketingConsentGranted;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsentAt)) {
-        insertValues.marketingConsentAt = marketingConsentGranted ? now : null;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent)) {
-        insertValues.promotionalConsent = marketingConsentGranted;
-      }
 
       const [applicant] = await db.insert(applicants).values(insertValues as any).returning({ id: applicants.id });
 

@@ -24,6 +24,10 @@ import { Spacing, BorderRadius } from "@/constants/theme";
 import { createAgreementAcceptance, createAgreementSubmission } from "@/storage";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { getErrorMessage } from "@/utils/errorHandler";
+import {
+  INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_LABEL,
+  INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_TEXT,
+} from "../../shared/contractor-guide-content";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -54,6 +58,7 @@ export default function AgreementSigningScreen() {
 
   const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
   const [iAgree, setIAgree] = useState(false);
+  const [icStatusAcknowledged, setIcStatusAcknowledged] = useState(false);
   const [acceptedFullName, setAcceptedFullName] = useState("");
   const [initials, setInitials] = useState<InitialsForm>({
     s19_1: "",
@@ -91,6 +96,11 @@ export default function AgreementSigningScreen() {
 
     if (!iAgree) {
       setAlertModal({title: "Required", message: "Please check the 'I Agree' box to continue."});
+      return;
+    }
+
+    if (!icStatusAcknowledged) {
+      setAlertModal({title: "Required", message: "Please acknowledge your independent contractor status to continue."});
       return;
     }
 
@@ -232,6 +242,12 @@ export default function AgreementSigningScreen() {
               "I have read and agree to the terms of this Worker Agreement",
               iAgree,
               () => setIAgree(!iAgree)
+            )}
+
+            {renderCheckbox(
+              `${INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_LABEL}: ${INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_TEXT}`,
+              icStatusAcknowledged,
+              () => setIcStatusAcknowledged(!icStatusAcknowledged)
             )}
 
             <View style={styles.inputGroup}>

@@ -76,6 +76,7 @@ export type ResolvedAcknowledgmentFields = {
   consentToContact: boolean;
   nonSolicitationAcknowledged: boolean;
   marketingConsent: boolean;
+  independentContractorStatusAcknowledged: boolean;
 };
 
 export function resolvePaymentFields(sourceInput: GenericRecord): ResolvedPaymentFields {
@@ -169,6 +170,7 @@ export function resolveAcknowledgmentFields(sourceInput: GenericRecord): Resolve
     consentToContact: toBoolean(source.consentToContact ?? source.consent_to_contact ?? source.consentOperationalMessages),
     nonSolicitationAcknowledged: toBoolean(source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged),
     marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
+    independentContractorStatusAcknowledged: toBoolean(source.independentContractorStatusAcknowledged ?? source.independent_contractor_status_acknowledged),
   };
 }
 

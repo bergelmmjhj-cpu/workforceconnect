@@ -216,15 +216,12 @@ export const workerApplications = pgTable("worker_applications", {
   
   // Experience
   yearsExperience: text("years_experience"),
-  workHistory: text("work_history"), // JSON array of job objects
   experienceSummary: text("experience_summary"),
   
   // Skills
   skills: text("skills"), // JSON array
-  certifications: text("certifications"), // JSON array
   
   // Shift Preferences
-  shiftTypePreference: text("shift_type_preference"), // day, night, flexible
   desiredShiftLength: text("desired_shift_length"), // 4, 8, flexible
   maxTravelDistance: text("max_travel_distance"),
   

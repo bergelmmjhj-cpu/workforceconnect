@@ -93,13 +93,16 @@
       line-height: 1.45;
       margin-bottom: 12px;
       font-weight: 500;
+      cursor: pointer;
     }
     .consent-row:last-of-type { margin-bottom: 0; }
     .consent-row input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
       margin-top: 2px;
       flex-shrink: 0;
+      cursor: pointer;
+      accent-color: var(--primary);
     }
     .consent-optional { font-weight: 400; }
     .consent-error {
@@ -143,10 +146,7 @@
       padding-right: 40px;
     }
     /* Ensure touch targets are large enough */
-    .consent-row input[type="checkbox"] {
-      width: 22px;
-      height: 22px;
-      min-width: 22px;
+    .field input[type="checkbox"] {
       cursor: pointer;
     }
     /* Fix for potential pointer-events issues */
@@ -388,12 +388,10 @@ function clearResolvedAddressFields() {
 
 // Canadian address pattern: must have city and province (ON, BC, AB, etc.)
 function isValidCanadianAddressFormat(address) {
-  if (!address || address.length < 10) return false;
-  // Check for province codes
-  const provincePattern = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT|Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland|Nova Scotia|Northwest Territories|Nunavut|Ontario|Prince Edward Island|Quebec|Saskatchewan|Yukon)\b/i;
-  // Check for city-like pattern (word before province)
-  const hasCityPattern = /[a-zA-Z]{2,}\s*,?\s*(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT|Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland|Nova Scotia|Northwest Territories|Nunavut|Ontario|Prince Edward Island|Quebec|Saskatchewan|Yukon)/i;
-  return provincePattern.test(address) && hasCityPattern.test(address);
+  if (!address || address.length < 8) return false;
+  // Simple check: has a province code/name
+  const provincePattern = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/i;
+  return provincePattern.test(address);
 }
 
 addressInput.addEventListener('input', () => {
@@ -403,7 +401,12 @@ addressInput.addEventListener('input', () => {
   clearTimeout(autocompleteTimer);
   const val = addressInput.value.trim();
   if (val.length < 3) { hideSuggestions(); return; }
-  autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
+  // Auto-close suggestions on mobile after user types to avoid blocking input
+  if (window.innerWidth < 768 && val.length > 15) {
+    hideSuggestions();
+  } else {
+    autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
+  }
 });
 
 addressInput.addEventListener('blur', () => { 
@@ -425,13 +428,14 @@ async function fetchSuggestions(input) {
   } catch { hideSuggestions(); }
 }
 
-function renderSuggestions(predictions) {
+  function renderSuggestions(predictions) {
   suggestionsBox.innerHTML = '';
   predictions.forEach(p => {
     const item = document.createElement('div');
     item.className = 'suggestion-item';
     item.textContent = p.description;
     item.addEventListener('mousedown', (e) => { e.preventDefault(); selectPlace(p.place_id, p.description); });
+    item.addEventListener('touchstart', (e) => { e.preventDefault(); selectPlace(p.place_id, p.description); });
     suggestionsBox.appendChild(item);
   });
   suggestionsBox.classList.add('open');

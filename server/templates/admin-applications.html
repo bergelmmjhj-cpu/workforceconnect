@@ -121,6 +121,11 @@
         background: var(--primary-dark);
       }
       
+      .login-btn:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+      
       .login-error {
         background: rgba(239, 68, 68, 0.1);
         color: var(--error);
@@ -1284,7 +1289,7 @@
             <label class="form-label">Password</label>
             <input type="password" name="password" class="form-input" placeholder="Enter password" required>
           </div>
-          <button type="submit" class="login-btn">Sign In</button>
+          <button type="submit" class="login-btn" id="loginBtn" onclick="handleLoginClick(event)">Sign In</button>
         </form>
       </div>
     </div>
@@ -1571,24 +1576,62 @@
         showDashboard();
       }
 
-      // Login form handler
-      document.getElementById('loginForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const username = this.username.value;
-        const password = this.password.value;
-        
-        authCredentials = btoa(username + ':' + password);
-        
+      // Standalone login handler — called by both the form submit event and the button onclick
+      async function handleLoginClick(event) {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        console.log('[Login] Sign-in button clicked');
+        await performLogin();
+      }
+
+      async function performLogin() {
+        console.log('[Login] performLogin() called');
+        var form = document.getElementById('loginForm');
+        var btn = document.getElementById('loginBtn');
+        var errorEl = document.getElementById('loginError');
+
+        var username = form && form.username ? form.username.value : '';
+        var password = form && form.password ? form.password.value : '';
+
+        console.log('[Login] username present:', Boolean(username), '| password present:', Boolean(password));
+
+        if (!username || !password) {
+          errorEl.textContent = 'Please enter your username and password.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        // Encode credentials — guard against btoa throwing on non-Latin chars
         try {
+          authCredentials = btoa(unescape(encodeURIComponent(username + ':' + password)));
+        } catch (encodeError) {
+          console.error('[Login] Failed to encode credentials:', encodeError);
+          errorEl.textContent = 'Invalid characters in username or password.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Signing in…';
+        }
+        errorEl.style.display = 'none';
+
+        try {
+          console.log('[Login] Sending auth-check request');
           const response = await fetch('/api/admin/auth-check', {
             headers: {
               'Authorization': 'Basic ' + authCredentials
             }
           });
-          
+
+          console.log('[Login] auth-check response status:', response.status);
+
           if (response.ok) {
             sessionStorage.setItem('wfconnect_admin_auth', authCredentials);
-            document.getElementById('loginError').style.display = 'none';
+            errorEl.style.display = 'none';
             showDashboard();
           } else {
             var loginMessage = 'Invalid credentials. Please try again.';
@@ -1598,14 +1641,29 @@
                 loginMessage = loginPayload.error;
               }
             } catch (_) {}
-            document.getElementById('loginError').textContent = loginMessage;
-            document.getElementById('loginError').style.display = 'block';
+            console.warn('[Login] Auth failed:', loginMessage);
+            errorEl.textContent = loginMessage;
+            errorEl.style.display = 'block';
             authCredentials = null;
           }
         } catch (error) {
-          document.getElementById('loginError').textContent = 'Connection error. Please try again.';
-          document.getElementById('loginError').style.display = 'block';
+          console.error('[Login] Network error:', error);
+          errorEl.textContent = 'Connection error. Please try again.';
+          errorEl.style.display = 'block';
+          authCredentials = null;
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Sign In';
+          }
         }
+      }
+
+      // Login form handler — also wired via button onclick for redundancy
+      document.getElementById('loginForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        console.log('[Login] Form submit event fired');
+        performLogin();
       });
 
       // Logout handler

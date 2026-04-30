@@ -843,6 +843,11 @@ function configureExpoAndLanding(app: express.Application) {
   const adminAppsPath = path.resolve(process.cwd(), "server", "templates", "admin-applications.html");
   const adminAppsTemplate = fs.readFileSync(adminAppsPath, "utf-8");
 
+  // /admin → redirect to the applications dashboard (canonical admin entry point)
+  app.get("/admin", (_req: Request, res: Response) => {
+    res.redirect(301, "/admin/applications");
+  });
+
   app.get("/admin/applications", (_req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");

@@ -1875,12 +1875,11 @@ function isRecentSubmissionFingerprint(fingerprint: string, now: number = Date.n
   }
 
   const existing = recentSubmissionFingerprints.get(fingerprint);
-  if (existing && existing > now) {
-    return true;
-  }
+  return !!(existing && existing > now);
+}
 
+function registerSubmissionFingerprint(fingerprint: string, now: number = Date.now()): void {
   recentSubmissionFingerprints.set(fingerprint, now + RECENT_SUBMISSION_WINDOW_MS);
-  return false;
 }
 
 function getConfiguredApiKeys(): string[] {
@@ -3838,6 +3837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [newApplication] = await db.insert(workerApplications).values(applicationData).returning();
 
+      registerSubmissionFingerprint(recentApplyFingerprint);
       console.log(`Worker application submitted from: ${payload.email}`);
       res.json({ ok: true, id: newApplication.id });
     } catch (error) {
@@ -5632,6 +5632,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [applicant] = await db.insert(applicants).values(insertValues as any).returning({ id: applicants.id });
 
+      registerSubmissionFingerprint(recentApplicantFingerprint);
       console.log(`[APPLICANTS] ✅ New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
       res.json({ success: true, applicantId: applicant.id });
     } catch (error: any) {
@@ -5745,6 +5746,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/applicants/stats", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const { search } = req.query;
+      const conditions = [];
+
+      if (search) {
+        const s = `%${search}%`;
+        conditions.push(sql`(${applicants.fullName} ILIKE ${s} OR ${applicants.phone} ILIKE ${s})`);
+      }
+
+      const grouped = await db.select({
+        status: applicants.status,
+        total: sql<number>`count(*)`,
+      })
+        .from(applicants)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .groupBy(applicants.status);
+
+      const [totalRow] = await db.select({
+        total: sql<number>`count(*)`,
+      })
+        .from(applicants)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      const counts: Record<string, number> = {
+        total: Number(totalRow?.total || 0),
+        new: 0,
+        reviewing: 0,
+        interviewed: 0,
+        hired: 0,
+        rejected: 0,
+      };
+
+      grouped.forEach((row) => {
+        const key = row.status || "";
+        if (counts[key] !== undefined) {
+          counts[key] = Number(row.total || 0);
+        }
+      });
+
+      res.json(counts);
+    } catch (error: any) {
+      console.error("[APPLICANTS] Stats error:", error);
+      res.status(500).json({ error: "Failed to fetch applicant stats" });
+    }
+  });
+
   app.get("/api/applicants/:id", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
       const applicantId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -5826,53 +5874,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updated);
     } catch (error: any) {
       res.status(500).json({ error: "Failed to update status" });
-    }
-  });
-
-  app.get("/api/applicants/stats", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
-    try {
-      const { search } = req.query;
-      const conditions = [];
-
-      if (search) {
-        const s = `%${search}%`;
-        conditions.push(sql`(${applicants.fullName} ILIKE ${s} OR ${applicants.phone} ILIKE ${s})`);
-      }
-
-      const grouped = await db.select({
-        status: applicants.status,
-        total: sql<number>`count(*)`,
-      })
-        .from(applicants)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .groupBy(applicants.status);
-
-      const [totalRow] = await db.select({
-        total: sql<number>`count(*)`,
-      })
-        .from(applicants)
-        .where(conditions.length > 0 ? and(...conditions) : undefined);
-
-      const counts: Record<string, number> = {
-        total: Number(totalRow?.total || 0),
-        new: 0,
-        reviewing: 0,
-        interviewed: 0,
-        hired: 0,
-        rejected: 0,
-      };
-
-      grouped.forEach((row) => {
-        const key = row.status || "";
-        if (counts[key] !== undefined) {
-          counts[key] = Number(row.total || 0);
-        }
-      });
-
-      res.json(counts);
-    } catch (error: any) {
-      console.error("[APPLICANTS] Stats error:", error);
-      res.status(500).json({ error: "Failed to fetch applicant stats" });
     }
   });
 

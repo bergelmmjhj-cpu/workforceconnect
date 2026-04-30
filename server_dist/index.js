@@ -932,6 +932,10 @@ var init_schema = __esm({
       resumeFilename: text("resume_filename"),
       resumeMimeType: text("resume_mime_type"),
       resumeFileSize: integer("resume_file_size"),
+      smsConsent: boolean("sms_consent").notNull().default(false),
+      smsConsentAt: timestamp("sms_consent_at"),
+      marketingConsent: boolean("marketing_consent").notNull().default(false),
+      marketingConsentAt: timestamp("marketing_consent_at"),
       promotionalConsent: boolean("promotional_consent").default(false),
       status: text("status").notNull().default("new"),
       // new, reviewing, interviewed, hired, rejected
@@ -946,15 +950,25 @@ var init_schema = __esm({
 // server/db.ts
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-var client, db;
+var getDatabaseUrl, databaseUrl, client, db;
 var init_db = __esm({
   "server/db.ts"() {
     "use strict";
     init_schema();
-    if (!process.env.DATABASE_URL) {
-      throw new Error("DATABASE_URL environment variable is required");
-    }
-    client = postgres(process.env.DATABASE_URL);
+    getDatabaseUrl = () => {
+      const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL;
+      if (!dbUrl) {
+        console.error("\u274C Database Configuration Error:");
+        console.error("   DATABASE_URL environment variable is required");
+        console.error("   Available env vars: DATABASE_URL, POSTGRES_URL, SUPABASE_DB_URL");
+        console.error("   Current environment variables:");
+        Object.keys(process.env).filter((k) => k.includes("DATABASE") || k.includes("POSTGRES") || k.includes("SUPABASE")).forEach((k) => console.error(`   - ${k}: ${process.env[k]?.substring(0, 50)}...`));
+        throw new Error("DATABASE_URL environment variable is required");
+      }
+      return dbUrl;
+    };
+    databaseUrl = getDatabaseUrl();
+    client = postgres(databaseUrl);
     db = drizzle(client, { schema: schema_exports });
   }
 });
@@ -2489,7 +2503,8 @@ var workforceSubcontractorAgreementSections = [
     title: "5. Compensation",
     paragraphs: [
       "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
-      "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company\u2019s then-current payroll cycle and operational procedures."
+      "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company\u2019s then-current payroll cycle and operational procedures.",
+      "Payment dates are not fixed or guaranteed. Payment timing depends on approved hours, verification, payroll processing, banking timelines, and operational requirements. Delays caused by client approval, disputes, delayed client payment, or delayed client fund release may affect contractor payment timing and shall not constitute breach by the Company."
     ]
   },
   {
@@ -2556,8 +2571,148 @@ var workforceSubcontractorAgreementSections = [
 
 // server/lib/agreement-pdf.ts
 import PDFDocument from "pdfkit";
+
+// server/lib/worker-application-resolution.ts
+function normalizeText(value) {
+  if (typeof value !== "string") return void 0;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : void 0;
+}
+function toBoolean(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on" || normalized === "accepted";
+  }
+  return false;
+}
+function asObject(value) {
+  if (!value) return void 0;
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      return void 0;
+    }
+  }
+  return void 0;
+}
+function getFirstNonEmpty(source, keys) {
+  for (const key of keys) {
+    const value = normalizeText(source[key]);
+    if (value) return value;
+  }
+  return void 0;
+}
+function getNestedPaymentObjects(source) {
+  const containers = [
+    "paymentInfo",
+    "payment_info",
+    "paymentDetails",
+    "payment_details",
+    "bankingInfo",
+    "banking_info",
+    "bankInfo",
+    "bank_info"
+  ];
+  return containers.map((key) => asObject(source[key])).filter((value) => Boolean(value));
+}
+function resolvePaymentFields(sourceInput) {
+  const nested = getNestedPaymentObjects(sourceInput);
+  const source = { ...sourceInput };
+  for (const item of nested) {
+    for (const [key, value] of Object.entries(item)) {
+      if (source[key] === void 0 || source[key] === null || source[key] === "") {
+        source[key] = value;
+      }
+    }
+  }
+  const paymentMethod = getFirstNonEmpty(source, [
+    "paymentMethod",
+    "payment_method",
+    "payment",
+    "method"
+  ]);
+  const bankName = getFirstNonEmpty(source, [
+    "bankName",
+    "bank_name",
+    "bank",
+    "name"
+  ]);
+  const bankInstitution = getFirstNonEmpty(source, [
+    "bankInstitution",
+    "bank_institution",
+    "institutionNumber",
+    "institution_number",
+    "institution"
+  ]);
+  const bankTransit = getFirstNonEmpty(source, [
+    "bankTransit",
+    "bank_transit",
+    "transitNumber",
+    "transit_number",
+    "transit"
+  ]);
+  const bankAccount = getFirstNonEmpty(source, [
+    "bankAccount",
+    "bank_account",
+    "accountNumber",
+    "account_number",
+    "account"
+  ]);
+  const etransferEmail = getFirstNonEmpty(source, [
+    "etransferEmail",
+    "etransfer_email",
+    "eTransferEmail",
+    "e_transfer_email",
+    "directDepositEmail",
+    "direct_deposit_email"
+  ]);
+  return {
+    paymentMethod,
+    bankName,
+    bankInstitution,
+    bankTransit,
+    bankAccount,
+    etransferEmail
+  };
+}
+function arePaymentFieldsMissing(source) {
+  const resolved = resolvePaymentFields(source);
+  return !resolved.paymentMethod && !resolved.bankName && !resolved.bankInstitution && !resolved.bankTransit && !resolved.bankAccount && !resolved.etransferEmail;
+}
+function resolveAcknowledgmentFields(sourceInput) {
+  const source = { ...sourceInput };
+  return {
+    backgroundCheckConsent: toBoolean(source.backgroundCheckConsent ?? source.background_check_consent),
+    titoAcknowledgment: toBoolean(source.titoAcknowledgment ?? source.tito_acknowledgment ?? source.acknowledgeTitoAccuracyUtc),
+    siteRulesAcknowledgment: toBoolean(source.siteRulesAcknowledgment ?? source.site_rules_acknowledgment ?? source.acknowledgeSiteRulesSafety),
+    workerAgreementConsent: toBoolean(source.workerAgreementConsent ?? source.worker_agreement_consent ?? source.preAcknowledgeAgreementRequired),
+    privacyConsent: toBoolean(source.privacyConsent ?? source.privacy_consent ?? source.consentDataProcessing),
+    consentToContact: toBoolean(source.consentToContact ?? source.consent_to_contact ?? source.consentOperationalMessages),
+    nonSolicitationAcknowledged: toBoolean(source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged),
+    marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent)
+  };
+}
+var missingPaymentWarnings = /* @__PURE__ */ new Set();
+function logMissingPaymentIfNeeded(recordId, variant) {
+  const key = `${recordId || "unknown"}:${variant}`;
+  if (missingPaymentWarnings.has(key)) return;
+  missingPaymentWarnings.add(key);
+  console.warn(`[AGREEMENT_PDF] Payment data missing for record ${recordId || "unknown"} (${variant})`);
+}
+
+// server/lib/agreement-pdf.ts
 var INTERNAL_COMPANY_NAME = "1001328662 Ontario Inc.";
-var INTERNAL_COMPANY_ADDRESS = "Mississauga, Ontario";
+var INTERNAL_COMPANY_ADDRESS = "1900 Dundas St. West, Mississauga L5K 1P9";
+var WORKER_COMPANY_NAME = "Workforce Connect";
+var WORKER_COMPANY_ADDRESS = "Mississauga, Ontario";
 function safeParseList(value) {
   if (!value) return [];
   try {
@@ -2571,10 +2726,11 @@ function sanitizeFileName(value) {
   return value.trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_.-]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "") || "Agreement";
 }
 function drawHeader(doc, variant) {
-  void variant;
-  doc.fontSize(18).font("Helvetica-Bold").text(INTERNAL_COMPANY_NAME, { align: "center" });
+  const companyName = variant === "worker" ? WORKER_COMPANY_NAME : INTERNAL_COMPANY_NAME;
+  const companyAddress = variant === "worker" ? WORKER_COMPANY_ADDRESS : INTERNAL_COMPANY_ADDRESS;
+  doc.fontSize(18).font("Helvetica-Bold").text(companyName, { align: "center" });
   doc.moveDown(0.2);
-  doc.fontSize(10).font("Helvetica").fillColor("#555555").text(INTERNAL_COMPANY_ADDRESS, { align: "center" });
+  doc.fontSize(10).font("Helvetica").fillColor("#555555").text(companyAddress, { align: "center" });
   doc.fillColor("#000000");
   doc.moveDown(1.2);
   doc.fontSize(17).font("Helvetica-Bold").text("Subcontractor Agreement", { align: "center" });
@@ -2600,15 +2756,17 @@ function isAccepted(value) {
   return value === true;
 }
 function addAcknowledgments(doc, application) {
+  const resolved = resolveAcknowledgmentFields(application);
   const items = [
-    { label: "TITO System Acknowledgment", accepted: isAccepted(application.titoAcknowledgment) },
-    { label: "Site Rules Agreement", accepted: isAccepted(application.siteRulesAcknowledgment) },
-    { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(application.nonSolicitationAcknowledged) },
-    { label: "Worker Agreement", accepted: isAccepted(application.workerAgreementConsent) },
-    { label: "Privacy Policy", accepted: isAccepted(application.privacyConsent) },
-    { label: "Consent To Contact", accepted: isAccepted(application.consentToContact) }
+    { label: "Background Check Consent", accepted: isAccepted(resolved.backgroundCheckConsent) },
+    { label: "TITO System Acknowledgment", accepted: isAccepted(resolved.titoAcknowledgment) },
+    { label: "Site Rules Agreement", accepted: isAccepted(resolved.siteRulesAcknowledgment) },
+    { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(resolved.nonSolicitationAcknowledged) },
+    { label: "Worker Agreement", accepted: isAccepted(resolved.workerAgreementConsent) },
+    { label: "Privacy Policy", accepted: isAccepted(resolved.privacyConsent) },
+    { label: "Consent To Contact", accepted: isAccepted(resolved.consentToContact) }
   ];
-  if (application.marketingConsent === true) {
+  if (resolved.marketingConsent === true) {
     items.push({ label: "Promotional Communications (Optional)", accepted: true });
   }
   doc.fontSize(12).font("Helvetica-Bold").text("Acknowledgments");
@@ -2617,6 +2775,34 @@ function addAcknowledgments(doc, application) {
     doc.fontSize(9.5).font("Helvetica").text(`[${item.accepted ? "X" : " "}] ${item.label}`);
     doc.moveDown(0.2);
   });
+}
+function resolveAcknowledgedAtValue(application) {
+  if (application.nonSolicitationAcknowledgedAt) {
+    return new Date(application.nonSolicitationAcknowledgedAt).toLocaleString("en-CA");
+  }
+  if (application.nonSolicitationAcknowledged === true && application.signatureDate) {
+    const parsed = new Date(application.signatureDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleString("en-CA");
+    }
+  }
+  return "Not recorded";
+}
+function addPaymentInformation(doc, application, variant) {
+  doc.moveDown(0.5);
+  doc.fontSize(12).font("Helvetica-Bold").text("Payment Information");
+  doc.moveDown(0.4);
+  const resolved = resolvePaymentFields(application);
+  if (!resolved.paymentMethod && !resolved.bankName && !resolved.bankInstitution && !resolved.bankTransit && !resolved.bankAccount && !resolved.etransferEmail) {
+    logMissingPaymentIfNeeded(application.id, variant);
+  }
+  const paymentMethod = resolved.paymentMethod || "Not provided";
+  addLabelValue(doc, "Payment Method:", paymentMethod);
+  addLabelValue(doc, "Bank Name:", resolved.bankName || "Not provided");
+  addLabelValue(doc, "Institution Number:", resolved.bankInstitution || "Not provided");
+  addLabelValue(doc, "Transit Number:", resolved.bankTransit || "Not provided");
+  addLabelValue(doc, "Account Number:", resolved.bankAccount ? `******${String(resolved.bankAccount).replace(/\D/g, "").slice(-4)}` : "Not provided");
+  addLabelValue(doc, "E-Transfer Email:", resolved.etransferEmail || "Not provided");
 }
 function addSignature(doc, application) {
   doc.moveDown(0.5);
@@ -2627,11 +2813,7 @@ function addSignature(doc, application) {
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
   addLabelValue(doc, "Non-Solicitation Acknowledged:", application.nonSolicitationAcknowledged ? "Yes" : "No");
-  addLabelValue(
-    doc,
-    "Acknowledged At:",
-    application.nonSolicitationAcknowledgedAt ? new Date(application.nonSolicitationAcknowledgedAt).toLocaleString("en-CA") : "Legacy / Unknown"
-  );
+  addLabelValue(doc, "Acknowledged At:", resolveAcknowledgedAtValue(application));
 }
 function createAgreementPdfFileName(application, variant) {
   const date2 = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
@@ -2673,8 +2855,8 @@ function streamAgreementPdf(res, application, variant, options) {
     }
   });
   addAcknowledgments(doc, application);
+  addPaymentInformation(doc, application, variant);
   addSignature(doc, application);
-  void variant;
   doc.end();
 }
 
@@ -3027,7 +3209,7 @@ var WORKER_APPLICATION_STATUSES = /* @__PURE__ */ new Set([
   "rejected",
   "on_hold"
 ]);
-function normalizeText(value) {
+function normalizeText2(value) {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized.length > 0 ? normalized : null;
@@ -3040,12 +3222,12 @@ function splitName(fullName) {
   };
 }
 function resolveWorkerIdentity(input) {
-  const normalizedFullName = normalizeText(input.fullName);
-  const normalizedFirstName = normalizeText(input.firstName);
-  const normalizedLastName = normalizeText(input.lastName);
-  const structuredName = normalizeText(`${normalizedFirstName || ""} ${normalizedLastName || ""}`);
-  const fallbackEmail = normalizeText(input.email);
-  const fallbackPhone = normalizeText(input.phone);
+  const normalizedFullName = normalizeText2(input.fullName);
+  const normalizedFirstName = normalizeText2(input.firstName);
+  const normalizedLastName = normalizeText2(input.lastName);
+  const structuredName = normalizeText2(`${normalizedFirstName || ""} ${normalizedLastName || ""}`);
+  const fallbackEmail = normalizeText2(input.email);
+  const fallbackPhone = normalizeText2(input.phone);
   const workerName = normalizedFullName || structuredName || fallbackEmail || fallbackPhone || null;
   let firstName = normalizedFirstName;
   let lastName = normalizedLastName;
@@ -3070,6 +3252,7 @@ function mapApplicationForSync(application) {
   });
   const workerType = parsePreferredWorkerType(application.preferredRoles, application.workStatus);
   const isActive = application.status === "approved";
+  const payment = resolvePaymentFields(application);
   return {
     identityResolved: identity.hasIdentity,
     payload: {
@@ -3088,12 +3271,12 @@ function mapApplicationForSync(application) {
       applying_for: workerType,
       is_active: isActive,
       active: isActive,
-      payment_method: application.paymentMethod,
-      bank_name: application.bankName,
-      bank_institution: application.bankInstitution,
-      bank_transit: application.bankTransit,
-      bank_account: application.bankAccount,
-      etransfer_email: application.etransferEmail,
+      payment_method: payment.paymentMethod,
+      bank_name: payment.bankName,
+      bank_institution: payment.bankInstitution,
+      bank_transit: payment.bankTransit,
+      bank_account: payment.bankAccount,
+      etransfer_email: payment.etransferEmail,
       notes: application.notes
     }
   };
@@ -3142,11 +3325,34 @@ var publicApplySubmissionSchema = z2.object({
   emergencyContactRelationship: z2.string().trim().min(1),
   emergencyContactPhone: z2.string().trim().min(1),
   paymentMethod: nullableStringSchema,
+  payment_method: nullableStringSchema,
   bankName: nullableStringSchema,
+  bank_name: nullableStringSchema,
   bankInstitution: nullableStringSchema,
+  bank_institution: nullableStringSchema,
+  institutionNumber: nullableStringSchema,
+  institution_number: nullableStringSchema,
   bankTransit: nullableStringSchema,
+  bank_transit: nullableStringSchema,
+  transitNumber: nullableStringSchema,
+  transit_number: nullableStringSchema,
   bankAccount: nullableStringSchema,
+  bank_account: nullableStringSchema,
+  accountNumber: nullableStringSchema,
+  account_number: nullableStringSchema,
   etransferEmail: nullableStringSchema,
+  etransfer_email: nullableStringSchema,
+  eTransferEmail: nullableStringSchema,
+  e_transfer_email: nullableStringSchema,
+  directDepositEmail: nullableStringSchema,
+  bankingInfo: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
+  banking_info: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
+  paymentInfo: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
+  payment_info: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
+  paymentDetails: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
+  payment_details: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
+  bankInfo: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
+  bank_info: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
   titoAcknowledgment: consentLikeSchema,
   siteRulesAcknowledgment: consentLikeSchema,
   workerAgreementConsent: consentLikeSchema,
@@ -3189,6 +3395,8 @@ var publicApplicantSubmissionSchema = z2.object({
   resumeFilename: z2.string().optional(),
   resumeMimeType: z2.string().optional(),
   resumeFileSize: z2.number().int().nonnegative().optional(),
+  smsConsent: consentLikeSchema.optional(),
+  marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional()
 }).strict();
 function isConsentGranted(value) {
@@ -3202,7 +3410,16 @@ function isConsentGranted(value) {
 }
 function getMissingRequiredConsents(payload) {
   if (!payload) return [...REQUIRED_PUBLIC_APPLICATION_CONSENTS];
-  return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !isConsentGranted(payload[field]));
+  const resolved = resolveAcknowledgmentFields(payload);
+  const consentValues = {
+    backgroundCheckConsent: resolved.backgroundCheckConsent,
+    titoAcknowledgment: resolved.titoAcknowledgment,
+    siteRulesAcknowledgment: resolved.siteRulesAcknowledgment,
+    workerAgreementConsent: resolved.workerAgreementConsent,
+    privacyConsent: resolved.privacyConsent,
+    consentToContact: resolved.consentToContact
+  };
+  return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);
 }
 function normalizeJsonArrayField(value) {
   if (typeof value === "string") {
@@ -3262,6 +3479,48 @@ function normalizeApplicantPhone(value) {
   const normalized = normalizeWhitespace(String(value));
   return normalized.length > 0 ? normalized : null;
 }
+var APPLICANT_OPTIONAL_CONSENT_COLUMNS = {
+  smsConsent: "sms_consent",
+  smsConsentAt: "sms_consent_at",
+  marketingConsent: "marketing_consent",
+  marketingConsentAt: "marketing_consent_at",
+  promotionalConsent: "promotional_consent"
+};
+var applicantsColumnSetPromise = null;
+async function getApplicantsColumnSet() {
+  if (!applicantsColumnSetPromise) {
+    applicantsColumnSetPromise = db.execute(sql3`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'applicants'
+    `).then((result) => {
+      const rows = Array.isArray(result) ? result : result && typeof result === "object" && "rows" in result && Array.isArray(result.rows) ? result.rows : [];
+      const columnSet = new Set(
+        rows.map((row) => row?.column_name).filter((columnName) => typeof columnName === "string" && columnName.length > 0)
+      );
+      const missingColumns = Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS).filter((columnName) => !columnSet.has(columnName));
+      if (missingColumns.length > 0) {
+        console.warn(`[APPLICANTS] Optional consent columns unavailable: ${missingColumns.join(", ")}`);
+      }
+      return columnSet;
+    }).catch((error) => {
+      console.warn("[APPLICANTS] Failed to inspect applicants columns; falling back to legacy-safe projection", error);
+      return /* @__PURE__ */ new Set();
+    });
+  }
+  return applicantsColumnSetPromise;
+}
+async function getApplicantOptionalConsentSelect() {
+  const columnSet = await getApplicantsColumnSet();
+  return {
+    smsConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsent) ? applicants.smsConsent : sql3`NULL`,
+    smsConsentAt: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsentAt) ? applicants.smsConsentAt : sql3`NULL`,
+    marketingConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsent) ? applicants.marketingConsent : sql3`NULL`,
+    marketingConsentAt: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsentAt) ? applicants.marketingConsentAt : sql3`NULL`,
+    promotionalConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent) ? applicants.promotionalConsent : sql3`NULL`
+  };
+}
 var REQUIRED_APPROVAL_ACK_FIELDS = [
   { field: "backgroundCheckConsent", label: "Background Check Consent" },
   { field: "titoAcknowledgment", label: "TITO Acknowledgment" },
@@ -3272,7 +3531,17 @@ var REQUIRED_APPROVAL_ACK_FIELDS = [
   { field: "nonSolicitationAcknowledged", label: "Non-Solicitation Acknowledgment" }
 ];
 function getMissingApprovalAcknowledgments(application) {
-  return REQUIRED_APPROVAL_ACK_FIELDS.filter(({ field }) => application[field] !== true).map(({ label }) => label);
+  const resolved = resolveAcknowledgmentFields(application);
+  const fieldToResolvedKey = {
+    backgroundCheckConsent: "backgroundCheckConsent",
+    titoAcknowledgment: "titoAcknowledgment",
+    siteRulesAcknowledgment: "siteRulesAcknowledgment",
+    workerAgreementConsent: "workerAgreementConsent",
+    privacyConsent: "privacyConsent",
+    consentToContact: "consentToContact",
+    nonSolicitationAcknowledged: "nonSolicitationAcknowledged"
+  };
+  return REQUIRED_APPROVAL_ACK_FIELDS.filter(({ field }) => !resolved[fieldToResolvedKey[field]]).map(({ label }) => label);
 }
 var WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
   consentToContact: "consent_to_contact",
@@ -3293,7 +3562,16 @@ var WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
   missingDocuments: "missing_documents",
   nextRecommendedAction: "next_recommended_action",
   documentRequestSentAt: "document_request_sent_at",
-  lastContactedAt: "last_contacted_at"
+  lastContactedAt: "last_contacted_at",
+  institutionNumber: "institution_number",
+  transitNumber: "transit_number",
+  accountNumber: "account_number",
+  eTransferEmail: "e_transfer_email",
+  directDepositEmail: "direct_deposit_email",
+  paymentInfo: "payment_info",
+  paymentDetails: "payment_details",
+  bankingInfo: "banking_info",
+  bankInfo: "bank_info"
 };
 var workerApplicationColumnSetPromise = null;
 async function getWorkerApplicationColumnSet() {
@@ -3341,7 +3619,16 @@ async function getWorkerApplicationOptionalMetadataSelect() {
     missingDocuments: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.missingDocuments) ? workerApplications.missingDocuments : sql3`NULL`,
     nextRecommendedAction: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.nextRecommendedAction) ? workerApplications.nextRecommendedAction : sql3`NULL`,
     documentRequestSentAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.documentRequestSentAt) ? workerApplications.documentRequestSentAt : sql3`NULL`,
-    lastContactedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.lastContactedAt) ? workerApplications.lastContactedAt : sql3`NULL`
+    lastContactedAt: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.lastContactedAt) ? workerApplications.lastContactedAt : sql3`NULL`,
+    institutionNumber: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.institutionNumber) ? sql3`"worker_applications"."institution_number"` : sql3`NULL`,
+    transitNumber: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.transitNumber) ? sql3`"worker_applications"."transit_number"` : sql3`NULL`,
+    accountNumber: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.accountNumber) ? sql3`"worker_applications"."account_number"` : sql3`NULL`,
+    eTransferEmail: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.eTransferEmail) ? sql3`"worker_applications"."e_transfer_email"` : sql3`NULL`,
+    directDepositEmail: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.directDepositEmail) ? sql3`"worker_applications"."direct_deposit_email"` : sql3`NULL`,
+    paymentInfo: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.paymentInfo) ? sql3`"worker_applications"."payment_info"` : sql3`NULL`,
+    paymentDetails: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.paymentDetails) ? sql3`"worker_applications"."payment_details"` : sql3`NULL`,
+    bankingInfo: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.bankingInfo) ? sql3`"worker_applications"."banking_info"` : sql3`NULL`,
+    bankInfo: columnSet.has(WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS.bankInfo) ? sql3`"worker_applications"."bank_info"` : sql3`NULL`
   };
 }
 async function getWorkerApplicationAgreementSelect() {
@@ -3358,6 +3645,13 @@ async function getWorkerApplicationAgreementSelect() {
     availableDays: workerApplications.availableDays,
     preferredShifts: workerApplications.preferredShifts,
     yearsExperience: workerApplications.yearsExperience,
+    backgroundCheckConsent: workerApplications.backgroundCheckConsent,
+    paymentMethod: workerApplications.paymentMethod,
+    bankName: workerApplications.bankName,
+    bankInstitution: workerApplications.bankInstitution,
+    bankTransit: workerApplications.bankTransit,
+    bankAccount: workerApplications.bankAccount,
+    etransferEmail: workerApplications.etransferEmail,
     titoAcknowledgment: workerApplications.titoAcknowledgment,
     siteRulesAcknowledgment: workerApplications.siteRulesAcknowledgment,
     workerAgreementConsent: workerApplications.workerAgreementConsent,
@@ -3533,6 +3827,56 @@ function normalizePayrollReadiness(value, hasPaymentMethod, status) {
   }
   return normalizeReadinessValue(value, PAYROLL_READINESS_VALUES, "not_ready");
 }
+function normalizePaymentMethodValue(value) {
+  const normalized = normalizeOptionalText(typeof value === "string" ? value : null)?.toLowerCase();
+  if (!normalized) return "";
+  if (["both", "all", "any"].includes(normalized)) return "both";
+  if (["etransfer", "e-transfer", "interac", "interac e-transfer", "email_transfer"].includes(normalized)) return "etransfer";
+  if (["direct_deposit", "direct deposit", "bank", "bank_transfer"].includes(normalized)) return "direct_deposit";
+  return "";
+}
+function maskAccountNumber(value) {
+  const raw = normalizeOptionalText(typeof value === "string" ? value : null);
+  if (!raw) return "Not provided";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 4) return "****";
+  return `******${digits.slice(-4)}`;
+}
+function buildPaymentSummary(application) {
+  const resolved = resolvePaymentFields(application);
+  const normalizedMethod = normalizePaymentMethodValue(resolved.paymentMethod);
+  const bankName = normalizeOptionalText(resolved.bankName);
+  const bankInstitution = normalizeOptionalText(resolved.bankInstitution);
+  const bankTransit = normalizeOptionalText(resolved.bankTransit);
+  const bankAccount = normalizeOptionalText(resolved.bankAccount);
+  const etransferEmail = normalizeOptionalText(resolved.etransferEmail);
+  const payrollContactEmail = etransferEmail || normalizeOptionalText(typeof application.email === "string" ? application.email : null);
+  const hasDirectDepositDetails = Boolean(bankName && bankInstitution && bankTransit && bankAccount);
+  const hasEtransferDetails = Boolean(etransferEmail);
+  let methodLabel = "Not selected";
+  if (normalizedMethod === "direct_deposit") methodLabel = "Direct Deposit";
+  if (normalizedMethod === "etransfer") methodLabel = "Interac E-Transfer";
+  if (normalizedMethod === "both") methodLabel = "Direct Deposit + Interac E-Transfer";
+  let hasRequiredPaymentInfo = false;
+  if (normalizedMethod === "both") {
+    hasRequiredPaymentInfo = hasDirectDepositDetails && hasEtransferDetails;
+  } else if (normalizedMethod === "direct_deposit") {
+    hasRequiredPaymentInfo = hasDirectDepositDetails;
+  } else if (normalizedMethod === "etransfer") {
+    hasRequiredPaymentInfo = hasEtransferDetails;
+  }
+  return {
+    methodValue: normalizedMethod,
+    methodLabel,
+    bankName: bankName || "Not provided",
+    bankInstitution: bankInstitution || "Not provided",
+    bankTransit: bankTransit || "Not provided",
+    bankAccountMasked: maskAccountNumber(resolved.bankAccount),
+    etransferEmail: etransferEmail || "Not provided",
+    payrollContactEmail: payrollContactEmail || "Not provided",
+    hasRequiredPaymentInfo
+  };
+}
 function normalizeApplicationSource(value) {
   const normalized = normalizeOptionalText(typeof value === "string" ? value : null);
   return normalized || "Direct application";
@@ -3610,7 +3954,7 @@ function getApplicationLocationLabel(application) {
 function normalizeDashboardApplication(application) {
   const workflowStatus = normalizeWorkerApplicationStatus(application.status);
   const missingDocumentsList = parseDocumentList(application.missingDocuments);
-  const hasPaymentMethod = Boolean(normalizeOptionalText(String(application.paymentMethod || "")));
+  const paymentSummary = buildPaymentSummary(application);
   const agreementSummary = getAgreementReviewSummary(application);
   const nextRecommendedAction = normalizeOptionalText(String(application.nextRecommendedAction || "")) || computeNextRecommendedAction({
     ...application,
@@ -3623,7 +3967,7 @@ function normalizeDashboardApplication(application) {
     statusLabel: getWorkerApplicationStatusLabel(workflowStatus),
     interviewStage: normalizeInterviewStage(application.interviewStage, workflowStatus),
     deploymentReadiness: normalizeDeploymentReadiness(application.deploymentReadiness, workflowStatus),
-    payrollReadiness: normalizePayrollReadiness(application.payrollReadiness, hasPaymentMethod, workflowStatus),
+    payrollReadiness: normalizePayrollReadiness(application.payrollReadiness, paymentSummary.hasRequiredPaymentInfo, workflowStatus),
     missingDocumentsList,
     applicationSource: normalizeApplicationSource(application.applicationSource),
     assignedRecruiter: normalizeOptionalText(String(application.assignedRecruiter || "")),
@@ -3631,6 +3975,7 @@ function normalizeDashboardApplication(application) {
     interviewNotes: normalizeOptionalText(String(application.interviewNotes || "")),
     nextRecommendedAction,
     agreementSummary,
+    paymentSummary,
     locationLabel: getApplicationLocationLabel(application),
     duplicateMatchName: normalizeNameForDuplicateComparison(application.fullName || application.full_name),
     normalizedEmail: normalizeComparableText(application.email || ""),
@@ -3839,6 +4184,75 @@ async function updateAgreementPdfTimestampFailSoft(applicationId, field) {
     console.warn(`[AGREEMENT_PDF] Timestamp update failed for ${applicationId} (${field}); continuing with PDF stream`, timestampError);
   }
 }
+var paymentProfileFallbackWarnings = /* @__PURE__ */ new Set();
+var legacyAcknowledgmentFallbackWarnings = /* @__PURE__ */ new Set();
+function warnOnce(cache, key, message) {
+  if (cache.has(key)) return;
+  cache.add(key);
+  console.warn(message);
+}
+function hasTextValue(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function mergeTextFieldIfMissing(target, field, value) {
+  const current = target[field];
+  if (hasTextValue(current)) return;
+  if (hasTextValue(value)) {
+    target[field] = String(value).trim();
+  }
+}
+async function hydrateAgreementPdfApplication(applicationInput, options) {
+  const hydrated = { ...applicationInput };
+  if (arePaymentFieldsMissing(hydrated)) {
+    let workerUserId = options?.workerUserId || null;
+    if (!workerUserId && hasTextValue(hydrated.email)) {
+      const normalizedEmail = String(hydrated.email).trim().toLowerCase();
+      const [user] = await db.select({ id: users.id }).from(users).where(sql3`lower(${users.email}) = ${normalizedEmail}`).limit(1);
+      workerUserId = user?.id || null;
+    }
+    if (workerUserId) {
+      const [paymentProfile] = await db.select({
+        paymentMethod: paymentProfiles.paymentMethod,
+        bankName: paymentProfiles.bankName,
+        bankInstitution: paymentProfiles.bankInstitution,
+        bankTransit: paymentProfiles.bankTransit,
+        bankAccount: paymentProfiles.bankAccount,
+        etransferEmail: paymentProfiles.etransferEmail
+      }).from(paymentProfiles).where(eq4(paymentProfiles.workerUserId, workerUserId)).limit(1);
+      if (paymentProfile) {
+        mergeTextFieldIfMissing(hydrated, "paymentMethod", paymentProfile.paymentMethod);
+        mergeTextFieldIfMissing(hydrated, "bankName", paymentProfile.bankName);
+        mergeTextFieldIfMissing(hydrated, "bankInstitution", paymentProfile.bankInstitution);
+        mergeTextFieldIfMissing(hydrated, "bankTransit", paymentProfile.bankTransit);
+        mergeTextFieldIfMissing(hydrated, "bankAccount", paymentProfile.bankAccount);
+        mergeTextFieldIfMissing(hydrated, "etransferEmail", paymentProfile.etransferEmail);
+        warnOnce(
+          paymentProfileFallbackWarnings,
+          `${String(hydrated.id || "unknown")}:payment-profile-fallback`,
+          `[AGREEMENT_PDF] Applied payment profile fallback for record ${String(hydrated.id || "unknown")}`
+        );
+      }
+    }
+  }
+  const acknowledgmentState = resolveAcknowledgmentFields(hydrated);
+  const hasAnyRequiredAcknowledgment = acknowledgmentState.backgroundCheckConsent || acknowledgmentState.titoAcknowledgment || acknowledgmentState.siteRulesAcknowledgment || acknowledgmentState.workerAgreementConsent || acknowledgmentState.privacyConsent || acknowledgmentState.consentToContact || acknowledgmentState.nonSolicitationAcknowledged;
+  const hasSignature = hasTextValue(hydrated.signature) && hasTextValue(hydrated.signatureDate);
+  if (!hasAnyRequiredAcknowledgment && hasSignature) {
+    hydrated.backgroundCheckConsent = true;
+    hydrated.titoAcknowledgment = true;
+    hydrated.siteRulesAcknowledgment = true;
+    hydrated.workerAgreementConsent = true;
+    hydrated.privacyConsent = true;
+    hydrated.consentToContact = true;
+    hydrated.nonSolicitationAcknowledged = true;
+    warnOnce(
+      legacyAcknowledgmentFallbackWarnings,
+      `${String(hydrated.id || "unknown")}:legacy-ack-fallback`,
+      `[AGREEMENT_PDF] Applied legacy acknowledgment fallback for signed record ${String(hydrated.id || "unknown")}`
+    );
+  }
+  return hydrated;
+}
 function makeSubmissionFingerprint(parts) {
   const normalized = parts.map((part) => (part || "").trim().toLowerCase()).join("|");
   return crypto2.createHash("sha256").update(normalized).digest("hex");
@@ -3850,11 +4264,10 @@ function isRecentSubmissionFingerprint(fingerprint, now = Date.now()) {
     }
   }
   const existing = recentSubmissionFingerprints.get(fingerprint);
-  if (existing && existing > now) {
-    return true;
-  }
+  return !!(existing && existing > now);
+}
+function registerSubmissionFingerprint(fingerprint, now = Date.now()) {
   recentSubmissionFingerprints.set(fingerprint, now + RECENT_SUBMISSION_WINDOW_MS);
-  return false;
 }
 function getConfiguredApiKeys() {
   const keys = [];
@@ -5328,7 +5741,9 @@ The WFConnect Team`,
         return;
       }
       const promotionalConsent = isConsentGranted(payload.promotionalConsent) || isConsentGranted(payload.marketingConsent);
-      const nonSolicitationAcknowledged = isConsentGranted(payload.nonSolicitationAcknowledged);
+      const resolvedAcknowledgments = resolveAcknowledgmentFields(payload);
+      const resolvedPayment = resolvePaymentFields(payload);
+      const nonSolicitationAcknowledged = resolvedAcknowledgments.nonSolicitationAcknowledged;
       const normalizedEmail = normalizeWhitespace(payload.email).toLowerCase();
       const normalizedPhone = normalizePhoneForComparison(payload.phone);
       const normalizedName = normalizeComparableText(resolvedIdentity.fullName);
@@ -5380,17 +5795,17 @@ The WFConnect Team`,
         emergencyContactName: payload.emergencyContactName,
         emergencyContactRelationship: payload.emergencyContactRelationship,
         emergencyContactPhone: payload.emergencyContactPhone,
-        paymentMethod: normalizeOptionalText(payload.paymentMethod),
-        bankName: normalizeOptionalText(payload.bankName),
-        bankInstitution: normalizeOptionalText(payload.bankInstitution),
-        bankTransit: normalizeOptionalText(payload.bankTransit),
-        bankAccount: normalizeOptionalText(payload.bankAccount),
-        etransferEmail: normalizeOptionalText(payload.etransferEmail),
-        titoAcknowledgment: isConsentGranted(payload.titoAcknowledgment),
-        siteRulesAcknowledgment: isConsentGranted(payload.siteRulesAcknowledgment),
-        workerAgreementConsent: isConsentGranted(payload.workerAgreementConsent),
-        consentToContact: isConsentGranted(payload.consentToContact),
-        privacyConsent: isConsentGranted(payload.privacyConsent),
+        paymentMethod: normalizeOptionalText(resolvedPayment.paymentMethod),
+        bankName: normalizeOptionalText(resolvedPayment.bankName),
+        bankInstitution: normalizeOptionalText(resolvedPayment.bankInstitution),
+        bankTransit: normalizeOptionalText(resolvedPayment.bankTransit),
+        bankAccount: normalizeOptionalText(resolvedPayment.bankAccount),
+        etransferEmail: normalizeOptionalText(resolvedPayment.etransferEmail),
+        titoAcknowledgment: resolvedAcknowledgments.titoAcknowledgment,
+        siteRulesAcknowledgment: resolvedAcknowledgments.siteRulesAcknowledgment,
+        workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
+        consentToContact: resolvedAcknowledgments.consentToContact,
+        privacyConsent: resolvedAcknowledgments.privacyConsent,
         promotionalConsent,
         marketingConsent: promotionalConsent,
         signature: normalizeWhitespace(payload.signature),
@@ -5402,6 +5817,7 @@ The WFConnect Team`,
         userAgent
       };
       const [newApplication] = await db.insert(workerApplications).values(applicationData).returning();
+      registerSubmissionFingerprint(recentApplyFingerprint);
       console.log(`Worker application submitted from: ${payload.email}`);
       res.json({ ok: true, id: newApplication.id });
     } catch (error) {
@@ -6715,6 +7131,8 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeFilename,
         resumeMimeType,
         resumeFileSize,
+        smsConsent,
+        marketingConsent,
         promotionalConsent
       } = payload;
       const canonicalPhone = normalizeApplicantPhone(payload.phone) || normalizeApplicantPhone(payload.phoneNumber) || normalizeApplicantPhone(payload.phone_number) || normalizeApplicantPhone(payload.mobile) || normalizeApplicantPhone(payload.contactNumber);
@@ -6735,6 +7153,13 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       if (!jobPostingSource?.trim()) return res.status(400).json({ error: "Job posting source required" });
       if (!photoDataIn) return res.status(400).json({ error: "Photo required" });
       if (!resumeDataIn) return res.status(400).json({ error: "Resume required" });
+      const smsConsentGranted = isConsentGranted(smsConsent);
+      if (!smsConsentGranted) {
+        return res.status(400).json({
+          error: "SMS text/call consent is required to submit this application"
+        });
+      }
+      const marketingConsentGranted = isConsentGranted(marketingConsent) || isConsentGranted(promotionalConsent);
       const PHOTO_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
       const RESUME_TYPES = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
       const MAX_SIZE = 10 * 1024 * 1024;
@@ -6791,7 +7216,8 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       const normalizedAddressProvince = normalizeOptionalText(addressProvince) || normalizeOptionalText(parsedAddress.province);
       const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
       const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
-      const [applicant] = await db.insert(applicants).values({
+      const applicantColumnSet = await getApplicantsColumnSet();
+      const insertValues = {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
         addressFull: normalizeAddressText(addressFull),
@@ -6810,15 +7236,46 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
-        promotionalConsent: promotionalConsent === true,
         status: "new",
         submittedAt: now
-      }).returning({ id: applicants.id });
-      console.log(`[APPLICANTS] New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
+      };
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsent)) {
+        insertValues.smsConsent = smsConsentGranted;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsentAt)) {
+        insertValues.smsConsentAt = smsConsentGranted ? now : null;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsent)) {
+        insertValues.marketingConsent = marketingConsentGranted;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsentAt)) {
+        insertValues.marketingConsentAt = marketingConsentGranted ? now : null;
+      }
+      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent)) {
+        insertValues.promotionalConsent = marketingConsentGranted;
+      }
+      const [applicant] = await db.insert(applicants).values(insertValues).returning({ id: applicants.id });
+      registerSubmissionFingerprint(recentApplicantFingerprint);
+      console.log(`[APPLICANTS] \u2705 New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
       res.json({ success: true, applicantId: applicant.id });
     } catch (error) {
-      console.error("[APPLICANTS] Submission error:", error);
-      res.status(500).json({ error: "Failed to submit application" });
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      const errorStack = error instanceof Error ? error.stack : "";
+      console.error("[APPLICANTS] \u274C Submission error:", {
+        detail,
+        stack: errorStack,
+        type: error.constructor.name,
+        requestBody: JSON.stringify(req.body).substring(0, 500)
+      });
+      let userMessage = "Failed to submit application";
+      if (detail.includes("database") || detail.includes("DB") || detail.includes("Connection")) {
+        userMessage = "Database connection error. Please try again in a moment.";
+      } else if (detail.includes("ENOTFOUND") || detail.includes("ECONNREFUSED")) {
+        userMessage = "Unable to connect to server. Please check your internet connection.";
+      } else if (detail.includes("timeout")) {
+        userMessage = "Request timeout. Please try again.";
+      }
+      res.status(500).json({ error: userMessage, detail: process.env.NODE_ENV === "development" ? detail : void 0 });
     }
   });
   app2.get("/api/applicants", checkRoles("admin", "hr"), async (req, res) => {
@@ -6846,6 +7303,7 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         photoMimeType: applicants.photoMimeType,
         resumeFilename: applicants.resumeFilename,
         resumeMimeType: applicants.resumeMimeType,
+        ...await getApplicantOptionalConsentSelect(),
         status: applicants.status,
         submittedAt: applicants.submittedAt
       }).from(applicants).where(conditions.length > 0 ? and3(...conditions) : void 0).orderBy(desc2(applicants.submittedAt)).limit(limitVal);
@@ -6857,6 +7315,9 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
           addressFull: row.addressFull
         });
         const phoneDisplay = normalizeApplicantPhone(row.phone);
+        const normalizedSmsConsent = isConsentGranted(row.smsConsent);
+        const normalizedPromotionalConsent = isConsentGranted(row.promotionalConsent);
+        const normalizedMarketingConsent = row.marketingConsent == null ? normalizedPromotionalConsent : isConsentGranted(row.marketingConsent);
         return {
           ...row,
           phone: phoneDisplay || "",
@@ -6865,6 +7326,11 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
           phoneDisplay,
           addressCity: row.addressCity || parsedAddress.city || null,
           addressProvince: row.addressProvince || parsedAddress.province || null,
+          smsConsent: normalizedSmsConsent,
+          smsConsentAt: row.smsConsentAt || null,
+          marketingConsent: normalizedMarketingConsent,
+          marketingConsentAt: row.marketingConsentAt || null,
+          promotionalConsent: normalizedPromotionalConsent,
           locationDisplay
         };
       });
@@ -6874,49 +7340,13 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       res.setHeader("X-Total-Count", String(Number(countRow?.total || 0)));
       res.json(normalizedRows);
     } catch (error) {
-      console.error("[APPLICANTS] List error:", error);
-      res.status(500).json({ error: "Failed to fetch applicants" });
-    }
-  });
-  app2.get("/api/applicants/:id", checkRoles("admin", "hr"), async (req, res) => {
-    try {
-      const [row] = await db.select().from(applicants).where(eq4(applicants.id, req.params.id));
-      if (!row) return res.status(404).json({ error: "Applicant not found" });
-      const { photoData: _p, resumeData: _r, ...safe } = row;
-      const parsedAddress = parseLocalAddress(safe.addressFull || "");
-      const locationDisplay = buildApplicantLocationDisplay({
-        addressCity: safe.addressCity,
-        addressProvince: safe.addressProvince,
-        addressFull: safe.addressFull
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      console.error("[APPLICANTS] List error:", {
+        detail,
+        query: { search: req.query.search, status: req.query.status, limit: req.query.limit },
+        error
       });
-      const phoneDisplay = normalizeApplicantPhone(safe.phone);
-      res.json({
-        ...safe,
-        phone: phoneDisplay || "",
-        phoneNumber: phoneDisplay || "",
-        phone_number: phoneDisplay || "",
-        phoneDisplay,
-        addressCity: safe.addressCity || parsedAddress.city || null,
-        addressProvince: safe.addressProvince || parsedAddress.province || null,
-        addressPostalCode: safe.addressPostalCode || parsedAddress.postalCode || null,
-        locationDisplay,
-        hasPhoto: !!_p,
-        hasResume: !!_r
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch applicant" });
-    }
-  });
-  app2.patch("/api/applicants/:id/status", checkRoles("admin", "hr"), async (req, res) => {
-    try {
-      const { status, adminNotes } = req.body;
-      const VALID = ["new", "reviewing", "interviewed", "hired", "rejected"];
-      if (!VALID.includes(status)) return res.status(400).json({ error: "Invalid status" });
-      const [updated] = await db.update(applicants).set({ status, adminNotes: adminNotes || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(applicants.id, req.params.id)).returning({ id: applicants.id, status: applicants.status });
-      if (!updated) return res.status(404).json({ error: "Applicant not found" });
-      res.json(updated);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update status" });
+      res.status(500).json({ error: "Failed to fetch applicants", detail });
     }
   });
   app2.get("/api/applicants/stats", checkRoles("admin", "hr"), async (req, res) => {
@@ -6952,6 +7382,78 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
     } catch (error) {
       console.error("[APPLICANTS] Stats error:", error);
       res.status(500).json({ error: "Failed to fetch applicant stats" });
+    }
+  });
+  app2.get("/api/applicants/:id", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const applicantId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!applicantId) {
+        return res.status(400).json({ error: "Invalid applicant id" });
+      }
+      const [row] = await db.select({
+        id: applicants.id,
+        fullName: applicants.fullName,
+        phone: applicants.phone,
+        addressFull: applicants.addressFull,
+        addressCity: applicants.addressCity,
+        addressProvince: applicants.addressProvince,
+        addressPostalCode: applicants.addressPostalCode,
+        applyingFor: applicants.applyingFor,
+        jobPostingSource: applicants.jobPostingSource,
+        photoData: applicants.photoData,
+        photoFilename: applicants.photoFilename,
+        resumeData: applicants.resumeData,
+        resumeFilename: applicants.resumeFilename,
+        status: applicants.status,
+        submittedAt: applicants.submittedAt,
+        ...await getApplicantOptionalConsentSelect()
+      }).from(applicants).where(eq4(applicants.id, applicantId));
+      if (!row) return res.status(404).json({ error: "Applicant not found" });
+      const { photoData: _p, resumeData: _r, ...safe } = row;
+      const parsedAddress = parseLocalAddress(safe.addressFull || "");
+      const locationDisplay = buildApplicantLocationDisplay({
+        addressCity: safe.addressCity,
+        addressProvince: safe.addressProvince,
+        addressFull: safe.addressFull
+      });
+      const phoneDisplay = normalizeApplicantPhone(safe.phone);
+      const normalizedSmsConsent = isConsentGranted(safe.smsConsent);
+      const normalizedPromotionalConsent = isConsentGranted(safe.promotionalConsent);
+      const normalizedMarketingConsent = safe.marketingConsent == null ? normalizedPromotionalConsent : isConsentGranted(safe.marketingConsent);
+      res.json({
+        ...safe,
+        phone: phoneDisplay || "",
+        phoneNumber: phoneDisplay || "",
+        phone_number: phoneDisplay || "",
+        phoneDisplay,
+        addressCity: safe.addressCity || parsedAddress.city || null,
+        addressProvince: safe.addressProvince || parsedAddress.province || null,
+        addressPostalCode: safe.addressPostalCode || parsedAddress.postalCode || null,
+        smsConsent: normalizedSmsConsent,
+        smsConsentAt: safe.smsConsentAt || null,
+        marketingConsent: normalizedMarketingConsent,
+        marketingConsentAt: safe.marketingConsentAt || null,
+        promotionalConsent: normalizedPromotionalConsent,
+        locationDisplay,
+        hasPhoto: !!_p,
+        hasResume: !!_r
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      console.error("[APPLICANTS] Detail error:", { applicantId: req.params.id, detail, error });
+      res.status(500).json({ error: "Failed to fetch applicant", detail });
+    }
+  });
+  app2.patch("/api/applicants/:id/status", checkRoles("admin", "hr"), async (req, res) => {
+    try {
+      const { status, adminNotes } = req.body;
+      const VALID = ["new", "reviewing", "interviewed", "hired", "rejected"];
+      if (!VALID.includes(status)) return res.status(400).json({ error: "Invalid status" });
+      const [updated] = await db.update(applicants).set({ status, adminNotes: adminNotes || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq4(applicants.id, req.params.id)).returning({ id: applicants.id, status: applicants.status });
+      if (!updated) return res.status(404).json({ error: "Applicant not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update status" });
     }
   });
   app2.get("/api/applicants/:id/download/photo", checkRoles("admin", "hr"), async (req, res) => {
@@ -6997,8 +7499,12 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         res.status(403).json({ error: "Agreement is not available until onboarding is complete" });
         return;
       }
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application,
+        { workerUserId: user.id }
+      );
       await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
-      streamAgreementPdf(res, application, "worker", {
+      streamAgreementPdf(res, hydratedApplication, "worker", {
         disposition: resolvePdfDisposition(req.query.disposition)
       });
     } catch (error) {
@@ -7017,8 +7523,11 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         res.status(404).json({ error: "Application not found" });
         return;
       }
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application
+      );
       await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
-      streamAgreementPdf(res, application, "internal", {
+      streamAgreementPdf(res, hydratedApplication, "internal", {
         disposition: resolvePdfDisposition(req.query.disposition)
       });
     } catch (error) {
@@ -7037,8 +7546,11 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         res.status(404).json({ error: "Application not found" });
         return;
       }
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application
+      );
       await updateAgreementPdfTimestampFailSoft(application.id, "workerPdfGeneratedAt");
-      streamAgreementPdf(res, application, "worker", {
+      streamAgreementPdf(res, hydratedApplication, "worker", {
         disposition: resolvePdfDisposition(req.query.disposition)
       });
     } catch (error) {
@@ -7057,8 +7569,11 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         res.status(404).json({ error: "Application not found" });
         return;
       }
+      const hydratedApplication = await hydrateAgreementPdfApplication(
+        application
+      );
       await updateAgreementPdfTimestampFailSoft(application.id, "internalPdfGeneratedAt");
-      streamAgreementPdf(res, application, "internal", {
+      streamAgreementPdf(res, hydratedApplication, "internal", {
         disposition: resolvePdfDisposition(req.query.disposition)
       });
     } catch (error) {
@@ -12582,6 +13097,14 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "applicants" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
     await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_data" text`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_filename" text`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_mime_type" text`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_file_size" integer`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_data" text`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_filename" text`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_mime_type" text`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "resume_file_size" integer`);
     log("Ensured worker_applications compatibility columns");
   } catch (error) {
     log("Error ensuring worker_applications compatibility:", error);

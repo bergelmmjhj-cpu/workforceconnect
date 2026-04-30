@@ -665,6 +665,7 @@ const publicApplySubmissionSchema = z.object({
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
   paymentTermsAcknowledged: consentLikeSchema,
+  independentContractorStatusAcknowledged: consentLikeSchema.optional(),
   signature: z.string().trim().min(1),
   signatureDate: z.string().trim().min(1),
 }).strict();

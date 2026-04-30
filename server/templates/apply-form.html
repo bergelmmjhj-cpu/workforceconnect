@@ -129,6 +129,46 @@
       .consent-disclosure { font-size: 13px; }
       .consent-row { font-size: 13px; }
     }
+    /* Fix for iOS/Safari input issues */
+    input, select, textarea, button {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
+      padding-right: 40px;
+    }
+    /* Ensure touch targets are large enough */
+    .consent-row input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      min-width: 22px;
+      cursor: pointer;
+    }
+    /* Fix for potential pointer-events issues */
+    .field input:not([type="file"]),
+    .field select,
+    .field textarea {
+      pointer-events: auto;
+      touch-action: manipulation;
+    }
+    /* Better focus states for accessibility */
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus,
+    .submit-btn:focus {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+    /* Ensure suggestions are clickable */
+    .suggestion-item {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
   </style>
 </head>
 <body>
@@ -172,9 +212,10 @@
       <div class="field">
         <label>Home Address (Canada only) <span class="req">*</span></label>
         <div class="autocomplete-wrap">
-          <input type="text" id="address_full" name="address_full" placeholder="Start typing your address..." autocomplete="off" />
+          <input type="text" id="address_full" name="address_full" placeholder="123 Main St, Toronto, ON" autocomplete="street-address" />
           <div class="suggestions" id="address-suggestions"></div>
         </div>
+        <div class="field-hint" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Enter your full address including city and province, or select from suggestions</div>
         <div class="field-error" id="err-address_full">Please enter a valid Canadian address</div>
         <input type="hidden" id="address_street" name="address_street" />
         <input type="hidden" id="address_city" name="address_city" />
@@ -218,28 +259,28 @@
       <div class="card-title"><span class="num">3</span>Upload Documents</div>
 
       <div class="field">
-        <label>Profile Photo <span class="req">*</span></label>
-        <div class="upload-area" id="photo-upload-area" onclick="document.getElementById('photo-file').click()">
-          <div class="upload-icon">📷</div>
-          <div class="upload-title">Upload your photo</div>
-          <div class="upload-sub">JPG, PNG, WEBP — max 10 MB</div>
+        <label for="photo-file">Profile Photo <span class="req">*</span></label>
+        <label class="upload-area" id="photo-upload-area" for="photo-file" tabindex="0" role="button" aria-describedby="photo-sub">
+          <div class="upload-icon" aria-hidden="true">📷</div>
+          <div class="upload-title">Tap to upload your photo</div>
+          <div class="upload-sub" id="photo-sub">JPG, PNG, WEBP — max 10 MB</div>
           <div class="upload-filename" id="photo-filename" style="display:none"></div>
           <button type="button" class="upload-clear" id="photo-clear" style="display:none" onclick="clearFile('photo', event)">Remove</button>
-          <input type="file" id="photo-file" accept=".jpg,.jpeg,.png,.webp" />
-        </div>
+          <input type="file" id="photo-file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" capture="environment" />
+        </label>
         <div class="field-error" id="err-photo">Please upload a profile photo</div>
       </div>
 
       <div class="field">
-        <label>Resume <span class="req">*</span></label>
-        <div class="upload-area" id="resume-upload-area" onclick="document.getElementById('resume-file').click()">
-          <div class="upload-icon">📄</div>
-          <div class="upload-title">Upload your resume</div>
-          <div class="upload-sub">PDF, DOC, DOCX — max 10 MB</div>
+        <label for="resume-file">Resume <span class="req">*</span></label>
+        <label class="upload-area" id="resume-upload-area" for="resume-file" tabindex="0" role="button" aria-describedby="resume-sub">
+          <div class="upload-icon" aria-hidden="true">📄</div>
+          <div class="upload-title">Tap to upload your resume</div>
+          <div class="upload-sub" id="resume-sub">PDF, DOC, DOCX — max 10 MB</div>
           <div class="upload-filename" id="resume-filename" style="display:none"></div>
           <button type="button" class="upload-clear" id="resume-clear" style="display:none" onclick="clearFile('resume', event)">Remove</button>
-          <input type="file" id="resume-file" accept=".pdf,.doc,.docx" />
-        </div>
+          <input type="file" id="resume-file" accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.doc,.docx" />
+        </label>
         <div class="field-error" id="err-resume">Please upload your resume</div>
       </div>
     </div>
@@ -271,9 +312,36 @@
 </div>
 
 <script>
-const PHOTO_ACCEPT = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-const RESUME_ACCEPT = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+// Expanded MIME types for better browser compatibility
+const PHOTO_ACCEPT = [
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+  'image/pjpeg' // Progressive JPEG (IE)
+];
+const RESUME_ACCEPT = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/x-pdf', // Alternative PDF MIME
+  'text/pdf' // Some browsers
+];
 const MAX_SIZE = 10 * 1024 * 1024;
+
+// Helper to check file type by extension if MIME check fails
+function isValidFileType(file, type) {
+  const accept = type === 'photo' ? PHOTO_ACCEPT : RESUME_ACCEPT;
+  const extensions = type === 'photo' 
+    ? ['.jpg', '.jpeg', '.png', '.webp']
+    : ['.pdf', '.doc', '.docx'];
+  
+  // Check MIME type first
+  if (file.type && accept.includes(file.type.toLowerCase())) {
+    return true;
+  }
+  
+  // Fallback to extension check
+  const fileName = file.name.toLowerCase();
+  return extensions.some(ext => fileName.endsWith(ext));
+}
 
 let photoData = null, resumeData = null;
 
@@ -302,6 +370,7 @@ let photoData = null, resumeData = null;
   }
 })();
 let addressValidated = false;
+let addressManuallyEntered = false;
 let submitPending = false;
 
 // --- ADDRESS AUTOCOMPLETE ---
@@ -317,8 +386,19 @@ function clearResolvedAddressFields() {
   document.getElementById('address_country').value = 'Canada';
 }
 
+// Canadian address pattern: must have city and province (ON, BC, AB, etc.)
+function isValidCanadianAddressFormat(address) {
+  if (!address || address.length < 10) return false;
+  // Check for province codes
+  const provincePattern = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT|Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland|Nova Scotia|Northwest Territories|Nunavut|Ontario|Prince Edward Island|Quebec|Saskatchewan|Yukon)\b/i;
+  // Check for city-like pattern (word before province)
+  const hasCityPattern = /[a-zA-Z]{2,}\s*,?\s*(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT|Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland|Nova Scotia|Northwest Territories|Nunavut|Ontario|Prince Edward Island|Quebec|Saskatchewan|Yukon)/i;
+  return provincePattern.test(address) && hasCityPattern.test(address);
+}
+
 addressInput.addEventListener('input', () => {
   addressValidated = false;
+  addressManuallyEntered = true;
   clearResolvedAddressFields();
   clearTimeout(autocompleteTimer);
   const val = addressInput.value.trim();
@@ -326,7 +406,14 @@ addressInput.addEventListener('input', () => {
   autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
 });
 
-addressInput.addEventListener('blur', () => { setTimeout(hideSuggestions, 200); });
+addressInput.addEventListener('blur', () => { 
+  setTimeout(hideSuggestions, 200); 
+  // If user manually typed an address and it looks valid, try to parse it
+  const val = addressInput.value.trim();
+  if (val && !addressValidated && isValidCanadianAddressFormat(val)) {
+    parseManualAddress(val);
+  }
+});
 
 async function fetchSuggestions(input) {
   try {
@@ -351,6 +438,72 @@ function renderSuggestions(predictions) {
 }
 
 function hideSuggestions() { suggestionsBox.classList.remove('open'); }
+
+// Parse manually entered address
+function parseManualAddress(address) {
+  const provinceMap = {
+    'AB': 'AB', 'ALBERTA': 'AB',
+    'BC': 'BC', 'BRITISH COLUMBIA': 'BC',
+    'MB': 'MB', 'MANITOBA': 'MB',
+    'NB': 'NB', 'NEW BRUNSWICK': 'NB',
+    'NL': 'NL', 'NEWFOUNDLAND': 'NL', 'NEWFOUNDLAND AND LABRADOR': 'NL',
+    'NS': 'NS', 'NOVA SCOTIA': 'NS',
+    'NT': 'NT', 'NORTHWEST TERRITORIES': 'NT',
+    'NU': 'NU', 'NUNAVUT': 'NU',
+    'ON': 'ON', 'ONTARIO': 'ON',
+    'PE': 'PE', 'PRINCE EDWARD ISLAND': 'PE', 'PEI': 'PE',
+    'QC': 'QC', 'QUEBEC': 'QC',
+    'SK': 'SK', 'SASKATCHEWAN': 'SK',
+    'YT': 'YT', 'YUKON': 'YT'
+  };
+  
+  // Extract province
+  let province = '';
+  const upper = address.toUpperCase();
+  for (const [key, code] of Object.entries(provinceMap)) {
+    const pattern = new RegExp('\\b' + key + '\\b', 'i');
+    if (pattern.test(upper)) {
+      province = code;
+      break;
+    }
+  }
+  
+  if (!province) return;
+  
+  // Try to extract city (word(s) before province)
+  const parts = address.split(/[,\s]+/);
+  const provinceIndex = parts.findIndex(p => provinceMap[p.toUpperCase()]);
+  let city = '';
+  if (provinceIndex > 0) {
+    // Take 1-2 words before province as city
+    city = parts.slice(Math.max(0, provinceIndex - 2), provinceIndex).join(' ');
+  }
+  
+  // Extract street (everything before city)
+  let street = '';
+  if (city && provinceIndex > 2) {
+    street = parts.slice(0, provinceIndex - 2).join(' ');
+  } else if (provinceIndex > 0) {
+    street = parts.slice(0, provinceIndex - 1).join(' ');
+  }
+  
+  // Extract postal code if present
+  const postalMatch = address.match(/([A-Za-z]\d[A-Za-z])\s*(\d[A-Za-z]\d)/i);
+  const postalCode = postalMatch ? (postalMatch[1] + ' ' + postalMatch[2]).toUpperCase() : '';
+  
+  // Set values
+  document.getElementById('address_street').value = street.replace(/,/g, '').trim();
+  document.getElementById('address_city').value = city.replace(/,/g, '').trim();
+  document.getElementById('address_province').value = province;
+  document.getElementById('address_postal_code').value = postalCode;
+  document.getElementById('address_country').value = 'Canada';
+  
+  if (city && province) {
+    addressValidated = true;
+    addressManuallyEntered = true;
+    clearError('address_full');
+  }
+}
 
 async function selectPlace(placeId, description) {
   addressInput.value = description;
@@ -398,6 +551,7 @@ function setupFileUpload(type) {
 
   fileInput.addEventListener('change', () => handleFile(type, fileInput.files[0]));
 
+  // Drag and drop support
   area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('drag-over'); });
   area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
   area.addEventListener('drop', (e) => {
@@ -405,19 +559,29 @@ function setupFileUpload(type) {
     const file = e.dataTransfer.files[0];
     if (file) handleFile(type, file);
   });
+  
+  // Keyboard accessibility - Enter/Space to trigger file input
+  area.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
 }
 
 function handleFile(type, file) {
   if (!file) return;
-  const accept = type === 'photo' ? PHOTO_ACCEPT : RESUME_ACCEPT;
-  const label = type === 'photo' ? 'photo' : 'resume';
 
-  if (!accept.includes(file.type)) {
+  if (!isValidFileType(file, type)) {
     showError(type, `Invalid file type. Accepted: ${type === 'photo' ? 'JPG, PNG, WEBP' : 'PDF, DOC, DOCX'}`);
     return;
   }
   if (file.size > MAX_SIZE) {
     showError(type, 'File too large — max 10 MB');
+    return;
+  }
+  if (file.size === 0) {
+    showError(type, 'File appears to be empty. Please select another file.');
     return;
   }
   clearError(type);
@@ -487,10 +651,32 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
   if (!validatePhone(phone)) { showError('phone', 'Please enter a valid Canadian phone number'); valid = false; } else clearError('phone');
 
   const address = document.getElementById('address_full').value.trim();
-  if (!address) { showError('address_full', 'Please enter your address'); valid = false; } else clearError('address_full');
-  if (address && !addressValidated) {
-    showError('address_full', 'Please select a complete address from the suggestions list.');
-    valid = false;
+  if (!address) { 
+    showError('address_full', 'Please enter your address'); 
+    valid = false; 
+  } else {
+    // Try to parse the address if not already validated
+    if (!addressValidated && isValidCanadianAddressFormat(address)) {
+      parseManualAddress(address);
+    }
+    
+    // Check if we have at least some address components or the address looks valid
+    const hasCity = document.getElementById('address_city').value.trim();
+    const hasProvince = document.getElementById('address_province').value.trim();
+    
+    if (!addressValidated && !isValidCanadianAddressFormat(address)) {
+      showError('address_full', 'Please include city and province (e.g., "123 Main St, Toronto, ON")');
+      valid = false;
+    } else if (addressValidated || (hasCity && hasProvince) || isValidCanadianAddressFormat(address)) {
+      clearError('address_full');
+      // Ensure addressValidated is true if we have parsed components
+      if (hasCity && hasProvince) {
+        addressValidated = true;
+      }
+    } else {
+      showError('address_full', 'Please enter a complete Canadian address with city and province');
+      valid = false;
+    }
   }
 
   const applyingFor = document.getElementById('applying_for').value;
@@ -545,23 +731,65 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       promotionalConsent: document.getElementById('marketing_consent').checked,
     };
 
-    const resp = await fetch('/api/applicants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    // Retry logic for network issues
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const resp = await fetch('/api/applicants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-    const result = await resp.json();
-    if (!resp.ok) throw new Error(result.error || 'Submission failed');
+        const result = await resp.json();
+        
+        if (!resp.ok) {
+          // Handle specific error cases
+          if (resp.status === 409) {
+            // Duplicate submission
+            document.getElementById('apply-form').classList.add('hidden');
+            document.getElementById('success-screen').classList.add('show');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+          throw new Error(result.error || result.detail || 'Submission failed');
+        }
 
-    document.getElementById('apply-form').classList.add('hidden');
-    document.getElementById('success-screen').classList.add('show');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Success!
+        document.getElementById('apply-form').classList.add('hidden');
+        document.getElementById('success-screen').classList.add('show');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      } catch (fetchError) {
+        lastError = fetchError;
+        // Only retry on network errors, not on 4xx responses
+        if (attempt === 0 && (fetchError.name === 'TypeError' || fetchError.message.includes('network'))) {
+          await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+          continue;
+        }
+        break;
+      }
+    }
+    
+    throw lastError || new Error('Submission failed');
   } catch (err) {
     btn.disabled = false;
     btn.textContent = 'Submit Application';
     submitPending = false;
-    alert('Something went wrong: ' + (err.message || 'Please try again.'));
+    
+    // More user-friendly error messages
+    let errorMsg = err.message || 'Please try again.';
+    if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
+      errorMsg = 'Network error. Please check your internet connection and try again.';
+    } else if (errorMsg.includes('Phone required')) {
+      errorMsg = 'Please enter a valid phone number.';
+      showError('phone', 'Please enter a valid phone number');
+    } else if (errorMsg.includes('Address required')) {
+      errorMsg = 'Please enter your address.';
+      showError('address_full', 'Please enter your address');
+    }
+    
+    alert('Unable to submit: ' + errorMsg);
   }
 });
 </script>

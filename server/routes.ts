@@ -5632,12 +5632,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [applicant] = await db.insert(applicants).values(insertValues as any).returning({ id: applicants.id });
 
-      console.log(`[APPLICANTS] New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
+      console.log(`[APPLICANTS] ✅ New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
       res.json({ success: true, applicantId: applicant.id });
     } catch (error: any) {
       const detail = error instanceof Error ? error.message : "Unknown error";
-      console.error("[APPLICANTS] Submission error:", { detail, error });
-      res.status(500).json({ error: "Failed to submit application", detail });
+      const errorStack = error instanceof Error ? error.stack : "";
+      console.error("[APPLICANTS] ❌ Submission error:", { 
+        detail, 
+        stack: errorStack,
+        type: error.constructor.name,
+        requestBody: JSON.stringify(req.body).substring(0, 500)
+      });
+      
+      // Provide more specific error messages
+      let userMessage = "Failed to submit application";
+      if (detail.includes("database") || detail.includes("DB") || detail.includes("Connection")) {
+        userMessage = "Database connection error. Please try again in a moment.";
+      } else if (detail.includes("ENOTFOUND") || detail.includes("ECONNREFUSED")) {
+        userMessage = "Unable to connect to server. Please check your internet connection.";
+      } else if (detail.includes("timeout")) {
+        userMessage = "Request timeout. Please try again.";
+      }
+      
+      res.status(500).json({ error: userMessage, detail: process.env.NODE_ENV === "development" ? detail : undefined });
     }
   });
 

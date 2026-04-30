@@ -659,8 +659,10 @@ const publicApplySubmissionSchema = z.object({
   agreementVersion: nullableStringSchema,
   nonSolicitationAcknowledged: consentLikeSchema.optional(),
   nonSolicitationAcknowledgedAt: z.union([z.string(), z.number()]).optional(),
+  independentContractorStatusAcknowledged: consentLikeSchema.optional(),
   privacyConsent: consentLikeSchema,
   consentToContact: consentLikeSchema.optional(),
+  smsConsent: consentLikeSchema.optional(),
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
   paymentTermsAcknowledged: consentLikeSchema,
@@ -3691,9 +3693,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const parsedPayload = publicApplySubmissionSchema.safeParse(req.body ?? {});
       if (!parsedPayload.success) {
+        const validationIssues = formatValidationIssues(parsedPayload.error.issues);
+        console.error(
+          "[APPLY] Payload validation failed — missing/invalid fields:",
+          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; ")
+        );
         res.status(400).json({
           error: "Invalid submission payload",
-          issues: formatValidationIssues(parsedPayload.error.issues),
+          issues: validationIssues,
         });
         return;
       }
@@ -3823,6 +3830,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
         consentToContact: resolvedAcknowledgments.consentToContact,
         privacyConsent: resolvedAcknowledgments.privacyConsent,
+        independentContractorStatusAcknowledged: resolvedAcknowledgments.independentContractorStatusAcknowledged,
         paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
@@ -5468,9 +5476,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const parsedPayload = publicApplicantSubmissionSchema.safeParse(req.body ?? {});
       if (!parsedPayload.success) {
+        const validationIssues = formatValidationIssues(parsedPayload.error.issues);
+        console.error(
+          "[APPLICANTS] Payload validation failed — missing/invalid fields:",
+          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; ")
+        );
         return res.status(400).json({
           error: "Invalid submission payload",
-          issues: formatValidationIssues(parsedPayload.error.issues),
+          issues: validationIssues,
         });
       }
 

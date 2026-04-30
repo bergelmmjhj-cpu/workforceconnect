@@ -254,8 +254,6 @@ export const workerApplications = pgTable("worker_applications", {
   consentToContact: boolean("consent_to_contact").default(false),
   promotionalConsent: boolean("promotional_consent").notNull().default(false),
   marketingConsent: boolean("marketing_consent").default(false),
-  paymentTermsAcknowledged: boolean("payment_terms_acknowledged").default(false),
-
   // Operations workflow
   applicationSource: text("application_source"),
   assignedRecruiter: text("assigned_recruiter"),

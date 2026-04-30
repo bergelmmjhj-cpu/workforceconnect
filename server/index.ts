@@ -11,8 +11,8 @@ import { users, workplaces, workplaceAssignments, timesheets, timesheetEntries, 
 import {
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS,
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
-  CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH,
-  NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH,
+  PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_TITLE,
+  PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_PARAGRAPHS,
   WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
 } from "../shared/contractor-guide-content";
 import { eq, and, isNull, sql } from "drizzle-orm";
@@ -40,9 +40,13 @@ function renderApplyTemplate(template: string): string {
 }
 
 function renderGuideTemplate(template: string): string {
+  const paymentTermsParagraphsHtml = PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_PARAGRAPHS
+    .map((p) => `<p>${escapeHtml(p)}</p>`)
+    .join("\n          ");
+
   return template
-    .replace(/__CLIENT_PAYMENT_DEPENDENCY__/g, escapeHtml(CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH))
-    .replace(/__NO_GUARANTEED_PAYMENT_DATE__/g, escapeHtml(NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH))
+    .replace(/__PAYMENT_TERMS_SECTION_TITLE__/g, escapeHtml(PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_TITLE))
+    .replace(/__PAYMENT_TERMS_SECTION_PARAGRAPHS__/g, paymentTermsParagraphsHtml)
     .replace(/__AGREEMENT_VERSION__/g, escapeHtml(WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION));
 }
 

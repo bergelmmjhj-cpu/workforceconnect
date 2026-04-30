@@ -1110,14 +1110,10 @@
             <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I consent to the collection, use, and protection of my personal data as outlined in the <a href="/privacy" style="color: var(--primary);">Privacy Policy</a>, in compliance with GDPR and PIPEDA regulations.</p>
 
             <label class="checkbox-item" style="margin-top: 16px;">
-              <input type="checkbox" name="consentToContact" required>
-              <span class="checkbox-label bold">By providing a telephone number and submitting this form, you consent to receive SMS text messages and phone calls from El Roi Property Management regarding job opportunities, interviews, onboarding, scheduling updates, and employment-related communication. Message frequency may vary. Message and data rates may apply. Reply STOP to unsubscribe and HELP for help. Consent is not a condition of employment. <span style="color: var(--error);">*</span></span>
+              <input type="checkbox" name="paymentTermsAcknowledged" required>
+              <span class="checkbox-label bold">Payment Terms and Delay Acknowledgment (Required) <span style="color: var(--error);">*</span></span>
             </label>
-            
-            <label class="checkbox-item" style="margin-top: 16px;">
-              <input type="checkbox" name="marketingConsent">
-              <span class="checkbox-label">I agree to receive promotional communications and updates (optional)</span>
-            </label>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I understand that payment depends on client payment and may be delayed or adjusted. I acknowledge that no guaranteed payment date has been promised.</p>
           </div>
         </section>
 
@@ -1241,7 +1237,7 @@
                 isValid = false;
               }
 
-              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'independentContractorStatusAcknowledged', 'privacyConsent', 'consentToContact'].forEach(function(name) {
+              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'independentContractorStatusAcknowledged', 'privacyConsent', 'paymentTermsAcknowledged'].forEach(function(name) {
                 var checkbox = form.querySelector('input[name="' + name + '"]');
                 if (checkbox && !checkbox.checked) {
                   isValid = false;
@@ -1343,8 +1339,7 @@
           nonSolicitationAcknowledged: form.nonSolicitationAcknowledged.checked,
           nonSolicitationAcknowledgedAt: new Date().toISOString(),
           privacyConsent: form.privacyConsent.checked,
-          consentToContact: form.consentToContact.checked,
-          marketingConsent: form.marketingConsent.checked,
+          paymentTermsAcknowledged: form.paymentTermsAcknowledged.checked,
           signature: form.signature.value,
           signatureDate: new Date().toISOString().split('T')[0]
         };

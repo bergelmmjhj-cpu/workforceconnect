@@ -4,6 +4,7 @@ import type { WorkerApplication } from "../../shared/schema";
 import {
   INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_LABEL,
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
+  PAYMENT_TERMS_ACKNOWLEDGMENT_LABEL,
   WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
   workforceSubcontractorAgreementSections,
 } from "../../shared/contractor-guide-content";
@@ -83,7 +84,7 @@ function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
     { label: INDEPENDENT_CONTRACTOR_STATUS_ACKNOWLEDGMENT_LABEL, accepted: isAccepted(resolved.independentContractorStatusAcknowledged) },
     { label: "Worker Agreement", accepted: isAccepted(resolved.workerAgreementConsent) },
     { label: "Privacy Policy", accepted: isAccepted(resolved.privacyConsent) },
-    { label: "Consent To Contact", accepted: isAccepted(resolved.consentToContact) },
+    { label: PAYMENT_TERMS_ACKNOWLEDGMENT_LABEL, accepted: isAccepted(resolved.paymentTermsAcknowledged) },
   ];
 
   if (resolved.marketingConsent === true) {

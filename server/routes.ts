@@ -585,7 +585,7 @@ const REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
   "siteRulesAcknowledgment",
   "workerAgreementConsent",
   "privacyConsent",
-  "consentToContact",
+  "paymentTermsAcknowledged",
 ] as const;
 
 const consentLikeSchema = z.union([z.boolean(), z.string(), z.number()]);
@@ -660,9 +660,10 @@ const publicApplySubmissionSchema = z.object({
   nonSolicitationAcknowledged: consentLikeSchema.optional(),
   nonSolicitationAcknowledgedAt: z.union([z.string(), z.number()]).optional(),
   privacyConsent: consentLikeSchema,
-  consentToContact: consentLikeSchema,
+  consentToContact: consentLikeSchema.optional(),
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
+  paymentTermsAcknowledged: consentLikeSchema,
   signature: z.string().trim().min(1),
   signatureDate: z.string().trim().min(1),
 }).strict();
@@ -721,7 +722,7 @@ function getMissingRequiredConsents(payload: Record<string, unknown> | undefined
     siteRulesAcknowledgment: resolved.siteRulesAcknowledgment,
     workerAgreementConsent: resolved.workerAgreementConsent,
     privacyConsent: resolved.privacyConsent,
-    consentToContact: resolved.consentToContact,
+    paymentTermsAcknowledged: resolved.paymentTermsAcknowledged,
   };
 
   return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);
@@ -3822,6 +3823,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
         consentToContact: resolvedAcknowledgments.consentToContact,
         privacyConsent: resolvedAcknowledgments.privacyConsent,
+        paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
         signature: normalizeWhitespace(payload.signature),

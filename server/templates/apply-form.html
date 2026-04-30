@@ -97,9 +97,9 @@
     }
     .consent-row:last-of-type { margin-bottom: 0; }
     .consent-row input[type="checkbox"] {
-      width: 20px;
-      height: 20px;
-      margin-top: 2px;
+      width: auto;
+      height: auto;
+      margin-right: 4px;
       flex-shrink: 0;
       cursor: pointer;
       accent-color: var(--primary);
@@ -133,11 +133,21 @@
       .consent-row { font-size: 13px; }
     }
     /* Fix for iOS/Safari input issues */
-    input, select, textarea, button {
+    input:not([type="checkbox"]), select, textarea, button {
       -webkit-appearance: none;
       -moz-appearance: none;
       appearance: none;
       font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+    /* Ensure checkboxes keep their native appearance */
+    input[type="checkbox"] {
+      -webkit-appearance: checkbox;
+      -moz-appearance: checkbox;
+      appearance: checkbox;
+      width: auto;
+      height: auto;
+      margin: 0;
+      cursor: pointer;
     }
     select {
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
@@ -146,11 +156,9 @@
       padding-right: 40px;
     }
     /* Ensure touch targets are large enough */
-    .field input[type="checkbox"] {
-      cursor: pointer;
-    }
-    /* Fix for potential pointer-events issues */
-    .field input:not([type="file"]),
+    .field input[type="text"],
+    .field input[type="email"],
+    .field input[type="tel"],
     .field select,
     .field textarea {
       pointer-events: auto;

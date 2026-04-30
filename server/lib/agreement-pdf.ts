@@ -97,21 +97,6 @@ function addAcknowledgments(doc: PDFDocument, application: WorkerApplication) {
   });
 }
 
-function resolveAcknowledgedAtValue(application: WorkerApplication): string {
-  if (application.nonSolicitationAcknowledgedAt) {
-    return new Date(application.nonSolicitationAcknowledgedAt).toLocaleString("en-CA");
-  }
-
-  if (application.nonSolicitationAcknowledged === true && application.signatureDate) {
-    const parsed = new Date(application.signatureDate);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toLocaleString("en-CA");
-    }
-  }
-
-  return "Not recorded";
-}
-
 function addPaymentInformation(doc: PDFDocument, application: WorkerApplication, variant: AgreementPdfVariant) {
   doc.moveDown(0.5);
   doc.fontSize(12).font("Helvetica-Bold").text("Payment Information");
@@ -142,7 +127,6 @@ function addSignature(doc: PDFDocument, application: WorkerApplication) {
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
   addLabelValue(doc, "Non-Solicitation Acknowledged:", resolved.nonSolicitationAcknowledged ? "Yes" : "No");
-  addLabelValue(doc, "Acknowledged At:", resolveAcknowledgedAtValue(application));
 }
 
 export function createAgreementPdfFileName(application: WorkerApplication, variant: AgreementPdfVariant): string {

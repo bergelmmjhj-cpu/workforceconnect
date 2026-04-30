@@ -42,8 +42,8 @@ export interface AgreementSection {
   paragraphs: string[];
 }
 
-export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.0";
-export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE = "2026-04-06";
+export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.1";
+export const WORKFORCE_SUBCONTRACTOR_AGREEMENT_EFFECTIVE_DATE = "2026-04-30";
 
 export const NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE = "Non-Solicitation / Direct Hiring Clause";
 
@@ -54,6 +54,12 @@ export const NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS = [
   "In the event that the Contractor accepts such employment or engagement without the Company’s prior written consent, the Contractor agrees to pay the Company a placement fee equivalent to three (3) months of full-time hours calculated at the Contractor’s most recent agreed hourly rate. The parties acknowledge and agree that this amount represents a genuine pre-estimate of damages and is not intended to be a penalty.",
   "The Contractor acknowledges that the duration, scope, and nature of this clause are reasonable and necessary to protect the Company’s legitimate business interests, including its client relationships and investment in securing and maintaining such clients.",
 ];
+
+export const CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH =
+  "Client Payment Dependency: The Contractor acknowledges and agrees that the Company’s ability to process payments is dependent on receiving payment from its clients. In the event of non-payment or delayed payment by a client, the Contractor’s payment may be correspondingly delayed. The Contractor accepts that such delays are outside the Company’s control and do not constitute a breach of this Agreement, provided that payment for approved hours is made once client funds are received.";
+
+export const NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH =
+  "No Guaranteed Payment Date: The Contractor acknowledges that no fixed or guaranteed payment date has been promised, and payment timelines may vary depending on client remittance and operational processing.";
 
 export const workforceSubcontractorAgreementSections: AgreementSection[] = [
   {
@@ -95,6 +101,8 @@ export const workforceSubcontractorAgreementSections: AgreementSection[] = [
     paragraphs: [
       "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
       "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company’s then-current payroll cycle and operational procedures.",
+      CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH,
+      NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH,
       "Payment dates are not fixed or guaranteed. Payment timing depends on approved hours, verification, payroll processing, banking timelines, and operational requirements. Delays caused by client approval, disputes, delayed client payment, or delayed client fund release may affect contractor payment timing and shall not constitute breach by the Company.",
     ],
   },

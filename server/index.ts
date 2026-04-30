@@ -11,6 +11,9 @@ import { users, workplaces, workplaceAssignments, timesheets, timesheetEntries, 
 import {
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS,
   NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE,
+  CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH,
+  NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH,
+  WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
 } from "../shared/contractor-guide-content";
 import { eq, and, isNull, sql } from "drizzle-orm";
 
@@ -34,6 +37,13 @@ function renderApplyTemplate(template: string): string {
   return template
     .replace(/__NON_SOLICITATION_TITLE__/g, escapeHtml(NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE))
     .replace(/__NON_SOLICITATION_BODY__/g, clauseHtml);
+}
+
+function renderGuideTemplate(template: string): string {
+  return template
+    .replace(/__CLIENT_PAYMENT_DEPENDENCY__/g, escapeHtml(CLIENT_PAYMENT_DEPENDENCY_PARAGRAPH))
+    .replace(/__NO_GUARANTEED_PAYMENT_DATE__/g, escapeHtml(NO_GUARANTEED_PAYMENT_DATE_PARAGRAPH))
+    .replace(/__AGREEMENT_VERSION__/g, escapeHtml(WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION));
 }
 
 // Global unhandledRejection handler - prevents crashing from async background jobs
@@ -731,7 +741,7 @@ function configureExpoAndLanding(app: express.Application) {
 
   // Serve Contractor Payment & Processing Guide
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
-  const contractorGuideTemplate = fs.readFileSync(contractorGuidePath, "utf-8");
+  const contractorGuideTemplate = renderGuideTemplate(fs.readFileSync(contractorGuidePath, "utf-8"));
   
   // Root path handler - domain-aware routing
   app.get("/", (req: Request, res: Response) => {

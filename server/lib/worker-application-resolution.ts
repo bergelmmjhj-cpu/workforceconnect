@@ -204,9 +204,10 @@ function isApplicationSigned(source: GenericRecord): boolean {
  *
  * - If the stored value is explicitly `true`, it is used as-is.
  * - If the stored value is null/missing BUT the application is signed (has a
- *   signature and signatureDate) AND has an agreementVersion, the required
- *   field is inferred as accepted.  Applicants cannot submit without accepting
- *   these clauses, so a signed submission is conclusive evidence of acceptance.
+ *   signature and signatureDate), the required field is inferred as accepted.
+ *   Applicants cannot submit without accepting these clauses, so a signed
+ *   submission is conclusive evidence of acceptance — regardless of whether
+ *   agreementVersion is populated (it may be null for legacy records).
  * - Only show as unchecked when there is explicit stored evidence of rejection
  *   (i.e. the value is explicitly `false`).
  *
@@ -217,11 +218,14 @@ export function resolveAcknowledgmentFieldsForPdf(sourceInput: GenericRecord): R
   const source: GenericRecord = { ...sourceInput };
 
   const signed = isApplicationSigned(source);
-  const hasAgreementVersion = Boolean(normalizeText(source.agreementVersion ?? source.agreement_version));
 
-  // An application qualifies for inference when it is signed and carries an
-  // agreement version — both are set during a successful submission.
-  const canInferRequired = signed && hasAgreementVersion;
+  // A signed application (signature + signatureDate present) is sufficient
+  // evidence that all required acknowledgments were accepted.  Applicants
+  // cannot submit the form without accepting these clauses, so a completed
+  // signature is conclusive — regardless of whether agreementVersion is
+  // populated (it may be null for legacy records where the column was added
+  // after the original submission).
+  const canInferRequired = signed;
 
   const rawNonSolicitation = source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged;
   const rawPaymentTerms = source.paymentTermsAcknowledged ?? source.payment_terms_acknowledged;
@@ -229,12 +233,12 @@ export function resolveAcknowledgmentFieldsForPdf(sourceInput: GenericRecord): R
   // Log missing/null required fields so we can track legacy records.
   if (rawNonSolicitation === null || rawNonSolicitation === undefined) {
     console.warn(
-      `[AGREEMENT_PDF] nonSolicitationAcknowledged is ${rawNonSolicitation === null ? "null" : "undefined"} for record ${source.id || "unknown"} — ${canInferRequired ? "inferring as accepted (signed + agreementVersion present)" : "cannot infer (not signed or no agreementVersion)"}`,
+      `[AGREEMENT_PDF] nonSolicitationAcknowledged is ${rawNonSolicitation === null ? "null" : "undefined"} for record ${source.id || "unknown"} — ${canInferRequired ? "inferring as accepted (application is signed)" : "cannot infer (application is not signed)"}`,
     );
   }
   if (rawPaymentTerms === null || rawPaymentTerms === undefined) {
     console.warn(
-      `[AGREEMENT_PDF] paymentTermsAcknowledged is ${rawPaymentTerms === null ? "null" : "undefined"} for record ${source.id || "unknown"} — ${canInferRequired ? "inferring as accepted (signed + agreementVersion present)" : "cannot infer (not signed or no agreementVersion)"}`,
+      `[AGREEMENT_PDF] paymentTermsAcknowledged is ${rawPaymentTerms === null ? "null" : "undefined"} for record ${source.id || "unknown"} — ${canInferRequired ? "inferring as accepted (application is signed)" : "cannot infer (application is not signed)"}`,
     );
   }
 

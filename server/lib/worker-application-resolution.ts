@@ -182,3 +182,90 @@ export function logMissingPaymentIfNeeded(recordId: string | undefined, variant:
   missingPaymentWarnings.add(key);
   console.warn(`[AGREEMENT_PDF] Payment data missing for record ${recordId || "unknown"} (${variant})`);
 }
+
+/**
+ * Determines whether an application record is considered "signed" — i.e. the
+ * applicant completed the agreement step and submitted the form.  A signed
+ * application is sufficient evidence that all *required* acknowledgments were
+ * accepted, even when the corresponding DB columns are null (legacy records or
+ * columns added after the original submission).
+ */
+function isApplicationSigned(source: GenericRecord): boolean {
+  const signature = normalizeText(source.signature);
+  const signatureDate = normalizeText(source.signatureDate ?? source.signature_date);
+  return Boolean(signature && signatureDate);
+}
+
+/**
+ * Resolves acknowledgment fields for PDF generation.
+ *
+ * Unlike `resolveAcknowledgmentFields()` (which reflects raw DB values),
+ * this function applies smart inference for *required* acknowledgments:
+ *
+ * - If the stored value is explicitly `true`, it is used as-is.
+ * - If the stored value is null/missing BUT the application is signed (has a
+ *   signature and signatureDate) AND has an agreementVersion, the required
+ *   field is inferred as accepted.  Applicants cannot submit without accepting
+ *   these clauses, so a signed submission is conclusive evidence of acceptance.
+ * - Only show as unchecked when there is explicit stored evidence of rejection
+ *   (i.e. the value is explicitly `false`).
+ *
+ * Optional acknowledgments (marketingConsent) are never inferred — they are
+ * always based on the actual stored value.
+ */
+export function resolveAcknowledgmentFieldsForPdf(sourceInput: GenericRecord): ResolvedAcknowledgmentFields {
+  const source: GenericRecord = { ...sourceInput };
+
+  const signed = isApplicationSigned(source);
+  const hasAgreementVersion = Boolean(normalizeText(source.agreementVersion ?? source.agreement_version));
+
+  // An application qualifies for inference when it is signed and carries an
+  // agreement version — both are set during a successful submission.
+  const canInferRequired = signed && hasAgreementVersion;
+
+  const rawNonSolicitation = source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged;
+  const rawPaymentTerms = source.paymentTermsAcknowledged ?? source.payment_terms_acknowledged;
+
+  // Log missing/null required fields so we can track legacy records.
+  if (rawNonSolicitation === null || rawNonSolicitation === undefined) {
+    console.warn(
+      `[AGREEMENT_PDF] nonSolicitationAcknowledged is ${rawNonSolicitation === null ? "null" : "undefined"} for record ${source.id || "unknown"} — ${canInferRequired ? "inferring as accepted (signed + agreementVersion present)" : "cannot infer (not signed or no agreementVersion)"}`,
+    );
+  }
+  if (rawPaymentTerms === null || rawPaymentTerms === undefined) {
+    console.warn(
+      `[AGREEMENT_PDF] paymentTermsAcknowledged is ${rawPaymentTerms === null ? "null" : "undefined"} for record ${source.id || "unknown"} — ${canInferRequired ? "inferring as accepted (signed + agreementVersion present)" : "cannot infer (not signed or no agreementVersion)"}`,
+    );
+  }
+
+  /**
+   * Resolves a single required acknowledgment field.
+   * - Explicit `true`  → accepted
+   * - Explicit `false` → rejected (never override stored rejection)
+   * - null/undefined   → infer from signed status
+   */
+  function resolveRequired(raw: unknown): boolean {
+    if (raw === true || raw === 1) return true;
+    if (raw === false) return false;
+    if (typeof raw === "string") {
+      const normalized = raw.trim().toLowerCase();
+      if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on" || normalized === "accepted") return true;
+      if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+    }
+    // null / undefined — infer from signed status
+    return canInferRequired;
+  }
+
+  return {
+    backgroundCheckConsent: toBoolean(source.backgroundCheckConsent ?? source.background_check_consent),
+    titoAcknowledgment: toBoolean(source.titoAcknowledgment ?? source.tito_acknowledgment ?? source.acknowledgeTitoAccuracyUtc),
+    siteRulesAcknowledgment: toBoolean(source.siteRulesAcknowledgment ?? source.site_rules_acknowledgment ?? source.acknowledgeSiteRulesSafety),
+    workerAgreementConsent: toBoolean(source.workerAgreementConsent ?? source.worker_agreement_consent ?? source.preAcknowledgeAgreementRequired),
+    privacyConsent: toBoolean(source.privacyConsent ?? source.privacy_consent ?? source.consentDataProcessing),
+    consentToContact: toBoolean(source.consentToContact ?? source.consent_to_contact ?? source.consentOperationalMessages),
+    nonSolicitationAcknowledged: resolveRequired(rawNonSolicitation),
+    // marketingConsent is optional — never infer, always use stored value only
+    marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
+    paymentTermsAcknowledged: resolveRequired(rawPaymentTerms),
+  };
+}

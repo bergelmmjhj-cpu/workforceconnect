@@ -746,18 +746,6 @@ function configureExpoAndLanding(app: express.Application) {
   // Serve Contractor Payment & Processing Guide
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
   const contractorGuideTemplate = renderGuideTemplate(fs.readFileSync(contractorGuidePath, "utf-8"));
-  
-  // Root path handler - domain-aware routing
-  app.get("/", (req: Request, res: Response) => {
-    if (isApplySubdomain(req)) {
-      // apply.wfconnect.org → standalone public worker application form
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache");
-      return res.status(200).send(applyFormTemplate || "Apply form not found");
-    }
-    // guide.wfconnect.org and others → redirect to /guide
-    res.redirect("/guide");
-  });
 
   // Serve guide at /guide path
   app.get("/guide", (_req: Request, res: Response) => {

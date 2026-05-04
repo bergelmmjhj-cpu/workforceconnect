@@ -96,9 +96,9 @@ function computeSchedule(p: PeriodData): ScheduleDates {
   // Scrutiny: Mon–Fri of the week immediately AFTER cutoff ends (no overlap)
   const scrutinyStart = nextMondayAfter(cutoffEnd);
   const scrutinyEnd   = addDays(scrutinyStart, 4); // Mon → Fri
-  // Release: Mon–Tue of the week immediately AFTER scrutiny ends
+  // Release: Mon–Fri of the week immediately AFTER scrutiny ends
   const releaseStart = nextMondayAfter(scrutinyEnd);
-  const releaseEnd   = addDays(releaseStart, 1); // Mon → Tue
+  const releaseEnd   = addDays(releaseStart, 4); // Mon → Fri
   return { cutoffStart, cutoffEnd, scrutinyStart, scrutinyEnd, releaseStart, releaseEnd };
 }
 

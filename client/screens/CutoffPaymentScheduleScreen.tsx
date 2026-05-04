@@ -57,7 +57,6 @@ const PERIODS: PeriodData[] = [
 // ─────────────────────────────────────────────────────────
 // 2. DATE UTILITIES
 // ─────────────────────────────────────────────────────────
-const SCRUTINY_DAYS = 5; // last 5 days of cutoff are Scrutiny/Review
 
 function parseDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -74,10 +73,11 @@ function addDays(d: Date, n: number): Date {
   return r;
 }
 
-/** Next Monday on or after the given date (if already Monday, returns same day) */
-function nextMonday(d: Date): Date {
+/** Next Monday strictly after the given date */
+function nextMondayAfter(d: Date): Date {
   const day = d.getDay(); // 0=Sun … 6=Sat
-  const diff = day === 1 ? 0 : day === 0 ? 1 : 8 - day;
+  // Days until next Monday (always at least 1)
+  const diff = day === 0 ? 1 : 8 - day;
   return addDays(d, diff);
 }
 
@@ -85,6 +85,7 @@ interface ScheduleDates {
   cutoffStart: Date;
   cutoffEnd: Date;
   scrutinyStart: Date;
+  scrutinyEnd: Date;
   releaseStart: Date;
   releaseEnd: Date;
 }
@@ -92,13 +93,13 @@ interface ScheduleDates {
 function computeSchedule(p: PeriodData): ScheduleDates {
   const cutoffStart = parseDate(p.cutoffStart);
   const cutoffEnd   = parseDate(p.cutoffEnd);
-  // Scrutiny: last SCRUTINY_DAYS of cutoff (overlaps cutoff)
-  const scrutinyStart = addDays(cutoffEnd, -(SCRUTINY_DAYS - 1));
-  // Release week: Monday–Friday of the week immediately after cutoff
-  const firstDayAfterCutoff = addDays(cutoffEnd, 1);
-  const releaseStart = nextMonday(firstDayAfterCutoff);
-  const releaseEnd   = addDays(releaseStart, 4); // Mon → Fri
-  return { cutoffStart, cutoffEnd, scrutinyStart, releaseStart, releaseEnd };
+  // Scrutiny: Mon–Fri of the week immediately AFTER cutoff ends (no overlap)
+  const scrutinyStart = nextMondayAfter(cutoffEnd);
+  const scrutinyEnd   = addDays(scrutinyStart, 4); // Mon → Fri
+  // Release: Mon–Tue of the week immediately AFTER scrutiny ends
+  const releaseStart = nextMondayAfter(scrutinyEnd);
+  const releaseEnd   = addDays(releaseStart, 1); // Mon → Tue
+  return { cutoffStart, cutoffEnd, scrutinyStart, scrutinyEnd, releaseStart, releaseEnd };
 }
 
 type DayType = "cutoff" | "scrutiny" | "release" | null;
@@ -107,14 +108,14 @@ function getDayType(date: Date, schedule: ScheduleDates): DayType {
   const iso = formatDate(date);
   const {
     cutoffStart, cutoffEnd,
-    scrutinyStart,
+    scrutinyStart, scrutinyEnd,
     releaseStart, releaseEnd,
   } = schedule;
 
   if (iso >= formatDate(releaseStart) && iso <= formatDate(releaseEnd)) {
     return "release";
   }
-  if (iso >= formatDate(scrutinyStart) && iso <= formatDate(cutoffEnd)) {
+  if (iso >= formatDate(scrutinyStart) && iso <= formatDate(scrutinyEnd)) {
     return "scrutiny";
   }
   if (iso >= formatDate(cutoffStart) && iso <= formatDate(cutoffEnd)) {
@@ -278,13 +279,14 @@ export default function CutoffPaymentScheduleScreen() {
   const selected = PERIODS[selectedIndex];
   const schedule = useMemo(() => computeSchedule(selected), [selectedIndex]);
 
-  // Determine which months to show (cutoff months + release month)
+  // Determine which months to show (cutoff + scrutiny + release months)
   const monthsToShow = useMemo(() => {
     const months = new Set<string>();
     const addMonth = (d: Date) =>
       months.add(`${d.getFullYear()}-${d.getMonth()}`);
     addMonth(schedule.cutoffStart);
     addMonth(schedule.cutoffEnd);
+    addMonth(schedule.scrutinyEnd);
     addMonth(schedule.releaseEnd);
     return Array.from(months).map((key) => {
       const [y, m] = key.split("-").map(Number);
@@ -298,7 +300,7 @@ export default function CutoffPaymentScheduleScreen() {
   }
 
   const cutoffRange   = `${fmtDate(schedule.cutoffStart)} – ${fmtDate(schedule.cutoffEnd)}`;
-  const scrutinyRange = `${fmtDate(schedule.scrutinyStart)} – ${fmtDate(schedule.cutoffEnd)}`;
+  const scrutinyRange = `${fmtDate(schedule.scrutinyStart)} – ${fmtDate(schedule.scrutinyEnd)}`;
   const releaseRange  = `${fmtDate(schedule.releaseStart)} – ${fmtDate(schedule.releaseEnd)}`;
 
   return (
@@ -616,7 +618,7 @@ export default function CutoffPaymentScheduleScreen() {
           >
             {scrutinyRange}
             <ThemedText style={[styles.explainCardNote, { color: theme.textMuted }]}>
-              {"  "}(last {SCRUTINY_DAYS} days of cutoff)
+              {"  "}(Mon – Fri after cutoff)
             </ThemedText>
           </ThemedText>
           <ThemedText

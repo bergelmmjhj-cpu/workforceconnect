@@ -1107,7 +1107,13 @@
               <input type="checkbox" name="privacyConsent" required>
               <span class="checkbox-label bold">Privacy Policy <span style="color: var(--error);">*</span></span>
             </label>
-            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I consent to the collection, use, and protection of my personal data as outlined in the <a href="/privacy" style="color: var(--primary);">Privacy Policy</a>, in compliance with GDPR and PIPEDA regulations.</p>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I consent to the collection, use, and protection of my personal data as outlined in the <a href="https://wfconnect.org/privacy" style="color: var(--primary);">Privacy Policy</a>, in compliance with GDPR and PIPEDA regulations.</p>
+
+            <label class="checkbox-item" style="margin-top: 16px;">
+              <input type="checkbox" name="smsConsent" required>
+              <span class="checkbox-label bold">SMS Communications Consent <span style="color: var(--error);">*</span></span>
+            </label>
+            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">By providing my phone number and submitting this form, I consent to receive SMS messages from Workforce Connect regarding job opportunities, shift updates, scheduling, reminders, and support. Message frequency may vary, typically 1–5 messages per week. Message and data rates may apply. Reply STOP to opt out or HELP for assistance. View our <a href="https://wfconnect.org/privacy" style="color: var(--primary);">Privacy Policy</a> and <a href="https://wfconnect.org/terms" style="color: var(--primary);">Terms</a>.</p>
 
             <label class="checkbox-item" style="margin-top: 16px;">
               <input type="checkbox" name="paymentTermsAcknowledged" required>
@@ -1237,7 +1243,7 @@
                 isValid = false;
               }
 
-              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'independentContractorStatusAcknowledged', 'privacyConsent', 'paymentTermsAcknowledged'].forEach(function(name) {
+              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'independentContractorStatusAcknowledged', 'privacyConsent', 'smsConsent', 'paymentTermsAcknowledged'].forEach(function(name) {
                 var checkbox = form.querySelector('input[name="' + name + '"]');
                 if (checkbox && !checkbox.checked) {
                   isValid = false;
@@ -1339,6 +1345,7 @@
           nonSolicitationAcknowledged: form.nonSolicitationAcknowledged.checked,
           nonSolicitationAcknowledgedAt: new Date().toISOString(),
           privacyConsent: form.privacyConsent.checked,
+          smsConsent: form.smsConsent.checked,
           paymentTermsAcknowledged: form.paymentTermsAcknowledged.checked,
           signature: form.signature.value,
           signatureDate: new Date().toISOString().split('T')[0]

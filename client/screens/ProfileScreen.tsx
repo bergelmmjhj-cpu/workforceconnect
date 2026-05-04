@@ -512,6 +512,7 @@ export default function ProfileScreen() {
               style={({ pressed }) => [
                 styles.menuItem,
                 pressed && { backgroundColor: theme.backgroundSecondary },
+                { borderBottomWidth: 1, borderBottomColor: theme.border },
               ]}
               testID="button-payment-info"
             >
@@ -529,6 +530,29 @@ export default function ProfileScreen() {
                         Not configured - tap to set up
                       </ThemedText>
                     )}
+                  </View>
+                </View>
+                <View style={styles.menuItemRight}>
+                  <Feather name="chevron-right" size={20} color={theme.textMuted} />
+                </View>
+              </View>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate("CutoffPaymentSchedule")}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && { backgroundColor: theme.backgroundSecondary },
+              ]}
+              testID="button-payment-schedule"
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <Feather name="calendar" size={20} color={theme.text} />
+                  <View>
+                    <ThemedText style={styles.menuItemText}>Cutoff & Payment Schedule</ThemedText>
+                    <ThemedText style={[styles.paymentStatus, { color: theme.textSecondary }]}>
+                      2026 period guide
+                    </ThemedText>
                   </View>
                 </View>
                 <View style={styles.menuItemRight}>

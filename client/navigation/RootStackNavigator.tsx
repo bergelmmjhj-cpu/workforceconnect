@@ -35,6 +35,7 @@ import UserManagementScreen from "@/screens/UserManagementScreen";
 import AppointmentsScreen from "@/screens/AppointmentsScreen";
 import SystemSettingsScreen from "@/screens/SystemSettingsScreen";
 import ApplicantsAdminScreen from "@/screens/ApplicantsAdminScreen";
+import CutoffPaymentScheduleScreen from "@/screens/CutoffPaymentScheduleScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -76,6 +77,7 @@ export type RootStackParamList = {
   Appointments: undefined;
   SystemSettings: undefined;
   ApplicantsAdmin: undefined;
+  CutoffPaymentSchedule: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -327,6 +329,13 @@ export default function RootStackNavigator() {
             component={ApplicantsAdminScreen}
             options={{
               headerTitle: "Applicants",
+            }}
+          />
+          <Stack.Screen
+            name="CutoffPaymentSchedule"
+            component={CutoffPaymentScheduleScreen}
+            options={{
+              headerTitle: "Payment Schedule",
             }}
           />
         </>

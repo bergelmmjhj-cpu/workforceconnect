@@ -162,6 +162,25 @@
 
       .nav-cta:hover { background: var(--primary); }
 
+      .nav-login {
+        display: inline-flex;
+        align-items: center;
+        padding: 9px 20px;
+        font-size: 14px;
+        font-weight: 600;
+        background: transparent;
+        color: var(--primary-mid);
+        border: 1.5px solid var(--primary-mid);
+        border-radius: 8px;
+        text-decoration: none;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+      }
+
+      .nav-login:hover {
+        background: var(--primary-subtle);
+      }
+
       .nav-hamburger {
         display: flex;
         flex-direction: column;
@@ -218,6 +237,19 @@
         color: white !important;
         border-radius: 8px;
         font-weight: 600;
+      }
+
+      .mobile-menu-login {
+        display: block;
+        margin-top: 16px;
+        padding: 12px;
+        text-align: center;
+        background: transparent;
+        color: var(--primary-mid) !important;
+        border: 1.5px solid var(--primary-mid);
+        border-radius: 8px;
+        font-weight: 600;
+        border-bottom: 1.5px solid var(--primary-mid) !important;
       }
 
       /* ─── HERO ───────────────────────────────────── */
@@ -1365,6 +1397,7 @@
         </ul>
 
         <div class="nav-right">
+          <a href="https://app.wfconnect.org" target="_blank" rel="noopener noreferrer" class="nav-login">Staff Login</a>
           <a href="#contact" class="nav-cta">Request a Quote</a>
           <button class="nav-hamburger" id="hamburger" aria-label="Open menu">
             <span></span>
@@ -1383,6 +1416,7 @@
       <a href="#about" onclick="closeMobile()">About</a>
       <a href="#faq" onclick="closeMobile()">FAQ</a>
       <a href="#contact" onclick="closeMobile()">Contact</a>
+      <a href="https://app.wfconnect.org" target="_blank" rel="noopener noreferrer" class="mobile-menu-login" onclick="closeMobile()">Staff Login</a>
       <a href="#contact" class="mobile-menu-cta" onclick="closeMobile()">Request a Quote</a>
     </div>
 

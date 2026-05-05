@@ -2157,8 +2157,13 @@
         { label: 'Site Rules Acknowledgment', camel: 'siteRulesAcknowledgment', snake: 'site_rules_acknowledgment' },
         { label: 'Worker Agreement Consent', camel: 'workerAgreementConsent', snake: 'worker_agreement_consent' },
         { label: 'Privacy Consent', camel: 'privacyConsent', snake: 'privacy_consent' },
-        { label: 'Consent To Contact', camel: 'consentToContact', snake: 'consent_to_contact' },
         { label: 'Non-Solicitation Acknowledgment', camel: 'nonSolicitationAcknowledged', snake: 'non_solicitation_acknowledged' }
+      ];
+
+      // Informational-only acknowledgments: shown in the admin detail view but
+      // NOT used as hard-block criteria during approval.
+      var INFO_ONLY_ACK_RULES = [
+        { label: 'Consent To Contact', camel: 'consentToContact', snake: 'consent_to_contact' }
       ];
 
       function getMissingRequiredAcknowledgments(app) {
@@ -2387,7 +2392,14 @@
             stateLabel: accepted ? 'Accepted' : 'Incomplete',
             statusClass: accepted ? 'approved' : 'on_hold'
           };
-        });
+        }).concat(INFO_ONLY_ACK_RULES.map(function(rule) {
+          var accepted = getAppValue(app, rule.camel, rule.snake) === true;
+          return {
+            label: rule.label + ' (informational)',
+            stateLabel: accepted ? 'Accepted' : 'Not accepted',
+            statusClass: accepted ? 'approved' : 'pending'
+          };
+        }));
         var missingDocumentChecklist = missingDocuments.map(function(item) {
           return { label: item, stateLabel: 'Outstanding', statusClass: 'on_hold' };
         });

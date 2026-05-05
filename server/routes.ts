@@ -880,7 +880,7 @@ const REQUIRED_APPROVAL_ACK_FIELDS: Array<{ field: keyof typeof workerApplicatio
   { field: "siteRulesAcknowledgment", label: "Site Rules Acknowledgment" },
   { field: "workerAgreementConsent", label: "Worker Agreement Consent" },
   { field: "privacyConsent", label: "Privacy Consent" },
-  { field: "consentToContact", label: "Consent To Contact" },
+  // consentToContact is informational-only and must NOT block approval
   { field: "nonSolicitationAcknowledged", label: "Non-Solicitation Acknowledgment" },
 ];
 
@@ -892,7 +892,7 @@ function getMissingApprovalAcknowledgments(application: Partial<typeof workerApp
     siteRulesAcknowledgment: "siteRulesAcknowledgment",
     workerAgreementConsent: "workerAgreementConsent",
     privacyConsent: "privacyConsent",
-    consentToContact: "consentToContact",
+    // consentToContact is informational-only and must NOT block approval
     nonSolicitationAcknowledged: "nonSolicitationAcknowledged",
   };
 

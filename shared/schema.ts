@@ -164,6 +164,8 @@ export const contactLeads = pgTable("contact_leads", {
   cityProvince: text("city_province"),
   serviceNeeded: text("service_needed"),
   message: text("message").notNull(),
+  smsConsent: boolean("sms_consent").notNull().default(false),
+  smsConsentAt: timestamp("sms_consent_at"),
   ip: text("ip"),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -249,6 +251,8 @@ export const workerApplications = pgTable("worker_applications", {
   internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
   privacyConsent: boolean("privacy_consent").default(false),
   consentToContact: boolean("consent_to_contact").default(false),
+  smsConsent: boolean("sms_consent").notNull().default(false),
+  smsConsentAt: timestamp("sms_consent_at"),
   promotionalConsent: boolean("promotional_consent").notNull().default(false),
   marketingConsent: boolean("marketing_consent").default(false),
   // Operations workflow
@@ -1245,6 +1249,10 @@ export const applicants = pgTable("applicants", {
   resumeFilename: text("resume_filename"),
   resumeMimeType: text("resume_mime_type"),
   resumeFileSize: integer("resume_file_size"),
+  smsConsent: boolean("sms_consent").notNull().default(false),
+  smsConsentAt: timestamp("sms_consent_at"),
+  marketingConsent: boolean("marketing_consent").notNull().default(false),
+  marketingConsentAt: timestamp("marketing_consent_at"),
   promotionalConsent: boolean("promotional_consent").default(false),
   status: text("status").notNull().default("new"), // new, reviewing, interviewed, hired, rejected
   adminNotes: text("admin_notes"),

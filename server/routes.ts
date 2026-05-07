@@ -586,6 +586,7 @@ const REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
   "workerAgreementConsent",
   "privacyConsent",
   "paymentTermsAcknowledged",
+  "smsConsent",
 ] as const;
 
 const consentLikeSchema = z.union([z.boolean(), z.string(), z.number()]);
@@ -661,7 +662,7 @@ const publicApplySubmissionSchema = z.object({
   nonSolicitationAcknowledgedAt: z.union([z.string(), z.number()]).optional(),
   privacyConsent: consentLikeSchema,
   consentToContact: consentLikeSchema.optional(),
-  smsConsent: consentLikeSchema.optional(),
+  smsConsent: consentLikeSchema,
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
   paymentTermsAcknowledged: consentLikeSchema,
@@ -725,6 +726,7 @@ function getMissingRequiredConsents(payload: Record<string, unknown> | undefined
     workerAgreementConsent: resolved.workerAgreementConsent,
     privacyConsent: resolved.privacyConsent,
     paymentTermsAcknowledged: resolved.paymentTermsAcknowledged,
+    smsConsent: resolved.smsConsent,
   };
 
   return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);

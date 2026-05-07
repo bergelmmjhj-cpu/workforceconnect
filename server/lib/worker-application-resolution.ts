@@ -77,6 +77,7 @@ export type ResolvedAcknowledgmentFields = {
   nonSolicitationAcknowledged: boolean;
   marketingConsent: boolean;
   paymentTermsAcknowledged: boolean;
+  smsConsent: boolean;
 };
 
 export function resolvePaymentFields(sourceInput: GenericRecord): ResolvedPaymentFields {
@@ -171,6 +172,7 @@ export function resolveAcknowledgmentFields(sourceInput: GenericRecord): Resolve
     nonSolicitationAcknowledged: toBoolean(source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged),
     marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
     paymentTermsAcknowledged: toBoolean(source.paymentTermsAcknowledged ?? source.payment_terms_acknowledged),
+    smsConsent: toBoolean(source.smsConsent ?? source.sms_consent),
   };
 }
 
@@ -271,5 +273,6 @@ export function resolveAcknowledgmentFieldsForPdf(sourceInput: GenericRecord): R
     // marketingConsent is optional — never infer, always use stored value only
     marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
     paymentTermsAcknowledged: resolveRequired(rawPaymentTerms),
+    smsConsent: toBoolean(source.smsConsent ?? source.sms_consent),
   };
 }

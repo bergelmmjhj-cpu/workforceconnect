@@ -254,17 +254,11 @@ var init_schema = __esm({
       unavailablePeriods: text("unavailable_periods"),
       // Experience
       yearsExperience: text("years_experience"),
-      workHistory: text("work_history"),
-      // JSON array of job objects
       experienceSummary: text("experience_summary"),
       // Skills
       skills: text("skills"),
       // JSON array
-      certifications: text("certifications"),
-      // JSON array
       // Shift Preferences
-      shiftTypePreference: text("shift_type_preference"),
-      // day, night, flexible
       desiredShiftLength: text("desired_shift_length"),
       // 4, 8, flexible
       maxTravelDistance: text("max_travel_distance"),
@@ -932,10 +926,6 @@ var init_schema = __esm({
       resumeFilename: text("resume_filename"),
       resumeMimeType: text("resume_mime_type"),
       resumeFileSize: integer("resume_file_size"),
-      smsConsent: boolean("sms_consent").notNull().default(false),
-      smsConsentAt: timestamp("sms_consent_at"),
-      marketingConsent: boolean("marketing_consent").notNull().default(false),
-      marketingConsentAt: timestamp("marketing_consent_at"),
       promotionalConsent: boolean("promotional_consent").default(false),
       status: text("status").notNull().default("new"),
       // new, reviewing, interviewed, hired, rejected
@@ -2455,7 +2445,7 @@ init_schema();
 init_discord();
 
 // shared/contractor-guide-content.ts
-var WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.0";
+var WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION = "v3.2";
 var NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE = "Non-Solicitation / Direct Hiring Clause";
 var NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS = [
   "The Contractor agrees that during the term of this Agreement and for a period of twelve (12) months following the completion or termination of any assignment, they shall not, directly or indirectly, solicit or accept employment, contract work, or any other form of engagement with any client of the Company to whom the Contractor was introduced or for whom the Contractor performed services under this Agreement, without the prior written consent of the Company.",
@@ -2464,6 +2454,14 @@ var NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS = [
   "In the event that the Contractor accepts such employment or engagement without the Company\u2019s prior written consent, the Contractor agrees to pay the Company a placement fee equivalent to three (3) months of full-time hours calculated at the Contractor\u2019s most recent agreed hourly rate. The parties acknowledge and agree that this amount represents a genuine pre-estimate of damages and is not intended to be a penalty.",
   "The Contractor acknowledges that the duration, scope, and nature of this clause are reasonable and necessary to protect the Company\u2019s legitimate business interests, including its client relationships and investment in securing and maintaining such clients."
 ];
+var PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_TITLE = "Payment Terms and Client Dependency";
+var PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_PARAGRAPHS = [
+  "Payment is based on completed and approved assignments and does not constitute a salary or wage. No guaranteed income, minimum compensation, or fixed payment schedule is provided.",
+  "The Company follows a bi-weekly cutoff for timesheet submission; however, payment release is not immediate. Timesheets and total hours are reviewed, verified, and processed by the Company's accounting team, which may take up to one (1) week following the cutoff. Payment is generally issued in the subsequent week, subject to client remittance, banking timelines, and operational processing. This timeline is an estimate only and does not constitute a guaranteed payment date.",
+  "The Contractor acknowledges that the Company\u2019s ability to issue payment depends on receiving payment from its clients. Payment timing may vary due to client remittance, approval processes, banking timelines, or operational factors.",
+  "In the event of delayed, partial, or non-payment by a client, contractor payment may be correspondingly delayed or adjusted. The Contractor agrees that such circumstances are outside the Company\u2019s control and do not constitute a breach, provided the Company processes payable amounts in good faith based on funds received."
+];
+var PAYMENT_TERMS_ACKNOWLEDGMENT_LABEL = "Payment Terms and Delay Acknowledgment";
 var workforceSubcontractorAgreementSections = [
   {
     id: "parties",
@@ -2477,9 +2475,13 @@ var workforceSubcontractorAgreementSections = [
     id: "relationship",
     title: "2. Independent Contractor Relationship",
     paragraphs: [
-      "The Contractor performs services as an independent subcontractor and not as an employee, agent, partner, or representative of the Company unless required by applicable law.",
-      "The Contractor understands that they are not entitled to Employment Insurance, Canada Pension Plan contributions, vacation pay, overtime pay, benefits, or any similar employee entitlements unless expressly required by law.",
-      "The Contractor is solely responsible for filing and remitting all taxes, source deductions, premiums, and statutory contributions arising from amounts paid under this Agreement."
+      "The Contractor is engaged as an independent contractor and not as an employee, agent, or representative of the Company. Nothing in this Agreement shall be interpreted as creating an employment, partnership, or joint venture relationship.",
+      "The Contractor has full discretion over whether to accept or decline assignments and retains control over the manner and means of performing accepted work, subject only to client site requirements and applicable laws.",
+      "The Contractor is free to perform services for other businesses, including competitors of the Company, and is not required to work exclusively for the Company.",
+      "The Contractor is not entitled to Employment Insurance, Canada Pension Plan contributions, vacation pay, overtime pay, termination pay, or any other employment-related benefits, except as required by law.",
+      "The Contractor assumes all responsibility for income taxes, HST (if applicable), and statutory remittances arising from payments received.",
+      "The Contractor acknowledges that they operate as an independent business and assume the risk of profit or loss.",
+      "The Contractor may operate under their own business name and is responsible for maintaining any required licenses, registrations, or insurance."
     ]
   },
   {
@@ -2495,7 +2497,17 @@ var workforceSubcontractorAgreementSections = [
     title: "4. Assignment Terms",
     paragraphs: [
       "The Contractor acknowledges that no minimum hours, recurring shifts, or ongoing assignments are guaranteed under this Agreement.",
-      "Assignments are based on client demand, may vary by location, role, and duration, and may be reassigned, rescheduled, shortened, or cancelled by the Company or the client."
+      "Assignments are based on client demand, may vary by location, role, and duration, and may be reassigned, rescheduled, shortened, or cancelled by the Company or the client.",
+      "The Company is not obligated to provide assignments, and the Contractor is not obligated to accept any assignment offered.",
+      "The Contractor is free to accept or decline assignments and may provide services to other entities at any time."
+    ]
+  },
+  {
+    id: "control-performance",
+    title: "4A. Control and Performance of Work",
+    paragraphs: [
+      "The Company does not control the manner or methods by which the Contractor performs services. The Contractor is responsible for determining how work is completed, subject only to the required outcome and client site policies such as safety and compliance standards.",
+      "The Company may communicate assignment requirements, but does not supervise or direct the Contractor as an employer would."
     ]
   },
   {
@@ -2504,7 +2516,8 @@ var workforceSubcontractorAgreementSections = [
     paragraphs: [
       "The Contractor will be paid the hourly rate communicated for the accepted assignment, subject to client-specific rates, approved hours, and compliance with Company procedures.",
       "Only hours that are properly submitted, verified, and approved are payable. Payroll processing follows the Company\u2019s then-current payroll cycle and operational procedures.",
-      "Payment dates are not fixed or guaranteed. Payment timing depends on approved hours, verification, payroll processing, banking timelines, and operational requirements. Delays caused by client approval, disputes, delayed client payment, or delayed client fund release may affect contractor payment timing and shall not constitute breach by the Company."
+      PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_TITLE + ":",
+      ...PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_PARAGRAPHS
     ]
   },
   {
@@ -2541,6 +2554,7 @@ var workforceSubcontractorAgreementSections = [
     id: "equipment",
     title: "10. Equipment / Damages",
     paragraphs: [
+      "Unless otherwise specified for a particular assignment, the Contractor is responsible for providing their own tools, transportation, and work-related materials. Use of client or Company equipment does not create an employment relationship.",
       "The Contractor is responsible for exercising reasonable care with Company and client property, equipment, uniforms, keys, and keycards issued for an assignment.",
       "The Contractor may be held responsible, to the extent permitted by law, for losses or damages caused by negligence, including lost keycards, access devices, or client property damage."
     ]
@@ -2697,7 +2711,9 @@ function resolveAcknowledgmentFields(sourceInput) {
     privacyConsent: toBoolean(source.privacyConsent ?? source.privacy_consent ?? source.consentDataProcessing),
     consentToContact: toBoolean(source.consentToContact ?? source.consent_to_contact ?? source.consentOperationalMessages),
     nonSolicitationAcknowledged: toBoolean(source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged),
-    marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent)
+    marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
+    paymentTermsAcknowledged: toBoolean(source.paymentTermsAcknowledged ?? source.payment_terms_acknowledged),
+    smsConsent: toBoolean(source.smsConsent ?? source.sms_consent)
   };
 }
 var missingPaymentWarnings = /* @__PURE__ */ new Set();
@@ -2706,6 +2722,51 @@ function logMissingPaymentIfNeeded(recordId, variant) {
   if (missingPaymentWarnings.has(key)) return;
   missingPaymentWarnings.add(key);
   console.warn(`[AGREEMENT_PDF] Payment data missing for record ${recordId || "unknown"} (${variant})`);
+}
+function isApplicationSigned(source) {
+  const signature = normalizeText(source.signature);
+  const signatureDate = normalizeText(source.signatureDate ?? source.signature_date);
+  return Boolean(signature && signatureDate);
+}
+function resolveAcknowledgmentFieldsForPdf(sourceInput) {
+  const source = { ...sourceInput };
+  const signed = isApplicationSigned(source);
+  const canInferRequired = signed;
+  const rawNonSolicitation = source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged;
+  const rawPaymentTerms = source.paymentTermsAcknowledged ?? source.payment_terms_acknowledged;
+  if (rawNonSolicitation === null || rawNonSolicitation === void 0) {
+    console.warn(
+      `[AGREEMENT_PDF] nonSolicitationAcknowledged is ${rawNonSolicitation === null ? "null" : "undefined"} for record ${source.id || "unknown"} \u2014 ${canInferRequired ? "inferring as accepted (application is signed)" : "cannot infer (application is not signed)"}`
+    );
+  }
+  if (rawPaymentTerms === null || rawPaymentTerms === void 0) {
+    console.warn(
+      `[AGREEMENT_PDF] paymentTermsAcknowledged is ${rawPaymentTerms === null ? "null" : "undefined"} for record ${source.id || "unknown"} \u2014 ${canInferRequired ? "inferring as accepted (application is signed)" : "cannot infer (application is not signed)"}`
+    );
+  }
+  function resolveRequired(raw) {
+    if (raw === true || raw === 1) return true;
+    if (raw === false) return false;
+    if (typeof raw === "string") {
+      const normalized = raw.trim().toLowerCase();
+      if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on" || normalized === "accepted") return true;
+      if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+    }
+    return canInferRequired;
+  }
+  return {
+    backgroundCheckConsent: toBoolean(source.backgroundCheckConsent ?? source.background_check_consent),
+    titoAcknowledgment: toBoolean(source.titoAcknowledgment ?? source.tito_acknowledgment ?? source.acknowledgeTitoAccuracyUtc),
+    siteRulesAcknowledgment: toBoolean(source.siteRulesAcknowledgment ?? source.site_rules_acknowledgment ?? source.acknowledgeSiteRulesSafety),
+    workerAgreementConsent: toBoolean(source.workerAgreementConsent ?? source.worker_agreement_consent ?? source.preAcknowledgeAgreementRequired),
+    privacyConsent: toBoolean(source.privacyConsent ?? source.privacy_consent ?? source.consentDataProcessing),
+    consentToContact: toBoolean(source.consentToContact ?? source.consent_to_contact ?? source.consentOperationalMessages),
+    nonSolicitationAcknowledged: resolveRequired(rawNonSolicitation),
+    // marketingConsent is optional — never infer, always use stored value only
+    marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
+    paymentTermsAcknowledged: resolveRequired(rawPaymentTerms),
+    smsConsent: toBoolean(source.smsConsent ?? source.sms_consent)
+  };
 }
 
 // server/lib/agreement-pdf.ts
@@ -2756,7 +2817,7 @@ function isAccepted(value) {
   return value === true;
 }
 function addAcknowledgments(doc, application) {
-  const resolved = resolveAcknowledgmentFields(application);
+  const resolved = resolveAcknowledgmentFieldsForPdf(application);
   const items = [
     { label: "Background Check Consent", accepted: isAccepted(resolved.backgroundCheckConsent) },
     { label: "TITO System Acknowledgment", accepted: isAccepted(resolved.titoAcknowledgment) },
@@ -2764,7 +2825,7 @@ function addAcknowledgments(doc, application) {
     { label: NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE, accepted: isAccepted(resolved.nonSolicitationAcknowledged) },
     { label: "Worker Agreement", accepted: isAccepted(resolved.workerAgreementConsent) },
     { label: "Privacy Policy", accepted: isAccepted(resolved.privacyConsent) },
-    { label: "Consent To Contact", accepted: isAccepted(resolved.consentToContact) }
+    { label: PAYMENT_TERMS_ACKNOWLEDGMENT_LABEL, accepted: isAccepted(resolved.paymentTermsAcknowledged) }
   ];
   if (resolved.marketingConsent === true) {
     items.push({ label: "Promotional Communications (Optional)", accepted: true });
@@ -2775,18 +2836,6 @@ function addAcknowledgments(doc, application) {
     doc.fontSize(9.5).font("Helvetica").text(`[${item.accepted ? "X" : " "}] ${item.label}`);
     doc.moveDown(0.2);
   });
-}
-function resolveAcknowledgedAtValue(application) {
-  if (application.nonSolicitationAcknowledgedAt) {
-    return new Date(application.nonSolicitationAcknowledgedAt).toLocaleString("en-CA");
-  }
-  if (application.nonSolicitationAcknowledged === true && application.signatureDate) {
-    const parsed = new Date(application.signatureDate);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toLocaleString("en-CA");
-    }
-  }
-  return "Not recorded";
 }
 function addPaymentInformation(doc, application, variant) {
   doc.moveDown(0.5);
@@ -2805,6 +2854,7 @@ function addPaymentInformation(doc, application, variant) {
   addLabelValue(doc, "E-Transfer Email:", resolved.etransferEmail || "Not provided");
 }
 function addSignature(doc, application) {
+  const resolved = resolveAcknowledgmentFieldsForPdf(application);
   doc.moveDown(0.5);
   doc.fontSize(12).font("Helvetica-Bold").text("Signature");
   doc.moveDown(0.4);
@@ -2812,8 +2862,7 @@ function addSignature(doc, application) {
   addLabelValue(doc, "Signed Date:", application.signatureDate);
   addLabelValue(doc, "Application Submitted:", new Date(application.createdAt).toLocaleDateString("en-CA"));
   addLabelValue(doc, "Agreement Version:", application.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION);
-  addLabelValue(doc, "Non-Solicitation Acknowledged:", application.nonSolicitationAcknowledged ? "Yes" : "No");
-  addLabelValue(doc, "Acknowledged At:", resolveAcknowledgedAtValue(application));
+  addLabelValue(doc, "Non-Solicitation Acknowledged:", resolved.nonSolicitationAcknowledged ? "Yes" : "No");
 }
 function createAgreementPdfFileName(application, variant) {
   const date2 = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
@@ -2826,6 +2875,10 @@ function createAgreementPdfFileName(application, variant) {
 function streamAgreementPdf(res, application, variant, options) {
   const fileName = createAgreementPdfFileName(application, variant);
   const disposition = options?.disposition === "inline" ? "inline" : "attachment";
+  const resolvedForLog = resolveAcknowledgmentFieldsForPdf(application);
+  console.info(
+    `[AGREEMENT_PDF] Generating ${variant} PDF for record ${application.id || "unknown"} (${application.fullName || "unknown"}) \u2014 nonSolicitation=${resolvedForLog.nonSolicitationAcknowledged} (stored=${application.nonSolicitationAcknowledged ?? "null/undefined"}) paymentTerms=${resolvedForLog.paymentTermsAcknowledged} marketingConsent=${resolvedForLog.marketingConsent} agreementVersion=${application.agreementVersion || "(none)"} signed=${Boolean(application.signature && application.signatureDate)}`
+  );
   const doc = new PDFDocument({ size: "LETTER", margins: { top: 50, bottom: 50, left: 56, right: 56 } });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `${disposition}; filename="${fileName}"`);
@@ -3287,7 +3340,8 @@ var REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
   "siteRulesAcknowledgment",
   "workerAgreementConsent",
   "privacyConsent",
-  "consentToContact"
+  "paymentTermsAcknowledged",
+  "smsConsent"
 ];
 var consentLikeSchema = z2.union([z2.boolean(), z2.string(), z2.number()]);
 var listLikeSchema = z2.union([z2.string(), z2.array(z2.string())]);
@@ -3360,9 +3414,12 @@ var publicApplySubmissionSchema = z2.object({
   nonSolicitationAcknowledged: consentLikeSchema.optional(),
   nonSolicitationAcknowledgedAt: z2.union([z2.string(), z2.number()]).optional(),
   privacyConsent: consentLikeSchema,
-  consentToContact: consentLikeSchema,
+  consentToContact: consentLikeSchema.optional(),
+  smsConsent: consentLikeSchema,
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
+  paymentTermsAcknowledged: consentLikeSchema,
+  independentContractorStatusAcknowledged: consentLikeSchema.optional(),
   signature: z2.string().trim().min(1),
   signatureDate: z2.string().trim().min(1)
 }).strict();
@@ -3417,7 +3474,8 @@ function getMissingRequiredConsents(payload) {
     siteRulesAcknowledgment: resolved.siteRulesAcknowledgment,
     workerAgreementConsent: resolved.workerAgreementConsent,
     privacyConsent: resolved.privacyConsent,
-    consentToContact: resolved.consentToContact
+    paymentTermsAcknowledged: resolved.paymentTermsAcknowledged,
+    smsConsent: resolved.smsConsent
   };
   return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);
 }
@@ -3527,7 +3585,7 @@ var REQUIRED_APPROVAL_ACK_FIELDS = [
   { field: "siteRulesAcknowledgment", label: "Site Rules Acknowledgment" },
   { field: "workerAgreementConsent", label: "Worker Agreement Consent" },
   { field: "privacyConsent", label: "Privacy Consent" },
-  { field: "consentToContact", label: "Consent To Contact" },
+  // consentToContact is informational-only and must NOT block approval
   { field: "nonSolicitationAcknowledged", label: "Non-Solicitation Acknowledgment" }
 ];
 function getMissingApprovalAcknowledgments(application) {
@@ -3538,7 +3596,7 @@ function getMissingApprovalAcknowledgments(application) {
     siteRulesAcknowledgment: "siteRulesAcknowledgment",
     workerAgreementConsent: "workerAgreementConsent",
     privacyConsent: "privacyConsent",
-    consentToContact: "consentToContact",
+    // consentToContact is informational-only and must NOT block approval
     nonSolicitationAcknowledged: "nonSolicitationAcknowledged"
   };
   return REQUIRED_APPROVAL_ACK_FIELDS.filter(({ field }) => !resolved[fieldToResolvedKey[field]]).map(({ label }) => label);
@@ -5696,9 +5754,14 @@ The WFConnect Team`,
     try {
       const parsedPayload = publicApplySubmissionSchema.safeParse(req.body ?? {});
       if (!parsedPayload.success) {
+        const validationIssues = formatValidationIssues(parsedPayload.error.issues);
+        console.error(
+          "[APPLY] Payload validation failed \u2014 missing/invalid fields:",
+          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; ")
+        );
         res.status(400).json({
           error: "Invalid submission payload",
-          issues: formatValidationIssues(parsedPayload.error.issues)
+          issues: validationIssues
         });
         return;
       }
@@ -5806,6 +5869,7 @@ The WFConnect Team`,
         workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
         consentToContact: resolvedAcknowledgments.consentToContact,
         privacyConsent: resolvedAcknowledgments.privacyConsent,
+        paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
         signature: normalizeWhitespace(payload.signature),
@@ -7103,9 +7167,14 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
     try {
       const parsedPayload = publicApplicantSubmissionSchema.safeParse(req.body ?? {});
       if (!parsedPayload.success) {
+        const validationIssues = formatValidationIssues(parsedPayload.error.issues);
+        console.error(
+          "[APPLICANTS] Payload validation failed \u2014 missing/invalid fields:",
+          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; ")
+        );
         return res.status(400).json({
           error: "Invalid submission payload",
-          issues: formatValidationIssues(parsedPayload.error.issues)
+          issues: validationIssues
         });
       }
       const payload = parsedPayload.data;
@@ -7216,7 +7285,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       const normalizedAddressProvince = normalizeOptionalText(addressProvince) || normalizeOptionalText(parsedAddress.province);
       const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
       const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
-      const applicantColumnSet = await getApplicantsColumnSet();
       const insertValues = {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
@@ -7239,21 +7307,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         status: "new",
         submittedAt: now
       };
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsent)) {
-        insertValues.smsConsent = smsConsentGranted;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsentAt)) {
-        insertValues.smsConsentAt = smsConsentGranted ? now : null;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsent)) {
-        insertValues.marketingConsent = marketingConsentGranted;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsentAt)) {
-        insertValues.marketingConsentAt = marketingConsentGranted ? now : null;
-      }
-      if (applicantColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent)) {
-        insertValues.promotionalConsent = marketingConsentGranted;
-      }
       const [applicant] = await db.insert(applicants).values(insertValues).returning({ id: applicants.id });
       registerSubmissionFingerprint(recentApplicantFingerprint);
       console.log(`[APPLICANTS] \u2705 New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
@@ -7480,6 +7533,32 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       res.send(buffer);
     } catch (error) {
       res.status(500).json({ error: "Failed to download resume" });
+    }
+  });
+  app2.delete("/api/admin/worker-applications/:id", checkRoles("admin"), async (req, res) => {
+    try {
+      const [deleted] = await db.delete(workerApplications).where(eq4(workerApplications.id, req.params.id)).returning({ id: workerApplications.id });
+      if (!deleted) {
+        res.status(404).json({ ok: false, error: "Worker application not found" });
+        return;
+      }
+      res.json({ ok: true, deleted: true });
+    } catch (error) {
+      console.error("[DELETE /api/admin/worker-applications/:id]", error);
+      res.status(500).json({ ok: false, error: "Failed to delete worker application" });
+    }
+  });
+  app2.delete("/api/admin/applicants/:id", checkRoles("admin"), async (req, res) => {
+    try {
+      const [deleted] = await db.delete(applicants).where(eq4(applicants.id, req.params.id)).returning({ id: applicants.id });
+      if (!deleted) {
+        res.status(404).json({ ok: false, error: "Applicant not found" });
+        return;
+      }
+      res.json({ ok: true, deleted: true });
+    } catch (error) {
+      console.error("[DELETE /api/admin/applicants/:id]", error);
+      res.status(500).json({ ok: false, error: "Failed to delete applicant" });
     }
   });
   app2.get("/api/agreements/me/download", async (req, res) => {
@@ -12783,6 +12862,10 @@ function renderApplyTemplate(template) {
   const clauseHtml = NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS.map((paragraph) => `<p class="clause-paragraph">${escapeHtml(paragraph)}</p>`).join("\n");
   return template.replace(/__NON_SOLICITATION_TITLE__/g, escapeHtml(NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE)).replace(/__NON_SOLICITATION_BODY__/g, clauseHtml);
 }
+function renderGuideTemplate(template) {
+  const paymentTermsParagraphsHtml = PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_PARAGRAPHS.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n          ");
+  return template.replace(/__PAYMENT_TERMS_SECTION_TITLE__/g, escapeHtml(PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_TITLE)).replace(/__PAYMENT_TERMS_SECTION_PARAGRAPHS__/g, paymentTermsParagraphsHtml).replace(/__AGREEMENT_VERSION__/g, escapeHtml(WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION));
+}
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] Unhandled Promise Rejection:", reason?.message || reason);
 });
@@ -13357,15 +13440,7 @@ function configureExpoAndLanding(app2) {
     log("Applicant lead portal available at apply.wfconnect.org/apply");
   }
   const contractorGuidePath = path.resolve(process.cwd(), "server", "templates", "contractor-guide.html");
-  const contractorGuideTemplate = fs.readFileSync(contractorGuidePath, "utf-8");
-  app2.get("/", (req, res) => {
-    if (isApplySubdomain(req)) {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache");
-      return res.status(200).send(applyFormTemplate || "Apply form not found");
-    }
-    res.redirect("/guide");
-  });
+  const contractorGuideTemplate = renderGuideTemplate(fs.readFileSync(contractorGuidePath, "utf-8"));
   app2.get("/guide", (_req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
@@ -13389,6 +13464,13 @@ function configureExpoAndLanding(app2) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.status(200).send(privacyTemplate);
+  });
+  const termsPath = path.resolve(process.cwd(), "server", "templates", "terms.html");
+  const termsTemplate = fs.readFileSync(termsPath, "utf-8");
+  app2.get("/terms", (_req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(termsTemplate);
   });
   const accountDeletionPath = path.resolve(process.cwd(), "server", "templates", "account-deletion.html");
   const accountDeletionTemplate = fs.readFileSync(accountDeletionPath, "utf-8");
@@ -13422,6 +13504,9 @@ function configureExpoAndLanding(app2) {
   });
   const adminAppsPath = path.resolve(process.cwd(), "server", "templates", "admin-applications.html");
   const adminAppsTemplate = fs.readFileSync(adminAppsPath, "utf-8");
+  app2.get("/admin", (_req, res) => {
+    res.redirect(301, "/admin/applications");
+  });
   app2.get("/admin/applications", (_req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache");

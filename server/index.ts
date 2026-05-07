@@ -781,6 +781,16 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(privacyTemplate);
   });
 
+  // Serve Terms & Conditions page
+  const termsPath = path.resolve(process.cwd(), "server", "templates", "terms.html");
+  const termsTemplate = fs.readFileSync(termsPath, "utf-8");
+
+  app.get("/terms", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(termsTemplate);
+  });
+
   // Serve Account Deletion Request page
   const accountDeletionPath = path.resolve(process.cwd(), "server", "templates", "account-deletion.html");
   const accountDeletionTemplate = fs.readFileSync(accountDeletionPath, "utf-8");

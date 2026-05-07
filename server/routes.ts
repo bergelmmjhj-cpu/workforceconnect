@@ -3623,7 +3623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const { name, email, company, phone, cityProvince, serviceNeeded, message } = req.body;
+      const { name, email, company, phone, cityProvince, serviceNeeded, message, smsConsent } = req.body;
       
       if (!name || typeof name !== "string" || name.trim().length < 2) {
         res.status(400).json({ ok: false, error: "Name is required (minimum 2 characters)" });
@@ -3641,7 +3641,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      if (!isConsentGranted(smsConsent)) {
+        res.status(400).json({ ok: false, error: "SMS consent is required to submit this form" });
+        return;
+      }
+
       const userAgent = req.headers["user-agent"] || null;
+      const submittedAt = new Date();
 
       await db.insert(contactLeads).values({
         name: name.trim(),
@@ -3651,6 +3657,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cityProvince: cityProvince?.trim() || null,
         serviceNeeded: serviceNeeded?.trim() || null,
         message: message.trim(),
+        smsConsent: true,
+        smsConsentAt: submittedAt,
         ip,
         userAgent,
       });
@@ -3832,6 +3840,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
         consentToContact: resolvedAcknowledgments.consentToContact,
         privacyConsent: resolvedAcknowledgments.privacyConsent,
+        smsConsent: resolvedAcknowledgments.smsConsent,
+        smsConsentAt: resolvedAcknowledgments.smsConsent ? new Date() : null,
         paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
@@ -5625,6 +5635,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
+        smsConsent: smsConsentGranted,
+        smsConsentAt: smsConsentGranted ? now : null,
+        marketingConsent: marketingConsentGranted,
+        marketingConsentAt: marketingConsentGranted ? now : null,
         status: "new",
         submittedAt: now,
       };

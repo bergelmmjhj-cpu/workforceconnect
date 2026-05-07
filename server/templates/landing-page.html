@@ -2184,7 +2184,8 @@
           phone: document.getElementById('phone').value.trim(),
           cityProvince: document.getElementById('cityProvince').value.trim(),
           serviceNeeded: document.getElementById('serviceNeeded').value,
-          message: document.getElementById('message').value.trim()
+          message: document.getElementById('message').value.trim(),
+          smsConsent: document.getElementById('sms_consent').checked
         };
 
         if (formData.name.length < 2) {
@@ -2202,6 +2203,12 @@
 
         if (formData.message.length < 10) {
           formMessage.textContent = 'Please describe your needs in a bit more detail (at least 10 characters).';
+          formMessage.className = 'form-message error';
+          return;
+        }
+
+        if (!formData.smsConsent) {
+          formMessage.textContent = 'Please agree to receive SMS communications before submitting.';
           formMessage.className = 'form-message error';
           return;
         }

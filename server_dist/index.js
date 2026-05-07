@@ -212,8 +212,6 @@ var init_schema = __esm({
       cityProvince: text("city_province"),
       serviceNeeded: text("service_needed"),
       message: text("message").notNull(),
-      smsConsent: boolean("sms_consent").notNull().default(false),
-      smsConsentAt: timestamp("sms_consent_at"),
       ip: text("ip"),
       userAgent: text("user_agent"),
       createdAt: timestamp("created_at").defaultNow().notNull()
@@ -287,8 +285,6 @@ var init_schema = __esm({
       internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
       privacyConsent: boolean("privacy_consent").default(false),
       consentToContact: boolean("consent_to_contact").default(false),
-      smsConsent: boolean("sms_consent").notNull().default(false),
-      smsConsentAt: timestamp("sms_consent_at"),
       promotionalConsent: boolean("promotional_consent").notNull().default(false),
       marketingConsent: boolean("marketing_consent").default(false),
       // Operations workflow
@@ -930,10 +926,6 @@ var init_schema = __esm({
       resumeFilename: text("resume_filename"),
       resumeMimeType: text("resume_mime_type"),
       resumeFileSize: integer("resume_file_size"),
-      smsConsent: boolean("sms_consent").notNull().default(false),
-      smsConsentAt: timestamp("sms_consent_at"),
-      marketingConsent: boolean("marketing_consent").notNull().default(false),
-      marketingConsentAt: timestamp("marketing_consent_at"),
       promotionalConsent: boolean("promotional_consent").default(false),
       status: text("status").notNull().default("new"),
       // new, reviewing, interviewed, hired, rejected
@@ -5699,7 +5691,7 @@ The WFConnect Team`,
         res.status(429).json({ ok: false, error: "Too many requests. Please try again later." });
         return;
       }
-      const { name, email, company, phone, cityProvince, serviceNeeded, message, smsConsent } = req.body;
+      const { name, email, company, phone, cityProvince, serviceNeeded, message } = req.body;
       if (!name || typeof name !== "string" || name.trim().length < 2) {
         res.status(400).json({ ok: false, error: "Name is required (minimum 2 characters)" });
         return;
@@ -5713,12 +5705,7 @@ The WFConnect Team`,
         res.status(400).json({ ok: false, error: "Message is required (minimum 10 characters)" });
         return;
       }
-      if (!isConsentGranted(smsConsent)) {
-        res.status(400).json({ ok: false, error: "SMS consent is required to submit this form" });
-        return;
-      }
       const userAgent = req.headers["user-agent"] || null;
-      const submittedAt = /* @__PURE__ */ new Date();
       await db.insert(contactLeads).values({
         name: name.trim(),
         email: email.trim().toLowerCase(),
@@ -5727,8 +5714,6 @@ The WFConnect Team`,
         cityProvince: cityProvince?.trim() || null,
         serviceNeeded: serviceNeeded?.trim() || null,
         message: message.trim(),
-        smsConsent: true,
-        smsConsentAt: submittedAt,
         ip,
         userAgent
       });
@@ -5884,8 +5869,6 @@ The WFConnect Team`,
         workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
         consentToContact: resolvedAcknowledgments.consentToContact,
         privacyConsent: resolvedAcknowledgments.privacyConsent,
-        smsConsent: resolvedAcknowledgments.smsConsent,
-        smsConsentAt: resolvedAcknowledgments.smsConsent ? /* @__PURE__ */ new Date() : null,
         paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
@@ -7321,10 +7304,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
-        smsConsent: smsConsentGranted,
-        smsConsentAt: smsConsentGranted ? now : null,
-        marketingConsent: marketingConsentGranted,
-        marketingConsentAt: marketingConsentGranted ? now : null,
         status: "new",
         submittedAt: now
       };

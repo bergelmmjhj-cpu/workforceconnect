@@ -166,6 +166,7 @@ function parseLocalAddress(input: string) {
 }
 
 const GOOGLE_PLACES_API_BASE_URL = "https://maps.googleapis.com/maps/api/place";
+const MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH = 3;
 const GOOGLE_PLACES_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY ||
   process.env.GOOGLE_MAPS_API_KEY ||
@@ -5892,7 +5893,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      if (normalizedAddressLatitude === null || normalizedAddressLongitude === null) {
+      const applicantsColumnSet = await getApplicantsColumnSet();
+      const hasApplicantAddressLatitudeColumn = applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLatitude);
+      const hasApplicantAddressLongitudeColumn = applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude);
+      const shouldPersistApplicantAddressCoordinates = hasApplicantAddressLatitudeColumn && hasApplicantAddressLongitudeColumn;
+
+      if ((hasApplicantAddressLatitudeColumn && !hasApplicantAddressLongitudeColumn) || (!hasApplicantAddressLatitudeColumn && hasApplicantAddressLongitudeColumn)) {
+        console.warn("[APPLICANTS] Applicant address coordinate columns are only partially available; skipping coordinate persistence.");
+      }
+
+      if (shouldPersistApplicantAddressCoordinates && (normalizedAddressLatitude === null || normalizedAddressLongitude === null)) {
         console.warn("[APPLICANTS] Missing applicant address coordinates", {
           addressFull,
           addressStreet,
@@ -5900,11 +5910,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           addressProvince,
         });
         return res.status(400).json({
-          error: "Please select a valid Canadian address from the suggestions.",
+          error: "Address coordinates are required. Please select a valid Canadian address from the suggestions.",
         });
       }
-
-      const applicantsColumnSet = await getApplicantsColumnSet();
 
       const insertValues: Record<string, unknown> = {
         fullName: normalizeWhitespace(fullName),
@@ -5933,10 +5941,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         submittedAt: now,
       };
 
-      if (applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLatitude)) {
+      if (shouldPersistApplicantAddressCoordinates) {
         insertValues.addressLatitude = normalizedAddressLatitude;
-      }
-      if (applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude)) {
         insertValues.addressLongitude = normalizedAddressLongitude;
       }
 
@@ -9573,7 +9579,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { input, country } = req.query;
       
-      if (!input || typeof input !== "string" || input.trim().length < 3) {
+      if (!input || typeof input !== "string" || input.trim().length < MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH) {
         res.json({ predictions: [] });
         return;
       }

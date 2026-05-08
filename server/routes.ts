@@ -414,13 +414,13 @@ async function fetchGooglePlaceDetails(placeId: string) {
       parsed.longitude === null
     ) {
       const missingFields = [
-        !parsed.formattedAddress && "formattedAddress",
-        !parsed.addressLine1 && "addressLine1",
-        !parsed.city && "city",
-        !parsed.province && "province",
-        parsed.latitude === null && "latitude",
-        parsed.longitude === null && "longitude",
-      ].filter(Boolean);
+        !parsed.formattedAddress ? "formattedAddress" : null,
+        !parsed.addressLine1 ? "addressLine1" : null,
+        !parsed.city ? "city" : null,
+        !parsed.province ? "province" : null,
+        parsed.latitude === null ? "latitude" : null,
+        parsed.longitude === null ? "longitude" : null,
+      ].filter((f): f is string => f !== null);
       console.warn("[PLACES] details:INCOMPLETE", {
         placeId,
         missingFields,
@@ -963,8 +963,20 @@ const publicApplicantSubmissionSchema = z.object({
   addressProvince: z.string().optional(),
   addressPostalCode: z.string().optional(),
   addressCountry: z.string().optional(),
-  addressLatitude: z.union([z.number(), z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value")]).optional(),
-  addressLongitude: z.union([z.number(), z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value")]).optional(),
+  addressLatitude: z.union([
+    z.number().min(-90).max(90),
+    z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
+      (v) => { const n = parseFloat(v); return n >= -90 && n <= 90; },
+      { message: "Latitude must be between -90 and 90" }
+    ),
+  ]).optional(),
+  addressLongitude: z.union([
+    z.number().min(-180).max(180),
+    z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
+      (v) => { const n = parseFloat(v); return n >= -180 && n <= 180; },
+      { message: "Longitude must be between -180 and 180" }
+    ),
+  ]).optional(),
   applyingFor: z.string().trim().min(1),
   jobPostingSource: z.string().trim().min(1),
   photoData: z.string().trim().min(1),

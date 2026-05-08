@@ -349,7 +349,7 @@ async function fetchGooglePlaceDetails(placeId: string) {
 
   const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/details/json`);
   url.searchParams.set("place_id", placeId);
-  url.searchParams.set("fields", "place_id,formatted_address,geometry,address_component");
+  url.searchParams.set("fields", "place_id,formatted_address,geometry,address_components");
   url.searchParams.set("language", "en");
   url.searchParams.set("key", apiKey);
 

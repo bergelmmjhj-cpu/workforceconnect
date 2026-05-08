@@ -944,6 +944,16 @@ const publicApplySubmissionSchema = z.object({
   signatureDate: z.string().trim().min(1),
 }).strict();
 
+function coordinateSchema(min: number, max: number, label: string) {
+  return z.union([
+    z.number().min(min).max(max),
+    z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
+      (v) => { const n = parseFloat(v); return n >= min && n <= max; },
+      { message: `${label} must be between ${min} and ${max}` }
+    ),
+  ]);
+}
+
 const publicApplicantSubmissionSchema = z.object({
   fullName: z.string().trim().min(1).optional(),
   full_name: z.string().trim().min(1).optional(),
@@ -963,20 +973,8 @@ const publicApplicantSubmissionSchema = z.object({
   addressProvince: z.string().optional(),
   addressPostalCode: z.string().optional(),
   addressCountry: z.string().optional(),
-  addressLatitude: z.union([
-    z.number().min(-90).max(90),
-    z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
-      (v) => { const n = parseFloat(v); return n >= -90 && n <= 90; },
-      { message: "Latitude must be between -90 and 90" }
-    ),
-  ]).optional(),
-  addressLongitude: z.union([
-    z.number().min(-180).max(180),
-    z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
-      (v) => { const n = parseFloat(v); return n >= -180 && n <= 180; },
-      { message: "Longitude must be between -180 and 180" }
-    ),
-  ]).optional(),
+  addressLatitude: coordinateSchema(-90, 90, "Latitude").optional(),
+  addressLongitude: coordinateSchema(-180, 180, "Longitude").optional(),
   applyingFor: z.string().trim().min(1),
   jobPostingSource: z.string().trim().min(1),
   photoData: z.string().trim().min(1),

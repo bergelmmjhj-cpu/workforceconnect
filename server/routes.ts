@@ -230,6 +230,15 @@ function mapGooglePlacesErrorStatus(status: string | undefined) {
   }
 }
 
+function getPlacesLogTag(status: string | undefined): string {
+  switch (status) {
+    case "REQUEST_DENIED": return "REQUEST_DENIED";
+    case "OVER_QUERY_LIMIT": return "RATE_LIMITED";
+    case "INVALID_REQUEST": return "INVALID_REQUEST";
+    default: return "UPSTREAM_ERROR";
+  }
+}
+
 function extractGoogleAddressComponent(
   components: GooglePlaceAddressComponent[] | undefined,
   candidateTypes: string[],
@@ -320,12 +329,7 @@ async function fetchGooglePlacesAutocomplete(input: string) {
     }
 
     const mappedError = mapGooglePlacesErrorStatus(status);
-    const logTag =
-      status === "REQUEST_DENIED" ? "REQUEST_DENIED" :
-      status === "OVER_QUERY_LIMIT" ? "RATE_LIMITED" :
-      status === "INVALID_REQUEST" ? "INVALID_REQUEST" :
-      "UPSTREAM_ERROR";
-    console.error(`[PLACES] autocomplete:${logTag}`, {
+    console.error(`[PLACES] autocomplete:${getPlacesLogTag(status)}`, {
       status,
       errorMessage: data.error_message || null,
       httpStatus: response.status,
@@ -374,12 +378,7 @@ async function fetchGooglePlaceDetails(placeId: string) {
 
     if (status !== "OK" || !data.result) {
       const mappedError = mapGooglePlacesErrorStatus(status);
-      const logTag =
-        status === "REQUEST_DENIED" ? "REQUEST_DENIED" :
-        status === "OVER_QUERY_LIMIT" ? "RATE_LIMITED" :
-        status === "INVALID_REQUEST" ? "INVALID_REQUEST" :
-        "UPSTREAM_ERROR";
-      console.error(`[PLACES] details:${logTag}`, {
+      console.error(`[PLACES] details:${getPlacesLogTag(status)}`, {
         placeId,
         status,
         errorMessage: data.error_message || null,
@@ -574,9 +573,20 @@ function checkRateLimit(ip: string): boolean {
 const placesRateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const PLACES_RATE_LIMIT_WINDOW = 60000;
 const PLACES_RATE_LIMIT_MAX = 30;
+let _placesRateLimitPruneCounter = 0;
 
 function checkPlacesRateLimit(ip: string): boolean {
   const now = Date.now();
+
+  // Prune expired entries every 500 calls to prevent unbounded map growth.
+  _placesRateLimitPruneCounter++;
+  if (_placesRateLimitPruneCounter >= 500) {
+    _placesRateLimitPruneCounter = 0;
+    for (const [key, val] of placesRateLimitMap) {
+      if (now > val.resetTime) placesRateLimitMap.delete(key);
+    }
+  }
+
   const entry = placesRateLimitMap.get(ip);
 
   if (!entry || now > entry.resetTime) {

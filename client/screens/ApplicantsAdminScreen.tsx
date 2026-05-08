@@ -34,6 +34,7 @@ type ApplicantSummary = {
   addressFull: string;
   addressCity: string | null;
   addressProvince: string | null;
+  addressEntryMethod?: "geocoded" | "manual";
   applyingFor: string;
   jobPostingSource: string;
   photoFilename: string | null;
@@ -48,6 +49,8 @@ type ApplicantDetail = ApplicantSummary & {
   addressStreet: string | null;
   addressPostalCode: string | null;
   addressCountry: string | null;
+  addressGeocoded?: boolean;
+  addressEntryMethod?: "geocoded" | "manual";
   adminNotes: string | null;
   hasPhoto: boolean;
   hasResume: boolean;
@@ -201,6 +204,14 @@ export default function ApplicantsAdminScreen() {
                 <Card style={styles.detailCard}>
                   <ThemedText style={styles.detailSectionTitle}>Address</ThemedText>
                   <DetailRow label="Full Address" value={detail.addressFull} theme={theme} />
+                  <DetailRow
+                    label="Verification"
+                    value={detail.addressEntryMethod === "manual" ? "Manual entry (not geocoded)" : "Google Places geocoded"}
+                    theme={theme}
+                  />
+                  {detail.addressEntryMethod === "manual" && detail.adminNotes ? (
+                    <DetailRow label="Note" value={detail.adminNotes} theme={theme} />
+                  ) : null}
                   {detail.addressCity ? <DetailRow label="City" value={`${detail.addressCity}${detail.addressProvince ? `, ${detail.addressProvince}` : ""}`} theme={theme} /> : null}
                   {detail.addressPostalCode ? <DetailRow label="Postal Code" value={detail.addressPostalCode} theme={theme} /> : null}
                 </Card>

@@ -277,22 +277,40 @@ async function fetchWithPlacesTimeout(url: URL): Promise<Response> {
   }
 }
 
-const initialPlacesKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
+const initialPlacesPrimaryKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
+const initialPlacesLegacyKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
 console.info("[PLACES] API_KEY_DIAGNOSTIC", {
-  keyExists: initialPlacesKey.length > 0,
-  keyLength: initialPlacesKey.length,
+  googlePlacesKeyExists: initialPlacesPrimaryKey.length > 0,
+  googleMapsKeyExists: initialPlacesLegacyKey.length > 0,
+  selectedEnvVar: initialPlacesPrimaryKey.length > 0
+    ? "GOOGLE_PLACES_API_KEY"
+    : initialPlacesLegacyKey.length > 0
+      ? "GOOGLE_MAPS_API_KEY"
+      : "none",
+  keyLength: (initialPlacesPrimaryKey || initialPlacesLegacyKey).length,
 });
 
 let _placesApiKeyMissingLogged = false;
+let _placesLegacyKeyUsageLogged = false;
 
 function getGooglePlacesApiKey(): string | null {
-  if (GOOGLE_PLACES_API_KEY.trim()) {
-    return GOOGLE_PLACES_API_KEY.trim();
+  const placesKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
+  if (placesKey) {
+    return placesKey;
+  }
+
+  const mapsKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
+  if (mapsKey) {
+    if (!_placesLegacyKeyUsageLogged) {
+      _placesLegacyKeyUsageLogged = true;
+      console.warn("[PLACES] CONFIG_WARNING: Using fallback GOOGLE_MAPS_API_KEY. Prefer GOOGLE_PLACES_API_KEY to avoid environment-name mismatches.");
+    }
+    return mapsKey;
   }
 
   if (!_placesApiKeyMissingLogged) {
     _placesApiKeyMissingLogged = true;
-    console.error("[PLACES] CONFIG_ERROR: Google Places API key is not configured. Set GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY.");
+    console.error("[PLACES] CONFIG_ERROR: Google Places API key is not configured. Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY and redeploy so runtime env loads the change.");
   }
   return null;
 }
@@ -1092,6 +1110,7 @@ const publicApplicantSubmissionSchema = z.object({
   addressCountry: z.string().optional(),
   addressLatitude: coordinateSchema(-90, 90, "Latitude").optional(),
   addressLongitude: coordinateSchema(-180, 180, "Longitude").optional(),
+  addressManualEntry: z.boolean().optional(),
   applyingFor: z.string().trim().min(1),
   jobPostingSource: z.string().trim().min(1),
   photoData: z.string().trim().min(1),
@@ -1265,7 +1284,7 @@ async function getApplicantsColumnSet(): Promise<Set<string>> {
           .filter((columnName) => !columnSet.has(columnName));
 
         if (missingColumns.length > 0) {
-          console.warn(`[APPLICANTS] Optional consent columns unavailable: ${missingColumns.join(", ")}`);
+          console.warn(`[APPLICANTS] Optional applicant columns unavailable: ${missingColumns.join(", ")}`);
         }
 
         return columnSet;
@@ -1298,6 +1317,19 @@ async function getApplicantOptionalConsentSelect() {
     promotionalConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent)
       ? applicants.promotionalConsent
       : sql<boolean | null>`NULL`,
+  };
+}
+
+async function getApplicantOptionalAddressSelect() {
+  const columnSet = await getApplicantsColumnSet();
+
+  return {
+    addressLatitude: columnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLatitude)
+      ? applicants.addressLatitude
+      : sql<number | null>`NULL`,
+    addressLongitude: columnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude)
+      ? applicants.addressLongitude
+      : sql<number | null>`NULL`,
   };
 }
 
@@ -5931,7 +5963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const {
         fullName: fullNameIn, addressFull, addressStreet, addressCity, addressProvince,
-        addressPostalCode, addressCountry, addressLatitude, addressLongitude, applyingFor, jobPostingSource,
+        addressPostalCode, addressCountry, addressLatitude, addressLongitude, addressManualEntry, applyingFor, jobPostingSource,
         photoData: photoDataIn, photoFilename, photoMimeType, photoFileSize,
         resumeData: resumeDataIn, resumeFilename, resumeMimeType, resumeFileSize,
         smsConsent, marketingConsent, promotionalConsent,
@@ -6042,14 +6074,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedAddressCountry = normalizeAddressText(normalizeOptionalText(addressCountry) || "Canada");
       const normalizedAddressLatitude = normalizeOptionalNumber(addressLatitude);
       const normalizedAddressLongitude = normalizeOptionalNumber(addressLongitude);
+      const parsedLocalAddress = parseLocalAddress(addressFull);
+      const hasGeocodedCoordinates = normalizedAddressLatitude !== null && normalizedAddressLongitude !== null;
+      const isManualAddressEntry = Boolean(addressManualEntry) || !hasGeocodedCoordinates;
+      const persistedAddressStreet = normalizedAddressStreet
+        || normalizeOptionalText(parsedLocalAddress.addressLine1)
+        || normalizeAddressText(addressFull);
+      const persistedAddressCity = normalizedAddressCity || normalizeOptionalText(parsedLocalAddress.city);
+      const persistedAddressProvince = normalizedAddressProvince
+        || normalizeProvince(normalizeOptionalText(parsedLocalAddress.province) || "");
+      const persistedAddressPostalCode = normalizedAddressPostalCode
+        || normalizePostalCode(normalizeOptionalText(parsedLocalAddress.postalCode) || "");
 
-      if (
-        !normalizedAddressStreet ||
-        !normalizedAddressCity ||
-        !normalizedAddressProvince ||
-        !/^canada$/i.test(normalizedAddressCountry)
-      ) {
-        console.warn("[APPLICANTS] Rejected unvalidated applicant address payload", {
+      if (!/^canada$/i.test(normalizedAddressCountry)) {
+        console.warn("[APPLICANTS] Rejected non-Canadian applicant address payload", {
           addressFull,
           addressStreet,
           addressCity,
@@ -6058,7 +6096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           addressCountry,
         });
         return res.status(400).json({
-          error: "Please select a valid Canadian address from the suggestions.",
+          error: "Only Canadian addresses are supported.",
         });
       }
 
@@ -6071,15 +6109,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn("[APPLICANTS] Applicant address coordinate columns are only partially available; skipping coordinate persistence.");
       }
 
-      if (shouldPersistApplicantAddressCoordinates && (normalizedAddressLatitude === null || normalizedAddressLongitude === null)) {
-        console.warn("[APPLICANTS] Missing applicant address coordinates", {
-          addressFull,
-          addressStreet,
-          addressCity,
-          addressProvince,
-        });
-        return res.status(400).json({
-          error: "Address coordinates are required. Please select a valid Canadian address from the suggestions.",
+      if (isManualAddressEntry) {
+        console.warn("[APPLICANTS] Address manually entered without geocoding", {
+          hasCoordinates: hasGeocodedCoordinates,
+          parsedCity: Boolean(persistedAddressCity),
+          parsedProvince: Boolean(persistedAddressProvince),
+          parsedPostalCode: Boolean(persistedAddressPostalCode),
         });
       }
 
@@ -6087,10 +6122,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
         addressFull: normalizeAddressText(addressFull),
-        addressStreet: normalizedAddressStreet,
-        addressCity: normalizedAddressCity,
-        addressProvince: normalizedAddressProvince || null,
-        addressPostalCode: normalizedAddressPostalCode || null,
+        addressStreet: persistedAddressStreet,
+        addressCity: persistedAddressCity || null,
+        addressProvince: persistedAddressProvince || null,
+        addressPostalCode: persistedAddressPostalCode || null,
         addressCountry: "Canada",
         applyingFor: normalizeWhitespace(applyingFor),
         jobPostingSource: normalizeWhitespace(jobPostingSource),
@@ -6106,13 +6141,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smsConsentAt: smsConsentGranted ? now : null,
         marketingConsent: marketingConsentGranted,
         marketingConsentAt: marketingConsentGranted ? now : null,
+        adminNotes: isManualAddressEntry
+          ? "Address entered manually; geocoding unavailable at submission."
+          : null,
         status: "new",
         submittedAt: now,
       };
 
       if (shouldPersistApplicantAddressCoordinates) {
-        insertValues.addressLatitude = normalizedAddressLatitude;
-        insertValues.addressLongitude = normalizedAddressLongitude;
+        insertValues.addressLatitude = hasGeocodedCoordinates ? normalizedAddressLatitude : null;
+        insertValues.addressLongitude = hasGeocodedCoordinates ? normalizedAddressLongitude : null;
       }
 
       const [applicant] = await db.insert(applicants).values(insertValues as any).returning({ id: applicants.id });
@@ -6171,6 +6209,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         photoMimeType: applicants.photoMimeType,
         resumeFilename: applicants.resumeFilename,
         resumeMimeType: applicants.resumeMimeType,
+        ...(await getApplicantOptionalAddressSelect()),
         ...(await getApplicantOptionalConsentSelect()),
         status: applicants.status,
         submittedAt: applicants.submittedAt,
@@ -6206,6 +6245,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           marketingConsent: normalizedMarketingConsent,
           marketingConsentAt: row.marketingConsentAt || null,
           promotionalConsent: normalizedPromotionalConsent,
+          addressGeocoded: row.addressLatitude !== null && row.addressLongitude !== null,
+          addressEntryMethod: row.addressLatitude !== null && row.addressLongitude !== null ? "geocoded" : "manual",
           locationDisplay,
         };
       });
@@ -6300,7 +6341,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resumeData: applicants.resumeData,
         resumeFilename: applicants.resumeFilename,
         status: applicants.status,
+        adminNotes: applicants.adminNotes,
         submittedAt: applicants.submittedAt,
+        ...(await getApplicantOptionalAddressSelect()),
         ...(await getApplicantOptionalConsentSelect()),
       }).from(applicants).where(eq(applicants.id, applicantId));
       if (!row) return res.status(404).json({ error: "Applicant not found" });
@@ -6333,6 +6376,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         marketingConsent: normalizedMarketingConsent,
         marketingConsentAt: safe.marketingConsentAt || null,
         promotionalConsent: normalizedPromotionalConsent,
+        addressGeocoded: safe.addressLatitude !== null && safe.addressLongitude !== null,
+        addressEntryMethod: safe.addressLatitude !== null && safe.addressLongitude !== null ? "geocoded" : "manual",
         locationDisplay,
         hasPhoto: !!_p,
         hasResume: !!_r,

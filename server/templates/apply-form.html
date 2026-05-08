@@ -42,6 +42,8 @@
     .field textarea { height: auto; padding: 14px 16px; resize: none; }
     .field-error { color: var(--error); font-size: 12px; margin-top: 4px; display: none; }
     .field-error.show { display: block; }
+    .field-warning { color: #b45309; font-size: 12px; margin-top: 4px; display: none; }
+    .field-warning.show { display: block; }
     /* Address autocomplete */
     .autocomplete-wrap { position: relative; }
     .suggestions { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1.5px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; z-index: 100; max-height: 220px; overflow-y: auto; display: none; }
@@ -225,6 +227,7 @@
           <div class="suggestions" id="address-suggestions"></div>
         </div>
         <div class="field-hint" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Enter your full address including city and province, or select from suggestions</div>
+        <div class="field-warning" id="warn-address_full"></div>
         <div class="field-error" id="err-address_full">Please enter a valid Canadian address</div>
         <input type="hidden" id="address_street" name="address_street" />
         <input type="hidden" id="address_city" name="address_city" />
@@ -382,6 +385,8 @@ let photoData = null, resumeData = null;
 })();
 let addressValidated = false;
 let submitPending = false;
+let addressAutocompleteUnavailable = false;
+const MANUAL_ADDRESS_WARNING_MESSAGE = 'Address autocomplete is unavailable. Please enter your full address manually including city, province, and postal code.';
 
 // --- ADDRESS AUTOCOMPLETE ---
 let autocompleteTimer;
@@ -413,6 +418,20 @@ function clearAddressLookupState() {
   hideSuggestions();
 }
 
+function setAddressAutocompleteFallback(enabled, message) {
+  addressAutocompleteUnavailable = enabled;
+  const warning = document.getElementById('warn-address_full');
+  if (!warning) return;
+  if (enabled) {
+    warning.textContent = message || MANUAL_ADDRESS_WARNING_MESSAGE;
+    warning.classList.add('show');
+    clearError('address_full');
+  } else {
+    warning.textContent = '';
+    warning.classList.remove('show');
+  }
+}
+
 addressInput.addEventListener('input', () => {
   addressValidated = false;
   clearResolvedAddressFields();
@@ -432,11 +451,18 @@ async function fetchSuggestions(input) {
     const resp = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}&country=CA`);
     const data = await resp.json();
     if (!resp.ok) {
-      const message = getAddressLookupErrorMessage(data, 'Address lookup is currently unavailable. Please try again later.');
+      const message = getAddressLookupErrorMessage(data, MANUAL_ADDRESS_WARNING_MESSAGE);
+      const normalizedMessage = String(message || '').toLowerCase();
+      const shouldFallbackToManual = resp.status >= 500 || resp.status === 429 || normalizedMessage.includes('unavailable');
       hideSuggestions();
-      showError('address_full', message);
+      if (shouldFallbackToManual) {
+        setAddressAutocompleteFallback(true, MANUAL_ADDRESS_WARNING_MESSAGE);
+      } else {
+        showError('address_full', message);
+      }
       return;
     }
+    setAddressAutocompleteFallback(false);
     if (!data.predictions || data.predictions.length === 0) {
       showError('address_full', 'No valid Canadian addresses found.');
       setSuggestionsMessage('No valid Canadian addresses found.');
@@ -446,7 +472,7 @@ async function fetchSuggestions(input) {
     renderSuggestions(data.predictions);
   } catch {
     hideSuggestions();
-    showError('address_full', 'Address lookup is currently unavailable. Please try again later.');
+    setAddressAutocompleteFallback(true, MANUAL_ADDRESS_WARNING_MESSAGE);
   }
 }
 
@@ -472,7 +498,14 @@ async function selectPlace(placeId, description) {
     const resp = await fetch(`/api/places/details/${placeId}`);
     const data = await resp.json();
     if (!resp.ok) {
-      showError('address_full', getAddressLookupErrorMessage(data, 'Unable to validate address. Please select another suggestion.'));
+      const message = getAddressLookupErrorMessage(data, 'Unable to validate address. Please select another suggestion.');
+      const normalizedMessage = String(message || '').toLowerCase();
+      const shouldFallbackToManual = resp.status >= 500 || resp.status === 429 || normalizedMessage.includes('unavailable');
+      if (shouldFallbackToManual) {
+        setAddressAutocompleteFallback(true, MANUAL_ADDRESS_WARNING_MESSAGE);
+      } else {
+        showError('address_full', message);
+      }
       addressValidated = false;
       clearResolvedAddressFields();
       return;
@@ -498,10 +531,11 @@ async function selectPlace(placeId, description) {
     document.getElementById('address_country').value = 'Canada';
     document.getElementById('address_latitude').value = data.latitude;
     document.getElementById('address_longitude').value = data.longitude;
+    setAddressAutocompleteFallback(false);
     clearError('address_full');
     addressValidated = true;
   } catch {
-    showError('address_full', 'Address lookup failed. Please select a valid suggestion.');
+    setAddressAutocompleteFallback(true, MANUAL_ADDRESS_WARNING_MESSAGE);
     addressValidated = false;
     clearResolvedAddressFields();
   }
@@ -617,7 +651,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
   if (!address) { 
     showError('address_full', 'Please enter your address'); 
     valid = false; 
-  } else if (!addressValidated) {
+  } else if (!addressValidated && !addressAutocompleteUnavailable) {
     showError('address_full', 'Please select a valid Canadian address from the suggestions.');
     valid = false;
   } else {
@@ -663,6 +697,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       addressCountry: 'Canada',
       addressLatitude: document.getElementById('address_latitude').value,
       addressLongitude: document.getElementById('address_longitude').value,
+      addressManualEntry: addressAutocompleteUnavailable || !addressValidated,
       applyingFor,
       jobPostingSource: source,
       photoData: photoData.data,

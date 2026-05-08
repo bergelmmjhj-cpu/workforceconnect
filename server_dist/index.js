@@ -13182,6 +13182,11 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "worker_applications" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "sms_consent" boolean`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "sms_consent" SET DEFAULT false`);
+    await db.execute(sql5`UPDATE "worker_applications" SET "sms_consent" = false WHERE "sms_consent" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "sms_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "sms_consent_at" timestamp`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "application_source" text`);
     await db.execute(sql5`UPDATE "worker_applications" SET "application_source" = 'Direct application' WHERE "application_source" IS NULL`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "assigned_recruiter" text`);
@@ -13201,6 +13206,16 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "applicants" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
     await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "sms_consent" boolean`);
+    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "sms_consent" SET DEFAULT false`);
+    await db.execute(sql5`UPDATE "applicants" SET "sms_consent" = false WHERE "sms_consent" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "sms_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "sms_consent_at" timestamp`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "marketing_consent" boolean`);
+    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "marketing_consent" SET DEFAULT false`);
+    await db.execute(sql5`UPDATE "applicants" SET "marketing_consent" = false WHERE "marketing_consent" IS NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "marketing_consent" SET NOT NULL`);
+    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "marketing_consent_at" timestamp`);
     await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_data" text`);
     await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_filename" text`);
     await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_mime_type" text`);

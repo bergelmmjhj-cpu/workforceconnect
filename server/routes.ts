@@ -1108,8 +1108,14 @@ const publicApplicantSubmissionSchema = z.object({
   addressProvince: z.string().optional(),
   addressPostalCode: z.string().optional(),
   addressCountry: z.string().optional(),
-  addressLatitude: coordinateSchema(-90, 90, "Latitude").optional(),
-  addressLongitude: coordinateSchema(-180, 180, "Longitude").optional(),
+  addressLatitude: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    coordinateSchema(-90, 90, "Latitude").optional()
+  ),
+  addressLongitude: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    coordinateSchema(-180, 180, "Longitude").optional()
+  ),
   addressManualEntry: z.boolean().optional(),
   applyingFor: z.string().trim().min(1),
   jobPostingSource: z.string().trim().min(1),

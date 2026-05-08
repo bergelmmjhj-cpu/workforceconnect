@@ -918,6 +918,8 @@ var init_schema = __esm({
       addressProvince: text("address_province"),
       addressPostalCode: text("address_postal_code"),
       addressCountry: text("address_country").default("Canada"),
+      addressLatitude: doublePrecision("address_latitude"),
+      addressLongitude: doublePrecision("address_longitude"),
       applyingFor: text("applying_for").notNull(),
       jobPostingSource: text("job_posting_source").notNull(),
       photoData: text("photo_data"),
@@ -3000,36 +3002,227 @@ function parseLocalAddress(input) {
     longitude: null
   };
 }
-function buildLocalAddressPredictions(input) {
-  const trimmed = normalizeAddressText(input);
-  if (trimmed.length < 2) {
-    return [];
+var GOOGLE_PLACES_API_BASE_URL = "https://maps.googleapis.com/maps/api/place";
+var MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH = 3;
+var GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
+var CANADIAN_PLACE_DETAIL_PROVINCE_TYPES = ["administrative_area_level_1"];
+var CANADIAN_PLACE_DETAIL_CITY_TYPES = [
+  "locality",
+  "postal_town",
+  "administrative_area_level_3",
+  "sublocality_level_1"
+];
+var _placesApiKeyMissingLogged = false;
+function getGooglePlacesApiKey() {
+  if (GOOGLE_PLACES_API_KEY.trim()) {
+    return GOOGLE_PLACES_API_KEY.trim();
   }
-  const parsed = parseLocalAddress(trimmed);
-  const candidates = /* @__PURE__ */ new Set();
-  if (parsed.formattedAddress) {
-    candidates.add(parsed.formattedAddress);
+  if (!_placesApiKeyMissingLogged) {
+    _placesApiKeyMissingLogged = true;
+    console.error("[PLACES] CONFIG_ERROR: Google Places API key is not configured. Set GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY.");
   }
-  candidates.add(trimmed);
-  if (!/canada$/i.test(trimmed)) {
-    candidates.add(`${trimmed}, Canada`);
+  return null;
+}
+function mapGooglePlacesErrorStatus(status) {
+  switch (status) {
+    case "OVER_QUERY_LIMIT":
+      return { httpStatus: 429, message: "Address lookup is temporarily rate limited. Please try again shortly." };
+    case "REQUEST_DENIED":
+      return { httpStatus: 503, message: "Address lookup is currently unavailable. Please try again later." };
+    case "INVALID_REQUEST":
+      return { httpStatus: 400, message: "Address lookup request is invalid." };
+    case "UNKNOWN_ERROR":
+      return { httpStatus: 503, message: "Address lookup is temporarily unavailable. Please try again." };
+    default:
+      return { httpStatus: 502, message: "Address lookup failed. Please try again later." };
   }
-  if (parsed.addressLine1 && parsed.city) {
-    candidates.add([parsed.addressLine1, parsed.city, parsed.province, "Canada"].filter(Boolean).join(", "));
+}
+function getPlacesLogTag(status) {
+  switch (status) {
+    case "REQUEST_DENIED":
+      return "REQUEST_DENIED";
+    case "OVER_QUERY_LIMIT":
+      return "RATE_LIMITED";
+    case "INVALID_REQUEST":
+      return "INVALID_REQUEST";
+    default:
+      return "UPSTREAM_ERROR";
   }
-  if (!parsed.city || !parsed.province) {
-    ["Mississauga", "Toronto", "Brampton", "Etobicoke"].forEach((city) => {
-      candidates.add([parsed.addressLine1 || trimmed, city, "ON", "Canada"].filter(Boolean).join(", "));
-    });
-  }
-  return Array.from(candidates).filter(Boolean).slice(0, 5).map((description) => ({
-    place_id: Buffer.from(description, "utf-8").toString("base64url"),
-    description,
-    structured_formatting: {
-      main_text: description.split(",")[0]?.trim() || description,
-      secondary_text: description.split(",").slice(1).join(",").trim() || "Canada"
+}
+function extractGoogleAddressComponent(components, candidateTypes, property = "long_name") {
+  if (!Array.isArray(components)) return "";
+  for (const type of candidateTypes) {
+    const match = components.find((component) => component.types?.includes(type));
+    const value = match?.[property];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
     }
-  }));
+  }
+  return "";
+}
+function parseGooglePlaceDetails(result) {
+  const components = result.address_components || [];
+  const countryCode = extractGoogleAddressComponent(components, ["country"], "short_name");
+  const country = extractGoogleAddressComponent(components, ["country"], "long_name");
+  const streetNumber = extractGoogleAddressComponent(components, ["street_number"]);
+  const route = extractGoogleAddressComponent(components, ["route"]);
+  const subpremise = extractGoogleAddressComponent(components, ["subpremise"]);
+  const city = extractGoogleAddressComponent(components, CANADIAN_PLACE_DETAIL_CITY_TYPES);
+  const province = extractGoogleAddressComponent(components, CANADIAN_PLACE_DETAIL_PROVINCE_TYPES, "short_name");
+  const postalCode = normalizePostalCode(extractGoogleAddressComponent(components, ["postal_code"]));
+  const latitude = typeof result.geometry?.location?.lat === "number" ? result.geometry.location.lat : null;
+  const longitude = typeof result.geometry?.location?.lng === "number" ? result.geometry.location.lng : null;
+  const addressLine1 = [subpremise ? `Unit ${subpremise}` : "", streetNumber, route].filter(Boolean).join(" ").trim();
+  return {
+    formattedAddress: normalizeAddressText(result.formatted_address || ""),
+    addressLine1,
+    city: normalizeAddressText(city),
+    province: normalizeProvince(province),
+    postalCode,
+    countryCode,
+    country: normalizeAddressText(country),
+    latitude,
+    longitude
+  };
+}
+async function fetchGooglePlacesAutocomplete(input) {
+  const apiKey = getGooglePlacesApiKey();
+  if (!apiKey) {
+    return {
+      ok: false,
+      httpStatus: 503,
+      message: "Address lookup is currently unavailable. Please try again later.",
+      predictions: []
+    };
+  }
+  const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/autocomplete/json`);
+  url.searchParams.set("input", input);
+  url.searchParams.set("components", "country:ca");
+  url.searchParams.set("types", "address");
+  url.searchParams.set("language", "en");
+  url.searchParams.set("key", apiKey);
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    const status = typeof data.status === "string" ? data.status : void 0;
+    if (status === "OK") {
+      return {
+        ok: true,
+        predictions: Array.isArray(data.predictions) ? data.predictions : []
+      };
+    }
+    if (status === "ZERO_RESULTS") {
+      return {
+        ok: true,
+        predictions: []
+      };
+    }
+    const mappedError = mapGooglePlacesErrorStatus(status);
+    console.error(`[PLACES] autocomplete:${getPlacesLogTag(status)}`, {
+      status,
+      errorMessage: data.error_message || null,
+      httpStatus: response.status
+    });
+    return {
+      ok: false,
+      httpStatus: mappedError.httpStatus,
+      message: mappedError.message,
+      predictions: []
+    };
+  } catch (error) {
+    console.error("[PLACES] autocomplete:NETWORK_ERROR", { message: error instanceof Error ? error.message : String(error) });
+    return {
+      ok: false,
+      httpStatus: 503,
+      message: "Address lookup is currently unavailable. Please try again later.",
+      predictions: []
+    };
+  }
+}
+async function fetchGooglePlaceDetails(placeId) {
+  const apiKey = getGooglePlacesApiKey();
+  if (!apiKey) {
+    return {
+      ok: false,
+      httpStatus: 503,
+      message: "Address lookup is currently unavailable. Please try again later."
+    };
+  }
+  const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/details/json`);
+  url.searchParams.set("place_id", placeId);
+  url.searchParams.set("fields", "place_id,formatted_address,geometry,address_components");
+  url.searchParams.set("language", "en");
+  url.searchParams.set("key", apiKey);
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    const status = typeof data.status === "string" ? data.status : void 0;
+    if (status !== "OK" || !data.result) {
+      const mappedError = mapGooglePlacesErrorStatus(status);
+      console.error(`[PLACES] details:${getPlacesLogTag(status)}`, {
+        placeId,
+        status,
+        errorMessage: data.error_message || null,
+        httpStatus: response.status
+      });
+      return {
+        ok: false,
+        httpStatus: mappedError.httpStatus,
+        message: mappedError.message
+      };
+    }
+    const parsed = parseGooglePlaceDetails(data.result);
+    if (parsed.countryCode !== "CA") {
+      console.warn("[PLACES] details:NON_CANADIAN", {
+        placeId,
+        countryCode: parsed.countryCode
+      });
+      return {
+        ok: false,
+        httpStatus: 400,
+        message: "Only Canadian addresses are accepted."
+      };
+    }
+    if (!parsed.formattedAddress || !parsed.addressLine1 || !parsed.city || !parsed.province || parsed.latitude === null || parsed.longitude === null) {
+      const missingFields = [
+        !parsed.formattedAddress ? "formattedAddress" : null,
+        !parsed.addressLine1 ? "addressLine1" : null,
+        !parsed.city ? "city" : null,
+        !parsed.province ? "province" : null,
+        parsed.latitude === null ? "latitude" : null,
+        parsed.longitude === null ? "longitude" : null
+      ].filter((f) => f !== null);
+      console.warn("[PLACES] details:INCOMPLETE", {
+        placeId,
+        missingFields
+      });
+      return {
+        ok: false,
+        httpStatus: 422,
+        message: "Please select a complete Canadian street address."
+      };
+    }
+    return {
+      ok: true,
+      details: {
+        formattedAddress: parsed.formattedAddress,
+        addressLine1: parsed.addressLine1,
+        city: parsed.city,
+        province: parsed.province,
+        postalCode: parsed.postalCode,
+        country: "Canada",
+        latitude: parsed.latitude,
+        longitude: parsed.longitude
+      }
+    };
+  } catch (error) {
+    console.error("[PLACES] details:NETWORK_ERROR", { placeId, message: error instanceof Error ? error.message : String(error) });
+    return {
+      ok: false,
+      httpStatus: 503,
+      message: "Address lookup is currently unavailable. Please try again later."
+    };
+  }
 }
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371e3;
@@ -3122,6 +3315,30 @@ function checkRateLimit(ip) {
     return true;
   }
   if (entry.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
+var placesRateLimitMap = /* @__PURE__ */ new Map();
+var PLACES_RATE_LIMIT_WINDOW = 6e4;
+var PLACES_RATE_LIMIT_MAX = 30;
+var _placesRateLimitPruneCounter = 0;
+function checkPlacesRateLimit(ip) {
+  const now = Date.now();
+  _placesRateLimitPruneCounter++;
+  if (_placesRateLimitPruneCounter >= 500) {
+    _placesRateLimitPruneCounter = 0;
+    for (const [key, val] of placesRateLimitMap) {
+      if (now > val.resetTime) placesRateLimitMap.delete(key);
+    }
+  }
+  const entry = placesRateLimitMap.get(ip);
+  if (!entry || now > entry.resetTime) {
+    placesRateLimitMap.set(ip, { count: 1, resetTime: now + PLACES_RATE_LIMIT_WINDOW });
+    return true;
+  }
+  if (entry.count >= PLACES_RATE_LIMIT_MAX) {
     return false;
   }
   entry.count++;
@@ -3431,6 +3648,18 @@ var publicApplySubmissionSchema = z2.object({
   signature: z2.string().trim().min(1),
   signatureDate: z2.string().trim().min(1)
 }).strict();
+function coordinateSchema(min, max, label) {
+  return z2.union([
+    z2.number().min(min).max(max),
+    z2.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
+      (v) => {
+        const n = parseFloat(v);
+        return n >= min && n <= max;
+      },
+      { message: `${label} must be between ${min} and ${max}` }
+    )
+  ]);
+}
 var publicApplicantSubmissionSchema = z2.object({
   fullName: z2.string().trim().min(1).optional(),
   full_name: z2.string().trim().min(1).optional(),
@@ -3450,6 +3679,8 @@ var publicApplicantSubmissionSchema = z2.object({
   addressProvince: z2.string().optional(),
   addressPostalCode: z2.string().optional(),
   addressCountry: z2.string().optional(),
+  addressLatitude: coordinateSchema(-90, 90, "Latitude").optional(),
+  addressLongitude: coordinateSchema(-180, 180, "Longitude").optional(),
   applyingFor: z2.string().trim().min(1),
   jobPostingSource: z2.string().trim().min(1),
   photoData: z2.string().trim().min(1),
@@ -3500,6 +3731,18 @@ function normalizeOptionalText(value) {
   if (typeof value !== "string") return null;
   const trimmed = normalizeWhitespace(value);
   return trimmed.length > 0 ? trimmed : null;
+}
+function normalizeOptionalNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 function normalizeWhitespace(value) {
   return value.trim().replace(/\s+/g, " ");
@@ -3552,6 +3795,10 @@ var APPLICANT_OPTIONAL_CONSENT_COLUMNS = {
   marketingConsentAt: "marketing_consent_at",
   promotionalConsent: "promotional_consent"
 };
+var APPLICANT_OPTIONAL_ADDRESS_COLUMNS = {
+  addressLatitude: "address_latitude",
+  addressLongitude: "address_longitude"
+};
 var applicantsColumnSetPromise = null;
 async function getApplicantsColumnSet() {
   if (!applicantsColumnSetPromise) {
@@ -3565,7 +3812,10 @@ async function getApplicantsColumnSet() {
       const columnSet = new Set(
         rows.map((row) => row?.column_name).filter((columnName) => typeof columnName === "string" && columnName.length > 0)
       );
-      const missingColumns = Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS).filter((columnName) => !columnSet.has(columnName));
+      const missingColumns = [
+        ...Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS),
+        ...Object.values(APPLICANT_OPTIONAL_ADDRESS_COLUMNS)
+      ].filter((columnName) => !columnSet.has(columnName));
       if (missingColumns.length > 0) {
         console.warn(`[APPLICANTS] Optional consent columns unavailable: ${missingColumns.join(", ")}`);
       }
@@ -7207,6 +7457,8 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         addressProvince,
         addressPostalCode,
         addressCountry,
+        addressLatitude,
+        addressLongitude,
         applyingFor,
         jobPostingSource,
         photoData: photoDataIn,
@@ -7297,20 +7549,53 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         });
       }
       const now = /* @__PURE__ */ new Date();
-      const parsedAddress = parseLocalAddress(addressFull);
-      const normalizedAddressCity = normalizeOptionalText(addressCity) || normalizeOptionalText(parsedAddress.city);
-      const normalizedAddressProvince = normalizeOptionalText(addressProvince) || normalizeOptionalText(parsedAddress.province);
-      const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
-      const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
+      const normalizedAddressStreet = normalizeOptionalText(addressStreet);
+      const normalizedAddressCity = normalizeOptionalText(addressCity);
+      const normalizedAddressProvince = normalizeProvince(normalizeOptionalText(addressProvince) || "");
+      const normalizedAddressPostalCode = normalizePostalCode(normalizeOptionalText(addressPostalCode) || "");
+      const normalizedAddressCountry = normalizeAddressText(normalizeOptionalText(addressCountry) || "Canada");
+      const normalizedAddressLatitude = normalizeOptionalNumber(addressLatitude);
+      const normalizedAddressLongitude = normalizeOptionalNumber(addressLongitude);
+      if (!normalizedAddressStreet || !normalizedAddressCity || !normalizedAddressProvince || !/^canada$/i.test(normalizedAddressCountry)) {
+        console.warn("[APPLICANTS] Rejected unvalidated applicant address payload", {
+          addressFull,
+          addressStreet,
+          addressCity,
+          addressProvince,
+          addressPostalCode,
+          addressCountry
+        });
+        return res.status(400).json({
+          error: "Please select a valid Canadian address from the suggestions."
+        });
+      }
+      const applicantsColumnSet = await getApplicantsColumnSet();
+      const hasApplicantAddressLatitudeColumn = applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLatitude);
+      const hasApplicantAddressLongitudeColumn = applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude);
+      const shouldPersistApplicantAddressCoordinates = hasApplicantAddressLatitudeColumn && hasApplicantAddressLongitudeColumn;
+      if (hasApplicantAddressLatitudeColumn && !hasApplicantAddressLongitudeColumn || !hasApplicantAddressLatitudeColumn && hasApplicantAddressLongitudeColumn) {
+        console.warn("[APPLICANTS] Applicant address coordinate columns are only partially available; skipping coordinate persistence.");
+      }
+      if (shouldPersistApplicantAddressCoordinates && (normalizedAddressLatitude === null || normalizedAddressLongitude === null)) {
+        console.warn("[APPLICANTS] Missing applicant address coordinates", {
+          addressFull,
+          addressStreet,
+          addressCity,
+          addressProvince
+        });
+        return res.status(400).json({
+          error: "Address coordinates are required. Please select a valid Canadian address from the suggestions."
+        });
+      }
       const insertValues = {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
         addressFull: normalizeAddressText(addressFull),
-        addressStreet: normalizeOptionalText(addressStreet),
+        addressStreet: normalizedAddressStreet,
         addressCity: normalizedAddressCity,
-        addressProvince: normalizedAddressProvince?.toUpperCase() || null,
-        addressPostalCode: normalizedAddressPostalCode?.toUpperCase() || null,
-        addressCountry: normalizedAddressCountry,
+        addressProvince: normalizedAddressProvince || null,
+        addressPostalCode: normalizedAddressPostalCode || null,
+        addressCountry: "Canada",
         applyingFor: normalizeWhitespace(applyingFor),
         jobPostingSource: normalizeWhitespace(jobPostingSource),
         photoData: photoDataIn,
@@ -7328,6 +7613,10 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         status: "new",
         submittedAt: now
       };
+      if (shouldPersistApplicantAddressCoordinates) {
+        insertValues.addressLatitude = normalizedAddressLatitude;
+        insertValues.addressLongitude = normalizedAddressLongitude;
+      }
       const [applicant] = await db.insert(applicants).values(insertValues).returning({ id: applicants.id });
       registerSubmissionFingerprint(recentApplicantFingerprint);
       console.log(`[APPLICANTS] \u2705 New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
@@ -10196,28 +10485,57 @@ This report includes ${items.length} worker(s).
   });
   app2.get("/api/places/autocomplete", async (req, res) => {
     try {
-      const { input } = req.query;
-      if (!input || typeof input !== "string" || input.length < 2) {
+      const { input, country } = req.query;
+      if (!input || typeof input !== "string" || input.trim().length < MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH) {
         res.json({ predictions: [] });
         return;
       }
-      res.json({ predictions: buildLocalAddressPredictions(input) });
+      if (typeof country === "string" && country.toUpperCase() !== "CA") {
+        res.status(400).json({ error: "Only Canadian addresses are supported." });
+        return;
+      }
+      const ip = getClientIp(req);
+      if (!checkPlacesRateLimit(ip)) {
+        res.status(429).json({ error: "Too many requests. Please try again later." });
+        return;
+      }
+      const lookup = await fetchGooglePlacesAutocomplete(input.trim());
+      if (!lookup.ok) {
+        res.status(lookup.httpStatus).json({ error: lookup.message });
+        return;
+      }
+      res.json({
+        predictions: lookup.predictions.filter((prediction) => prediction.place_id && prediction.description).map((prediction) => ({
+          place_id: prediction.place_id,
+          description: prediction.description,
+          structured_formatting: prediction.structured_formatting
+        }))
+      });
     } catch (error) {
-      console.error("Error in address autocomplete:", error);
+      console.error("[PLACES] autocomplete:INTERNAL_ERROR", { message: error instanceof Error ? error.message : String(error) });
       res.status(500).json({ error: "Failed to fetch address suggestions" });
     }
   });
   app2.get("/api/places/details/:placeId", async (req, res) => {
     try {
       const { placeId } = req.params;
-      if (!placeId) {
+      if (!placeId || typeof placeId !== "string") {
         res.status(400).json({ error: "Place ID is required" });
         return;
       }
-      const decodedPlaceText = Buffer.from(placeId, "base64url").toString("utf-8");
-      res.json(parseLocalAddress(decodedPlaceText));
+      const ip = getClientIp(req);
+      if (!checkPlacesRateLimit(ip)) {
+        res.status(429).json({ error: "Too many requests. Please try again later." });
+        return;
+      }
+      const lookup = await fetchGooglePlaceDetails(placeId);
+      if (!lookup.ok) {
+        res.status(lookup.httpStatus).json({ error: lookup.message });
+        return;
+      }
+      res.json(lookup.details);
     } catch (error) {
-      console.error("Error in address details:", error);
+      console.error("[PLACES] details:INTERNAL_ERROR", { message: error instanceof Error ? error.message : String(error) });
       res.status(500).json({ error: "Failed to fetch address details" });
     }
   });

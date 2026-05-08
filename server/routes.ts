@@ -201,12 +201,17 @@ type GooglePlacesApiResponse<T> = {
   result?: T;
 };
 
+let _placesApiKeyMissingLogged = false;
+
 function getGooglePlacesApiKey(): string | null {
   if (GOOGLE_PLACES_API_KEY.trim()) {
     return GOOGLE_PLACES_API_KEY.trim();
   }
 
-  console.error("[PLACES] Google Places API key is not configured. Set GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY.");
+  if (!_placesApiKeyMissingLogged) {
+    _placesApiKeyMissingLogged = true;
+    console.error("[PLACES] CONFIG_ERROR: Google Places API key is not configured. Set GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY.");
+  }
   return null;
 }
 
@@ -315,8 +320,12 @@ async function fetchGooglePlacesAutocomplete(input: string) {
     }
 
     const mappedError = mapGooglePlacesErrorStatus(status);
-    console.error("[PLACES] Google autocomplete failed", {
-      input,
+    const logTag =
+      status === "REQUEST_DENIED" ? "REQUEST_DENIED" :
+      status === "OVER_QUERY_LIMIT" ? "RATE_LIMITED" :
+      status === "INVALID_REQUEST" ? "INVALID_REQUEST" :
+      "UPSTREAM_ERROR";
+    console.error(`[PLACES] autocomplete:${logTag}`, {
       status,
       errorMessage: data.error_message || null,
       httpStatus: response.status,
@@ -328,7 +337,7 @@ async function fetchGooglePlacesAutocomplete(input: string) {
       predictions: [] as GooglePlacePrediction[],
     };
   } catch (error) {
-    console.error("[PLACES] Google autocomplete request failed", { input, error });
+    console.error("[PLACES] autocomplete:NETWORK_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
     return {
       ok: false as const,
       httpStatus: 503,
@@ -365,7 +374,12 @@ async function fetchGooglePlaceDetails(placeId: string) {
 
     if (status !== "OK" || !data.result) {
       const mappedError = mapGooglePlacesErrorStatus(status);
-      console.error("[PLACES] Google place details failed", {
+      const logTag =
+        status === "REQUEST_DENIED" ? "REQUEST_DENIED" :
+        status === "OVER_QUERY_LIMIT" ? "RATE_LIMITED" :
+        status === "INVALID_REQUEST" ? "INVALID_REQUEST" :
+        "UPSTREAM_ERROR";
+      console.error(`[PLACES] details:${logTag}`, {
         placeId,
         status,
         errorMessage: data.error_message || null,
@@ -380,10 +394,9 @@ async function fetchGooglePlaceDetails(placeId: string) {
 
     const parsed = parseGooglePlaceDetails(data.result);
     if (parsed.countryCode !== "CA") {
-      console.warn("[PLACES] Rejected non-Canadian place details result", {
+      console.warn("[PLACES] details:NON_CANADIAN", {
         placeId,
         countryCode: parsed.countryCode,
-        country: parsed.country,
       });
       return {
         ok: false as const,
@@ -400,9 +413,17 @@ async function fetchGooglePlaceDetails(placeId: string) {
       parsed.latitude === null ||
       parsed.longitude === null
     ) {
-      console.warn("[PLACES] Incomplete place details returned for applicant address", {
+      const missingFields = [
+        !parsed.formattedAddress && "formattedAddress",
+        !parsed.addressLine1 && "addressLine1",
+        !parsed.city && "city",
+        !parsed.province && "province",
+        parsed.latitude === null && "latitude",
+        parsed.longitude === null && "longitude",
+      ].filter(Boolean);
+      console.warn("[PLACES] details:INCOMPLETE", {
         placeId,
-        parsed,
+        missingFields,
       });
       return {
         ok: false as const,
@@ -425,7 +446,7 @@ async function fetchGooglePlaceDetails(placeId: string) {
       },
     };
   } catch (error) {
-    console.error("[PLACES] Google place details request failed", { placeId, error });
+    console.error("[PLACES] details:NETWORK_ERROR", { placeId, message: (error instanceof Error ? error.message : String(error)) });
     return {
       ok: false as const,
       httpStatus: 503,
@@ -546,6 +567,27 @@ function checkRateLimit(ip: string): boolean {
     return false;
   }
   
+  entry.count++;
+  return true;
+}
+
+const placesRateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const PLACES_RATE_LIMIT_WINDOW = 60000;
+const PLACES_RATE_LIMIT_MAX = 30;
+
+function checkPlacesRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = placesRateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetTime) {
+    placesRateLimitMap.set(ip, { count: 1, resetTime: now + PLACES_RATE_LIMIT_WINDOW });
+    return true;
+  }
+
+  if (entry.count >= PLACES_RATE_LIMIT_MAX) {
+    return false;
+  }
+
   entry.count++;
   return true;
 }
@@ -921,8 +963,8 @@ const publicApplicantSubmissionSchema = z.object({
   addressProvince: z.string().optional(),
   addressPostalCode: z.string().optional(),
   addressCountry: z.string().optional(),
-  addressLatitude: z.union([z.number(), z.string().trim().min(1)]).optional(),
-  addressLongitude: z.union([z.number(), z.string().trim().min(1)]).optional(),
+  addressLatitude: z.union([z.number(), z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value")]).optional(),
+  addressLongitude: z.union([z.number(), z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value")]).optional(),
   applyingFor: z.string().trim().min(1),
   jobPostingSource: z.string().trim().min(1),
   photoData: z.string().trim().min(1),
@@ -9589,6 +9631,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const ip = getClientIp(req);
+      if (!checkPlacesRateLimit(ip)) {
+        res.status(429).json({ error: "Too many requests. Please try again later." });
+        return;
+      }
+
       const lookup = await fetchGooglePlacesAutocomplete(input.trim());
       if (!lookup.ok) {
         res.status(lookup.httpStatus).json({ error: lookup.message });
@@ -9605,7 +9653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })),
       });
     } catch (error) {
-      console.error("[PLACES] Error in address autocomplete:", error);
+      console.error("[PLACES] autocomplete:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
       res.status(500).json({ error: "Failed to fetch address suggestions" });
     }
   });
@@ -9619,6 +9667,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const ip = getClientIp(req);
+      if (!checkPlacesRateLimit(ip)) {
+        res.status(429).json({ error: "Too many requests. Please try again later." });
+        return;
+      }
+
       const lookup = await fetchGooglePlaceDetails(placeId);
       if (!lookup.ok) {
         res.status(lookup.httpStatus).json({ error: lookup.message });
@@ -9627,7 +9681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(lookup.details);
     } catch (error) {
-      console.error("[PLACES] Error in address details:", error);
+      console.error("[PLACES] details:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
       res.status(500).json({ error: "Failed to fetch address details" });
     }
   });

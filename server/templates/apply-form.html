@@ -49,6 +49,7 @@
     .suggestion-item { padding: 12px 16px; cursor: pointer; font-size: 14px; border-bottom: 1px solid var(--border); }
     .suggestion-item:last-child { border-bottom: none; }
     .suggestion-item:hover, .suggestion-item.active { background: var(--bg); }
+    .suggestion-message { padding: 12px 16px; font-size: 14px; color: var(--text-muted); }
     /* File upload */
     .upload-area {
       border: 2px dashed var(--border); border-radius: 10px; padding: 28px 16px;
@@ -230,6 +231,8 @@
         <input type="hidden" id="address_province" name="address_province" />
         <input type="hidden" id="address_postal_code" name="address_postal_code" />
         <input type="hidden" id="address_country" name="address_country" value="Canada" />
+        <input type="hidden" id="address_latitude" name="address_latitude" />
+        <input type="hidden" id="address_longitude" name="address_longitude" />
       </div>
     </div>
 
@@ -378,7 +381,6 @@ let photoData = null, resumeData = null;
   }
 })();
 let addressValidated = false;
-let addressManuallyEntered = false;
 let submitPending = false;
 
 // --- ADDRESS AUTOCOMPLETE ---
@@ -392,51 +394,63 @@ function clearResolvedAddressFields() {
   document.getElementById('address_province').value = '';
   document.getElementById('address_postal_code').value = '';
   document.getElementById('address_country').value = 'Canada';
+  document.getElementById('address_latitude').value = '';
+  document.getElementById('address_longitude').value = '';
 }
 
-// Canadian address pattern: must have city and province (ON, BC, AB, etc.)
-function isValidCanadianAddressFormat(address) {
-  if (!address || address.length < 8) return false;
-  // Simple check: has a province code/name
-  const provincePattern = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/i;
-  return provincePattern.test(address);
+function setSuggestionsMessage(message) {
+  suggestionsBox.innerHTML = `<div class="suggestion-message">${message}</div>`;
+  suggestionsBox.classList.add('open');
+}
+
+function getAddressLookupErrorMessage(result, fallbackMessage) {
+  return (result && (result.error || result.detail)) || fallbackMessage;
+}
+
+function clearAddressLookupState() {
+  clearError('address_full');
+  suggestionsBox.innerHTML = '';
+  hideSuggestions();
 }
 
 addressInput.addEventListener('input', () => {
   addressValidated = false;
-  addressManuallyEntered = true;
   clearResolvedAddressFields();
   clearTimeout(autocompleteTimer);
   const val = addressInput.value.trim();
-  if (val.length < 3) { hideSuggestions(); return; }
-  // Auto-close suggestions on mobile after user types to avoid blocking input
-  if (window.innerWidth < 768 && val.length > 15) {
-    hideSuggestions();
-  } else {
-    autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
-  }
+  if (val.length < 3) { clearAddressLookupState(); return; }
+  clearError('address_full');
+  autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
 });
 
 addressInput.addEventListener('blur', () => { 
   setTimeout(hideSuggestions, 200); 
-  // If user manually typed an address and it looks valid, try to parse it
-  const val = addressInput.value.trim();
-  if (val && !addressValidated && isValidCanadianAddressFormat(val)) {
-    parseManualAddress(val);
-  }
 });
 
 async function fetchSuggestions(input) {
   try {
     const resp = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}&country=CA`);
-    if (!resp.ok) { hideSuggestions(); return; }
     const data = await resp.json();
-    if (!data.predictions || data.predictions.length === 0) { hideSuggestions(); return; }
+    if (!resp.ok) {
+      const message = getAddressLookupErrorMessage(data, 'Address lookup is currently unavailable. Please try again later.');
+      hideSuggestions();
+      showError('address_full', message);
+      return;
+    }
+    if (!data.predictions || data.predictions.length === 0) {
+      showError('address_full', 'No valid Canadian addresses found.');
+      setSuggestionsMessage('No valid Canadian addresses found.');
+      return;
+    }
+    clearError('address_full');
     renderSuggestions(data.predictions);
-  } catch { hideSuggestions(); }
+  } catch {
+    hideSuggestions();
+    showError('address_full', 'Address lookup is currently unavailable. Please try again later.');
+  }
 }
 
-  function renderSuggestions(predictions) {
+function renderSuggestions(predictions) {
   suggestionsBox.innerHTML = '';
   predictions.forEach(p => {
     const item = document.createElement('div');
@@ -451,84 +465,18 @@ async function fetchSuggestions(input) {
 
 function hideSuggestions() { suggestionsBox.classList.remove('open'); }
 
-// Parse manually entered address
-function parseManualAddress(address) {
-  const provinceMap = {
-    'AB': 'AB', 'ALBERTA': 'AB',
-    'BC': 'BC', 'BRITISH COLUMBIA': 'BC',
-    'MB': 'MB', 'MANITOBA': 'MB',
-    'NB': 'NB', 'NEW BRUNSWICK': 'NB',
-    'NL': 'NL', 'NEWFOUNDLAND': 'NL', 'NEWFOUNDLAND AND LABRADOR': 'NL',
-    'NS': 'NS', 'NOVA SCOTIA': 'NS',
-    'NT': 'NT', 'NORTHWEST TERRITORIES': 'NT',
-    'NU': 'NU', 'NUNAVUT': 'NU',
-    'ON': 'ON', 'ONTARIO': 'ON',
-    'PE': 'PE', 'PRINCE EDWARD ISLAND': 'PE', 'PEI': 'PE',
-    'QC': 'QC', 'QUEBEC': 'QC',
-    'SK': 'SK', 'SASKATCHEWAN': 'SK',
-    'YT': 'YT', 'YUKON': 'YT'
-  };
-  
-  // Extract province
-  let province = '';
-  const upper = address.toUpperCase();
-  for (const [key, code] of Object.entries(provinceMap)) {
-    const pattern = new RegExp('\\b' + key + '\\b', 'i');
-    if (pattern.test(upper)) {
-      province = code;
-      break;
-    }
-  }
-  
-  if (!province) return;
-  
-  // Try to extract city (word(s) before province)
-  const parts = address.split(/[,\s]+/);
-  const provinceIndex = parts.findIndex(p => provinceMap[p.toUpperCase()]);
-  let city = '';
-  if (provinceIndex > 0) {
-    // Take 1-2 words before province as city
-    city = parts.slice(Math.max(0, provinceIndex - 2), provinceIndex).join(' ');
-  }
-  
-  // Extract street (everything before city)
-  let street = '';
-  if (city && provinceIndex > 2) {
-    street = parts.slice(0, provinceIndex - 2).join(' ');
-  } else if (provinceIndex > 0) {
-    street = parts.slice(0, provinceIndex - 1).join(' ');
-  }
-  
-  // Extract postal code if present
-  const postalMatch = address.match(/([A-Za-z]\d[A-Za-z])\s*(\d[A-Za-z]\d)/i);
-  const postalCode = postalMatch ? (postalMatch[1] + ' ' + postalMatch[2]).toUpperCase() : '';
-  
-  // Set values
-  document.getElementById('address_street').value = street.replace(/,/g, '').trim();
-  document.getElementById('address_city').value = city.replace(/,/g, '').trim();
-  document.getElementById('address_province').value = province;
-  document.getElementById('address_postal_code').value = postalCode;
-  document.getElementById('address_country').value = 'Canada';
-  
-  if (city && province) {
-    addressValidated = true;
-    addressManuallyEntered = true;
-    clearError('address_full');
-  }
-}
-
 async function selectPlace(placeId, description) {
   addressInput.value = description;
   hideSuggestions();
   try {
     const resp = await fetch(`/api/places/details/${placeId}`);
+    const data = await resp.json();
     if (!resp.ok) {
-      showError('address_full', 'Unable to validate address. Please select another suggestion.');
+      showError('address_full', getAddressLookupErrorMessage(data, 'Unable to validate address. Please select another suggestion.'));
       addressValidated = false;
       clearResolvedAddressFields();
       return;
     }
-    const data = await resp.json();
     if (data.country !== 'Canada') {
       showError('address_full', 'Only Canadian addresses are accepted');
       addressInput.value = '';
@@ -536,17 +484,20 @@ async function selectPlace(placeId, description) {
       clearResolvedAddressFields();
       return;
     }
-    if (!data.city || !data.province) {
-      showError('address_full', 'Please choose an address suggestion that includes city and province.');
+    if (!data.addressLine1 || !data.city || !data.province || data.latitude === null || data.longitude === null) {
+      showError('address_full', 'Please choose a complete Canadian address suggestion.');
       addressValidated = false;
       clearResolvedAddressFields();
       return;
     }
+    addressInput.value = data.formattedAddress || description;
     document.getElementById('address_street').value = data.addressLine1 || '';
     document.getElementById('address_city').value = data.city || '';
     document.getElementById('address_province').value = data.province || '';
     document.getElementById('address_postal_code').value = data.postalCode || '';
     document.getElementById('address_country').value = 'Canada';
+    document.getElementById('address_latitude').value = data.latitude;
+    document.getElementById('address_longitude').value = data.longitude;
     clearError('address_full');
     addressValidated = true;
   } catch {
@@ -666,29 +617,11 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
   if (!address) { 
     showError('address_full', 'Please enter your address'); 
     valid = false; 
+  } else if (!addressValidated) {
+    showError('address_full', 'Please select a valid Canadian address from the suggestions.');
+    valid = false;
   } else {
-    // Try to parse the address if not already validated
-    if (!addressValidated && isValidCanadianAddressFormat(address)) {
-      parseManualAddress(address);
-    }
-    
-    // Check if we have at least some address components or the address looks valid
-    const hasCity = document.getElementById('address_city').value.trim();
-    const hasProvince = document.getElementById('address_province').value.trim();
-    
-    if (!addressValidated && !isValidCanadianAddressFormat(address)) {
-      showError('address_full', 'Please include city and province (e.g., "123 Main St, Toronto, ON")');
-      valid = false;
-    } else if (addressValidated || (hasCity && hasProvince) || isValidCanadianAddressFormat(address)) {
-      clearError('address_full');
-      // Ensure addressValidated is true if we have parsed components
-      if (hasCity && hasProvince) {
-        addressValidated = true;
-      }
-    } else {
-      showError('address_full', 'Please enter a complete Canadian address with city and province');
-      valid = false;
-    }
+    clearError('address_full');
   }
 
   const applyingFor = document.getElementById('applying_for').value;
@@ -728,6 +661,8 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       addressProvince: document.getElementById('address_province').value,
       addressPostalCode: document.getElementById('address_postal_code').value,
       addressCountry: 'Canada',
+      addressLatitude: document.getElementById('address_latitude').value,
+      addressLongitude: document.getElementById('address_longitude').value,
       applyingFor,
       jobPostingSource: source,
       photoData: photoData.data,

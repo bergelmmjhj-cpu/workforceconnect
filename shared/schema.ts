@@ -1239,6 +1239,8 @@ export const applicants = pgTable("applicants", {
   addressProvince: text("address_province"),
   addressPostalCode: text("address_postal_code"),
   addressCountry: text("address_country").default("Canada"),
+  addressLatitude: doublePrecision("address_latitude"),
+  addressLongitude: doublePrecision("address_longitude"),
   applyingFor: text("applying_for").notNull(),
   jobPostingSource: text("job_posting_source").notNull(),
   photoData: text("photo_data"), // base64 data URI

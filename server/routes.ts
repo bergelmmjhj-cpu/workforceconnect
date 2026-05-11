@@ -1352,7 +1352,7 @@ const publicApplySubmissionSchema = z.object({
   independentContractorStatusAcknowledged: consentLikeSchema.optional(),
   signature: z.string().trim().min(1).optional(),
   signatureDate: z.string().trim().min(1).optional(),
-}).strict();
+}).strip();
 
 function coordinateSchema(min: number, max: number, label: string) {
   return z.union([

@@ -4679,8 +4679,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
-        signature: normalizeWhitespace(payload.signature),
-        signatureDate: normalizeWhitespace(payload.signatureDate),
+        signature: payload.signature ? normalizeWhitespace(payload.signature) : null,
+        signatureDate: payload.signatureDate ? normalizeWhitespace(payload.signatureDate) : null,
         agreementVersion: payload.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
         nonSolicitationAcknowledged,
         nonSolicitationAcknowledgedAt: nonSolicitationAcknowledged

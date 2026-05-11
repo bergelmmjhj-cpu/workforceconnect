@@ -537,10 +537,31 @@ addressInput.addEventListener('input', () => {
   const val = addressInput.value.trim();
   if (val.length < 3) { clearAddressLookupState(); return; }
   maybeResetAddressAutocompleteFallback();
+  if (isAddressAutocompleteFallbackActive()) {
+    const localPredictions = buildLocalAddressPredictions(val);
+    if (localPredictions.length > 0) {
+      clearError('address_full');
+      renderSuggestions(localPredictions);
+    } else {
+      hideSuggestions();
+    }
+    return;
+  }
   if (shouldDeferAutocompleteRequest()) return;
   if (addressAutocompleteFallbackState === 'permanent') return;
   clearError('address_full');
   autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
+});
+
+addressInput.addEventListener('focus', () => {
+  const val = addressInput.value.trim();
+  if (val.length < 3) return;
+  if (isAddressAutocompleteFallbackActive()) {
+    const localPredictions = buildLocalAddressPredictions(val);
+    if (localPredictions.length > 0) {
+      renderSuggestions(localPredictions);
+    }
+  }
 });
 
 if (retryAutocompleteButton) {

@@ -247,6 +247,10 @@
         <input type="hidden" id="address_province" name="address_province" />
         <input type="hidden" id="address_postal_code" name="address_postal_code" />
         <input type="hidden" id="address_country" name="address_country" value="Canada" />
+        <input type="hidden" id="address_place_id" name="address_place_id" />
+        <input type="hidden" id="address_street_number" name="address_street_number" />
+        <input type="hidden" id="address_street_name" name="address_street_name" />
+        <input type="hidden" id="address_place_types" name="address_place_types" />
         <input type="hidden" id="address_latitude" name="address_latitude" />
         <input type="hidden" id="address_longitude" name="address_longitude" />
       </div>
@@ -409,7 +413,7 @@ let submitPending = false;
 let addressAutocompleteFallbackState = null;
 let autocompleteRetryAfter = 0;
 const MANUAL_ADDRESS_WARNING_MESSAGE = 'Address autocomplete is unavailable. Please enter your full address manually including city, province, and postal code.';
-const AUTOCOMPLETE_TRANSIENT_RETRY_DELAY_MS = 15000;
+const AUTOCOMPLETE_TRANSIENT_RETRY_DELAY_MS = 3000;
 const AUTOCOMPLETE_PERMANENT_FAILURE_CATEGORIES = new Set([
   'CONFIG_MISSING_KEY',
   'INVALID_KEY',
@@ -432,6 +436,10 @@ function clearResolvedAddressFields() {
   document.getElementById('address_province').value = '';
   document.getElementById('address_postal_code').value = '';
   document.getElementById('address_country').value = 'Canada';
+  document.getElementById('address_place_id').value = '';
+  document.getElementById('address_street_number').value = '';
+  document.getElementById('address_street_name').value = '';
+  document.getElementById('address_place_types').value = '';
   document.getElementById('address_latitude').value = '';
   document.getElementById('address_longitude').value = '';
 }
@@ -545,10 +553,8 @@ addressInput.addEventListener('input', () => {
     } else {
       hideSuggestions();
     }
-    return;
   }
   if (shouldDeferAutocompleteRequest()) return;
-  if (addressAutocompleteFallbackState === 'permanent') return;
   clearError('address_full');
   autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
 });
@@ -579,15 +585,6 @@ addressInput.addEventListener('blur', () => {
 });
 
 async function fetchSuggestions(input) {
-  if (isAddressAutocompleteFallbackActive()) {
-    const localPredictions = buildLocalAddressPredictions(input);
-    if (localPredictions.length > 0) {
-      clearError('address_full');
-      renderSuggestions(localPredictions);
-      return;
-    }
-  }
-
   logPlacesClient('autocomplete_request_start', { inputLength: input.length });
   try {
     const resp = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}&country=CA`);
@@ -619,13 +616,14 @@ async function fetchSuggestions(input) {
       return;
     }
     setAddressAutocompleteFallback(null);
-    if (!data.predictions || data.predictions.length === 0) {
+    const rankedPredictions = rankPredictions(data.predictions || []);
+    if (rankedPredictions.length === 0) {
       showError('address_full', 'No valid Canadian addresses found.');
       setSuggestionsMessage('No valid Canadian addresses found.');
       return;
     }
     clearError('address_full');
-    renderSuggestions(data.predictions);
+    renderSuggestions(rankedPredictions);
   } catch (error) {
     logPlacesClient('autocomplete_exception', { message: error instanceof Error ? error.message : String(error) });
     hideSuggestions();
@@ -655,6 +653,79 @@ function renderSuggestions(predictions) {
 }
 
 function hideSuggestions() { suggestionsBox.classList.remove('open'); }
+
+function normalizeSuggestionText(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function scorePrediction(prediction) {
+  const description = prediction?.description || '';
+  const mainText = prediction?.structured_formatting?.main_text || description.split(',')[0] || '';
+  const secondaryText = prediction?.structured_formatting?.secondary_text || description.split(',').slice(1).join(',');
+  const types = Array.isArray(prediction?.types) ? prediction.types : [];
+  const hasStreetNumber = /^\d+[A-Za-z]?\b/.test(mainText.trim());
+  const hasStreetName = /[A-Za-z]/.test(mainText.replace(/^\d+[A-Za-z]?\b\s*/, ''));
+  const hasProvince = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/i.test(secondaryText);
+  const hasPostalCode = /\b[A-Za-z]\d[A-Za-z][\s-]?\d[A-Za-z]\d\b/.test(description);
+  const segments = secondaryText.split(',').map((part) => part.trim()).filter(Boolean);
+  const hasCity = segments.length >= 2;
+  const isVague = /,\s*canada$/i.test(description) && !hasProvince;
+
+  let score = typeof prediction?.qualityScore === 'number' ? prediction.qualityScore : 0;
+  if (hasStreetNumber) score += 40;
+  if (hasStreetName) score += 25;
+  if (hasCity) score += 20;
+  if (hasProvince) score += 20;
+  if (hasPostalCode) score += 10;
+  if (types.includes('street_address')) score += 40;
+  if (types.includes('premise')) score += 20;
+  if (types.includes('route') && !hasStreetNumber) score -= 35;
+  if (isVague) score -= 80;
+
+  return {
+    ...prediction,
+    _quality: {
+      score,
+      hasStreetNumber,
+      hasStreetName,
+      hasCity,
+      hasProvince,
+      isVague,
+    },
+  };
+}
+
+function rankPredictions(predictions) {
+  const scored = (Array.isArray(predictions) ? predictions : [])
+    .filter((prediction) => prediction?.place_id && prediction?.description)
+    .map(scorePrediction);
+
+  const hasComplete = scored.some((prediction) =>
+    prediction._quality.hasStreetNumber &&
+    prediction._quality.hasStreetName &&
+    prediction._quality.hasCity &&
+    prediction._quality.hasProvince,
+  );
+
+  const filtered = hasComplete
+    ? scored.filter((prediction) => !prediction._quality.isVague)
+    : scored;
+
+  const deduped = new Map();
+  filtered.forEach((prediction) => {
+    const key = normalizeSuggestionText(prediction.description);
+    const existing = deduped.get(key);
+    if (!existing || prediction._quality.score > existing._quality.score) {
+      deduped.set(key, prediction);
+    }
+  });
+
+  return Array.from(deduped.values())
+    .sort((a, b) => b._quality.score - a._quality.score)
+    .slice(0, 8)
+    .map(({ _quality, ...prediction }) => prediction);
+}
 
 function normalizeTextValue(value) {
   if (typeof value !== 'string') return '';
@@ -753,6 +824,10 @@ async function selectPlace(placeId, description) {
     document.getElementById('address_province').value = localAddress.province || '';
     document.getElementById('address_postal_code').value = localAddress.postalCode || '';
     document.getElementById('address_country').value = 'Canada';
+    document.getElementById('address_place_id').value = '';
+    document.getElementById('address_street_number').value = '';
+    document.getElementById('address_street_name').value = '';
+    document.getElementById('address_place_types').value = 'local_fallback';
     document.getElementById('address_latitude').value = '';
     document.getElementById('address_longitude').value = '';
     clearError('address_full');
@@ -808,6 +883,10 @@ async function selectPlace(placeId, description) {
     document.getElementById('address_province').value = data.province || '';
     document.getElementById('address_postal_code').value = data.postalCode || '';
     document.getElementById('address_country').value = 'Canada';
+    document.getElementById('address_place_id').value = data.placeId || placeId || '';
+    document.getElementById('address_street_number').value = data.streetNumber || '';
+    document.getElementById('address_street_name').value = data.streetName || '';
+    document.getElementById('address_place_types').value = Array.isArray(data.types) ? data.types.join(',') : '';
     document.getElementById('address_latitude').value = data.latitude;
     document.getElementById('address_longitude').value = data.longitude;
     setAddressAutocompleteFallback(null);
@@ -994,6 +1073,10 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       addressProvince: document.getElementById('address_province').value.trim(),
       addressPostalCode: document.getElementById('address_postal_code').value.trim(),
       addressCountry: 'Canada',
+      addressPlaceId: document.getElementById('address_place_id').value.trim(),
+      addressStreetNumber: document.getElementById('address_street_number').value.trim(),
+      addressStreetName: document.getElementById('address_street_name').value.trim(),
+      addressPlaceTypes: document.getElementById('address_place_types').value.trim(),
       addressLatitude: document.getElementById('address_latitude').value,
       addressLongitude: document.getElementById('address_longitude').value,
       addressManualEntry: isAddressAutocompleteFallbackActive() || !addressValidated,

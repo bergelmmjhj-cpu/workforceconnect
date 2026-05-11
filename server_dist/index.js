@@ -3013,6 +3013,8 @@ var CANADIAN_PLACE_DETAIL_CITY_TYPES = [
   "administrative_area_level_3",
   "sublocality_level_1"
 ];
+var CANADIAN_PROVINCE_CODE_REGEX = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/i;
+var CANADIAN_POSTAL_CODE_REGEX_RELAXED = /\b[A-Za-z]\d[A-Za-z][\s-]?\d[A-Za-z]\d\b/;
 function inferGooglePlacesFailureCategory(status, errorMessage) {
   const message = (errorMessage || "").toLowerCase();
   if (status === "REQUEST_DENIED") {
@@ -3150,7 +3152,11 @@ function parseGooglePlaceDetails(result) {
   const longitude = typeof result.geometry?.location?.lng === "number" ? result.geometry.location.lng : null;
   const addressLine1 = [subpremise ? `Unit ${subpremise}` : "", streetNumber, route].filter(Boolean).join(" ").trim();
   return {
+    placeId: normalizeAddressText(result.place_id || ""),
+    types: Array.isArray(result.types) ? result.types : [],
     formattedAddress: normalizeAddressText(result.formatted_address || ""),
+    streetNumber,
+    streetName: route,
     addressLine1,
     city: normalizeAddressText(city),
     province: normalizeProvince(province),
@@ -3160,6 +3166,61 @@ function parseGooglePlaceDetails(result) {
     latitude,
     longitude
   };
+}
+function normalizePredictionKey(description) {
+  return description.trim().toLowerCase().replace(/\s+/g, " ");
+}
+function scoreGooglePrediction(prediction) {
+  const description = normalizeAddressText(prediction.description || "");
+  const mainText = normalizeAddressText(prediction.structured_formatting?.main_text || description.split(",")[0] || "");
+  const secondaryText = normalizeAddressText(prediction.structured_formatting?.secondary_text || description.split(",").slice(1).join(",") || "");
+  const types = Array.isArray(prediction.types) ? prediction.types : [];
+  const hasStreetNumber = /^\d+[A-Za-z]?\b/.test(mainText);
+  const hasStreetName = /[A-Za-z]/.test(mainText.replace(/^\d+[A-Za-z]?\b\s*/, ""));
+  const hasCity = secondaryText.split(",").map((part) => part.trim()).filter(Boolean).length >= 2;
+  const hasProvince = CANADIAN_PROVINCE_CODE_REGEX.test(secondaryText);
+  const hasPostalCode = CANADIAN_POSTAL_CODE_REGEX_RELAXED.test(description);
+  const isVague = /,\s*canada$/i.test(description) && !hasProvince;
+  let qualityScore = 0;
+  if (types.includes("street_address")) qualityScore += 150;
+  if (types.includes("premise")) qualityScore += 90;
+  if (types.includes("subpremise")) qualityScore += 60;
+  if (hasStreetNumber) qualityScore += 70;
+  if (hasStreetName) qualityScore += 45;
+  if (hasCity) qualityScore += 35;
+  if (hasProvince) qualityScore += 30;
+  if (hasPostalCode) qualityScore += 20;
+  if (types.includes("route") && !hasStreetNumber) qualityScore -= 70;
+  if (types.includes("locality") || types.includes("administrative_area_level_1")) qualityScore -= 50;
+  if (isVague) qualityScore -= 120;
+  return {
+    ...prediction,
+    qualityScore,
+    qualitySignals: {
+      hasStreetNumber,
+      hasStreetName,
+      hasCity,
+      hasProvince,
+      hasPostalCode,
+      isVague
+    }
+  };
+}
+function rankAndFilterGooglePredictions(predictions) {
+  const ranked = predictions.filter((prediction) => prediction.place_id && prediction.description).map(scoreGooglePrediction);
+  const completeCount = ranked.filter(
+    (prediction) => prediction.qualitySignals.hasStreetNumber && prediction.qualitySignals.hasStreetName && prediction.qualitySignals.hasCity && prediction.qualitySignals.hasProvince
+  ).length;
+  const filtered = completeCount > 0 ? ranked.filter((prediction) => prediction.qualitySignals.isVague === false) : ranked;
+  const dedupedByDescription = /* @__PURE__ */ new Map();
+  for (const prediction of filtered) {
+    const key = normalizePredictionKey(prediction.description || "");
+    const existing = dedupedByDescription.get(key);
+    if (!existing || prediction.qualityScore > existing.qualityScore) {
+      dedupedByDescription.set(key, prediction);
+    }
+  }
+  return Array.from(dedupedByDescription.values()).sort((left, right) => right.qualityScore - left.qualityScore).slice(0, 8);
 }
 async function fetchGooglePlacesAutocomplete(input) {
   const apiKey = getGooglePlacesApiKey();
@@ -3240,7 +3301,7 @@ async function fetchGooglePlaceDetails(placeId) {
   }
   const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/details/json`);
   url.searchParams.set("place_id", placeId);
-  url.searchParams.set("fields", "place_id,formatted_address,geometry,address_components");
+  url.searchParams.set("fields", "place_id,types,formatted_address,geometry,address_components");
   url.searchParams.set("language", "en");
   url.searchParams.set("key", apiKey);
   try {
@@ -3299,7 +3360,11 @@ async function fetchGooglePlaceDetails(placeId) {
     return {
       ok: true,
       details: {
+        placeId: parsed.placeId,
+        types: parsed.types,
         formattedAddress: parsed.formattedAddress,
+        streetNumber: parsed.streetNumber,
+        streetName: parsed.streetName,
         addressLine1: parsed.addressLine1,
         city: parsed.city,
         province: parsed.province,
@@ -3926,6 +3991,10 @@ var publicApplicantSubmissionSchema = z2.object({
   addressProvince: optionalTrimmedStringSchema,
   addressPostalCode: optionalTrimmedStringSchema,
   addressCountry: optionalTrimmedStringSchema,
+  addressPlaceId: optionalTrimmedStringSchema,
+  addressStreetNumber: optionalTrimmedStringSchema,
+  addressStreetName: optionalTrimmedStringSchema,
+  addressPlaceTypes: optionalTrimmedStringSchema,
   addressLatitude: coordinateSchema(-90, 90, "Latitude").optional(),
   addressLongitude: coordinateSchema(-180, 180, "Longitude").optional(),
   addressManualEntry: z2.boolean().optional(),
@@ -3977,6 +4046,10 @@ function normalizePublicApplicantSubmissionPayload(input) {
     addressProvince: pickFirstPresent(source, ["addressProvince", "address_province", "province", "state"]),
     addressPostalCode: pickFirstPresent(source, ["addressPostalCode", "address_postal_code", "postalCode", "postal_code", "zip", "zipCode"]),
     addressCountry: pickFirstPresent(source, ["addressCountry", "address_country", "country"]),
+    addressPlaceId: pickFirstPresent(source, ["addressPlaceId", "address_place_id", "googlePlaceId", "google_place_id"]),
+    addressStreetNumber: pickFirstPresent(source, ["addressStreetNumber", "address_street_number", "streetNumber", "street_number"]),
+    addressStreetName: pickFirstPresent(source, ["addressStreetName", "address_street_name", "streetName", "street_name"]),
+    addressPlaceTypes: pickFirstPresent(source, ["addressPlaceTypes", "address_place_types", "placeTypes", "place_types"]),
     addressLatitude: pickFirstPresent(source, ["addressLatitude", "address_latitude", "latitude", "lat"]),
     addressLongitude: pickFirstPresent(source, ["addressLongitude", "address_longitude", "longitude", "lng", "lon"]),
     addressManualEntry: pickFirstPresent(source, ["addressManualEntry", "address_manual_entry", "manualAddressEntry"]),
@@ -7767,6 +7840,10 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         addressProvince,
         addressPostalCode,
         addressCountry,
+        addressPlaceId,
+        addressStreetNumber,
+        addressStreetName,
+        addressPlaceTypes,
         addressLatitude,
         addressLongitude,
         addressManualEntry,
@@ -7902,6 +7979,23 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
           parsedPostalCode: Boolean(persistedAddressPostalCode)
         });
       }
+      const addressMetadataNotes = [];
+      if (isManualAddressEntry) {
+        addressMetadataNotes.push("Address entered manually; geocoding unavailable at submission.");
+      }
+      const normalizedAddressPlaceId = normalizeOptionalText(addressPlaceId);
+      const normalizedStreetNumber = normalizeOptionalText(addressStreetNumber);
+      const normalizedStreetName = normalizeOptionalText(addressStreetName);
+      const normalizedPlaceTypes = normalizeOptionalText(addressPlaceTypes);
+      if (normalizedAddressPlaceId) {
+        addressMetadataNotes.push(`Google place_id: ${normalizedAddressPlaceId}`);
+      }
+      if (normalizedStreetNumber || normalizedStreetName) {
+        addressMetadataNotes.push(`Street components: ${[normalizedStreetNumber, normalizedStreetName].filter(Boolean).join(" ")}`);
+      }
+      if (normalizedPlaceTypes) {
+        addressMetadataNotes.push(`Place types: ${normalizedPlaceTypes}`);
+      }
       const insertValues = {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
@@ -7925,7 +8019,7 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         smsConsentAt: smsConsentGranted ? now : null,
         marketingConsent: marketingConsentGranted,
         marketingConsentAt: marketingConsentGranted ? now : null,
-        adminNotes: isManualAddressEntry ? "Address entered manually; geocoding unavailable at submission." : null,
+        adminNotes: addressMetadataNotes.length > 0 ? addressMetadataNotes.join(" | ") : null,
         status: "new",
         submittedAt: now
       };
@@ -10845,9 +10939,11 @@ This report includes ${items.length} worker(s).
         return;
       }
       res.json({
-        predictions: lookup.predictions.filter((prediction) => prediction.place_id && prediction.description).map((prediction) => ({
+        predictions: rankAndFilterGooglePredictions(lookup.predictions).map((prediction) => ({
           place_id: prediction.place_id,
           description: prediction.description,
+          types: prediction.types || [],
+          qualityScore: prediction.qualityScore,
           structured_formatting: prediction.structured_formatting
         }))
       });

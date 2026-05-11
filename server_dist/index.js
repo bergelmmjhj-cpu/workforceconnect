@@ -3038,6 +3038,18 @@ function inferGooglePlacesFailureCategory(status, errorMessage) {
   }
   return "UPSTREAM_ERROR";
 }
+var NON_RETRYABLE_GOOGLE_PLACES_FAILURE_CATEGORIES = /* @__PURE__ */ new Set([
+  "CONFIG_MISSING_KEY",
+  "INVALID_KEY",
+  "API_NOT_ACTIVATED",
+  "BILLING_INACTIVE_OR_INVALID",
+  "RESTRICTION_BLOCKED"
+]);
+function isGooglePlacesFailureRetryable(failureCategory, failureStage) {
+  if (failureStage === "missing_api_key") return false;
+  if (!failureCategory) return true;
+  return !NON_RETRYABLE_GOOGLE_PLACES_FAILURE_CATEGORIES.has(failureCategory);
+}
 async function fetchWithPlacesTimeout(url) {
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), PLACES_FETCH_TIMEOUT_MS);
@@ -3047,28 +3059,36 @@ async function fetchWithPlacesTimeout(url) {
     clearTimeout(timeout);
   }
 }
-var initialPlacesPrimaryKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
-var initialPlacesLegacyKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
+function resolveGooglePlacesApiKeyConfig() {
+  const placesKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
+  if (placesKey) {
+    return { apiKey: placesKey, envVar: "GOOGLE_PLACES_API_KEY" };
+  }
+  const mapsKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
+  if (mapsKey) {
+    return { apiKey: mapsKey, envVar: "GOOGLE_MAPS_API_KEY" };
+  }
+  return { apiKey: null, envVar: "none" };
+}
+var initialPlacesConfig = resolveGooglePlacesApiKeyConfig();
 console.info("[PLACES] API_KEY_DIAGNOSTIC", {
-  googlePlacesKeyExists: initialPlacesPrimaryKey.length > 0,
-  googleMapsKeyExists: initialPlacesLegacyKey.length > 0,
-  selectedEnvVar: initialPlacesPrimaryKey.length > 0 ? "GOOGLE_PLACES_API_KEY" : initialPlacesLegacyKey.length > 0 ? "GOOGLE_MAPS_API_KEY" : "none",
-  keyLength: (initialPlacesPrimaryKey || initialPlacesLegacyKey).length
+  googlePlacesKeyExists: (process.env.GOOGLE_PLACES_API_KEY || "").trim().length > 0,
+  googleMapsKeyExists: (process.env.GOOGLE_MAPS_API_KEY || "").trim().length > 0,
+  selectedEnvVar: initialPlacesConfig.envVar,
+  keyLength: initialPlacesConfig.apiKey?.length || 0
 });
 var _placesApiKeyMissingLogged = false;
 var _placesLegacyKeyUsageLogged = false;
 function getGooglePlacesApiKey() {
-  const placesKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
-  if (placesKey) {
-    return placesKey;
-  }
-  const mapsKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
-  if (mapsKey) {
-    if (!_placesLegacyKeyUsageLogged) {
-      _placesLegacyKeyUsageLogged = true;
-      console.warn("[PLACES] CONFIG_WARNING: Using fallback GOOGLE_MAPS_API_KEY. Prefer GOOGLE_PLACES_API_KEY to avoid environment-name mismatches.");
+  const resolved = resolveGooglePlacesApiKeyConfig();
+  if (resolved.apiKey) {
+    if (resolved.envVar === "GOOGLE_MAPS_API_KEY") {
+      if (!_placesLegacyKeyUsageLogged) {
+        _placesLegacyKeyUsageLogged = true;
+        console.warn("[PLACES] CONFIG_WARNING: Using fallback GOOGLE_MAPS_API_KEY. Prefer GOOGLE_PLACES_API_KEY to avoid environment-name mismatches.");
+      }
     }
-    return mapsKey;
+    return resolved.apiKey;
   }
   if (!_placesApiKeyMissingLogged) {
     _placesApiKeyMissingLogged = true;
@@ -3077,9 +3097,7 @@ function getGooglePlacesApiKey() {
   return null;
 }
 function getGooglePlacesEnvVarName() {
-  if (process.env.GOOGLE_PLACES_API_KEY) return "GOOGLE_PLACES_API_KEY";
-  if (process.env.GOOGLE_MAPS_API_KEY) return "GOOGLE_MAPS_API_KEY";
-  return "none";
+  return resolveGooglePlacesApiKeyConfig().envVar;
 }
 function mapGooglePlacesErrorStatus(status) {
   switch (status) {
@@ -3483,6 +3501,11 @@ var placesRateLimitMap = /* @__PURE__ */ new Map();
 var PLACES_RATE_LIMIT_WINDOW = 6e4;
 var PLACES_RATE_LIMIT_MAX = 30;
 var _placesRateLimitPruneCounter = 0;
+var placesHealthProbeRateLimitMap = /* @__PURE__ */ new Map();
+var PLACES_HEALTH_PROBE_RATE_LIMIT_WINDOW = 6e4;
+var PLACES_HEALTH_PROBE_RATE_LIMIT_MAX = 5;
+var PLACES_HEALTH_PROBE_TOKEN = (process.env.PLACES_HEALTH_PROBE_TOKEN || "").trim();
+var _placesHealthProbeRateLimitPruneCounter = 0;
 function checkPlacesRateLimit(ip) {
   const now = Date.now();
   _placesRateLimitPruneCounter++;
@@ -3502,6 +3525,40 @@ function checkPlacesRateLimit(ip) {
   }
   entry.count++;
   return true;
+}
+function checkPlacesHealthProbeRateLimit(ip) {
+  const now = Date.now();
+  _placesHealthProbeRateLimitPruneCounter++;
+  if (_placesHealthProbeRateLimitPruneCounter >= 500) {
+    _placesHealthProbeRateLimitPruneCounter = 0;
+    for (const [key, val] of placesHealthProbeRateLimitMap) {
+      if (now > val.resetTime) placesHealthProbeRateLimitMap.delete(key);
+    }
+  }
+  const entry = placesHealthProbeRateLimitMap.get(ip);
+  if (!entry || now > entry.resetTime) {
+    placesHealthProbeRateLimitMap.set(ip, { count: 1, resetTime: now + PLACES_HEALTH_PROBE_RATE_LIMIT_WINDOW });
+    return true;
+  }
+  if (entry.count >= PLACES_HEALTH_PROBE_RATE_LIMIT_MAX) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
+function safeTokenMatch(expected, provided) {
+  const expectedDigest = crypto2.createHash("sha256").update(expected).digest();
+  const providedDigest = crypto2.createHash("sha256").update(provided).digest();
+  const digestMatch = crypto2.timingSafeEqual(expectedDigest, providedDigest);
+  return Boolean(expected) && Boolean(provided) && digestMatch;
+}
+function isAuthorizedPlacesProbeRequest(req) {
+  if (!PLACES_HEALTH_PROBE_TOKEN) {
+    return false;
+  }
+  const providedToken = typeof req.headers["x-places-health-token"] === "string" ? req.headers["x-places-health-token"].trim() : "";
+  if (!providedToken) return false;
+  return safeTokenMatch(PLACES_HEALTH_PROBE_TOKEN, providedToken);
 }
 function checkRoles(...allowedRoles) {
   return (req, res, next) => {
@@ -10686,12 +10743,19 @@ This report includes ${items.length} worker(s).
       }
       const lookup = await fetchGooglePlacesAutocomplete(input.trim());
       if (!lookup.ok) {
+        const failureStage = lookup.failureStage || "unknown";
+        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
         console.error("[PLACES] autocomplete:LOOKUP_FAILED", {
-          failureStage: lookup.failureStage || "unknown",
-          failureCategory: lookup.failureCategory || "UPSTREAM_ERROR",
+          failureStage,
+          failureCategory,
           httpStatus: lookup.httpStatus
         });
-        res.status(lookup.httpStatus).json({ error: lookup.message });
+        res.status(lookup.httpStatus).json({
+          error: lookup.message,
+          failureStage,
+          failureCategory,
+          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage)
+        });
         return;
       }
       res.json({
@@ -10706,7 +10770,12 @@ This report includes ${items.length} worker(s).
       });
     } catch (error) {
       console.error("[PLACES] autocomplete:INTERNAL_ERROR", { message: error instanceof Error ? error.message : String(error) });
-      res.status(500).json({ error: "Failed to fetch address suggestions" });
+      res.status(500).json({
+        error: "Failed to fetch address suggestions",
+        failureStage: "route_handler",
+        failureCategory: "UPSTREAM_ERROR",
+        retryable: true
+      });
     }
   });
   app2.get("/api/places/details/:placeId", async (req, res) => {
@@ -10727,42 +10796,62 @@ This report includes ${items.length} worker(s).
       }
       const lookup = await fetchGooglePlaceDetails(placeId);
       if (!lookup.ok) {
+        const failureStage = lookup.failureStage || "unknown";
+        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
         console.error("[PLACES] details:LOOKUP_FAILED", {
-          failureStage: lookup.failureStage || "unknown",
-          failureCategory: lookup.failureCategory || "UPSTREAM_ERROR",
+          failureStage,
+          failureCategory,
           httpStatus: lookup.httpStatus
         });
-        res.status(lookup.httpStatus).json({ error: lookup.message });
+        res.status(lookup.httpStatus).json({
+          error: lookup.message,
+          failureStage,
+          failureCategory,
+          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage)
+        });
         return;
       }
       res.json(lookup.details);
       console.info("[PLACES] details:SUCCESS");
     } catch (error) {
       console.error("[PLACES] details:INTERNAL_ERROR", { message: error instanceof Error ? error.message : String(error) });
-      res.status(500).json({ error: "Failed to fetch address details" });
+      res.status(500).json({
+        error: "Failed to fetch address details",
+        failureStage: "route_handler",
+        failureCategory: "UPSTREAM_ERROR",
+        retryable: true
+      });
     }
   });
   app2.get("/api/places/health", async (req, res) => {
     try {
-      const apiKey = getGooglePlacesApiKey();
-      const envVar = getGooglePlacesEnvVarName();
-      const keyConfigured = apiKey !== null;
+      const keyConfigured = getGooglePlacesApiKey() !== null;
       const liveProbe = req.query.probe === "1";
       if (!liveProbe) {
         res.json({
           configured: keyConfigured,
-          envVar,
-          keyLengthHint: apiKey ? apiKey.length : 0,
-          liveTest: null,
-          note: "Pass ?probe=1 to run a live API test (consumes one API quota call)."
+          liveTest: null
         });
+        return;
+      }
+      if (!PLACES_HEALTH_PROBE_TOKEN) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      if (!isAuthorizedPlacesProbeRequest(req)) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const ip = getClientIp(req);
+      if (!checkPlacesHealthProbeRateLimit(ip)) {
+        console.warn("[PLACES] health:PROBE_RATE_LIMITED", { ipPresent: Boolean(ip) });
+        res.status(429).json({ error: "Too many probe requests. Please try again later." });
         return;
       }
       const probe = await probeGooglePlacesApiKey();
       res.json({
         configured: probe.configured,
         envVar: probe.envVar,
-        keyLengthHint: apiKey ? apiKey.length : 0,
         liveTest: {
           working: probe.working,
           failureCategory: probe.failureCategory,

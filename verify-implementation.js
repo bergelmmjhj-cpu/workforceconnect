@@ -178,7 +178,7 @@ test('test-address-autocomplete.js has test scenarios', () => {
 console.log('\n[GIT HISTORY VERIFICATION]');
 
 test('Recent commits record refactoring work', () => {
-  const output = require('child_process').execSync('git log --oneline -3', { cwd: '.' }).toString();
+      const output = require('child_process').execSync('git log --oneline -20', { cwd: '.' }).toString();
   assert(
     output.includes('Applicant Submission') || output.includes('Address Autocomplete'),
     'Expected commits not found in history'

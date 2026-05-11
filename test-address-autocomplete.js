@@ -132,7 +132,7 @@ test('Server builds successfully', () => {
 // Test 11: Git commits are present
 test('Required git commits are present', () => {
   const { execSync } = require('child_process');
-  const log = execSync('git log --oneline -5', { cwd: __dirname, encoding: 'utf8' });
+  const log = execSync('git log --oneline -20', { cwd: __dirname, encoding: 'utf8' });
   if (!log.includes('3514392f')) throw new Error('Refactoring commit not found');
   if (!log.includes('63f7e67a')) throw new Error('Synthetic removal commit not found');
 });

@@ -1355,14 +1355,17 @@ const publicApplySubmissionSchema = z.object({
 }).strip();
 
 function coordinateSchema(min: number, max: number, label: string) {
-  return z.union([
+  return z.preprocess((value) => {
+    if (value === null || value === undefined || value === "") return undefined;
+    return value;
+  }, z.union([
     z.null(),
     z.number().min(min).max(max),
     z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
       (v) => { const n = parseFloat(v); return n >= min && n <= max; },
       { message: `${label} must be between ${min} and ${max}` }
     ),
-  ]);
+  ]).optional());
 }
 
 const optionalTrimmedStringSchema = z.preprocess((value) => {

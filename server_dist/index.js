@@ -3547,16 +3547,16 @@ function checkPlacesHealthProbeRateLimit(ip) {
   return true;
 }
 function safeTokenMatch(expected, provided) {
-  const expectedBuffer = Buffer.from(expected);
-  const providedBuffer = Buffer.from(provided);
-  if (expectedBuffer.length !== providedBuffer.length) return false;
-  return crypto2.timingSafeEqual(expectedBuffer, providedBuffer);
+  const expectedDigest = crypto2.createHash("sha256").update(expected).digest();
+  const providedDigest = crypto2.createHash("sha256").update(provided).digest();
+  const digestMatch = crypto2.timingSafeEqual(expectedDigest, providedDigest);
+  return Boolean(expected) && Boolean(provided) && digestMatch;
 }
 function isAuthorizedPlacesProbeRequest(req) {
   if (!PLACES_HEALTH_PROBE_TOKEN) {
     return false;
   }
-  const providedToken = typeof req.query.token === "string" ? req.query.token.trim() : typeof req.headers["x-places-health-token"] === "string" ? req.headers["x-places-health-token"].trim() : "";
+  const providedToken = typeof req.headers["x-places-health-token"] === "string" ? req.headers["x-places-health-token"].trim() : "";
   if (!providedToken) return false;
   return safeTokenMatch(PLACES_HEALTH_PROBE_TOKEN, providedToken);
 }
@@ -10835,8 +10835,7 @@ This report includes ${items.length} worker(s).
         return;
       }
       if (!PLACES_HEALTH_PROBE_TOKEN) {
-        console.warn("[PLACES] health:PROBE_NOT_CONFIGURED");
-        res.status(503).json({ error: "Live probe is not available." });
+        res.status(401).json({ error: "Unauthorized" });
         return;
       }
       if (!isAuthorizedPlacesProbeRequest(req)) {

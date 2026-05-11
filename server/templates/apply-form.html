@@ -473,6 +473,19 @@ function isPermanentAutocompleteFailure(data, status) {
   return status !== 429 && AUTOCOMPLETE_PERMANENT_FAILURE_CATEGORIES.has(String(data.failureCategory));
 }
 
+async function parsePlacesResponseJson(resp, context) {
+  try {
+    return await resp.json();
+  } catch (error) {
+    logPlacesClient('response_parse_exception', {
+      context,
+      status: resp.status,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
+}
+
 function setAddressAutocompleteFallback(mode, message, meta) {
   addressAutocompleteFallbackState = mode;
   const warning = document.getElementById('warn-address_full');
@@ -538,7 +551,7 @@ async function fetchSuggestions(input) {
   logPlacesClient('autocomplete_request_start', { inputLength: input.length });
   try {
     const resp = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}&country=CA`);
-    const data = await resp.json().catch(() => ({}));
+    const data = await parsePlacesResponseJson(resp, 'autocomplete');
     logPlacesClient('autocomplete_response_status', {
       status: resp.status,
       ok: resp.ok,
@@ -600,7 +613,7 @@ async function selectPlace(placeId, description) {
   hideSuggestions();
   try {
     const resp = await fetch(`/api/places/details/${placeId}`);
-    const data = await resp.json().catch(() => ({}));
+    const data = await parsePlacesResponseJson(resp, 'details');
     logPlacesClient('details_response_status', {
       status: resp.status,
       ok: resp.ok,

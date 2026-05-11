@@ -882,10 +882,10 @@ function checkPlacesHealthProbeRateLimit(ip: string): boolean {
 }
 
 function safeTokenMatch(expected: string, provided: string): boolean {
-  const expectedBuffer = Buffer.from(expected);
-  const providedBuffer = Buffer.from(provided);
-  if (expectedBuffer.length !== providedBuffer.length) return false;
-  return crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+  const expectedDigest = crypto.createHash("sha256").update(expected).digest();
+  const providedDigest = crypto.createHash("sha256").update(provided).digest();
+  const digestMatch = crypto.timingSafeEqual(expectedDigest, providedDigest);
+  return Boolean(expected) && Boolean(provided) && digestMatch;
 }
 
 function isAuthorizedPlacesProbeRequest(req: Request): boolean {
@@ -893,11 +893,9 @@ function isAuthorizedPlacesProbeRequest(req: Request): boolean {
     return false;
   }
 
-  const providedToken = typeof req.query.token === "string"
-    ? req.query.token.trim()
-    : typeof req.headers["x-places-health-token"] === "string"
-      ? req.headers["x-places-health-token"].trim()
-      : "";
+  const providedToken = typeof req.headers["x-places-health-token"] === "string"
+    ? req.headers["x-places-health-token"].trim()
+    : "";
 
   if (!providedToken) return false;
   return safeTokenMatch(PLACES_HEALTH_PROBE_TOKEN, providedToken);
@@ -10100,8 +10098,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!PLACES_HEALTH_PROBE_TOKEN) {
-        console.warn("[PLACES] health:PROBE_NOT_CONFIGURED");
-        res.status(503).json({ error: "Live probe is not available." });
+        res.status(401).json({ error: "Unauthorized" });
         return;
       }
 

@@ -234,14 +234,9 @@
 
       <div class="field">
         <label>Home Address (Canada only) <span class="req">*</span></label>
-        <div class="autocomplete-wrap">
-          <input type="text" id="address_full" name="address_full" placeholder="123 Main St, Toronto, ON" autocomplete="street-address" />
-          <div class="suggestions" id="address-suggestions"></div>
-        </div>
-        <div class="field-hint" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Enter your full address including city and province, or select from suggestions</div>
-        <div class="field-warning" id="warn-address_full"></div>
-        <button type="button" class="retry-autocomplete" id="retry-address-autocomplete">Try again</button>
-        <div class="field-error" id="err-address_full">Please enter a valid Canadian address</div>
+        <input type="text" id="address_full" name="address_full" placeholder="123 Main St, Toronto, ON" autocomplete="street-address" />
+        <div class="field-hint" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Enter your full address including city and province</div>
+        <div class="field-error" id="err-address_full">Please enter your address</div>
         <input type="hidden" id="address_street" name="address_street" />
         <input type="hidden" id="address_city" name="address_city" />
         <input type="hidden" id="address_province" name="address_province" />
@@ -412,9 +407,8 @@ let photoData = null, resumeData = null;
     populateSelect(fallback);
   }
 })();
-let addressValidated = false;
 let submitPending = false;
-let addressAutocompleteController = null;
+const addressInput = document.getElementById('address_full');
 
 function clearResolvedAddressFields() {
   const fields = [
@@ -426,9 +420,10 @@ function clearResolvedAddressFields() {
   document.getElementById('address_country').value = 'Canada';
 }
 
-function isAddressAutocompleteFallbackActive() {
-  return Boolean(addressAutocompleteController && addressAutocompleteController.isFallbackActive());
-}
+addressInput.addEventListener('input', () => {
+  clearResolvedAddressFields();
+  clearError('address_full');
+});
 
 // --- FILE UPLOAD ---
 function setupFileUpload(type) {
@@ -523,62 +518,6 @@ function clearError(field) {
   if (inp) inp.classList.remove('error');
 }
 
-function populateResolvedAddressFields(placeData) {
-  document.getElementById('address_full').value = placeData.formattedAddress || document.getElementById('address_full').value;
-  document.getElementById('address_street').value = placeData.addressLine1 || '';
-  document.getElementById('address_city').value = placeData.city || '';
-  document.getElementById('address_province').value = placeData.province || '';
-  document.getElementById('address_postal_code').value = placeData.postalCode || '';
-  document.getElementById('address_country').value = placeData.country || 'Canada';
-  document.getElementById('address_place_id').value = placeData.placeId || '';
-  document.getElementById('address_street_number').value = placeData.streetNumber || '';
-  document.getElementById('address_street_name').value = placeData.route || '';
-  document.getElementById('address_place_types').value = Array.isArray(placeData.types) ? placeData.types.join(',') : '';
-  document.getElementById('address_latitude').value = placeData.latitude === null ? '' : String(placeData.latitude);
-  document.getElementById('address_longitude').value = placeData.longitude === null ? '' : String(placeData.longitude);
-}
-
-function initializeHomeAddressAutocomplete() {
-  const addressInput = document.getElementById('address_full');
-  if (!addressInput || !window.WorkforceAddressAutocomplete) return;
-
-  addressAutocompleteController = window.WorkforceAddressAutocomplete.createAddressAutocomplete({
-    input: addressInput,
-    value: addressInput.value,
-    onChange: function onAddressChange() {
-      addressValidated = false;
-    },
-    onPlaceSelected: function onAddressPlaceSelected(placeData) {
-      populateResolvedAddressFields(placeData);
-      addressValidated = true;
-    },
-    onValidationChange: function onAddressValidationChange(nextValue) {
-      addressValidated = !!nextValue;
-    },
-    onFallbackStateChange: function onAddressFallbackChange(state) {
-      if (state && state.active) {
-        addressValidated = false;
-      }
-    },
-    clearResolvedFields: clearResolvedAddressFields,
-    showError: function showAddressError(message) {
-      showError('address_full', message);
-    },
-    clearError: function clearAddressError() {
-      clearError('address_full');
-    },
-    warningElement: document.getElementById('warn-address_full'),
-    retryButton: document.getElementById('retry-address-autocomplete'),
-    suggestionsContainer: document.getElementById('address-suggestions'),
-    countryRestriction: 'ca',
-    placeholder: addressInput.getAttribute('placeholder') || '123 Main St, Toronto, ON',
-    required: addressInput.hasAttribute('required'),
-    diagnosticsEnabled: Boolean(window.__WORKFORCE_GOOGLE_PLACES_CONFIG__ && window.__WORKFORCE_GOOGLE_PLACES_CONFIG__.diagnosticsEnabled),
-  });
-}
-
-initializeHomeAddressAutocomplete();
-
 function validatePhone(val) {
   const digits = val.replace(/\D/g, '');
   return digits.length >= 10 && digits.length <= 11;
@@ -601,9 +540,6 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
   if (!address) { 
     showError('address_full', 'Please enter your address'); 
     valid = false; 
-  } else if (!addressValidated && !isAddressAutocompleteFallbackActive()) {
-    showError('address_full', 'Please select a valid Canadian address from the suggestions.');
-    valid = false;
   } else {
     clearError('address_full');
   }
@@ -650,7 +586,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       fullName: fullName.trim(),
       phone: phone.trim(),
       addressFull: address.trim(),
-      addressStreet: document.getElementById('address_street').value.trim(),
+      addressStreet: address.trim(),
       addressCity: document.getElementById('address_city').value.trim(),
       addressProvince: document.getElementById('address_province').value.trim(),
       addressPostalCode: document.getElementById('address_postal_code').value.trim(),
@@ -661,7 +597,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       addressPlaceTypes: document.getElementById('address_place_types').value.trim(),
       addressLatitude: document.getElementById('address_latitude').value,
       addressLongitude: document.getElementById('address_longitude').value,
-      addressManualEntry: isAddressAutocompleteFallbackActive() || !addressValidated,
+      addressManualEntry: true,
       applyingFor: applyingFor.trim(),
       jobPostingSource: source.trim(),
       photoData: String(photoData.data).trim(),

@@ -343,6 +343,10 @@
 </div>
 
 <script>
+window.__WORKFORCE_GOOGLE_PLACES_CONFIG__ = __GOOGLE_PLACES_FRONTEND_CONFIG__;
+__GOOGLE_PLACES_LOADER_SCRIPT__
+__ADDRESS_AUTOCOMPLETE_SCRIPT__
+
 // Expanded MIME types for better browser compatibility
 const PHOTO_ACCEPT = [
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
@@ -410,70 +414,8 @@ let photoData = null, resumeData = null;
 })();
 let addressValidated = false;
 let submitPending = false;
+let addressAutocompleteController = null;
 
-/**
- * ============================================
- * ADDRESS AUTOCOMPLETE MODULE
- * ============================================
- * Production-grade address autocomplete with:
- * - Real-time Google Places suggestions
- * - Quality scoring (prioritizes complete street-level addresses)
- * - Explicit error diagnostics and logging
- * - Graceful fallback to manual entry
- * - Transient/permanent failure distinction
- * 
- * Architecture:
- * 1. Suggest stage: User types → fetch /api/places/autocomplete → rank → display
- * 2. Select stage: User picks suggestion → fetch /api/places/details/{placeId} → populate fields
- * 3. Fallback: If Google unavailable (permanent or transient) → show warning, allow manual entry
- */
-
-// Configuration Constants
-const ADDRESS_AUTOCOMPLETE_CONFIG = {
-  transientRetryDelayMs: 3000,
-  minInputLength: 3,
-  maxSuggestions: 8,
-};
-
-const MANUAL_ADDRESS_WARNING_MESSAGE = 
-  'Address autocomplete is unavailable. Please enter your full address manually including city, province, and postal code.';
-
-// Failure categories that should NOT be retried (permanent failures)
-const PERMANENT_FAILURE_CATEGORIES = new Set([
-  'CONFIG_MISSING_KEY',
-  'INVALID_KEY', 
-  'API_NOT_ACTIVATED',
-  'BILLING_INACTIVE_OR_INVALID',
-  'RESTRICTION_BLOCKED',
-  'QUOTA_EXCEEDED',
-]);
-
-// State Variables
-let addressAutocompleteFallbackState = null; // null | 'transient' | 'permanent'
-let autocompleteRetryAfter = 0; // Timestamp when transient failure can retry
-let autocompleteTimer; // Debounce timer for input event
-
-// DOM Elements
-const addressInput = document.getElementById('address_full');
-const suggestionsBox = document.getElementById('address-suggestions');
-const retryAutocompleteButton = document.getElementById('retry-address-autocomplete');
-
-/**
- * Diagnostics Logger
- * All important events are logged to console with [PLACES_CLIENT] prefix for production debugging
- */
-function logPlacesClient(event, details) {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    event,
-    ...details,
-  };
-  console.info('[PLACES_CLIENT]', logEntry);
-}
-
-/**
- * Clears all resolved address fields (when user changes their input)
- */
 function clearResolvedAddressFields() {
   const fields = [
     'address_street', 'address_city', 'address_province', 'address_postal_code',
@@ -482,553 +424,10 @@ function clearResolvedAddressFields() {
   ];
   fields.forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('address_country').value = 'Canada';
-  logPlacesClient('address_fields_cleared', { reason: 'user_input_changed' });
 }
 
-/**
- * State Management: Fallback Mode
- * - null: Autocomplete working normally
- * - 'transient': Temporary failure (will retry after delay)
- * - 'permanent': Permanent failure (missing API key, invalid key, blocked, etc.)
- */
 function isAddressAutocompleteFallbackActive() {
-  return addressAutocompleteFallbackState !== null;
-}
-
-function isTransientRetryWindowActive() {
-  return addressAutocompleteFallbackState === 'transient' && Date.now() < autocompleteRetryAfter;
-}
-
-function maybeResetAddressAutocompleteFallback() {
-  if (addressAutocompleteFallbackState === 'transient' && Date.now() >= autocompleteRetryAfter) {
-    logPlacesClient('fallback_transient_retry_window_elapsed', {
-      elapsedSinceFailure: Date.now() - (autocompleteRetryAfter - ADDRESS_AUTOCOMPLETE_CONFIG.transientRetryDelayMs),
-    });
-    setAddressAutocompleteFallback(null);
-  }
-}
-
-/**
- * Determines if a failure response is permanent (don't retry)
- */
-function isPermanentFailure(responseData, httpStatus) {
-  if (responseData && typeof responseData.retryable === 'boolean') {
-    return !responseData.retryable;
-  }
-  if (!responseData || !responseData.failureCategory) {
-    return false;
-  }
-  // Never consider 429 (rate limit) as permanent
-  if (httpStatus === 429) return false;
-  return PERMANENT_FAILURE_CATEGORIES.has(String(responseData.failureCategory));
-}
-
-/**
- * Determines the fallback mode based on failure type
- * Returns: null (no fallback), 'transient' (retry later), or 'permanent' (don't retry)
- */
-function determineFallbackMode(httpStatus, responseData) {
-  const shouldFallback = httpStatus >= 500 || httpStatus === 429 || isPermanentFailure(responseData, httpStatus);
-  if (!shouldFallback) return null;
-  return isPermanentFailure(responseData, httpStatus) ? 'permanent' : 'transient';
-}
-
-/**
- * Parses API response JSON with error handling
- */
-async function parsePlacesResponseJson(response, context) {
-  try {
-    return await response.json();
-  } catch (error) {
-    logPlacesClient('response_parse_failure', {
-      context,
-      status: response.status,
-      failureReason: error instanceof Error ? error.message : String(error),
-    });
-    return {};
-  }
-}
-
-/**
- * Extracts user-friendly error message from response
- */
-function getAddressLookupErrorMessage(responseData, fallback) {
-  return (responseData && (responseData.error || responseData.detail)) || fallback;
-}
-
-/**
- * Sets fallback mode with explicit diagnostics
- * Shows warning message to user when autocomplete unavailable
- * 
- * Mode values:
- * - null: Restore normal autocomplete (clear warning)
- * - 'transient': Temporary failure (show warning + retry button), retry after delay
- * - 'permanent': Permanent failure (show warning, no retry button), don't retry
- */
-function setAddressAutocompleteFallback(mode, message = null, metadata = {}) {
-  addressAutocompleteFallbackState = mode;
-  const warningEl = document.getElementById('warn-address_full');
-  if (!warningEl) return;
-
-  if (mode) {
-    // Enable fallback mode
-    const displayMessage = message || MANUAL_ADDRESS_WARNING_MESSAGE;
-    if (mode === 'transient') {
-      autocompleteRetryAfter = Date.now() + ADDRESS_AUTOCOMPLETE_CONFIG.transientRetryDelayMs;
-    } else {
-      autocompleteRetryAfter = 0;
-    }
-    
-    logPlacesClient('fallback_activated', {
-      mode,
-      message: displayMessage.substring(0, 60),
-      retryAfterMs: mode === 'transient' ? ADDRESS_AUTOCOMPLETE_CONFIG.transientRetryDelayMs : null,
-      reason: metadata.reason || 'unknown',
-      failureCategory: metadata.failureCategory,
-      failureStage: metadata.failureStage,
-      httpStatus: metadata.httpStatus,
-    });
-    
-    warningEl.textContent = displayMessage;
-    if (retryAutocompleteButton) {
-      retryAutocompleteButton.classList.toggle('show', mode === 'transient');
-    }
-    warningEl.classList.add('show');
-    clearError('address_full');
-  } else {
-    // Disable fallback mode
-    logPlacesClient('fallback_deactivated', { reason: metadata.reason || 'unknown' });
-    autocompleteRetryAfter = 0;
-    warningEl.textContent = '';
-    warningEl.classList.remove('show');
-    if (retryAutocompleteButton) {
-      retryAutocompleteButton.classList.remove('show');
-    }
-  }
-}
-
-/**
- * INPUT EVENT HANDLING
- * Debounces user input and fetches suggestions with at least 3 characters
- */
-addressInput.addEventListener('input', () => {
-  addressValidated = false;
-  clearResolvedAddressFields();
-  clearTimeout(autocompleteTimer);
-  
-  const value = addressInput.value.trim();
-  const length = value.length;
-  
-  logPlacesClient('address_input_change', { length });
-
-  // Clear suggestions if input is too short
-  if (length < ADDRESS_AUTOCOMPLETE_CONFIG.minInputLength) {
-    clearError('address_full');
-    suggestionsBox.innerHTML = '';
-    suggestionsBox.classList.remove('open');
-    return;
-  }
-
-  // Try to reset transient fallback if enough time has passed
-  maybeResetAddressAutocompleteFallback();
-  clearError('address_full');
-
-  // Debounce the fetch request (300ms)
-  autocompleteTimer = setTimeout(() => fetchSuggestions(value), 300);
-});
-
-/**
- * FOCUS EVENT HANDLING
- * Shows suggestions when user focuses on the field (if they previously typed something)
- */
-addressInput.addEventListener('focus', () => {
-  const value = addressInput.value.trim();
-  if (value.length < ADDRESS_AUTOCOMPLETE_CONFIG.minInputLength) return;
-  if (!isAddressAutocompleteFallbackActive()) {
-    clearTimeout(autocompleteTimer);
-    // Shorter debounce on focus (150ms)
-    autocompleteTimer = setTimeout(() => fetchSuggestions(value), 150);
-  }
-});
-
-/**
- * BLUR EVENT HANDLING
- * Closes suggestions when user leaves the field
- */
-addressInput.addEventListener('blur', () => {
-  setTimeout(() => suggestionsBox.classList.remove('open'), 200);
-});
-
-/**
- * RETRY BUTTON HANDLER
- * Allows user to manually retry after a transient failure
- */
-if (retryAutocompleteButton) {
-  retryAutocompleteButton.addEventListener('click', () => {
-    const value = addressInput.value.trim();
-    if (value.length < ADDRESS_AUTOCOMPLETE_CONFIG.minInputLength) return;
-    
-    logPlacesClient('retry_button_clicked', { inputLength: value.length });
-    setAddressAutocompleteFallback(null, null, { reason: 'user_retry' });
-    clearTimeout(autocompleteTimer);
-    fetchSuggestions(value);
-  });
-}
-
-/**
- * AUTOCOMPLETE SUGGESTION FETCHING
- * Calls backend /api/places/autocomplete endpoint
- * Backend handles Google Places API interaction and quality scoring
- */
-async function fetchSuggestions(input) {
-  logPlacesClient('suggestions_fetch_start', { inputLength: input.length, input: input.substring(0, 50) });
-  
-  try {
-    const url = `/api/places/autocomplete?input=${encodeURIComponent(input)}&country=CA`;
-    const response = await fetch(url);
-    const data = await parsePlacesResponseJson(response, 'autocomplete');
-
-    logPlacesClient('suggestions_fetch_complete', {
-      status: response.status,
-      ok: response.ok,
-      predictionsCount: Array.isArray(data.predictions) ? data.predictions.length : 0,
-      failureCategory: data.failureCategory || null,
-      failureStage: data.failureStage || null,
-    });
-
-    if (!response.ok) {
-      const errorMsg = getAddressLookupErrorMessage(data, MANUAL_ADDRESS_WARNING_MESSAGE);
-      suggestionsBox.innerHTML = '';
-      suggestionsBox.classList.remove('open');
-
-      // Determine if we should fall back to manual entry
-      const fallbackMode = determineFallbackMode(response.status, data);
-      if (fallbackMode) {
-        logPlacesClient('suggestions_fallback_needed', {
-          status: response.status,
-          fallbackMode,
-          failureCategory: data.failureCategory,
-        });
-        setAddressAutocompleteFallback(fallbackMode, MANUAL_ADDRESS_WARNING_MESSAGE, {
-          reason: `autocomplete_http_${response.status}`,
-          failureCategory: data.failureCategory,
-          failureStage: data.failureStage,
-          httpStatus: response.status,
-        });
-      } else {
-        showError('address_full', errorMsg);
-      }
-      return;
-    }
-
-    // Success - clear any previous fallback state
-    setAddressAutocompleteFallback(null, null, { reason: 'suggestions_fetch_success' });
-
-    // Rank and display predictions
-    const predictions = data.predictions || [];
-    const rankedPredictions = rankPredictions(predictions);
-
-    if (rankedPredictions.length === 0) {
-      logPlacesClient('suggestions_no_results', { input, totalPredictions: predictions.length });
-      showError('address_full', 'No valid Canadian addresses found.');
-      displaySuggestionsMessage('No valid Canadian addresses found.');
-      return;
-    }
-
-    clearError('address_full');
-    logPlacesClient('suggestions_render_start', { count: rankedPredictions.length });
-    renderSuggestions(rankedPredictions);
-  } catch (error) {
-    logPlacesClient('suggestions_fetch_exception', {
-      errorName: error instanceof Error ? error.name : 'Unknown',
-      errorMessage: error instanceof Error ? error.message : String(error),
-    });
-
-    suggestionsBox.innerHTML = '';
-    suggestionsBox.classList.remove('open');
-    setAddressAutocompleteFallback('transient', MANUAL_ADDRESS_WARNING_MESSAGE, {
-      reason: 'autocomplete_exception',
-      failureCategory: 'PROXY_FETCH_FAILURE',
-      failureStage: 'client_fetch',
-      httpStatus: null,
-    });
-  }
-}
-
-/**
- * Display a message in the suggestions box (e.g., "No results found")
- */
-function displaySuggestionsMessage(message) {
-  suggestionsBox.innerHTML = `<div class="suggestion-message">${message}</div>`;
-  suggestionsBox.classList.add('open');
-}
-
-/**
- * Render predicted addresses in the suggestions dropdown
- */
-function renderSuggestions(predictions) {
-  suggestionsBox.innerHTML = '';
-  predictions.forEach(prediction => {
-    const item = document.createElement('div');
-    item.className = 'suggestion-item';
-    item.textContent = prediction.description;
-    
-    // Handle both mouse and touch interactions
-    item.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      selectPlace(prediction.place_id, prediction.description);
-    });
-    item.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      selectPlace(prediction.place_id, prediction.description);
-    });
-    
-    suggestionsBox.appendChild(item);
-  });
-  suggestionsBox.classList.add('open');
-  logPlacesClient('suggestions_rendered', { count: predictions.length });
-}
-
-/**
- * Close suggestions dropdown
- */
-function hideSuggestions() {
-  suggestionsBox.classList.remove('open');
-}
-
-/**
- * PREDICTION RANKING ENGINE
- * Sorts suggestions to prioritize complete street-level Canadian addresses
- * 
- * Scoring prioritizes:
- * - Street addresses (has street number + name + city + province)
- * - Complete postal code
- * - Avoids vague results (e.g., "Dundas, Canada")
- */
-
-function normalizeSuggestionText(value) {
-  return typeof value === 'string' 
-    ? value.trim().toLowerCase().replace(/\s+/g, ' ')
-    : '';
-}
-
-/**
- * Scores a single prediction based on address completeness
- * Returns scored prediction with quality metrics
- */
-function scorePrediction(prediction) {
-  const description = prediction?.description || '';
-  const mainText = prediction?.structured_formatting?.main_text || description.split(',')[0] || '';
-  const secondaryText = prediction?.structured_formatting?.secondary_text || description.split(',').slice(1).join(',');
-  const types = Array.isArray(prediction?.types) ? prediction.types : [];
-
-  // Analyze address components
-  const hasStreetNumber = /^\d+[A-Za-z]?\b/.test(mainText.trim());
-  const hasStreetName = /[A-Za-z]/.test(mainText.replace(/^\d+[A-Za-z]?\b\s*/, ''));
-  const hasProvince = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/i.test(secondaryText);
-  const hasPostalCode = /\b[A-Za-z]\d[A-Za-z][\s-]?\d[A-Za-z]\d\b/.test(description);
-  const segments = secondaryText.split(',').map((part) => part.trim()).filter(Boolean);
-  const hasCity = segments.length >= 2;
-  const isVague = /,\s*canada$/i.test(description) && !hasProvince;
-
-  // Calculate quality score (higher is better)
-  let score = typeof prediction?.qualityScore === 'number' ? prediction.qualityScore : 0;
-  if (hasStreetNumber) score += 40;
-  if (hasStreetName) score += 25;
-  if (hasCity) score += 20;
-  if (hasProvince) score += 20;
-  if (hasPostalCode) score += 10;
-  if (types.includes('street_address')) score += 40;
-  if (types.includes('premise')) score += 20;
-  if (types.includes('route') && !hasStreetNumber) score -= 35;
-  if (isVague) score -= 80;
-
-  return {
-    ...prediction,
-    _quality: {
-      score,
-      hasStreetNumber,
-      hasStreetName,
-      hasCity,
-      hasProvince,
-      isVague,
-    },
-  };
-}
-
-/**
- * Ranks predictions by quality score
- * Steps:
- * 1. Score each prediction
- * 2. If complete addresses exist, filter out vague ones
- * 3. Deduplicate by description
- * 4. Sort by score descending
- * 5. Return top 8
- */
-function rankPredictions(predictions) {
-  if (!Array.isArray(predictions)) return [];
-
-  // Score all predictions
-  const scored = predictions
-    .filter((p) => p?.place_id && p?.description)
-    .map(scorePrediction);
-
-  logPlacesClient('rankPredictions:scored', { count: scored.length });
-
-  // Check how many have complete addresses
-  const hasComplete = scored.some((p) =>
-    p._quality.hasStreetNumber &&
-    p._quality.hasStreetName &&
-    p._quality.hasCity &&
-    p._quality.hasProvince,
-  );
-
-  // Filter: remove vague if we have complete ones
-  const filtered = hasComplete
-    ? scored.filter((p) => !p._quality.isVague)
-    : scored;
-
-  logPlacesClient('rankPredictions:filtered', { count: filtered.length, hasComplete });
-
-  // Deduplicate by normalized description
-  const deduped = new Map();
-  filtered.forEach((p) => {
-    const key = normalizeSuggestionText(p.description);
-    const existing = deduped.get(key);
-    if (!existing || p._quality.score > existing._quality.score) {
-      deduped.set(key, p);
-    }
-  });
-
-  logPlacesClient('rankPredictions:deduped', { count: deduped.size });
-
-  // Sort by score, take top 8, remove quality metadata
-  const result = Array.from(deduped.values())
-    .sort((a, b) => b._quality.score - a._quality.score)
-    .slice(0, ADDRESS_AUTOCOMPLETE_CONFIG.maxSuggestions)
-    .map(({ _quality, ...p }) => p);
-
-  logPlacesClient('rankPredictions:final', { count: result.length });
-  return result;
-}
-
-/**
- * PLACE SELECTION
- * User clicked on a suggestion - now fetch detailed address info
- * Calls backend /api/places/details/{placeId} endpoint
- */
-async function selectPlace(placeId, description) {
-  addressInput.value = description;
-  suggestionsBox.classList.remove('open');
-  
-  logPlacesClient('place_selection_start', { 
-    placeId: placeId.substring(0, 20),
-    description: description.substring(0, 50),
-  });
-
-  try {
-    const url = `/api/places/details/${encodeURIComponent(placeId)}`;
-    const response = await fetch(url);
-    const data = await parsePlacesResponseJson(response, 'details');
-
-    logPlacesClient('place_details_fetch_complete', {
-      status: response.status,
-      ok: response.ok,
-      country: data.country,
-      failureCategory: data.failureCategory || null,
-      failureStage: data.failureStage || null,
-    });
-
-    if (!response.ok) {
-      const errorMsg = getAddressLookupErrorMessage(data, 'Unable to validate address. Please select another suggestion.');
-      
-      // Check if we should fall back to manual entry
-      const fallbackMode = determineFallbackMode(response.status, data);
-      if (fallbackMode) {
-        logPlacesClient('place_details_fallback_needed', {
-          status: response.status,
-          fallbackMode,
-        });
-        setAddressAutocompleteFallback(fallbackMode, MANUAL_ADDRESS_WARNING_MESSAGE, {
-          reason: `details_http_${response.status}`,
-          failureCategory: data.failureCategory,
-          failureStage: data.failureStage,
-          httpStatus: response.status,
-        });
-      } else {
-        showError('address_full', errorMsg);
-      }
-      addressValidated = false;
-      clearResolvedAddressFields();
-      return;
-    }
-
-    // Validate result
-    if (data.country !== 'Canada') {
-      logPlacesClient('place_validation_failed', { reason: 'country_not_canada', country: data.country });
-      showError('address_full', 'Only Canadian addresses are accepted');
-      addressInput.value = '';
-      addressValidated = false;
-      clearResolvedAddressFields();
-      return;
-    }
-
-    // Ensure we have required fields
-    if (!data.addressLine1 || !data.city || !data.province || 
-        data.latitude === null || data.longitude === null) {
-      logPlacesClient('place_validation_failed', {
-        reason: 'incomplete_address',
-        hasAddressLine1: !!data.addressLine1,
-        hasCity: !!data.city,
-        hasProvince: !!data.province,
-        hasLatitude: data.latitude !== null,
-        hasLongitude: data.longitude !== null,
-      });
-      showError('address_full', 'Please choose a complete Canadian address suggestion.');
-      addressValidated = false;
-      clearResolvedAddressFields();
-      return;
-    }
-
-    // SUCCESS - populate all address fields
-    logPlacesClient('place_validated_success', {
-      city: data.city,
-      province: data.province,
-      hasPostalCode: !!data.postalCode,
-    });
-
-    addressInput.value = data.formattedAddress || description;
-    document.getElementById('address_street').value = data.addressLine1 || '';
-    document.getElementById('address_city').value = data.city || '';
-    document.getElementById('address_province').value = data.province || '';
-    document.getElementById('address_postal_code').value = data.postalCode || '';
-    document.getElementById('address_country').value = 'Canada';
-    document.getElementById('address_place_id').value = data.placeId || placeId || '';
-    document.getElementById('address_street_number').value = data.streetNumber || '';
-    document.getElementById('address_street_name').value = data.streetName || '';
-    document.getElementById('address_place_types').value = Array.isArray(data.types) ? data.types.join(',') : '';
-    document.getElementById('address_latitude').value = data.latitude;
-    document.getElementById('address_longitude').value = data.longitude;
-
-    setAddressAutocompleteFallback(null, null, { reason: 'place_selected_successfully' });
-    clearError('address_full');
-    addressValidated = true;
-
-  } catch (error) {
-    logPlacesClient('place_details_exception', {
-      errorName: error instanceof Error ? error.name : 'Unknown',
-      errorMessage: error instanceof Error ? error.message : String(error),
-    });
-
-    setAddressAutocompleteFallback('transient', MANUAL_ADDRESS_WARNING_MESSAGE, {
-      reason: 'details_exception',
-      failureCategory: 'PROXY_FETCH_FAILURE',
-      failureStage: 'client_fetch',
-      httpStatus: null,
-    });
-    addressValidated = false;
-    clearResolvedAddressFields();
-  }
+  return Boolean(addressAutocompleteController && addressAutocompleteController.isFallbackActive());
 }
 
 // --- FILE UPLOAD ---
@@ -1123,6 +522,62 @@ function clearError(field) {
   if (el) el.classList.remove('show');
   if (inp) inp.classList.remove('error');
 }
+
+function populateResolvedAddressFields(placeData) {
+  document.getElementById('address_full').value = placeData.formattedAddress || document.getElementById('address_full').value;
+  document.getElementById('address_street').value = placeData.addressLine1 || '';
+  document.getElementById('address_city').value = placeData.city || '';
+  document.getElementById('address_province').value = placeData.province || '';
+  document.getElementById('address_postal_code').value = placeData.postalCode || '';
+  document.getElementById('address_country').value = placeData.country || 'Canada';
+  document.getElementById('address_place_id').value = placeData.placeId || '';
+  document.getElementById('address_street_number').value = placeData.streetNumber || '';
+  document.getElementById('address_street_name').value = placeData.route || '';
+  document.getElementById('address_place_types').value = Array.isArray(placeData.types) ? placeData.types.join(',') : '';
+  document.getElementById('address_latitude').value = placeData.latitude === null ? '' : String(placeData.latitude);
+  document.getElementById('address_longitude').value = placeData.longitude === null ? '' : String(placeData.longitude);
+}
+
+function initializeHomeAddressAutocomplete() {
+  const addressInput = document.getElementById('address_full');
+  if (!addressInput || !window.WorkforceAddressAutocomplete) return;
+
+  addressAutocompleteController = window.WorkforceAddressAutocomplete.createAddressAutocomplete({
+    input: addressInput,
+    value: addressInput.value,
+    onChange: function onAddressChange() {
+      addressValidated = false;
+    },
+    onPlaceSelected: function onAddressPlaceSelected(placeData) {
+      populateResolvedAddressFields(placeData);
+      addressValidated = true;
+    },
+    onValidationChange: function onAddressValidationChange(nextValue) {
+      addressValidated = !!nextValue;
+    },
+    onFallbackStateChange: function onAddressFallbackChange(state) {
+      if (state && state.active) {
+        addressValidated = false;
+      }
+    },
+    clearResolvedFields: clearResolvedAddressFields,
+    showError: function showAddressError(message) {
+      showError('address_full', message);
+    },
+    clearError: function clearAddressError() {
+      clearError('address_full');
+    },
+    warningElement: document.getElementById('warn-address_full'),
+    retryButton: document.getElementById('retry-address-autocomplete'),
+    suggestionsContainer: document.getElementById('address-suggestions'),
+    countryRestriction: 'ca',
+    placeholder: addressInput.getAttribute('placeholder') || '123 Main St, Toronto, ON',
+    required: addressInput.hasAttribute('required'),
+    diagnosticsEnabled: Boolean(window.__WORKFORCE_GOOGLE_PLACES_CONFIG__ && window.__WORKFORCE_GOOGLE_PLACES_CONFIG__.diagnosticsEnabled),
+  });
+}
+
+initializeHomeAddressAutocomplete();
 
 function validatePhone(val) {
   const digits = val.replace(/\D/g, '');

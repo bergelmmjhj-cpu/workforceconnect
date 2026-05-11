@@ -29,6 +29,15 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function serializeForInlineScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function renderApplyTemplate(template: string): string {
   const clauseHtml = NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS
     .map((paragraph) => `<p class="clause-paragraph">${escapeHtml(paragraph)}</p>`)
@@ -37,6 +46,95 @@ function renderApplyTemplate(template: string): string {
   return template
     .replace(/__NON_SOLICITATION_TITLE__/g, escapeHtml(NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE))
     .replace(/__NON_SOLICITATION_BODY__/g, clauseHtml);
+}
+
+type FrontendGoogleMapsEnvVar =
+  | "VITE_GOOGLE_MAPS_API_KEY"
+  | "GOOGLE_MAPS_API_KEY"
+  | "GOOGLE_PLACES_API_KEY"
+  | "none";
+
+function resolveFrontendGoogleMapsConfig(): {
+  apiKey: string;
+  envVar: FrontendGoogleMapsEnvVar;
+} {
+  const viteGoogleMapsApiKey = (process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+  if (viteGoogleMapsApiKey) {
+    return {
+      apiKey: viteGoogleMapsApiKey,
+      envVar: "VITE_GOOGLE_MAPS_API_KEY",
+    };
+  }
+
+  const googleMapsApiKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
+  if (googleMapsApiKey) {
+    return {
+      apiKey: googleMapsApiKey,
+      envVar: "GOOGLE_MAPS_API_KEY",
+    };
+  }
+
+  const googlePlacesApiKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
+  if (googlePlacesApiKey) {
+    return {
+      apiKey: googlePlacesApiKey,
+      envVar: "GOOGLE_PLACES_API_KEY",
+    };
+  }
+
+  return {
+    apiKey: "",
+    envVar: "none",
+  };
+}
+
+function renderApplyFormTemplate(template: string): string {
+  const googlePlacesLoaderPath = path.resolve(
+    process.cwd(),
+    "server",
+    "templates",
+    "scripts",
+    "google-places-loader.js",
+  );
+  const addressAutocompletePath = path.resolve(
+    process.cwd(),
+    "server",
+    "templates",
+    "scripts",
+    "address-autocomplete.js",
+  );
+  const googlePlacesLoaderScript = fs.readFileSync(googlePlacesLoaderPath, "utf-8");
+  const addressAutocompleteScript = fs.readFileSync(addressAutocompletePath, "utf-8");
+  const frontendGoogleMapsConfig = resolveFrontendGoogleMapsConfig();
+
+  if (!frontendGoogleMapsConfig.apiKey) {
+    console.error(
+      "[PLACES_CLIENT] FRONTEND_CONFIG_ERROR: Missing VITE_GOOGLE_MAPS_API_KEY. " +
+        "Set VITE_GOOGLE_MAPS_API_KEY for the frontend build/runtime. " +
+        "GOOGLE_MAPS_API_KEY and GOOGLE_PLACES_API_KEY are currently accepted as legacy fallbacks.",
+    );
+  } else if (frontendGoogleMapsConfig.envVar !== "VITE_GOOGLE_MAPS_API_KEY") {
+    console.warn("[PLACES_CLIENT] FRONTEND_CONFIG_WARNING: Using legacy Google Maps API key env var fallback.", {
+      selectedEnvVar: frontendGoogleMapsConfig.envVar,
+      recommendedEnvVar: "VITE_GOOGLE_MAPS_API_KEY",
+    });
+  }
+
+  return template
+    .replace(
+      /__GOOGLE_PLACES_FRONTEND_CONFIG__/g,
+      serializeForInlineScript({
+        apiKey: frontendGoogleMapsConfig.apiKey,
+        envVar: frontendGoogleMapsConfig.envVar,
+        diagnosticsEnabled:
+          process.env.NODE_ENV !== "production" ||
+          process.env.PLACES_CLIENT_DIAGNOSTICS === "1" ||
+          process.env.DEBUG_GOOGLE_PLACES === "1",
+        scriptLoadTimeoutMs: 15000,
+      }),
+    )
+    .replace(/__GOOGLE_PLACES_LOADER_SCRIPT__/g, googlePlacesLoaderScript)
+    .replace(/__ADDRESS_AUTOCOMPLETE_SCRIPT__/g, addressAutocompleteScript);
 }
 
 function renderGuideTemplate(template: string): string {
@@ -718,7 +816,9 @@ function configureExpoAndLanding(app: express.Application) {
 
   // Serve Applicant Portal (apply.wfconnect.org)
   const applyFormPath = path.resolve(process.cwd(), "server", "templates", "apply-form.html");
-  const applyFormTemplate = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : null;
+  const applyFormTemplate = fs.existsSync(applyFormPath)
+    ? renderApplyFormTemplate(fs.readFileSync(applyFormPath, "utf-8"))
+    : null;
 
   // Serve Applicants Admin Portal (apply.wfconnect.org/applicants)
   const applicantsPortalPath = path.resolve(process.cwd(), "server", "templates", "applicants-portal.html");

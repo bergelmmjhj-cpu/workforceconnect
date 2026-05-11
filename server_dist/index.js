@@ -3076,6 +3076,11 @@ function getGooglePlacesApiKey() {
   }
   return null;
 }
+function getGooglePlacesEnvVarName() {
+  if (process.env.GOOGLE_PLACES_API_KEY) return "GOOGLE_PLACES_API_KEY";
+  if (process.env.GOOGLE_MAPS_API_KEY) return "GOOGLE_MAPS_API_KEY";
+  return "none";
+}
 function mapGooglePlacesErrorStatus(status) {
   switch (status) {
     case "OVER_QUERY_LIMIT":
@@ -3302,6 +3307,82 @@ async function fetchGooglePlaceDetails(placeId) {
     };
   }
 }
+async function probeGooglePlacesApiKey() {
+  const apiKey = getGooglePlacesApiKey();
+  const envVar = getGooglePlacesEnvVarName();
+  if (!apiKey) {
+    return { configured: false, working: null, failureCategory: "CONFIG_MISSING_KEY", errorMessage: "No API key configured", envVar };
+  }
+  const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/autocomplete/json`);
+  url.searchParams.set("input", "123 Main");
+  url.searchParams.set("components", "country:ca");
+  url.searchParams.set("types", "address");
+  url.searchParams.set("language", "en");
+  url.searchParams.set("key", apiKey);
+  try {
+    const response = await fetchWithPlacesTimeout(url);
+    const data = await response.json();
+    const status = typeof data.status === "string" ? data.status : void 0;
+    const isWorking = status === "OK" || status === "ZERO_RESULTS";
+    if (isWorking) {
+      return { configured: true, working: true, failureCategory: null, errorMessage: null, envVar };
+    }
+    const failureCategory = inferGooglePlacesFailureCategory(status, data.error_message);
+    return {
+      configured: true,
+      working: false,
+      failureCategory,
+      errorMessage: data.error_message || status || "Unknown error",
+      envVar
+    };
+  } catch (error) {
+    const isTimeout = error instanceof Error && error.name === "AbortError";
+    return {
+      configured: true,
+      working: false,
+      failureCategory: isTimeout ? "PROXY_TIMEOUT" : "PROXY_FETCH_FAILURE",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      envVar
+    };
+  }
+}
+setTimeout(async () => {
+  try {
+    const result = await probeGooglePlacesApiKey();
+    if (result.working === true) {
+      console.info("[PLACES] STARTUP_PROBE: API key is valid and Places API is responding normally.", { envVar: result.envVar });
+    } else if (!result.configured) {
+      console.error(
+        "[PLACES] STARTUP_PROBE: Google Places API key is NOT configured. Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY in your deployment environment and redeploy. Address autocomplete will fall back to manual entry until this is resolved."
+      );
+    } else {
+      let hint = "";
+      switch (result.failureCategory) {
+        case "API_NOT_ACTIVATED":
+          hint = " Ensure 'Places API' is enabled in Google Cloud Console for your project.";
+          break;
+        case "BILLING_INACTIVE_OR_INVALID":
+          hint = " Google Cloud billing must be enabled for the project linked to this API key.";
+          break;
+        case "RESTRICTION_BLOCKED":
+          hint = " The API key has HTTP referrer or IP restrictions. For server-side use, remove referrer restrictions and add the server's IP, or use an unrestricted key.";
+          break;
+        case "INVALID_KEY":
+          hint = " The API key value appears to be invalid or has been revoked. Regenerate the key in Google Cloud Console.";
+          break;
+        case "QUOTA_EXCEEDED":
+          hint = " The API quota has been exceeded. Check your Google Cloud Console quota settings.";
+          break;
+      }
+      console.error(`[PLACES] STARTUP_PROBE: API key is configured but Places API calls are failing (${result.failureCategory}).${hint}`, {
+        envVar: result.envVar,
+        errorMessage: result.errorMessage
+      });
+    }
+  } catch (err) {
+    console.error("[PLACES] STARTUP_PROBE: Unexpected error during probe.", { message: err instanceof Error ? err.message : String(err) });
+  }
+}, 5e3);
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371e3;
   const phi1 = lat1 * Math.PI / 180;
@@ -10659,6 +10740,38 @@ This report includes ${items.length} worker(s).
     } catch (error) {
       console.error("[PLACES] details:INTERNAL_ERROR", { message: error instanceof Error ? error.message : String(error) });
       res.status(500).json({ error: "Failed to fetch address details" });
+    }
+  });
+  app2.get("/api/places/health", async (req, res) => {
+    try {
+      const apiKey = getGooglePlacesApiKey();
+      const envVar = getGooglePlacesEnvVarName();
+      const keyConfigured = apiKey !== null;
+      const liveProbe = req.query.probe === "1";
+      if (!liveProbe) {
+        res.json({
+          configured: keyConfigured,
+          envVar,
+          keyLengthHint: apiKey ? apiKey.length : 0,
+          liveTest: null,
+          note: "Pass ?probe=1 to run a live API test (consumes one API quota call)."
+        });
+        return;
+      }
+      const probe = await probeGooglePlacesApiKey();
+      res.json({
+        configured: probe.configured,
+        envVar: probe.envVar,
+        keyLengthHint: apiKey ? apiKey.length : 0,
+        liveTest: {
+          working: probe.working,
+          failureCategory: probe.failureCategory,
+          errorMessage: probe.errorMessage
+        }
+      });
+    } catch (error) {
+      console.error("[PLACES] health:ERROR", { message: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: "Failed to check Places API health" });
     }
   });
   app2.get("/api/debug/whoami", (req, res) => {

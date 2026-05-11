@@ -438,6 +438,8 @@ addressInput.addEventListener('input', () => {
   clearTimeout(autocompleteTimer);
   const val = addressInput.value.trim();
   if (val.length < 3) { clearAddressLookupState(); return; }
+  // Skip autocomplete calls if the service is already known to be unavailable.
+  if (addressAutocompleteUnavailable) return;
   clearError('address_full');
   autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
 });

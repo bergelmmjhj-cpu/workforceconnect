@@ -704,5 +704,146 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
   }
 });
 </script>
+
+<script>
+// ── Address Autocomplete ────────────────────────────────────────────
+(function () {
+  var addressInput = document.getElementById('address_full');
+  if (!addressInput) return;
+
+  // Wrap input in a relative-positioned container for the dropdown
+  var wrapper = addressInput.parentNode;
+  wrapper.style.position = 'relative';
+
+  // Create dropdown element
+  var dropdown = document.createElement('div');
+  dropdown.className = 'suggestions';
+  dropdown.style.display = 'none';
+  addressInput.insertAdjacentElement('afterend', dropdown);
+
+  var debounceTimer = null;
+  var activeIndex = -1;
+  var currentPredictions = [];
+
+  function setVal(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.value = val || '';
+  }
+
+  function clearHiddenFields() {
+    setVal('address_street', '');
+    setVal('address_city', '');
+    setVal('address_province', '');
+    setVal('address_postal_code', '');
+    setVal('address_place_id', '');
+    setVal('address_street_number', '');
+    setVal('address_street_name', '');
+    setVal('address_place_types', '');
+  }
+
+  function hideDropdown() {
+    dropdown.style.display = 'none';
+    dropdown.innerHTML = '';
+    activeIndex = -1;
+    currentPredictions = [];
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderPredictions(predictions) {
+    dropdown.innerHTML = '';
+    if (!predictions || predictions.length === 0) { hideDropdown(); return; }
+    currentPredictions = predictions;
+    predictions.forEach(function (pred, i) {
+      var item = document.createElement('div');
+      item.className = 'suggestion-item';
+      var sf = pred.structured_formatting || {};
+      var main = sf.main_text || pred.description;
+      var secondary = sf.secondary_text || '';
+      item.innerHTML =
+        '<span style="font-weight:600">' + escapeHtml(main) + '</span>' +
+        (secondary ? ' <span style="color:#6b7280;font-size:13px">' + escapeHtml(secondary) + '</span>' : '');
+      item.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        selectPrediction(pred);
+      });
+      dropdown.appendChild(item);
+    });
+    dropdown.style.display = 'block';
+    activeIndex = -1;
+  }
+
+  function selectPrediction(pred) {
+    addressInput.value = pred.description;
+    clearHiddenFields();
+    setVal('address_place_id', pred.place_id);
+    setVal('address_place_types', (pred.types || []).join(','));
+    hideDropdown();
+    fetch('/api/places/details/' + encodeURIComponent(pred.place_id))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && !d.error) {
+          setVal('address_street', d.addressLine1 || '');
+          setVal('address_city', d.city || '');
+          setVal('address_province', d.province || '');
+          setVal('address_postal_code', d.postalCode || '');
+          setVal('address_street_number', d.streetNumber || '');
+          setVal('address_street_name', d.streetName || '');
+          if (d.formattedAddress) addressInput.value = d.formattedAddress;
+        }
+      })
+      .catch(function () {});
+  }
+
+  function fetchSuggestions(val) {
+    if (!val || val.trim().length < 3) { hideDropdown(); return; }
+    fetch('/api/places/autocomplete?input=' + encodeURIComponent(val.trim()))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && Array.isArray(data.predictions)) {
+          renderPredictions(data.predictions);
+        } else {
+          hideDropdown();
+        }
+      })
+      .catch(function () { hideDropdown(); });
+  }
+
+  addressInput.addEventListener('input', function () {
+    clearHiddenFields();
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function () {
+      fetchSuggestions(addressInput.value);
+    }, 300);
+  });
+
+  addressInput.addEventListener('keydown', function (e) {
+    var items = dropdown.querySelectorAll('.suggestion-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, items.length - 1);
+      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+    } else if (e.key === 'Enter' && activeIndex >= 0) {
+      e.preventDefault();
+      if (currentPredictions[activeIndex]) selectPrediction(currentPredictions[activeIndex]);
+    } else if (e.key === 'Escape') {
+      hideDropdown();
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!wrapper.contains(e.target)) hideDropdown();
+  });
+})();
+</script>
 </body>
 </html>

@@ -97,7 +97,8 @@ test('HTML template JavaScript has balanced braces', () => {
   if (!scriptMatch) throw new Error('Script tag not found');
 
   let braceCount = 0;
-  for (const char of scriptMatch[0]) {
+  for (let index = 0; index < scriptMatch[0].length; index += 1) {
+    const char = scriptMatch[0][index];
     if (char === '{') braceCount++;
     if (char === '}') braceCount--;
   }

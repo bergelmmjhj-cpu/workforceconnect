@@ -246,10 +246,23 @@
       };
 
       global.gm_authFailure = function onGoogleMapsAuthFailure() {
-        log("error", "api_key_rejected", {
+        const detectedError = extractGoogleMapsErrorReason() || {
+          reason: "api_key_rejected",
+          retryable: false,
+          diagnosticMessage:
+            "Google Maps JavaScript API authentication failed. This can be caused by an invalid API key, billing issues, or referrer/domain restrictions.",
+        };
+        log("error", detectedError.reason, {
           hostname: global.location ? global.location.hostname : "",
           envVar: config.envVar || "none",
+          diagnosticMessage: detectedError.diagnosticMessage || null,
         });
+        settle(
+          createFailure(detectedError.reason, Object.assign({
+            hostname: global.location ? global.location.hostname : "",
+            envVar: config.envVar || "none",
+          }, detectedError)),
+        );
       };
 
       if (!script) {

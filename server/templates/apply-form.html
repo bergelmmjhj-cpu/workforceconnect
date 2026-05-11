@@ -428,7 +428,6 @@ function clearResolvedAddressFields() {
 }
 
 addressInput.addEventListener('input', () => {
-  if (window._addressAutofilling) return;
   clearResolvedAddressFields();
   clearError('address_full');
 });
@@ -794,7 +793,11 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
           setVal('address_postal_code', d.postalCode || '');
           setVal('address_street_number', d.streetNumber || '');
           setVal('address_street_name', d.streetName || '');
-          if (d.formattedAddress) addressInput.value = d.formattedAddress;
+          if (d.formattedAddress) {
+            window._addressAutofilling = true;
+            addressInput.value = d.formattedAddress;
+            window._addressAutofilling = false;
+          }
         }
       })
       .catch(function () {});

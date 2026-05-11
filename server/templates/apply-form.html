@@ -410,6 +410,13 @@ let photoData = null, resumeData = null;
 let submitPending = false;
 const addressInput = document.getElementById('address_full');
 
+function parseCoordinate(id) {
+  const val = document.getElementById(id).value.trim();
+  if (!val) return null;
+  const num = parseFloat(val);
+  return Number.isFinite(num) ? num : null;
+}
+
 function clearResolvedAddressFields() {
   const fields = [
     'address_street', 'address_city', 'address_province', 'address_postal_code',
@@ -595,8 +602,8 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       addressStreetNumber: document.getElementById('address_street_number').value.trim(),
       addressStreetName: document.getElementById('address_street_name').value.trim(),
       addressPlaceTypes: document.getElementById('address_place_types').value.trim(),
-      addressLatitude: document.getElementById('address_latitude').value,
-      addressLongitude: document.getElementById('address_longitude').value,
+      addressLatitude: parseCoordinate('address_latitude'),
+      addressLongitude: parseCoordinate('address_longitude'),
       addressManualEntry: true,
       applyingFor: applyingFor.trim(),
       jobPostingSource: source.trim(),

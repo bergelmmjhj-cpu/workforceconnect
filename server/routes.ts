@@ -1263,42 +1263,135 @@ function coordinateSchema(min: number, max: number, label: string) {
   ]);
 }
 
+const optionalTrimmedStringSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string") {
+    const normalized = normalizeWhitespace(value);
+    return normalized.length > 0 ? normalized : undefined;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return value;
+}, z.string().optional());
+
+const requiredTrimmedStringSchema = z.preprocess((value) => {
+  if (typeof value === "string") return normalizeWhitespace(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return value;
+}, z.string().trim().min(1));
+
+const optionalNonNegativeIntSchema = z.preprocess((value) => {
+  if (value === null || value === undefined || value === "") return undefined;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) return undefined;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+  return value;
+}, z.number().int().nonnegative().optional());
+
 const publicApplicantSubmissionSchema = z.object({
-  fullName: z.string().trim().min(1).optional(),
-  full_name: z.string().trim().min(1).optional(),
-  firstName: z.string().trim().min(1).optional(),
-  first_name: z.string().trim().min(1).optional(),
-  lastName: z.string().trim().min(1).optional(),
-  last_name: z.string().trim().min(1).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().trim().min(1).optional(),
-  phoneNumber: z.string().trim().min(1).optional(),
-  phone_number: z.string().trim().min(1).optional(),
-  mobile: z.string().trim().min(1).optional(),
-  contactNumber: z.string().trim().min(1).optional(),
-  addressFull: z.string().trim().min(1),
-  addressStreet: z.string().optional(),
-  addressCity: z.string().optional(),
-  addressProvince: z.string().optional(),
-  addressPostalCode: z.string().optional(),
-  addressCountry: z.string().optional(),
+  fullName: optionalTrimmedStringSchema,
+  full_name: optionalTrimmedStringSchema,
+  firstName: optionalTrimmedStringSchema,
+  first_name: optionalTrimmedStringSchema,
+  lastName: optionalTrimmedStringSchema,
+  last_name: optionalTrimmedStringSchema,
+  email: z.preprocess((value) => {
+    if (value === null || value === undefined || value === "") return undefined;
+    if (typeof value !== "string") return value;
+    return value.trim().toLowerCase();
+  }, z.string().email().optional()),
+  phone: optionalTrimmedStringSchema,
+  phoneNumber: optionalTrimmedStringSchema,
+  phone_number: optionalTrimmedStringSchema,
+  mobile: optionalTrimmedStringSchema,
+  contactNumber: optionalTrimmedStringSchema,
+  addressFull: requiredTrimmedStringSchema,
+  addressStreet: optionalTrimmedStringSchema,
+  addressCity: optionalTrimmedStringSchema,
+  addressProvince: optionalTrimmedStringSchema,
+  addressPostalCode: optionalTrimmedStringSchema,
+  addressCountry: optionalTrimmedStringSchema,
   addressLatitude: coordinateSchema(-90, 90, "Latitude").optional(),
   addressLongitude: coordinateSchema(-180, 180, "Longitude").optional(),
   addressManualEntry: z.boolean().optional(),
-  applyingFor: z.string().trim().min(1),
-  jobPostingSource: z.string().trim().min(1),
-  photoData: z.string().trim().min(1),
-  photoFilename: z.string().optional(),
-  photoMimeType: z.string().optional(),
-  photoFileSize: z.number().int().nonnegative().optional(),
-  resumeData: z.string().trim().min(1),
-  resumeFilename: z.string().optional(),
-  resumeMimeType: z.string().optional(),
-  resumeFileSize: z.number().int().nonnegative().optional(),
+  applyingFor: requiredTrimmedStringSchema,
+  jobPostingSource: requiredTrimmedStringSchema,
+  photoData: requiredTrimmedStringSchema,
+  photoFilename: optionalTrimmedStringSchema,
+  photoMimeType: optionalTrimmedStringSchema,
+  photoFileSize: optionalNonNegativeIntSchema,
+  resumeData: requiredTrimmedStringSchema,
+  resumeFilename: optionalTrimmedStringSchema,
+  resumeMimeType: optionalTrimmedStringSchema,
+  resumeFileSize: optionalNonNegativeIntSchema,
   smsConsent: consentLikeSchema.optional(),
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
-}).strict();
+}).strip();
+
+function pickFirstPresent(source: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const value = source[key];
+      if (value !== undefined && value !== null) {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
+
+function normalizePublicApplicantSubmissionPayload(input: unknown): Record<string, unknown> {
+  const source =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+
+  const photoData = pickFirstPresent(source, ["photoData", "photo_data"]);
+  const resumeData = pickFirstPresent(source, ["resumeData", "resume_data"]);
+
+  return {
+    fullName: pickFirstPresent(source, ["fullName", "full_name", "name"]),
+    full_name: pickFirstPresent(source, ["full_name"]),
+    firstName: pickFirstPresent(source, ["firstName", "first_name"]),
+    first_name: pickFirstPresent(source, ["first_name"]),
+    lastName: pickFirstPresent(source, ["lastName", "last_name"]),
+    last_name: pickFirstPresent(source, ["last_name"]),
+    email: pickFirstPresent(source, ["email", "emailAddress", "email_address"]),
+    phone: pickFirstPresent(source, ["phone", "phoneNumber", "phone_number", "mobile", "contactNumber"]),
+    phoneNumber: pickFirstPresent(source, ["phoneNumber"]),
+    phone_number: pickFirstPresent(source, ["phone_number"]),
+    mobile: pickFirstPresent(source, ["mobile"]),
+    contactNumber: pickFirstPresent(source, ["contactNumber", "contact_number"]),
+    addressFull: pickFirstPresent(source, ["addressFull", "address_full", "address"]),
+    addressStreet: pickFirstPresent(source, ["addressStreet", "address_street", "street", "addressLine1"]),
+    addressCity: pickFirstPresent(source, ["addressCity", "address_city", "city"]),
+    addressProvince: pickFirstPresent(source, ["addressProvince", "address_province", "province", "state"]),
+    addressPostalCode: pickFirstPresent(source, ["addressPostalCode", "address_postal_code", "postalCode", "postal_code", "zip", "zipCode"]),
+    addressCountry: pickFirstPresent(source, ["addressCountry", "address_country", "country"]),
+    addressLatitude: pickFirstPresent(source, ["addressLatitude", "address_latitude", "latitude", "lat"]),
+    addressLongitude: pickFirstPresent(source, ["addressLongitude", "address_longitude", "longitude", "lng", "lon"]),
+    addressManualEntry: pickFirstPresent(source, ["addressManualEntry", "address_manual_entry", "manualAddressEntry"]),
+    applyingFor: pickFirstPresent(source, ["applyingFor", "applying_for", "position", "role"]),
+    jobPostingSource: pickFirstPresent(source, ["jobPostingSource", "job_posting_source", "applicationSource", "source"]),
+    photoData,
+    photoFilename: pickFirstPresent(source, ["photoFilename", "photo_filename"]),
+    photoMimeType: pickFirstPresent(source, ["photoMimeType", "photo_mime_type"]),
+    photoFileSize: pickFirstPresent(source, ["photoFileSize", "photo_file_size"]),
+    resumeData,
+    resumeFilename: pickFirstPresent(source, ["resumeFilename", "resume_filename"]),
+    resumeMimeType: pickFirstPresent(source, ["resumeMimeType", "resume_mime_type"]),
+    resumeFileSize: pickFirstPresent(source, ["resumeFileSize", "resume_file_size"]),
+    smsConsent: pickFirstPresent(source, ["smsConsent", "sms_consent", "consentToContact", "consent_to_contact"]),
+    marketingConsent: pickFirstPresent(source, ["marketingConsent", "marketing_consent"]),
+    promotionalConsent: pickFirstPresent(source, ["promotionalConsent", "promotional_consent", "marketingConsent", "marketing_consent"]),
+  };
+}
 
 function isConsentGranted(value: unknown): boolean {
   if (typeof value === "boolean") return value;
@@ -6116,12 +6209,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public submission — no auth required
   app.post("/api/applicants", async (req: Request, res: Response) => {
     try {
-      const parsedPayload = publicApplicantSubmissionSchema.safeParse(req.body ?? {});
+      const normalizedBody = normalizePublicApplicantSubmissionPayload(req.body ?? {});
+      const parsedPayload = publicApplicantSubmissionSchema.safeParse(normalizedBody);
       if (!parsedPayload.success) {
         const validationIssues = formatValidationIssues(parsedPayload.error.issues);
         console.error(
           "[APPLICANTS] Payload validation failed — missing/invalid fields:",
-          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; ")
+          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; "),
+          "| raw keys:",
+          Object.keys(req.body ?? {})
         );
         return res.status(400).json({
           error: "Invalid submission payload",

@@ -212,8 +212,6 @@ var init_schema = __esm({
       cityProvince: text("city_province"),
       serviceNeeded: text("service_needed"),
       message: text("message").notNull(),
-      smsConsent: boolean("sms_consent").notNull().default(false),
-      smsConsentAt: timestamp("sms_consent_at"),
       ip: text("ip"),
       userAgent: text("user_agent"),
       createdAt: timestamp("created_at").defaultNow().notNull()
@@ -287,8 +285,6 @@ var init_schema = __esm({
       internalPdfGeneratedAt: timestamp("internal_pdf_generated_at"),
       privacyConsent: boolean("privacy_consent").default(false),
       consentToContact: boolean("consent_to_contact").default(false),
-      smsConsent: boolean("sms_consent").notNull().default(false),
-      smsConsentAt: timestamp("sms_consent_at"),
       promotionalConsent: boolean("promotional_consent").notNull().default(false),
       marketingConsent: boolean("marketing_consent").default(false),
       // Operations workflow
@@ -918,8 +914,6 @@ var init_schema = __esm({
       addressProvince: text("address_province"),
       addressPostalCode: text("address_postal_code"),
       addressCountry: text("address_country").default("Canada"),
-      addressLatitude: doublePrecision("address_latitude"),
-      addressLongitude: doublePrecision("address_longitude"),
       applyingFor: text("applying_for").notNull(),
       jobPostingSource: text("job_posting_source").notNull(),
       photoData: text("photo_data"),
@@ -932,10 +926,6 @@ var init_schema = __esm({
       resumeFilename: text("resume_filename"),
       resumeMimeType: text("resume_mime_type"),
       resumeFileSize: integer("resume_file_size"),
-      smsConsent: boolean("sms_consent").notNull().default(false),
-      smsConsentAt: timestamp("sms_consent_at"),
-      marketingConsent: boolean("marketing_consent").notNull().default(false),
-      marketingConsentAt: timestamp("marketing_consent_at"),
       promotionalConsent: boolean("promotional_consent").default(false),
       status: text("status").notNull().default("new"),
       // new, reviewing, interviewed, hired, rejected
@@ -2722,8 +2712,7 @@ function resolveAcknowledgmentFields(sourceInput) {
     consentToContact: toBoolean(source.consentToContact ?? source.consent_to_contact ?? source.consentOperationalMessages),
     nonSolicitationAcknowledged: toBoolean(source.nonSolicitationAcknowledged ?? source.non_solicitation_acknowledged),
     marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
-    paymentTermsAcknowledged: toBoolean(source.paymentTermsAcknowledged ?? source.payment_terms_acknowledged),
-    smsConsent: toBoolean(source.smsConsent ?? source.sms_consent)
+    paymentTermsAcknowledged: toBoolean(source.paymentTermsAcknowledged ?? source.payment_terms_acknowledged)
   };
 }
 var missingPaymentWarnings = /* @__PURE__ */ new Set();
@@ -2774,8 +2763,7 @@ function resolveAcknowledgmentFieldsForPdf(sourceInput) {
     nonSolicitationAcknowledged: resolveRequired(rawNonSolicitation),
     // marketingConsent is optional — never infer, always use stored value only
     marketingConsent: toBoolean(source.marketingConsent ?? source.marketing_consent ?? source.promotionalConsent ?? source.promotional_consent),
-    paymentTermsAcknowledged: resolveRequired(rawPaymentTerms),
-    smsConsent: toBoolean(source.smsConsent ?? source.sms_consent)
+    paymentTermsAcknowledged: resolveRequired(rawPaymentTerms)
   };
 }
 
@@ -3002,405 +2990,37 @@ function parseLocalAddress(input) {
     longitude: null
   };
 }
-var GOOGLE_PLACES_API_BASE_URL = "https://maps.googleapis.com/maps/api/place";
-var MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH = 3;
-var PLACES_FETCH_TIMEOUT_MS = 8e3;
-var GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
-var CANADIAN_PLACE_DETAIL_PROVINCE_TYPES = ["administrative_area_level_1"];
-var CANADIAN_PLACE_DETAIL_CITY_TYPES = [
-  "locality",
-  "postal_town",
-  "administrative_area_level_3",
-  "sublocality_level_1"
-];
-function inferGooglePlacesFailureCategory(status, errorMessage) {
-  const message = (errorMessage || "").toLowerCase();
-  if (status === "REQUEST_DENIED") {
-    if (message.includes("api key not valid") || message.includes("invalid api key") || message.includes("invalid key")) {
-      return "INVALID_KEY";
-    }
-    if (message.includes("not authorized to use this api") || message.includes("api has not been used") || message.includes("api not activated") || message.includes("is not enabled")) {
-      return "API_NOT_ACTIVATED";
-    }
-    if (message.includes("billing") || message.includes("payment") || message.includes("billing account")) {
-      return "BILLING_INACTIVE_OR_INVALID";
-    }
-    if (message.includes("referer") || message.includes("referrer") || message.includes("ip address") || message.includes("restriction") || message.includes("not allowed")) {
-      return "RESTRICTION_BLOCKED";
-    }
-    return "REQUEST_DENIED";
+function buildLocalAddressPredictions(input) {
+  const trimmed = normalizeAddressText(input);
+  if (trimmed.length < 2) {
+    return [];
   }
-  if (status === "OVER_QUERY_LIMIT") {
-    return "QUOTA_EXCEEDED";
+  const parsed = parseLocalAddress(trimmed);
+  const candidates = /* @__PURE__ */ new Set();
+  if (parsed.formattedAddress) {
+    candidates.add(parsed.formattedAddress);
   }
-  if (status === "INVALID_REQUEST") {
-    return "INVALID_REQUEST";
+  candidates.add(trimmed);
+  if (!/canada$/i.test(trimmed)) {
+    candidates.add(`${trimmed}, Canada`);
   }
-  return "UPSTREAM_ERROR";
-}
-var NON_RETRYABLE_GOOGLE_PLACES_FAILURE_CATEGORIES = /* @__PURE__ */ new Set([
-  "CONFIG_MISSING_KEY",
-  "INVALID_KEY",
-  "API_NOT_ACTIVATED",
-  "BILLING_INACTIVE_OR_INVALID",
-  "RESTRICTION_BLOCKED"
-]);
-function isGooglePlacesFailureRetryable(failureCategory, failureStage) {
-  if (failureStage === "missing_api_key") return false;
-  if (!failureCategory) return true;
-  return !NON_RETRYABLE_GOOGLE_PLACES_FAILURE_CATEGORIES.has(failureCategory);
-}
-async function fetchWithPlacesTimeout(url) {
-  const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), PLACES_FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, { signal: abortController.signal });
-  } finally {
-    clearTimeout(timeout);
+  if (parsed.addressLine1 && parsed.city) {
+    candidates.add([parsed.addressLine1, parsed.city, parsed.province, "Canada"].filter(Boolean).join(", "));
   }
-}
-function resolveGooglePlacesApiKeyConfig() {
-  const placesKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
-  if (placesKey) {
-    return { apiKey: placesKey, envVar: "GOOGLE_PLACES_API_KEY" };
-  }
-  const mapsKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
-  if (mapsKey) {
-    return { apiKey: mapsKey, envVar: "GOOGLE_MAPS_API_KEY" };
-  }
-  return { apiKey: null, envVar: "none" };
-}
-var initialPlacesConfig = resolveGooglePlacesApiKeyConfig();
-console.info("[PLACES] API_KEY_DIAGNOSTIC", {
-  googlePlacesKeyExists: (process.env.GOOGLE_PLACES_API_KEY || "").trim().length > 0,
-  googleMapsKeyExists: (process.env.GOOGLE_MAPS_API_KEY || "").trim().length > 0,
-  selectedEnvVar: initialPlacesConfig.envVar,
-  keyLength: initialPlacesConfig.apiKey?.length || 0
-});
-var _placesApiKeyMissingLogged = false;
-var _placesLegacyKeyUsageLogged = false;
-function getGooglePlacesApiKey() {
-  const resolved = resolveGooglePlacesApiKeyConfig();
-  if (resolved.apiKey) {
-    if (resolved.envVar === "GOOGLE_MAPS_API_KEY") {
-      if (!_placesLegacyKeyUsageLogged) {
-        _placesLegacyKeyUsageLogged = true;
-        console.warn("[PLACES] CONFIG_WARNING: Using fallback GOOGLE_MAPS_API_KEY. Prefer GOOGLE_PLACES_API_KEY to avoid environment-name mismatches.");
-      }
-    }
-    return resolved.apiKey;
-  }
-  if (!_placesApiKeyMissingLogged) {
-    _placesApiKeyMissingLogged = true;
-    console.error("[PLACES] CONFIG_ERROR: Google Places API key is not configured. Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY and redeploy so runtime env loads the change.");
-  }
-  return null;
-}
-function getGooglePlacesEnvVarName() {
-  return resolveGooglePlacesApiKeyConfig().envVar;
-}
-function mapGooglePlacesErrorStatus(status) {
-  switch (status) {
-    case "OVER_QUERY_LIMIT":
-      return { httpStatus: 429, message: "Address lookup is temporarily rate limited. Please try again shortly." };
-    case "REQUEST_DENIED":
-      return { httpStatus: 503, message: "Address lookup is currently unavailable. Please try again later." };
-    case "INVALID_REQUEST":
-      return { httpStatus: 400, message: "Address lookup request is invalid." };
-    case "UNKNOWN_ERROR":
-      return { httpStatus: 503, message: "Address lookup is temporarily unavailable. Please try again." };
-    default:
-      return { httpStatus: 502, message: "Address lookup failed. Please try again later." };
-  }
-}
-function getPlacesLogTag(status) {
-  switch (status) {
-    case "REQUEST_DENIED":
-      return "REQUEST_DENIED";
-    case "OVER_QUERY_LIMIT":
-      return "RATE_LIMITED";
-    case "INVALID_REQUEST":
-      return "INVALID_REQUEST";
-    default:
-      return "UPSTREAM_ERROR";
-  }
-}
-function extractGoogleAddressComponent(components, candidateTypes, property = "long_name") {
-  if (!Array.isArray(components)) return "";
-  for (const type of candidateTypes) {
-    const match = components.find((component) => component.types?.includes(type));
-    const value = match?.[property];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
-}
-function parseGooglePlaceDetails(result) {
-  const components = result.address_components || [];
-  const countryCode = extractGoogleAddressComponent(components, ["country"], "short_name");
-  const country = extractGoogleAddressComponent(components, ["country"], "long_name");
-  const streetNumber = extractGoogleAddressComponent(components, ["street_number"]);
-  const route = extractGoogleAddressComponent(components, ["route"]);
-  const subpremise = extractGoogleAddressComponent(components, ["subpremise"]);
-  const city = extractGoogleAddressComponent(components, CANADIAN_PLACE_DETAIL_CITY_TYPES);
-  const province = extractGoogleAddressComponent(components, CANADIAN_PLACE_DETAIL_PROVINCE_TYPES, "short_name");
-  const postalCode = normalizePostalCode(extractGoogleAddressComponent(components, ["postal_code"]));
-  const latitude = typeof result.geometry?.location?.lat === "number" ? result.geometry.location.lat : null;
-  const longitude = typeof result.geometry?.location?.lng === "number" ? result.geometry.location.lng : null;
-  const addressLine1 = [subpremise ? `Unit ${subpremise}` : "", streetNumber, route].filter(Boolean).join(" ").trim();
-  return {
-    formattedAddress: normalizeAddressText(result.formatted_address || ""),
-    addressLine1,
-    city: normalizeAddressText(city),
-    province: normalizeProvince(province),
-    postalCode,
-    countryCode,
-    country: normalizeAddressText(country),
-    latitude,
-    longitude
-  };
-}
-async function fetchGooglePlacesAutocomplete(input) {
-  const apiKey = getGooglePlacesApiKey();
-  if (!apiKey) {
-    return {
-      ok: false,
-      httpStatus: 503,
-      message: "Address lookup is currently unavailable. Please try again later.",
-      failureStage: "missing_api_key",
-      failureCategory: "CONFIG_MISSING_KEY",
-      predictions: []
-    };
-  }
-  const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/autocomplete/json`);
-  url.searchParams.set("input", input);
-  url.searchParams.set("components", "country:ca");
-  url.searchParams.set("types", "address");
-  url.searchParams.set("language", "en");
-  url.searchParams.set("key", apiKey);
-  try {
-    const response = await fetchWithPlacesTimeout(url);
-    const data = await response.json();
-    const status = typeof data.status === "string" ? data.status : void 0;
-    if (status === "OK") {
-      return {
-        ok: true,
-        predictions: Array.isArray(data.predictions) ? data.predictions : []
-      };
-    }
-    if (status === "ZERO_RESULTS") {
-      return {
-        ok: true,
-        predictions: []
-      };
-    }
-    const mappedError = mapGooglePlacesErrorStatus(status);
-    const failureCategory = inferGooglePlacesFailureCategory(status, data.error_message);
-    console.error(`[PLACES] autocomplete:${getPlacesLogTag(status)}`, {
-      status,
-      failureCategory,
-      errorMessage: data.error_message || null,
-      httpStatus: response.status
+  if (!parsed.city || !parsed.province) {
+    ["Mississauga", "Toronto", "Brampton", "Etobicoke"].forEach((city) => {
+      candidates.add([parsed.addressLine1 || trimmed, city, "ON", "Canada"].filter(Boolean).join(", "));
     });
-    return {
-      ok: false,
-      httpStatus: mappedError.httpStatus,
-      message: mappedError.message,
-      failureStage: "google_autocomplete",
-      failureCategory,
-      predictions: []
-    };
-  } catch (error) {
-    const isTimeout = error instanceof Error && error.name === "AbortError";
-    console.error("[PLACES] autocomplete:NETWORK_ERROR", {
-      failureCategory: isTimeout ? "PROXY_TIMEOUT" : "PROXY_FETCH_FAILURE",
-      message: error instanceof Error ? error.message : String(error)
-    });
-    return {
-      ok: false,
-      httpStatus: 503,
-      message: "Address lookup is currently unavailable. Please try again later.",
-      failureStage: "proxy_fetch",
-      failureCategory: isTimeout ? "PROXY_TIMEOUT" : "PROXY_FETCH_FAILURE",
-      predictions: []
-    };
   }
+  return Array.from(candidates).filter(Boolean).slice(0, 5).map((description) => ({
+    place_id: Buffer.from(description, "utf-8").toString("base64url"),
+    description,
+    structured_formatting: {
+      main_text: description.split(",")[0]?.trim() || description,
+      secondary_text: description.split(",").slice(1).join(",").trim() || "Canada"
+    }
+  }));
 }
-async function fetchGooglePlaceDetails(placeId) {
-  const apiKey = getGooglePlacesApiKey();
-  if (!apiKey) {
-    return {
-      ok: false,
-      httpStatus: 503,
-      message: "Address lookup is currently unavailable. Please try again later.",
-      failureStage: "missing_api_key",
-      failureCategory: "CONFIG_MISSING_KEY"
-    };
-  }
-  const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/details/json`);
-  url.searchParams.set("place_id", placeId);
-  url.searchParams.set("fields", "place_id,formatted_address,geometry,address_components");
-  url.searchParams.set("language", "en");
-  url.searchParams.set("key", apiKey);
-  try {
-    const response = await fetchWithPlacesTimeout(url);
-    const data = await response.json();
-    const status = typeof data.status === "string" ? data.status : void 0;
-    if (status !== "OK" || !data.result) {
-      const mappedError = mapGooglePlacesErrorStatus(status);
-      const failureCategory = inferGooglePlacesFailureCategory(status, data.error_message);
-      console.error(`[PLACES] details:${getPlacesLogTag(status)}`, {
-        placeIdLength: placeId.length,
-        status,
-        failureCategory,
-        errorMessage: data.error_message || null,
-        httpStatus: response.status
-      });
-      return {
-        ok: false,
-        httpStatus: mappedError.httpStatus,
-        message: mappedError.message,
-        failureStage: "google_details",
-        failureCategory
-      };
-    }
-    const parsed = parseGooglePlaceDetails(data.result);
-    if (parsed.countryCode !== "CA") {
-      console.warn("[PLACES] details:NON_CANADIAN", {
-        placeIdLength: placeId.length,
-        countryCode: parsed.countryCode
-      });
-      return {
-        ok: false,
-        httpStatus: 400,
-        message: "Only Canadian addresses are accepted."
-      };
-    }
-    if (!parsed.formattedAddress || !parsed.addressLine1 || !parsed.city || !parsed.province || parsed.latitude === null || parsed.longitude === null) {
-      const missingFields = [
-        !parsed.formattedAddress ? "formattedAddress" : null,
-        !parsed.addressLine1 ? "addressLine1" : null,
-        !parsed.city ? "city" : null,
-        !parsed.province ? "province" : null,
-        parsed.latitude === null ? "latitude" : null,
-        parsed.longitude === null ? "longitude" : null
-      ].filter((f) => f !== null);
-      console.warn("[PLACES] details:INCOMPLETE", {
-        placeIdLength: placeId.length,
-        missingFields
-      });
-      return {
-        ok: false,
-        httpStatus: 422,
-        message: "Please select a complete Canadian street address."
-      };
-    }
-    return {
-      ok: true,
-      details: {
-        formattedAddress: parsed.formattedAddress,
-        addressLine1: parsed.addressLine1,
-        city: parsed.city,
-        province: parsed.province,
-        postalCode: parsed.postalCode,
-        country: "Canada",
-        latitude: parsed.latitude,
-        longitude: parsed.longitude
-      }
-    };
-  } catch (error) {
-    const isTimeout = error instanceof Error && error.name === "AbortError";
-    console.error("[PLACES] details:NETWORK_ERROR", {
-      placeIdLength: placeId.length,
-      failureCategory: isTimeout ? "PROXY_TIMEOUT" : "PROXY_FETCH_FAILURE",
-      message: error instanceof Error ? error.message : String(error)
-    });
-    return {
-      ok: false,
-      httpStatus: 503,
-      message: "Address lookup is currently unavailable. Please try again later.",
-      failureStage: "proxy_fetch",
-      failureCategory: isTimeout ? "PROXY_TIMEOUT" : "PROXY_FETCH_FAILURE"
-    };
-  }
-}
-async function probeGooglePlacesApiKey() {
-  const apiKey = getGooglePlacesApiKey();
-  const envVar = getGooglePlacesEnvVarName();
-  if (!apiKey) {
-    return { configured: false, working: null, failureCategory: "CONFIG_MISSING_KEY", errorMessage: "No API key configured", envVar };
-  }
-  const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/autocomplete/json`);
-  url.searchParams.set("input", "123 Main");
-  url.searchParams.set("components", "country:ca");
-  url.searchParams.set("types", "address");
-  url.searchParams.set("language", "en");
-  url.searchParams.set("key", apiKey);
-  try {
-    const response = await fetchWithPlacesTimeout(url);
-    const data = await response.json();
-    const status = typeof data.status === "string" ? data.status : void 0;
-    const isWorking = status === "OK" || status === "ZERO_RESULTS";
-    if (isWorking) {
-      return { configured: true, working: true, failureCategory: null, errorMessage: null, envVar };
-    }
-    const failureCategory = inferGooglePlacesFailureCategory(status, data.error_message);
-    return {
-      configured: true,
-      working: false,
-      failureCategory,
-      errorMessage: data.error_message || status || "Unknown error",
-      envVar
-    };
-  } catch (error) {
-    const isTimeout = error instanceof Error && error.name === "AbortError";
-    return {
-      configured: true,
-      working: false,
-      failureCategory: isTimeout ? "PROXY_TIMEOUT" : "PROXY_FETCH_FAILURE",
-      errorMessage: error instanceof Error ? error.message : String(error),
-      envVar
-    };
-  }
-}
-setTimeout(async () => {
-  try {
-    const result = await probeGooglePlacesApiKey();
-    if (result.working === true) {
-      console.info("[PLACES] STARTUP_PROBE: API key is valid and Places API is responding normally.", { envVar: result.envVar });
-    } else if (!result.configured) {
-      console.error(
-        "[PLACES] STARTUP_PROBE: Google Places API key is NOT configured. Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY in your deployment environment and redeploy. Address autocomplete will fall back to manual entry until this is resolved."
-      );
-    } else {
-      let hint = "";
-      switch (result.failureCategory) {
-        case "API_NOT_ACTIVATED":
-          hint = " Ensure 'Places API' is enabled in Google Cloud Console for your project.";
-          break;
-        case "BILLING_INACTIVE_OR_INVALID":
-          hint = " Google Cloud billing must be enabled for the project linked to this API key.";
-          break;
-        case "RESTRICTION_BLOCKED":
-          hint = " The API key has HTTP referrer or IP restrictions. For server-side use, remove referrer restrictions and add the server's IP, or use an unrestricted key.";
-          break;
-        case "INVALID_KEY":
-          hint = " The API key value appears to be invalid or has been revoked. Regenerate the key in Google Cloud Console.";
-          break;
-        case "QUOTA_EXCEEDED":
-          hint = " The API quota has been exceeded. Check your Google Cloud Console quota settings.";
-          break;
-      }
-      console.error(`[PLACES] STARTUP_PROBE: API key is configured but Places API calls are failing (${result.failureCategory}).${hint}`, {
-        envVar: result.envVar,
-        errorMessage: result.errorMessage
-      });
-    }
-  } catch (err) {
-    console.error("[PLACES] STARTUP_PROBE: Unexpected error during probe.", { message: err instanceof Error ? err.message : String(err) });
-  }
-}, 5e3);
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371e3;
   const phi1 = lat1 * Math.PI / 180;
@@ -3496,69 +3116,6 @@ function checkRateLimit(ip) {
   }
   entry.count++;
   return true;
-}
-var placesRateLimitMap = /* @__PURE__ */ new Map();
-var PLACES_RATE_LIMIT_WINDOW = 6e4;
-var PLACES_RATE_LIMIT_MAX = 30;
-var _placesRateLimitPruneCounter = 0;
-var placesHealthProbeRateLimitMap = /* @__PURE__ */ new Map();
-var PLACES_HEALTH_PROBE_RATE_LIMIT_WINDOW = 6e4;
-var PLACES_HEALTH_PROBE_RATE_LIMIT_MAX = 5;
-var PLACES_HEALTH_PROBE_TOKEN = (process.env.PLACES_HEALTH_PROBE_TOKEN || "").trim();
-var _placesHealthProbeRateLimitPruneCounter = 0;
-function checkPlacesRateLimit(ip) {
-  const now = Date.now();
-  _placesRateLimitPruneCounter++;
-  if (_placesRateLimitPruneCounter >= 500) {
-    _placesRateLimitPruneCounter = 0;
-    for (const [key, val] of placesRateLimitMap) {
-      if (now > val.resetTime) placesRateLimitMap.delete(key);
-    }
-  }
-  const entry = placesRateLimitMap.get(ip);
-  if (!entry || now > entry.resetTime) {
-    placesRateLimitMap.set(ip, { count: 1, resetTime: now + PLACES_RATE_LIMIT_WINDOW });
-    return true;
-  }
-  if (entry.count >= PLACES_RATE_LIMIT_MAX) {
-    return false;
-  }
-  entry.count++;
-  return true;
-}
-function checkPlacesHealthProbeRateLimit(ip) {
-  const now = Date.now();
-  _placesHealthProbeRateLimitPruneCounter++;
-  if (_placesHealthProbeRateLimitPruneCounter >= 500) {
-    _placesHealthProbeRateLimitPruneCounter = 0;
-    for (const [key, val] of placesHealthProbeRateLimitMap) {
-      if (now > val.resetTime) placesHealthProbeRateLimitMap.delete(key);
-    }
-  }
-  const entry = placesHealthProbeRateLimitMap.get(ip);
-  if (!entry || now > entry.resetTime) {
-    placesHealthProbeRateLimitMap.set(ip, { count: 1, resetTime: now + PLACES_HEALTH_PROBE_RATE_LIMIT_WINDOW });
-    return true;
-  }
-  if (entry.count >= PLACES_HEALTH_PROBE_RATE_LIMIT_MAX) {
-    return false;
-  }
-  entry.count++;
-  return true;
-}
-function safeTokenMatch(expected, provided) {
-  const expectedDigest = crypto2.createHash("sha256").update(expected).digest();
-  const providedDigest = crypto2.createHash("sha256").update(provided).digest();
-  const digestMatch = crypto2.timingSafeEqual(expectedDigest, providedDigest);
-  return Boolean(expected) && Boolean(provided) && digestMatch;
-}
-function isAuthorizedPlacesProbeRequest(req) {
-  if (!PLACES_HEALTH_PROBE_TOKEN) {
-    return false;
-  }
-  const providedToken = typeof req.headers["x-places-health-token"] === "string" ? req.headers["x-places-health-token"].trim() : "";
-  if (!providedToken) return false;
-  return safeTokenMatch(PLACES_HEALTH_PROBE_TOKEN, providedToken);
 }
 function checkRoles(...allowedRoles) {
   return (req, res, next) => {
@@ -3781,8 +3338,7 @@ var REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
   "siteRulesAcknowledgment",
   "workerAgreementConsent",
   "privacyConsent",
-  "paymentTermsAcknowledged",
-  "smsConsent"
+  "paymentTermsAcknowledged"
 ];
 var consentLikeSchema = z2.union([z2.boolean(), z2.string(), z2.number()]);
 var listLikeSchema = z2.union([z2.string(), z2.array(z2.string())]);
@@ -3856,7 +3412,7 @@ var publicApplySubmissionSchema = z2.object({
   nonSolicitationAcknowledgedAt: z2.union([z2.string(), z2.number()]).optional(),
   privacyConsent: consentLikeSchema,
   consentToContact: consentLikeSchema.optional(),
-  smsConsent: consentLikeSchema,
+  smsConsent: consentLikeSchema.optional(),
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
   paymentTermsAcknowledged: consentLikeSchema,
@@ -3864,54 +3420,119 @@ var publicApplySubmissionSchema = z2.object({
   signature: z2.string().trim().min(1),
   signatureDate: z2.string().trim().min(1)
 }).strict();
-function coordinateSchema(min, max, label) {
-  return z2.union([
-    z2.number().min(min).max(max),
-    z2.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
-      (v) => {
-        const n = parseFloat(v);
-        return n >= min && n <= max;
-      },
-      { message: `${label} must be between ${min} and ${max}` }
-    )
-  ]);
-}
+var optionalTrimmedStringSchema = z2.preprocess((value) => {
+  if (value === null || value === void 0) return void 0;
+  if (typeof value === "string") {
+    const normalized = normalizeWhitespace(value);
+    return normalized.length > 0 ? normalized : void 0;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return value;
+}, z2.string().optional());
+var requiredTrimmedStringSchema = z2.preprocess((value) => {
+  if (typeof value === "string") return normalizeWhitespace(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return value;
+}, z2.string().trim().min(1));
+var optionalNonNegativeIntSchema = z2.preprocess((value) => {
+  if (value === null || value === void 0 || value === "") return void 0;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) return void 0;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+  return value;
+}, z2.number().int().nonnegative().optional());
 var publicApplicantSubmissionSchema = z2.object({
-  fullName: z2.string().trim().min(1).optional(),
-  full_name: z2.string().trim().min(1).optional(),
-  firstName: z2.string().trim().min(1).optional(),
-  first_name: z2.string().trim().min(1).optional(),
-  lastName: z2.string().trim().min(1).optional(),
-  last_name: z2.string().trim().min(1).optional(),
-  email: z2.string().email().optional(),
-  phone: z2.string().trim().min(1).optional(),
-  phoneNumber: z2.string().trim().min(1).optional(),
-  phone_number: z2.string().trim().min(1).optional(),
-  mobile: z2.string().trim().min(1).optional(),
-  contactNumber: z2.string().trim().min(1).optional(),
-  addressFull: z2.string().trim().min(1),
-  addressStreet: z2.string().optional(),
-  addressCity: z2.string().optional(),
-  addressProvince: z2.string().optional(),
-  addressPostalCode: z2.string().optional(),
-  addressCountry: z2.string().optional(),
-  addressLatitude: coordinateSchema(-90, 90, "Latitude").optional(),
-  addressLongitude: coordinateSchema(-180, 180, "Longitude").optional(),
-  addressManualEntry: z2.boolean().optional(),
-  applyingFor: z2.string().trim().min(1),
-  jobPostingSource: z2.string().trim().min(1),
-  photoData: z2.string().trim().min(1),
-  photoFilename: z2.string().optional(),
-  photoMimeType: z2.string().optional(),
-  photoFileSize: z2.number().int().nonnegative().optional(),
-  resumeData: z2.string().trim().min(1),
-  resumeFilename: z2.string().optional(),
-  resumeMimeType: z2.string().optional(),
-  resumeFileSize: z2.number().int().nonnegative().optional(),
+  fullName: optionalTrimmedStringSchema,
+  full_name: optionalTrimmedStringSchema,
+  firstName: optionalTrimmedStringSchema,
+  first_name: optionalTrimmedStringSchema,
+  lastName: optionalTrimmedStringSchema,
+  last_name: optionalTrimmedStringSchema,
+  email: z2.preprocess((value) => {
+    if (value === null || value === void 0 || value === "") return void 0;
+    if (typeof value !== "string") return value;
+    return value.trim().toLowerCase();
+  }, z2.string().email().optional()),
+  phone: optionalTrimmedStringSchema,
+  phoneNumber: optionalTrimmedStringSchema,
+  phone_number: optionalTrimmedStringSchema,
+  mobile: optionalTrimmedStringSchema,
+  contactNumber: optionalTrimmedStringSchema,
+  addressFull: requiredTrimmedStringSchema,
+  addressStreet: optionalTrimmedStringSchema,
+  addressCity: optionalTrimmedStringSchema,
+  addressProvince: optionalTrimmedStringSchema,
+  addressPostalCode: optionalTrimmedStringSchema,
+  addressCountry: optionalTrimmedStringSchema,
+  applyingFor: requiredTrimmedStringSchema,
+  jobPostingSource: requiredTrimmedStringSchema,
+  photoData: requiredTrimmedStringSchema,
+  photoFilename: optionalTrimmedStringSchema,
+  photoMimeType: optionalTrimmedStringSchema,
+  photoFileSize: optionalNonNegativeIntSchema,
+  resumeData: requiredTrimmedStringSchema,
+  resumeFilename: optionalTrimmedStringSchema,
+  resumeMimeType: optionalTrimmedStringSchema,
+  resumeFileSize: optionalNonNegativeIntSchema,
   smsConsent: consentLikeSchema.optional(),
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional()
-}).strict();
+}).strip();
+function pickFirstPresent(source, keys) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const value = source[key];
+      if (value !== void 0 && value !== null) {
+        return value;
+      }
+    }
+  }
+  return void 0;
+}
+function normalizePublicApplicantSubmissionPayload(input) {
+  const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const photoData = pickFirstPresent(source, ["photoData", "photo_data"]);
+  const resumeData = pickFirstPresent(source, ["resumeData", "resume_data"]);
+  return {
+    fullName: pickFirstPresent(source, ["fullName", "full_name", "name"]),
+    full_name: pickFirstPresent(source, ["full_name"]),
+    firstName: pickFirstPresent(source, ["firstName", "first_name"]),
+    first_name: pickFirstPresent(source, ["first_name"]),
+    lastName: pickFirstPresent(source, ["lastName", "last_name"]),
+    last_name: pickFirstPresent(source, ["last_name"]),
+    email: pickFirstPresent(source, ["email", "emailAddress", "email_address"]),
+    phone: pickFirstPresent(source, ["phone", "phoneNumber", "phone_number", "mobile", "contactNumber"]),
+    phoneNumber: pickFirstPresent(source, ["phoneNumber"]),
+    phone_number: pickFirstPresent(source, ["phone_number"]),
+    mobile: pickFirstPresent(source, ["mobile"]),
+    contactNumber: pickFirstPresent(source, ["contactNumber", "contact_number"]),
+    addressFull: pickFirstPresent(source, ["addressFull", "address_full", "address"]),
+    addressStreet: pickFirstPresent(source, ["addressStreet", "address_street", "street", "addressLine1"]),
+    addressCity: pickFirstPresent(source, ["addressCity", "address_city", "city"]),
+    addressProvince: pickFirstPresent(source, ["addressProvince", "address_province", "province", "state"]),
+    addressPostalCode: pickFirstPresent(source, ["addressPostalCode", "address_postal_code", "postalCode", "postal_code", "zip", "zipCode"]),
+    addressCountry: pickFirstPresent(source, ["addressCountry", "address_country", "country"]),
+    applyingFor: pickFirstPresent(source, ["applyingFor", "applying_for", "position", "role"]),
+    jobPostingSource: pickFirstPresent(source, ["jobPostingSource", "job_posting_source", "applicationSource", "source"]),
+    photoData,
+    photoFilename: pickFirstPresent(source, ["photoFilename", "photo_filename"]),
+    photoMimeType: pickFirstPresent(source, ["photoMimeType", "photo_mime_type"]),
+    photoFileSize: pickFirstPresent(source, ["photoFileSize", "photo_file_size"]),
+    resumeData,
+    resumeFilename: pickFirstPresent(source, ["resumeFilename", "resume_filename"]),
+    resumeMimeType: pickFirstPresent(source, ["resumeMimeType", "resume_mime_type"]),
+    resumeFileSize: pickFirstPresent(source, ["resumeFileSize", "resume_file_size"]),
+    smsConsent: pickFirstPresent(source, ["smsConsent", "sms_consent", "consentToContact", "consent_to_contact"]),
+    marketingConsent: pickFirstPresent(source, ["marketingConsent", "marketing_consent"]),
+    promotionalConsent: pickFirstPresent(source, ["promotionalConsent", "promotional_consent", "marketingConsent", "marketing_consent"])
+  };
+}
 function isConsentGranted(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -3930,8 +3551,7 @@ function getMissingRequiredConsents(payload) {
     siteRulesAcknowledgment: resolved.siteRulesAcknowledgment,
     workerAgreementConsent: resolved.workerAgreementConsent,
     privacyConsent: resolved.privacyConsent,
-    paymentTermsAcknowledged: resolved.paymentTermsAcknowledged,
-    smsConsent: resolved.smsConsent
+    paymentTermsAcknowledged: resolved.paymentTermsAcknowledged
   };
   return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);
 }
@@ -3948,18 +3568,6 @@ function normalizeOptionalText(value) {
   if (typeof value !== "string") return null;
   const trimmed = normalizeWhitespace(value);
   return trimmed.length > 0 ? trimmed : null;
-}
-function normalizeOptionalNumber(value) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
 }
 function normalizeWhitespace(value) {
   return value.trim().replace(/\s+/g, " ");
@@ -4012,10 +3620,6 @@ var APPLICANT_OPTIONAL_CONSENT_COLUMNS = {
   marketingConsentAt: "marketing_consent_at",
   promotionalConsent: "promotional_consent"
 };
-var APPLICANT_OPTIONAL_ADDRESS_COLUMNS = {
-  addressLatitude: "address_latitude",
-  addressLongitude: "address_longitude"
-};
 var applicantsColumnSetPromise = null;
 async function getApplicantsColumnSet() {
   if (!applicantsColumnSetPromise) {
@@ -4029,12 +3633,9 @@ async function getApplicantsColumnSet() {
       const columnSet = new Set(
         rows.map((row) => row?.column_name).filter((columnName) => typeof columnName === "string" && columnName.length > 0)
       );
-      const missingColumns = [
-        ...Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS),
-        ...Object.values(APPLICANT_OPTIONAL_ADDRESS_COLUMNS)
-      ].filter((columnName) => !columnSet.has(columnName));
+      const missingColumns = Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS).filter((columnName) => !columnSet.has(columnName));
       if (missingColumns.length > 0) {
-        console.warn(`[APPLICANTS] Optional applicant columns unavailable: ${missingColumns.join(", ")}`);
+        console.warn(`[APPLICANTS] Optional consent columns unavailable: ${missingColumns.join(", ")}`);
       }
       return columnSet;
     }).catch((error) => {
@@ -4054,20 +3655,13 @@ async function getApplicantOptionalConsentSelect() {
     promotionalConsent: columnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent) ? applicants.promotionalConsent : sql3`NULL`
   };
 }
-async function getApplicantOptionalAddressSelect() {
-  const columnSet = await getApplicantsColumnSet();
-  return {
-    addressLatitude: columnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLatitude) ? applicants.addressLatitude : sql3`NULL`,
-    addressLongitude: columnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude) ? applicants.addressLongitude : sql3`NULL`
-  };
-}
 var REQUIRED_APPROVAL_ACK_FIELDS = [
   { field: "backgroundCheckConsent", label: "Background Check Consent" },
   { field: "titoAcknowledgment", label: "TITO Acknowledgment" },
   { field: "siteRulesAcknowledgment", label: "Site Rules Acknowledgment" },
   { field: "workerAgreementConsent", label: "Worker Agreement Consent" },
   { field: "privacyConsent", label: "Privacy Consent" },
-  // consentToContact is informational-only and must NOT block approval
+  { field: "consentToContact", label: "Consent To Contact" },
   { field: "nonSolicitationAcknowledged", label: "Non-Solicitation Acknowledgment" }
 ];
 function getMissingApprovalAcknowledgments(application) {
@@ -4078,7 +3672,7 @@ function getMissingApprovalAcknowledgments(application) {
     siteRulesAcknowledgment: "siteRulesAcknowledgment",
     workerAgreementConsent: "workerAgreementConsent",
     privacyConsent: "privacyConsent",
-    // consentToContact is informational-only and must NOT block approval
+    consentToContact: "consentToContact",
     nonSolicitationAcknowledged: "nonSolicitationAcknowledged"
   };
   return REQUIRED_APPROVAL_ACK_FIELDS.filter(({ field }) => !resolved[fieldToResolvedKey[field]]).map(({ label }) => label);
@@ -6173,7 +5767,7 @@ The WFConnect Team`,
         res.status(429).json({ ok: false, error: "Too many requests. Please try again later." });
         return;
       }
-      const { name, email, company, phone, cityProvince, serviceNeeded, message, smsConsent } = req.body;
+      const { name, email, company, phone, cityProvince, serviceNeeded, message } = req.body;
       if (!name || typeof name !== "string" || name.trim().length < 2) {
         res.status(400).json({ ok: false, error: "Name is required (minimum 2 characters)" });
         return;
@@ -6187,12 +5781,7 @@ The WFConnect Team`,
         res.status(400).json({ ok: false, error: "Message is required (minimum 10 characters)" });
         return;
       }
-      if (!isConsentGranted(smsConsent)) {
-        res.status(400).json({ ok: false, error: "SMS consent is required to submit this form" });
-        return;
-      }
       const userAgent = req.headers["user-agent"] || null;
-      const submittedAt = /* @__PURE__ */ new Date();
       await db.insert(contactLeads).values({
         name: name.trim(),
         email: email.trim().toLowerCase(),
@@ -6201,8 +5790,6 @@ The WFConnect Team`,
         cityProvince: cityProvince?.trim() || null,
         serviceNeeded: serviceNeeded?.trim() || null,
         message: message.trim(),
-        smsConsent: true,
-        smsConsentAt: submittedAt,
         ip,
         userAgent
       });
@@ -6358,8 +5945,6 @@ The WFConnect Team`,
         workerAgreementConsent: resolvedAcknowledgments.workerAgreementConsent,
         consentToContact: resolvedAcknowledgments.consentToContact,
         privacyConsent: resolvedAcknowledgments.privacyConsent,
-        smsConsent: resolvedAcknowledgments.smsConsent,
-        smsConsentAt: resolvedAcknowledgments.smsConsent ? /* @__PURE__ */ new Date() : null,
         paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
@@ -7656,12 +7241,15 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
   });
   app2.post("/api/applicants", async (req, res) => {
     try {
-      const parsedPayload = publicApplicantSubmissionSchema.safeParse(req.body ?? {});
+      const normalizedBody = normalizePublicApplicantSubmissionPayload(req.body ?? {});
+      const parsedPayload = publicApplicantSubmissionSchema.safeParse(normalizedBody);
       if (!parsedPayload.success) {
         const validationIssues = formatValidationIssues(parsedPayload.error.issues);
         console.error(
           "[APPLICANTS] Payload validation failed \u2014 missing/invalid fields:",
-          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; ")
+          validationIssues.map((i) => `${i.path || "(root)"}: ${i.message}`).join("; "),
+          "| raw keys:",
+          Object.keys(req.body ?? {})
         );
         return res.status(400).json({
           error: "Invalid submission payload",
@@ -7681,9 +7269,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         addressProvince,
         addressPostalCode,
         addressCountry,
-        addressLatitude,
-        addressLongitude,
-        addressManualEntry,
         applyingFor,
         jobPostingSource,
         photoData: photoDataIn,
@@ -7774,57 +7359,20 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         });
       }
       const now = /* @__PURE__ */ new Date();
-      const normalizedAddressStreet = normalizeOptionalText(addressStreet);
-      const normalizedAddressCity = normalizeOptionalText(addressCity);
-      const normalizedAddressProvince = normalizeProvince(normalizeOptionalText(addressProvince) || "");
-      const normalizedAddressPostalCode = normalizePostalCode(normalizeOptionalText(addressPostalCode) || "");
-      const normalizedAddressCountry = normalizeAddressText(normalizeOptionalText(addressCountry) || "Canada");
-      const normalizedAddressLatitude = normalizeOptionalNumber(addressLatitude);
-      const normalizedAddressLongitude = normalizeOptionalNumber(addressLongitude);
-      const parsedLocalAddress = parseLocalAddress(addressFull);
-      const hasGeocodedCoordinates = normalizedAddressLatitude !== null && normalizedAddressLongitude !== null;
-      const isManualAddressEntry = Boolean(addressManualEntry) || !hasGeocodedCoordinates;
-      const persistedAddressStreet = normalizedAddressStreet || normalizeOptionalText(parsedLocalAddress.addressLine1) || normalizeAddressText(addressFull);
-      const persistedAddressCity = normalizedAddressCity || normalizeOptionalText(parsedLocalAddress.city);
-      const persistedAddressProvince = normalizedAddressProvince || normalizeProvince(normalizeOptionalText(parsedLocalAddress.province) || "");
-      const persistedAddressPostalCode = normalizedAddressPostalCode || normalizePostalCode(normalizeOptionalText(parsedLocalAddress.postalCode) || "");
-      if (!/^canada$/i.test(normalizedAddressCountry)) {
-        console.warn("[APPLICANTS] Rejected non-Canadian applicant address payload", {
-          addressFull,
-          addressStreet,
-          addressCity,
-          addressProvince,
-          addressPostalCode,
-          addressCountry
-        });
-        return res.status(400).json({
-          error: "Only Canadian addresses are supported."
-        });
-      }
-      const applicantsColumnSet = await getApplicantsColumnSet();
-      const hasApplicantAddressLatitudeColumn = applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLatitude);
-      const hasApplicantAddressLongitudeColumn = applicantsColumnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude);
-      const shouldPersistApplicantAddressCoordinates = hasApplicantAddressLatitudeColumn && hasApplicantAddressLongitudeColumn;
-      if (hasApplicantAddressLatitudeColumn && !hasApplicantAddressLongitudeColumn || !hasApplicantAddressLatitudeColumn && hasApplicantAddressLongitudeColumn) {
-        console.warn("[APPLICANTS] Applicant address coordinate columns are only partially available; skipping coordinate persistence.");
-      }
-      if (isManualAddressEntry) {
-        console.warn("[APPLICANTS] Address manually entered without geocoding", {
-          hasCoordinates: hasGeocodedCoordinates,
-          parsedCity: Boolean(persistedAddressCity),
-          parsedProvince: Boolean(persistedAddressProvince),
-          parsedPostalCode: Boolean(persistedAddressPostalCode)
-        });
-      }
+      const parsedAddress = parseLocalAddress(addressFull);
+      const normalizedAddressCity = normalizeOptionalText(addressCity) || normalizeOptionalText(parsedAddress.city);
+      const normalizedAddressProvince = normalizeOptionalText(addressProvince) || normalizeOptionalText(parsedAddress.province);
+      const normalizedAddressPostalCode = normalizeOptionalText(addressPostalCode) || normalizeOptionalText(parsedAddress.postalCode);
+      const normalizedAddressCountry = normalizeOptionalText(addressCountry) || normalizeOptionalText(parsedAddress.country) || "Canada";
       const insertValues = {
         fullName: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
         addressFull: normalizeAddressText(addressFull),
-        addressStreet: persistedAddressStreet,
-        addressCity: persistedAddressCity || null,
-        addressProvince: persistedAddressProvince || null,
-        addressPostalCode: persistedAddressPostalCode || null,
-        addressCountry: "Canada",
+        addressStreet: normalizeOptionalText(addressStreet),
+        addressCity: normalizedAddressCity,
+        addressProvince: normalizedAddressProvince?.toUpperCase() || null,
+        addressPostalCode: normalizedAddressPostalCode?.toUpperCase() || null,
+        addressCountry: normalizedAddressCountry,
         applyingFor: normalizeWhitespace(applyingFor),
         jobPostingSource: normalizeWhitespace(jobPostingSource),
         photoData: photoDataIn,
@@ -7835,18 +7383,9 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
-        smsConsent: smsConsentGranted,
-        smsConsentAt: smsConsentGranted ? now : null,
-        marketingConsent: marketingConsentGranted,
-        marketingConsentAt: marketingConsentGranted ? now : null,
-        adminNotes: isManualAddressEntry ? "Address entered manually; geocoding unavailable at submission." : null,
         status: "new",
         submittedAt: now
       };
-      if (shouldPersistApplicantAddressCoordinates) {
-        insertValues.addressLatitude = hasGeocodedCoordinates ? normalizedAddressLatitude : null;
-        insertValues.addressLongitude = hasGeocodedCoordinates ? normalizedAddressLongitude : null;
-      }
       const [applicant] = await db.insert(applicants).values(insertValues).returning({ id: applicants.id });
       registerSubmissionFingerprint(recentApplicantFingerprint);
       console.log(`[APPLICANTS] \u2705 New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
@@ -7896,7 +7435,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         photoMimeType: applicants.photoMimeType,
         resumeFilename: applicants.resumeFilename,
         resumeMimeType: applicants.resumeMimeType,
-        ...await getApplicantOptionalAddressSelect(),
         ...await getApplicantOptionalConsentSelect(),
         status: applicants.status,
         submittedAt: applicants.submittedAt
@@ -7925,8 +7463,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
           marketingConsent: normalizedMarketingConsent,
           marketingConsentAt: row.marketingConsentAt || null,
           promotionalConsent: normalizedPromotionalConsent,
-          addressGeocoded: row.addressLatitude !== null && row.addressLongitude !== null,
-          addressEntryMethod: row.addressLatitude !== null && row.addressLongitude !== null ? "geocoded" : "manual",
           locationDisplay
         };
       });
@@ -8001,9 +7537,7 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeData: applicants.resumeData,
         resumeFilename: applicants.resumeFilename,
         status: applicants.status,
-        adminNotes: applicants.adminNotes,
         submittedAt: applicants.submittedAt,
-        ...await getApplicantOptionalAddressSelect(),
         ...await getApplicantOptionalConsentSelect()
       }).from(applicants).where(eq4(applicants.id, applicantId));
       if (!row) return res.status(404).json({ error: "Applicant not found" });
@@ -8032,8 +7566,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         marketingConsent: normalizedMarketingConsent,
         marketingConsentAt: safe.marketingConsentAt || null,
         promotionalConsent: normalizedPromotionalConsent,
-        addressGeocoded: safe.addressLatitude !== null && safe.addressLongitude !== null,
-        addressEntryMethod: safe.addressLatitude !== null && safe.addressLongitude !== null ? "geocoded" : "manual",
         locationDisplay,
         hasPhoto: !!_p,
         hasResume: !!_r
@@ -10722,145 +10254,29 @@ This report includes ${items.length} worker(s).
   });
   app2.get("/api/places/autocomplete", async (req, res) => {
     try {
-      const { input, country } = req.query;
-      console.info("[PLACES] autocomplete:REQUEST_RECEIVED", {
-        inputLength: typeof input === "string" ? input.trim().length : 0,
-        country: typeof country === "string" ? country.toUpperCase() : "CA"
-      });
-      if (!input || typeof input !== "string" || input.trim().length < MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH) {
+      const { input } = req.query;
+      if (!input || typeof input !== "string" || input.length < 2) {
         res.json({ predictions: [] });
         return;
       }
-      if (typeof country === "string" && country.toUpperCase() !== "CA") {
-        res.status(400).json({ error: "Only Canadian addresses are supported." });
-        return;
-      }
-      const ip = getClientIp(req);
-      if (!checkPlacesRateLimit(ip)) {
-        console.warn("[PLACES] autocomplete:RATE_LIMITED", { ipPresent: Boolean(ip) });
-        res.status(429).json({ error: "Too many requests. Please try again later." });
-        return;
-      }
-      const lookup = await fetchGooglePlacesAutocomplete(input.trim());
-      if (!lookup.ok) {
-        const failureStage = lookup.failureStage || "unknown";
-        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
-        console.error("[PLACES] autocomplete:LOOKUP_FAILED", {
-          failureStage,
-          failureCategory,
-          httpStatus: lookup.httpStatus
-        });
-        res.status(lookup.httpStatus).json({
-          error: lookup.message,
-          failureStage,
-          failureCategory,
-          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage)
-        });
-        return;
-      }
-      res.json({
-        predictions: lookup.predictions.filter((prediction) => prediction.place_id && prediction.description).map((prediction) => ({
-          place_id: prediction.place_id,
-          description: prediction.description,
-          structured_formatting: prediction.structured_formatting
-        }))
-      });
-      console.info("[PLACES] autocomplete:SUCCESS", {
-        predictionCount: lookup.predictions.length
-      });
+      res.json({ predictions: buildLocalAddressPredictions(input) });
     } catch (error) {
-      console.error("[PLACES] autocomplete:INTERNAL_ERROR", { message: error instanceof Error ? error.message : String(error) });
-      res.status(500).json({
-        error: "Failed to fetch address suggestions",
-        failureStage: "route_handler",
-        failureCategory: "UPSTREAM_ERROR",
-        retryable: true
-      });
+      console.error("Error in address autocomplete:", error);
+      res.status(500).json({ error: "Failed to fetch address suggestions" });
     }
   });
   app2.get("/api/places/details/:placeId", async (req, res) => {
     try {
       const { placeId } = req.params;
-      console.info("[PLACES] details:REQUEST_RECEIVED", {
-        placeIdLength: typeof placeId === "string" ? placeId.length : 0
-      });
-      if (!placeId || typeof placeId !== "string") {
+      if (!placeId) {
         res.status(400).json({ error: "Place ID is required" });
         return;
       }
-      const ip = getClientIp(req);
-      if (!checkPlacesRateLimit(ip)) {
-        console.warn("[PLACES] details:RATE_LIMITED", { ipPresent: Boolean(ip) });
-        res.status(429).json({ error: "Too many requests. Please try again later." });
-        return;
-      }
-      const lookup = await fetchGooglePlaceDetails(placeId);
-      if (!lookup.ok) {
-        const failureStage = lookup.failureStage || "unknown";
-        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
-        console.error("[PLACES] details:LOOKUP_FAILED", {
-          failureStage,
-          failureCategory,
-          httpStatus: lookup.httpStatus
-        });
-        res.status(lookup.httpStatus).json({
-          error: lookup.message,
-          failureStage,
-          failureCategory,
-          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage)
-        });
-        return;
-      }
-      res.json(lookup.details);
-      console.info("[PLACES] details:SUCCESS");
+      const decodedPlaceText = Buffer.from(placeId, "base64url").toString("utf-8");
+      res.json(parseLocalAddress(decodedPlaceText));
     } catch (error) {
-      console.error("[PLACES] details:INTERNAL_ERROR", { message: error instanceof Error ? error.message : String(error) });
-      res.status(500).json({
-        error: "Failed to fetch address details",
-        failureStage: "route_handler",
-        failureCategory: "UPSTREAM_ERROR",
-        retryable: true
-      });
-    }
-  });
-  app2.get("/api/places/health", async (req, res) => {
-    try {
-      const keyConfigured = getGooglePlacesApiKey() !== null;
-      const liveProbe = req.query.probe === "1";
-      if (!liveProbe) {
-        res.json({
-          configured: keyConfigured,
-          liveTest: null
-        });
-        return;
-      }
-      if (!PLACES_HEALTH_PROBE_TOKEN) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-      if (!isAuthorizedPlacesProbeRequest(req)) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-      const ip = getClientIp(req);
-      if (!checkPlacesHealthProbeRateLimit(ip)) {
-        console.warn("[PLACES] health:PROBE_RATE_LIMITED", { ipPresent: Boolean(ip) });
-        res.status(429).json({ error: "Too many probe requests. Please try again later." });
-        return;
-      }
-      const probe = await probeGooglePlacesApiKey();
-      res.json({
-        configured: probe.configured,
-        envVar: probe.envVar,
-        liveTest: {
-          working: probe.working,
-          failureCategory: probe.failureCategory,
-          errorMessage: probe.errorMessage
-        }
-      });
-    } catch (error) {
-      console.error("[PLACES] health:ERROR", { message: error instanceof Error ? error.message : String(error) });
-      res.status(500).json({ error: "Failed to check Places API health" });
+      console.error("Error in address details:", error);
+      res.status(500).json({ error: "Failed to fetch address details" });
     }
   });
   app2.get("/api/debug/whoami", (req, res) => {
@@ -13824,11 +13240,6 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "worker_applications" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "promotional_consent" SET NOT NULL`);
-    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "sms_consent" boolean`);
-    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "sms_consent" SET DEFAULT false`);
-    await db.execute(sql5`UPDATE "worker_applications" SET "sms_consent" = false WHERE "sms_consent" IS NULL`);
-    await db.execute(sql5`ALTER TABLE "worker_applications" ALTER COLUMN "sms_consent" SET NOT NULL`);
-    await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "sms_consent_at" timestamp`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "application_source" text`);
     await db.execute(sql5`UPDATE "worker_applications" SET "application_source" = 'Direct application' WHERE "application_source" IS NULL`);
     await db.execute(sql5`ALTER TABLE "worker_applications" ADD COLUMN IF NOT EXISTS "assigned_recruiter" text`);
@@ -13848,16 +13259,6 @@ async function ensureWorkerApplicationsCompatibility() {
     await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET DEFAULT false`);
     await db.execute(sql5`UPDATE "applicants" SET "promotional_consent" = false WHERE "promotional_consent" IS NULL`);
     await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "promotional_consent" SET NOT NULL`);
-    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "sms_consent" boolean`);
-    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "sms_consent" SET DEFAULT false`);
-    await db.execute(sql5`UPDATE "applicants" SET "sms_consent" = false WHERE "sms_consent" IS NULL`);
-    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "sms_consent" SET NOT NULL`);
-    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "sms_consent_at" timestamp`);
-    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "marketing_consent" boolean`);
-    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "marketing_consent" SET DEFAULT false`);
-    await db.execute(sql5`UPDATE "applicants" SET "marketing_consent" = false WHERE "marketing_consent" IS NULL`);
-    await db.execute(sql5`ALTER TABLE "applicants" ALTER COLUMN "marketing_consent" SET NOT NULL`);
-    await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "marketing_consent_at" timestamp`);
     await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_data" text`);
     await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_filename" text`);
     await db.execute(sql5`ALTER TABLE "applicants" ADD COLUMN IF NOT EXISTS "photo_mime_type" text`);
@@ -14142,13 +13543,6 @@ function configureExpoAndLanding(app2) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.status(200).send(privacyTemplate);
-  });
-  const termsPath = path.resolve(process.cwd(), "server", "templates", "terms.html");
-  const termsTemplate = fs.readFileSync(termsPath, "utf-8");
-  app2.get("/terms", (_req, res) => {
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    res.status(200).send(termsTemplate);
   });
   const accountDeletionPath = path.resolve(process.cwd(), "server", "templates", "account-deletion.html");
   const accountDeletionTemplate = fs.readFileSync(accountDeletionPath, "utf-8");

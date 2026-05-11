@@ -370,6 +370,14 @@ function isValidFileType(file, type) {
   return extensions.some(ext => fileName.endsWith(ext));
 }
 
+function isNonEmptyDataUri(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('data:') || !trimmed.includes(';base64,')) return false;
+  const parts = trimmed.split(',');
+  return parts.length === 2 && parts[1].trim().length > 0;
+}
+
 let photoData = null, resumeData = null;
 
 (async function loadPositions() {
@@ -716,8 +724,13 @@ function handleFile(type, file) {
   clearError(type);
   const reader = new FileReader();
   reader.onload = (e) => {
-    if (type === 'photo') photoData = { data: e.target.result, filename: file.name, mime: file.type, size: file.size };
-    else resumeData = { data: e.target.result, filename: file.name, mime: file.type, size: file.size };
+    const fileData = typeof e.target.result === 'string' ? e.target.result : '';
+    if (!isNonEmptyDataUri(fileData)) {
+      showError(type, 'File read failed. Please re-upload your file.');
+      return;
+    }
+    if (type === 'photo') photoData = { data: fileData, filename: file.name, mime: file.type, size: file.size };
+    else resumeData = { data: fileData, filename: file.name, mime: file.type, size: file.size };
     const area = document.getElementById(`${type}-upload-area`);
     const fn = document.getElementById(`${type}-filename`);
     const clr = document.getElementById(`${type}-clear`);
@@ -796,8 +809,18 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
   const source = document.getElementById('job_posting_source').value;
   if (!source) { showError('job_posting_source', 'Please select where you saw the posting'); valid = false; } else clearError('job_posting_source');
 
-  if (!photoData) { showError('photo', 'Please upload a profile photo'); valid = false; } else clearError('photo');
-  if (!resumeData) { showError('resume', 'Please upload your resume'); valid = false; } else clearError('resume');
+  if (!photoData || !isNonEmptyDataUri(photoData.data)) {
+    showError('photo', 'Please upload a valid profile photo');
+    valid = false;
+  } else {
+    clearError('photo');
+  }
+  if (!resumeData || !isNonEmptyDataUri(resumeData.data)) {
+    showError('resume', 'Please upload a valid resume file');
+    valid = false;
+  } else {
+    clearError('resume');
+  }
   const smsConsentChecked = document.getElementById('sms_consent').checked;
   const smsConsentError = document.getElementById('err-sms-consent');
   if (!smsConsentChecked) {
@@ -819,24 +842,24 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
 
   try {
     const payload = {
-      fullName,
-      phone,
-      addressFull: address,
-      addressStreet: document.getElementById('address_street').value,
-      addressCity: document.getElementById('address_city').value,
-      addressProvince: document.getElementById('address_province').value,
-      addressPostalCode: document.getElementById('address_postal_code').value,
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      addressFull: address.trim(),
+      addressStreet: document.getElementById('address_street').value.trim(),
+      addressCity: document.getElementById('address_city').value.trim(),
+      addressProvince: document.getElementById('address_province').value.trim(),
+      addressPostalCode: document.getElementById('address_postal_code').value.trim(),
       addressCountry: 'Canada',
       addressLatitude: document.getElementById('address_latitude').value,
       addressLongitude: document.getElementById('address_longitude').value,
       addressManualEntry: isAddressAutocompleteFallbackActive() || !addressValidated,
-      applyingFor,
-      jobPostingSource: source,
-      photoData: photoData.data,
+      applyingFor: applyingFor.trim(),
+      jobPostingSource: source.trim(),
+      photoData: String(photoData.data).trim(),
       photoFilename: photoData.filename,
       photoMimeType: photoData.mime,
       photoFileSize: photoData.size,
-      resumeData: resumeData.data,
+      resumeData: String(resumeData.data).trim(),
       resumeFilename: resumeData.filename,
       resumeMimeType: resumeData.mime,
       resumeFileSize: resumeData.size,
@@ -858,6 +881,13 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
         const result = await resp.json();
         
         if (!resp.ok) {
+          const issueMessage = Array.isArray(result?.issues)
+            ? result.issues
+                .map((issue) => issue?.path ? `${issue.path}: ${issue.message}` : issue?.message)
+                .filter(Boolean)
+                .join('; ')
+            : '';
+
           // Handle specific error cases
           if (resp.status === 409) {
             // Duplicate submission
@@ -866,7 +896,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
           }
-          throw new Error(result.error || result.detail || 'Submission failed');
+          throw new Error(issueMessage || result.error || result.detail || 'Submission failed');
         }
 
         // Success!

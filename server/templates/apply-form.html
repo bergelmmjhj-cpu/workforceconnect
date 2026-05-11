@@ -421,8 +421,6 @@ const AUTOCOMPLETE_PERMANENT_FAILURE_CATEGORIES = new Set([
   'BILLING_INACTIVE_OR_INVALID',
   'RESTRICTION_BLOCKED',
 ]);
-const COMMON_CA_CITIES = ['Toronto', 'Mississauga', 'Brampton', 'Vaughan', 'Markham', 'Etobicoke'];
-const PROVINCE_CODE_PATTERN = /\b(AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)\b/i;
 
 // --- ADDRESS AUTOCOMPLETE ---
 let autocompleteTimer;
@@ -469,10 +467,6 @@ function isTransientRetryWindowActive() {
 
 function isAddressAutocompleteFallbackActive() {
   return addressAutocompleteFallbackState !== null;
-}
-
-function shouldDeferAutocompleteRequest() {
-  return addressAutocompleteFallbackState === 'transient' && isTransientRetryWindowActive();
 }
 
 function maybeResetAddressAutocompleteFallback() {
@@ -545,16 +539,6 @@ addressInput.addEventListener('input', () => {
   const val = addressInput.value.trim();
   if (val.length < 3) { clearAddressLookupState(); return; }
   maybeResetAddressAutocompleteFallback();
-  if (isAddressAutocompleteFallbackActive()) {
-    const localPredictions = buildLocalAddressPredictions(val);
-    if (localPredictions.length > 0) {
-      clearError('address_full');
-      renderSuggestions(localPredictions);
-    } else {
-      hideSuggestions();
-    }
-  }
-  if (shouldDeferAutocompleteRequest()) return;
   clearError('address_full');
   autocompleteTimer = setTimeout(() => fetchSuggestions(val), 300);
 });
@@ -562,11 +546,9 @@ addressInput.addEventListener('input', () => {
 addressInput.addEventListener('focus', () => {
   const val = addressInput.value.trim();
   if (val.length < 3) return;
-  if (isAddressAutocompleteFallbackActive()) {
-    const localPredictions = buildLocalAddressPredictions(val);
-    if (localPredictions.length > 0) {
-      renderSuggestions(localPredictions);
-    }
+  if (!isAddressAutocompleteFallbackActive()) {
+    clearTimeout(autocompleteTimer);
+    autocompleteTimer = setTimeout(() => fetchSuggestions(val), 150);
   }
 });
 
@@ -606,10 +588,6 @@ async function fetchSuggestions(input) {
           failureCategory: data.failureCategory || null,
           failureStage: data.failureStage || null,
         });
-        const localPredictions = buildLocalAddressPredictions(input);
-        if (localPredictions.length > 0) {
-          renderSuggestions(localPredictions);
-        }
       } else {
         showError('address_full', message);
       }
@@ -632,10 +610,6 @@ async function fetchSuggestions(input) {
       failureCategory: 'PROXY_FETCH_FAILURE',
       failureStage: 'client_fetch',
     });
-    const localPredictions = buildLocalAddressPredictions(input);
-    if (localPredictions.length > 0) {
-      renderSuggestions(localPredictions);
-    }
   }
 }
 
@@ -727,115 +701,7 @@ function rankPredictions(predictions) {
     .map(({ _quality, ...prediction }) => prediction);
 }
 
-function normalizeTextValue(value) {
-  if (typeof value !== 'string') return '';
-  return value.trim().replace(/\s+/g, ' ');
-}
-
-function parseManualCanadianAddress(input) {
-  const cleaned = normalizeTextValue(input);
-  if (!cleaned) return null;
-
-  const parts = cleaned.split(',').map((part) => normalizeTextValue(part)).filter(Boolean);
-  const street = parts[0] || cleaned;
-  let city = parts.length >= 2 ? parts[1] : '';
-  let province = '';
-  let postalCode = '';
-
-  const postalMatch = cleaned.match(/\b([A-Za-z]\d[A-Za-z])[\s-]?(\d[A-Za-z]\d)\b/i);
-  if (postalMatch) {
-    postalCode = `${postalMatch[1]} ${postalMatch[2]}`.toUpperCase();
-  }
-
-  const provinceMatch = cleaned.match(PROVINCE_CODE_PATTERN);
-  if (provinceMatch) {
-    province = provinceMatch[1].toUpperCase();
-  }
-
-  if (!city && province) {
-    const provinceIndex = parts.findIndex((part) => PROVINCE_CODE_PATTERN.test(part));
-    if (provinceIndex > 0) {
-      city = parts[provinceIndex - 1];
-    }
-  }
-
-  return {
-    formattedAddress: cleaned,
-    addressLine1: street,
-    city,
-    province,
-    postalCode,
-  };
-}
-
-function encodeLocalPredictionId(value, index) {
-  try {
-    return `local-${index}-${btoa(unescape(encodeURIComponent(value))).replace(/=+$/, '')}`;
-  } catch {
-    return `local-${index}-${Date.now()}`;
-  }
-}
-
-function buildLocalAddressPredictions(input) {
-  const cleaned = normalizeTextValue(input);
-  if (cleaned.length < 3) return [];
-
-  const parsed = parseManualCanadianAddress(cleaned);
-  const candidates = new Set();
-
-  if (parsed?.formattedAddress) {
-    candidates.add(parsed.formattedAddress);
-  }
-  candidates.add(`${cleaned}, Canada`);
-
-  if (parsed?.addressLine1 && parsed?.city && parsed?.province) {
-    candidates.add(`${parsed.addressLine1}, ${parsed.city}, ${parsed.province}${parsed.postalCode ? ` ${parsed.postalCode}` : ''}, Canada`);
-  }
-
-  if (!PROVINCE_CODE_PATTERN.test(cleaned)) {
-    COMMON_CA_CITIES.forEach((city) => {
-      candidates.add(`${cleaned}, ${city}, ON, Canada`);
-    });
-  }
-
-  return Array.from(candidates)
-    .filter(Boolean)
-    .slice(0, 6)
-    .map((description, index) => ({
-      place_id: encodeLocalPredictionId(description, index),
-      description,
-      source: 'local',
-    }));
-}
-
 async function selectPlace(placeId, description) {
-  if (typeof placeId === 'string' && placeId.startsWith('local-')) {
-    const localAddress = parseManualCanadianAddress(description);
-    if (!localAddress) {
-      showError('address_full', 'Please enter a complete Canadian address with city and province.');
-      addressValidated = false;
-      clearResolvedAddressFields();
-      return;
-    }
-
-    addressInput.value = localAddress.formattedAddress;
-    document.getElementById('address_street').value = localAddress.addressLine1 || '';
-    document.getElementById('address_city').value = localAddress.city || '';
-    document.getElementById('address_province').value = localAddress.province || '';
-    document.getElementById('address_postal_code').value = localAddress.postalCode || '';
-    document.getElementById('address_country').value = 'Canada';
-    document.getElementById('address_place_id').value = '';
-    document.getElementById('address_street_number').value = '';
-    document.getElementById('address_street_name').value = '';
-    document.getElementById('address_place_types').value = 'local_fallback';
-    document.getElementById('address_latitude').value = '';
-    document.getElementById('address_longitude').value = '';
-    clearError('address_full');
-    addressValidated = true;
-    hideSuggestions();
-    return;
-  }
-
   addressInput.value = description;
   hideSuggestions();
   try {

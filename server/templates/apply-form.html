@@ -633,18 +633,6 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
         const result = await resp.json();
         
         if (!resp.ok) {
-          // Check for coordinate-related errors and show a clean address message instead
-          const coordinateFields = ['addressLatitude', 'addressLongitude', 'address_latitude', 'address_longitude'];
-          const hasCoordError = Array.isArray(result?.issues) && result.issues.some(
-            (issue) => coordinateFields.some(f => String(issue?.path || '').includes(f))
-          );
-          if (hasCoordError) {
-            showError('address_full', 'Please select a valid address from the suggestions or enter a complete Canadian address.');
-            btn.disabled = false;
-            btn.textContent = 'Submit Application';
-            submitPending = false;
-            return;
-          }
           const issueMessage = Array.isArray(result?.issues)
             ? result.issues
                 .map((issue) => issue?.path ? `${issue.path}: ${issue.message}` : issue?.message)
@@ -695,9 +683,24 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
     } else if (errorMsg.includes('Address required')) {
       errorMsg = 'Please enter your address.';
       showError('address_full', 'Please enter your address');
+    } else if (
+      errorMsg.includes('Latitude') || errorMsg.includes('Longitude') ||
+      errorMsg.includes('numeric value') || errorMsg.includes('addressLatitude') ||
+      errorMsg.includes('addressLongitude')
+    ) {
+      errorMsg = 'Please select a valid address from the suggestions or enter a complete Canadian address.';
+      showError('address_full', errorMsg);
     }
     
-    alert('Unable to submit: ' + errorMsg);
+    // Show a toast/inline error instead of a browser alert
+    const existingBanner = document.getElementById('submit-error-banner');
+    if (existingBanner) existingBanner.remove();
+    const banner = document.createElement('div');
+    banner.id = 'submit-error-banner';
+    banner.style.cssText = 'background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;padding:12px 16px;border-radius:8px;margin-top:12px;font-size:14px;line-height:1.5;';
+    banner.textContent = errorMsg;
+    document.getElementById('submit-btn').insertAdjacentElement('afterend', banner);
+    window.scrollTo({ top: document.getElementById('submit-btn').offsetTop - 100, behavior: 'smooth' });
   }
 });
 </script>

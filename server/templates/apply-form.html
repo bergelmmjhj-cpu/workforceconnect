@@ -633,6 +633,18 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
         const result = await resp.json();
         
         if (!resp.ok) {
+          // Check for coordinate-related errors and show a clean address message instead
+          const coordinateFields = ['addressLatitude', 'addressLongitude', 'address_latitude', 'address_longitude'];
+          const hasCoordError = Array.isArray(result?.issues) && result.issues.some(
+            (issue) => coordinateFields.some(f => String(issue?.path || '').includes(f))
+          );
+          if (hasCoordError) {
+            showError('address_full', 'Please select a valid address from the suggestions or enter a complete Canadian address.');
+            btn.disabled = false;
+            btn.textContent = 'Submit Application';
+            submitPending = false;
+            return;
+          }
           const issueMessage = Array.isArray(result?.issues)
             ? result.issues
                 .map((issue) => issue?.path ? `${issue.path}: ${issue.message}` : issue?.message)

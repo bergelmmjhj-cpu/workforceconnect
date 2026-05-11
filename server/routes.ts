@@ -315,6 +315,12 @@ function getGooglePlacesApiKey(): string | null {
   return null;
 }
 
+function getGooglePlacesEnvVarName(): string {
+  if (process.env.GOOGLE_PLACES_API_KEY) return "GOOGLE_PLACES_API_KEY";
+  if (process.env.GOOGLE_MAPS_API_KEY) return "GOOGLE_MAPS_API_KEY";
+  return "none";
+}
+
 function mapGooglePlacesErrorStatus(status: string | undefined) {
   switch (status) {
     case "OVER_QUERY_LIMIT":
@@ -578,6 +584,99 @@ async function fetchGooglePlaceDetails(placeId: string) {
     };
   }
 }
+
+async function probeGooglePlacesApiKey(): Promise<{
+  configured: boolean;
+  working: boolean | null;
+  failureCategory: GooglePlacesFailureCategory | null;
+  errorMessage: string | null;
+  envVar: string;
+}> {
+  const apiKey = getGooglePlacesApiKey();
+  const envVar = getGooglePlacesEnvVarName();
+
+  if (!apiKey) {
+    return { configured: false, working: null, failureCategory: "CONFIG_MISSING_KEY", errorMessage: "No API key configured", envVar };
+  }
+
+  // Use a lightweight autocomplete request with a short generic query to test the key.
+  const url = new URL(`${GOOGLE_PLACES_API_BASE_URL}/autocomplete/json`);
+  url.searchParams.set("input", "123 Main");
+  url.searchParams.set("components", "country:ca");
+  url.searchParams.set("types", "address");
+  url.searchParams.set("language", "en");
+  url.searchParams.set("key", apiKey);
+
+  try {
+    const response = await fetchWithPlacesTimeout(url);
+    const data = await response.json() as GooglePlacesApiResponse<never>;
+    const status = typeof data.status === "string" ? data.status : undefined;
+    const isWorking = status === "OK" || status === "ZERO_RESULTS";
+
+    if (isWorking) {
+      return { configured: true, working: true, failureCategory: null, errorMessage: null, envVar };
+    }
+
+    const failureCategory = inferGooglePlacesFailureCategory(status, data.error_message);
+    return {
+      configured: true,
+      working: false,
+      failureCategory,
+      errorMessage: data.error_message || status || "Unknown error",
+      envVar,
+    };
+  } catch (error) {
+    const isTimeout = error instanceof Error && error.name === "AbortError";
+    return {
+      configured: true,
+      working: false,
+      failureCategory: isTimeout ? "PROXY_TIMEOUT" : "PROXY_FETCH_FAILURE",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      envVar,
+    };
+  }
+}
+
+// Run a non-blocking startup probe to surface API key issues in logs immediately.
+setTimeout(async () => {
+  try {
+    const result = await probeGooglePlacesApiKey();
+    if (result.working === true) {
+      console.info("[PLACES] STARTUP_PROBE: API key is valid and Places API is responding normally.", { envVar: result.envVar });
+    } else if (!result.configured) {
+      console.error(
+        "[PLACES] STARTUP_PROBE: Google Places API key is NOT configured. " +
+        "Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY in your deployment environment and redeploy. " +
+        "Address autocomplete will fall back to manual entry until this is resolved.",
+      );
+    } else {
+      let hint = "";
+      switch (result.failureCategory) {
+        case "API_NOT_ACTIVATED":
+          hint = " Ensure 'Places API' is enabled in Google Cloud Console for your project.";
+          break;
+        case "BILLING_INACTIVE_OR_INVALID":
+          hint = " Google Cloud billing must be enabled for the project linked to this API key.";
+          break;
+        case "RESTRICTION_BLOCKED":
+          hint = " The API key has HTTP referrer or IP restrictions. For server-side use, remove referrer restrictions and add the server's IP, or use an unrestricted key.";
+          break;
+        case "INVALID_KEY":
+          hint = " The API key value appears to be invalid or has been revoked. Regenerate the key in Google Cloud Console.";
+          break;
+        case "QUOTA_EXCEEDED":
+          hint = " The API quota has been exceeded. Check your Google Cloud Console quota settings.";
+          break;
+      }
+      console.error(`[PLACES] STARTUP_PROBE: API key is configured but Places API calls are failing (${result.failureCategory}).${hint}`, {
+        envVar: result.envVar,
+        errorMessage: result.errorMessage,
+      });
+    }
+  } catch (err) {
+    console.error("[PLACES] STARTUP_PROBE: Unexpected error during probe.", { message: err instanceof Error ? err.message : String(err) });
+  }
+}, 5000);
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371e3;
@@ -9880,6 +9979,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[PLACES] details:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
       res.status(500).json({ error: "Failed to fetch address details" });
+    }
+  });
+
+  // Diagnostic endpoint: checks API key configuration and optionally runs a live probe.
+  // Returns only safe, non-secret information. Useful for deployment health checks.
+  app.get("/api/places/health", async (req: Request, res: Response) => {
+    try {
+      const apiKey = getGooglePlacesApiKey();
+      const envVar = getGooglePlacesEnvVarName();
+      const keyConfigured = apiKey !== null;
+
+      // Only run a live probe if explicitly requested (to avoid consuming quota on every health check).
+      const liveProbe = req.query.probe === "1";
+      if (!liveProbe) {
+        res.json({
+          configured: keyConfigured,
+          envVar,
+          keyLengthHint: apiKey ? apiKey.length : 0,
+          liveTest: null,
+          note: "Pass ?probe=1 to run a live API test (consumes one API quota call).",
+        });
+        return;
+      }
+
+      const probe = await probeGooglePlacesApiKey();
+      res.json({
+        configured: probe.configured,
+        envVar: probe.envVar,
+        keyLengthHint: apiKey ? apiKey.length : 0,
+        liveTest: {
+          working: probe.working,
+          failureCategory: probe.failureCategory,
+          errorMessage: probe.errorMessage,
+        },
+      });
+    } catch (error) {
+      console.error("[PLACES] health:ERROR", { message: (error instanceof Error ? error.message : String(error)) });
+      res.status(500).json({ error: "Failed to check Places API health" });
     }
   });
 

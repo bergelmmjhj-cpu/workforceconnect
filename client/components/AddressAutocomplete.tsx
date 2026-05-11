@@ -68,6 +68,9 @@ export function AddressAutocomplete({
   const [showDropdown, setShowDropdown] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the autocomplete service is temporarily unavailable so we
+  // avoid hammering the endpoint with repeated failing requests.
+  const serviceUnavailableRef = useRef(false);
 
   useEffect(() => {
     setInputValue(value);
@@ -81,14 +84,36 @@ export function AddressAutocomplete({
       return;
     }
 
+    // Skip the call if the service is already known to be unavailable.
+    if (serviceUnavailableRef.current) {
+      return;
+    }
+
     setIsLoading(true);
     setApiError(null);
     try {
       const response = await apiRequest("GET", `/api/places/autocomplete?input=${encodeURIComponent(input)}`);
       const data = await response.json();
+
+      if (!response.ok) {
+        // 5xx means the service is down — stop retrying until the user clears.
+        // 429 means rate-limited — transient, so allow the next call through.
+        if (response.status >= 500) {
+          serviceUnavailableRef.current = true;
+        }
+        setApiError("Address search unavailable. Please type your address manually.");
+        setPredictions([]);
+        setShowDropdown(false);
+        return;
+      }
+
+      // Clear the unavailability flag on a successful response.
+      serviceUnavailableRef.current = false;
       setPredictions(data.predictions || []);
       setShowDropdown(data.predictions?.length > 0);
     } catch (err) {
+      // Network-level errors (e.g. offline, timeout) are transient — do not
+      // permanently disable autocomplete; just surface the error message.
       console.error("Error fetching predictions:", err);
       setApiError("Address search unavailable. Please check your connection.");
     } finally {
@@ -103,6 +128,11 @@ export function AddressAutocomplete({
     
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
+    }
+
+    // Don't schedule further API calls if the service is known to be unavailable.
+    if (serviceUnavailableRef.current) {
+      return;
     }
 
     debounceRef.current = setTimeout(() => {
@@ -133,6 +163,8 @@ export function AddressAutocomplete({
     setPredictions([]);
     setShowDropdown(false);
     setApiError(null);
+    // Allow retry after the user clears the field.
+    serviceUnavailableRef.current = false;
     onInputChange?.("");
     onClear?.();
   };

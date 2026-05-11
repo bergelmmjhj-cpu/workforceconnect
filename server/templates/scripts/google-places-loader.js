@@ -258,10 +258,10 @@
           diagnosticMessage: detectedError.diagnosticMessage || null,
         });
         settle(
-          createFailure(detectedError.reason, Object.assign({
+          createFailure(detectedError.reason, Object.assign({}, detectedError, {
             hostname: global.location ? global.location.hostname : "",
             envVar: config.envVar || "none",
-          }, detectedError)),
+          })),
         );
       };
 

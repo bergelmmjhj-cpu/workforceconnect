@@ -110,7 +110,7 @@ function renderApplyFormTemplate(template: string): string {
   if (!frontendGoogleMapsConfig.apiKey) {
     console.error(
       "[PLACES_CLIENT] FRONTEND_CONFIG_ERROR: Missing VITE_GOOGLE_MAPS_API_KEY. " +
-        "Set VITE_GOOGLE_MAPS_API_KEY in Railway or your .env/environment configuration for the frontend build/runtime. " +
+        "Set VITE_GOOGLE_MAPS_API_KEY in your deployment or .env/environment configuration (for example Railway) for the frontend build/runtime. " +
         "GOOGLE_MAPS_API_KEY and GOOGLE_PLACES_API_KEY are currently accepted as legacy fallbacks.",
     );
   } else if (frontendGoogleMapsConfig.envVar !== "VITE_GOOGLE_MAPS_API_KEY") {

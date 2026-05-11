@@ -1356,6 +1356,7 @@ const publicApplySubmissionSchema = z.object({
 
 function coordinateSchema(min: number, max: number, label: string) {
   return z.union([
+    z.null(),
     z.number().min(min).max(max),
     z.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
       (v) => { const n = parseFloat(v); return n >= min && n <= max; },

@@ -2203,6 +2203,7 @@ function buildPaymentSummary(application: Record<string, unknown>) {
     bankInstitution: bankInstitution || "Not provided",
     bankTransit: bankTransit || "Not provided",
     bankAccountMasked: maskAccountNumber(resolved.bankAccount),
+    bankAccountRaw: bankAccount || "Not provided",
     etransferEmail: etransferEmail || "Not provided",
     payrollContactEmail: payrollContactEmail || "Not provided",
     hasRequiredPaymentInfo,

@@ -1953,8 +1953,39 @@
         return 'Not selected';
       }
 
+      function maskAccountNumber(value) {
+        if (!value) return 'Not provided';
+        var digits = String(value).replace(/\D/g, '');
+        if (!digits) return 'Not provided';
+        if (digits.length < 4) return '****';
+        return '******' + digits.slice(-4);
+      }
+
+      function toggleAccountNumber(appId, button) {
+        var accountValueElement = document.getElementById('account-number-' + appId);
+        if (!accountValueElement || !button) return;
+
+        var isVisible = accountValueElement.getAttribute('data-visible') === 'true';
+        var maskedValue = accountValueElement.getAttribute('data-masked') || 'Not provided';
+        var rawValue = accountValueElement.getAttribute('data-raw') || 'Not provided';
+
+        if (isVisible) {
+          accountValueElement.textContent = maskedValue;
+          accountValueElement.setAttribute('data-visible', 'false');
+          button.textContent = 'Show';
+          return;
+        }
+
+        accountValueElement.textContent = rawValue;
+        accountValueElement.setAttribute('data-visible', 'true');
+        button.textContent = 'Hide';
+      }
       function getPaymentSummary(app) {
-        if (app.paymentSummary) return app.paymentSummary;
+        if (app.paymentSummary) {
+          return Object.assign({}, app.paymentSummary, {
+            bankAccountRaw: app.paymentSummary.bankAccountRaw || 'Not provided'
+          });
+        }
 
         function firstNonEmpty() {
           for (var i = 0; i < arguments.length; i += 1) {
@@ -2045,7 +2076,8 @@
           bankName: bankName || 'Not provided',
           bankInstitution: bankInstitution || 'Not provided',
           bankTransit: bankTransit || 'Not provided',
-          bankAccount: bankAccount || 'Not provided',
+          bankAccountMasked: maskAccountNumber(bankAccount),
+          bankAccountRaw: bankAccount || 'Not provided',
           etransferEmail: etransferEmail || 'Not provided',
           payrollContactEmail: payrollContactEmail || 'Not provided',
           hasRequiredPaymentInfo: hasRequiredPaymentInfo
@@ -2417,7 +2449,7 @@
         html += '<div class="detail-item"><div class="detail-label">Bank Name</div><div class="detail-value">' + escapeHtml(paymentSummary.bankName) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Institution Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankInstitution) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Transit Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankTransit) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Account Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankAccount) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Account Number</div><div class="detail-value"><span id="account-number-' + app.id + '" data-visible="false" data-masked="' + escapeAttribute(paymentSummary.bankAccountMasked) + '" data-raw="' + escapeAttribute(paymentSummary.bankAccountRaw) + '">' + escapeHtml(paymentSummary.bankAccountMasked) + '</span> <button type="button" class="pdf-btn" onclick="toggleAccountNumber(\'' + app.id + '\', this)">Show</button></div></div>';
         html += '<div class="detail-item full"><div class="detail-label">E-Transfer Email</div><div class="detail-value">' + escapeHtml(paymentSummary.etransferEmail) + '</div></div>';
         if (!paymentSummary.hasRequiredPaymentInfo) {
           html += '<div class="detail-item full"><div class="detail-value" style="color:#b45309;font-weight:700;">Missing Payment Information</div></div>';

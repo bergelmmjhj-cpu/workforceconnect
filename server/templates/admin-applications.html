@@ -1953,14 +1953,6 @@
         return 'Not selected';
       }
 
-      function maskAccountNumber(value) {
-        if (!value) return 'Not provided';
-        var digits = String(value).replace(/\D/g, '');
-        if (!digits) return 'Not provided';
-        if (digits.length < 4) return '****';
-        return '******' + digits.slice(-4);
-      }
-
       function getPaymentSummary(app) {
         if (app.paymentSummary) return app.paymentSummary;
 
@@ -2053,7 +2045,7 @@
           bankName: bankName || 'Not provided',
           bankInstitution: bankInstitution || 'Not provided',
           bankTransit: bankTransit || 'Not provided',
-          bankAccountMasked: maskAccountNumber(bankAccount),
+          bankAccount: bankAccount || 'Not provided',
           etransferEmail: etransferEmail || 'Not provided',
           payrollContactEmail: payrollContactEmail || 'Not provided',
           hasRequiredPaymentInfo: hasRequiredPaymentInfo
@@ -2425,7 +2417,7 @@
         html += '<div class="detail-item"><div class="detail-label">Bank Name</div><div class="detail-value">' + escapeHtml(paymentSummary.bankName) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Institution Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankInstitution) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Transit Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankTransit) + '</div></div>';
-        html += '<div class="detail-item"><div class="detail-label">Account Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankAccountMasked) + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Account Number</div><div class="detail-value">' + escapeHtml(paymentSummary.bankAccount) + '</div></div>';
         html += '<div class="detail-item full"><div class="detail-label">E-Transfer Email</div><div class="detail-value">' + escapeHtml(paymentSummary.etransferEmail) + '</div></div>';
         if (!paymentSummary.hasRequiredPaymentInfo) {
           html += '<div class="detail-item full"><div class="detail-value" style="color:#b45309;font-weight:700;">Missing Payment Information</div></div>';

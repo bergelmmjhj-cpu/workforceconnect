@@ -3913,24 +3913,28 @@ var publicApplySubmissionSchema = z2.object({
   payment_details: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
   bankInfo: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
   bank_info: z2.union([z2.string(), z2.record(z2.unknown()), z2.null()]).optional(),
-  titoAcknowledgment: consentLikeSchema,
-  siteRulesAcknowledgment: consentLikeSchema,
-  workerAgreementConsent: consentLikeSchema,
+  titoAcknowledgment: consentLikeSchema.optional(),
+  siteRulesAcknowledgment: consentLikeSchema.optional(),
+  workerAgreementConsent: consentLikeSchema.optional(),
   agreementVersion: nullableStringSchema,
   nonSolicitationAcknowledged: consentLikeSchema.optional(),
   nonSolicitationAcknowledgedAt: z2.union([z2.string(), z2.number()]).optional(),
-  privacyConsent: consentLikeSchema,
+  privacyConsent: consentLikeSchema.optional(),
   consentToContact: consentLikeSchema.optional(),
-  smsConsent: consentLikeSchema,
+  smsConsent: consentLikeSchema.optional(),
   marketingConsent: consentLikeSchema.optional(),
   promotionalConsent: consentLikeSchema.optional(),
-  paymentTermsAcknowledged: consentLikeSchema,
+  paymentTermsAcknowledged: consentLikeSchema.optional(),
   independentContractorStatusAcknowledged: consentLikeSchema.optional(),
-  signature: z2.string().trim().min(1),
-  signatureDate: z2.string().trim().min(1)
-}).strict();
+  signature: z2.string().trim().min(1).optional(),
+  signatureDate: z2.string().trim().min(1).optional()
+}).strip();
 function coordinateSchema(min, max, label) {
-  return z2.union([
+  return z2.preprocess((value) => {
+    if (value === null || value === void 0 || value === "") return void 0;
+    return value;
+  }, z2.union([
+    z2.null(),
     z2.number().min(min).max(max),
     z2.string().trim().regex(/^-?\d+(\.\d+)?$/, "Must be a numeric value").refine(
       (v) => {
@@ -3939,7 +3943,7 @@ function coordinateSchema(min, max, label) {
       },
       { message: `${label} must be between ${min} and ${max}` }
     )
-  ]);
+  ]).optional());
 }
 var optionalTrimmedStringSchema = z2.preprocess((value) => {
   if (value === null || value === void 0) return void 0;
@@ -4568,6 +4572,7 @@ function buildPaymentSummary(application) {
     bankInstitution: bankInstitution || "Not provided",
     bankTransit: bankTransit || "Not provided",
     bankAccountMasked: maskAccountNumber(resolved.bankAccount),
+    bankAccountRaw: bankAccount || "Not provided",
     etransferEmail: etransferEmail || "Not provided",
     payrollContactEmail: payrollContactEmail || "Not provided",
     hasRequiredPaymentInfo
@@ -6519,8 +6524,8 @@ The WFConnect Team`,
         paymentTermsAcknowledged: resolvedAcknowledgments.paymentTermsAcknowledged,
         promotionalConsent,
         marketingConsent: promotionalConsent,
-        signature: normalizeWhitespace(payload.signature),
-        signatureDate: normalizeWhitespace(payload.signatureDate),
+        signature: payload.signature ? normalizeWhitespace(payload.signature) : null,
+        signatureDate: payload.signatureDate ? normalizeWhitespace(payload.signatureDate) : null,
         agreementVersion: payload.agreementVersion || WORKFORCE_SUBCONTRACTOR_AGREEMENT_VERSION,
         nonSolicitationAcknowledged,
         nonSolicitationAcknowledgedAt: nonSolicitationAcknowledged ? new Date(payload.nonSolicitationAcknowledgedAt || Date.now()) : null,
@@ -13703,9 +13708,77 @@ var log = console.log;
 function escapeHtml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
+function serializeForInlineScript(value) {
+  return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+}
 function renderApplyTemplate(template) {
   const clauseHtml = NON_SOLICITATION_DIRECT_HIRING_CLAUSE_PARAGRAPHS.map((paragraph) => `<p class="clause-paragraph">${escapeHtml(paragraph)}</p>`).join("\n");
   return template.replace(/__NON_SOLICITATION_TITLE__/g, escapeHtml(NON_SOLICITATION_DIRECT_HIRING_CLAUSE_TITLE)).replace(/__NON_SOLICITATION_BODY__/g, clauseHtml);
+}
+function resolveFrontendGoogleMapsConfig() {
+  const viteGoogleMapsApiKey = (process.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+  if (viteGoogleMapsApiKey) {
+    return {
+      apiKey: viteGoogleMapsApiKey,
+      envVar: "VITE_GOOGLE_MAPS_API_KEY"
+    };
+  }
+  const googleMapsApiKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
+  if (googleMapsApiKey) {
+    return {
+      apiKey: googleMapsApiKey,
+      envVar: "GOOGLE_MAPS_API_KEY"
+    };
+  }
+  const googlePlacesApiKey = (process.env.GOOGLE_PLACES_API_KEY || "").trim();
+  if (googlePlacesApiKey) {
+    return {
+      apiKey: googlePlacesApiKey,
+      envVar: "GOOGLE_PLACES_API_KEY"
+    };
+  }
+  return {
+    apiKey: "",
+    envVar: "none"
+  };
+}
+function renderApplyFormTemplate(template) {
+  const googlePlacesLoaderPath = path.resolve(
+    process.cwd(),
+    "server",
+    "templates",
+    "scripts",
+    "google-places-loader.js"
+  );
+  const addressAutocompletePath = path.resolve(
+    process.cwd(),
+    "server",
+    "templates",
+    "scripts",
+    "address-autocomplete.js"
+  );
+  const googlePlacesLoaderScript = fs.readFileSync(googlePlacesLoaderPath, "utf-8");
+  const addressAutocompleteScript = fs.readFileSync(addressAutocompletePath, "utf-8");
+  const frontendGoogleMapsConfig = resolveFrontendGoogleMapsConfig();
+  if (!frontendGoogleMapsConfig.apiKey) {
+    console.error(
+      "[PLACES_CLIENT] FRONTEND_CONFIG_ERROR: Missing VITE_GOOGLE_MAPS_API_KEY. Set VITE_GOOGLE_MAPS_API_KEY in Railway or your .env/environment configuration for the frontend build/runtime. GOOGLE_MAPS_API_KEY and GOOGLE_PLACES_API_KEY are currently accepted as legacy fallbacks."
+    );
+  } else if (frontendGoogleMapsConfig.envVar !== "VITE_GOOGLE_MAPS_API_KEY") {
+    console.warn("[PLACES_CLIENT] FRONTEND_CONFIG_WARNING: Using legacy Google Maps API key env var fallback.", {
+      selectedEnvVar: frontendGoogleMapsConfig.envVar,
+      recommendedEnvVar: "VITE_GOOGLE_MAPS_API_KEY"
+    });
+  }
+  return template.replace(
+    /__GOOGLE_PLACES_FRONTEND_CONFIG__/g,
+    serializeForInlineScript({
+      apiKey: frontendGoogleMapsConfig.apiKey,
+      envVar: frontendGoogleMapsConfig.envVar,
+      diagnosticsEnabled: process.env.NODE_ENV !== "production" || process.env.PLACES_CLIENT_DIAGNOSTICS === "1" || process.env.DEBUG_GOOGLE_PLACES === "1",
+      scriptLoadTimeoutMs: 15e3
+    })
+  ).replace(/__GOOGLE_PLACES_LOADER_SCRIPT__/g, googlePlacesLoaderScript).replace(/__ADDRESS_AUTOCOMPLETE_SCRIPT__/g, addressAutocompleteScript);
 }
 function renderGuideTemplate(template) {
   const paymentTermsParagraphsHtml = PAYMENT_TERMS_AND_CLIENT_DEPENDENCY_PARAGRAPHS.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n          ");
@@ -14272,7 +14345,7 @@ function configureExpoAndLanding(app2) {
     res.sendFile(faviconPath);
   });
   const applyFormPath = path.resolve(process.cwd(), "server", "templates", "apply-form.html");
-  const applyFormTemplate = fs.existsSync(applyFormPath) ? fs.readFileSync(applyFormPath, "utf-8") : null;
+  const applyFormTemplate = fs.existsSync(applyFormPath) ? renderApplyFormTemplate(fs.readFileSync(applyFormPath, "utf-8")) : null;
   const applicantsPortalPath = path.resolve(process.cwd(), "server", "templates", "applicants-portal.html");
   const applicantsPortalTemplate = fs.existsSync(applicantsPortalPath) ? fs.readFileSync(applicantsPortalPath, "utf-8") : null;
   function isApplySubdomain(req) {

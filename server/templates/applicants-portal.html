@@ -372,12 +372,11 @@ function showLogin() {
   googleInitialized = false;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('dashboard').classList.remove('show');
-  document.getElementById('google-signin-section').style.display = 'block';
+  document.getElementById('google-signin-section').style.display = 'none';
   document.getElementById('credentials-fields').style.display = 'block';
   document.getElementById('totp-fields').style.display = 'none';
   document.getElementById('login-btn').textContent = 'Sign In';
   document.getElementById('login-error').classList.remove('show');
-  setTimeout(initGoogleSignIn, 300);
 }
 
 function showDashboard() {
@@ -396,66 +395,33 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   errEl.classList.remove('show');
 
   try {
-    if (pending2FAUserId) {
-      btn.textContent = 'Verifying...';
-      const code = document.getElementById('login-totp').value.trim();
-      if (!code) throw new Error('Please enter your verification code');
+    btn.textContent = 'Signing in...';
+    const username = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!username) throw new Error('Please enter your username');
+    if (!password) throw new Error('Please enter your password');
 
-      const resp = await apiFetch('/api/2fa/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: pending2FAUserId, code }),
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data.verified) throw new Error(data.error || 'Invalid code');
+    const resp = await apiFetch('/api/applicants/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await resp.json();
 
-      const role = data.user.role;
-      if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
+    if (!resp.ok) throw new Error(data.error || 'Login failed');
+    if (!data.user) throw new Error('Login failed');
 
-      currentUser = data.user;
-      pending2FAUserId = null;
-      showDashboard();
-    } else {
-      btn.textContent = 'Signing in...';
-      const email = document.getElementById('login-email').value.trim();
-      const password = document.getElementById('login-password').value;
-      if (!email) throw new Error('Please enter your email address');
-      if (!password) throw new Error('Please enter your password');
+    const role = data.user.role;
+    if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
 
-      const resp = await apiFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await resp.json();
-
-      if (!resp.ok) throw new Error(data.error || 'Login failed');
-      if (data.pending) throw new Error('Account pending approval');
-
-      if (data.requires2FA) {
-        pending2FAUserId = data.userId;
-        document.getElementById('google-signin-section').style.display = 'none';
-        document.getElementById('credentials-fields').style.display = 'none';
-        document.getElementById('totp-fields').style.display = 'block';
-        document.getElementById('login-btn').textContent = 'Verify';
-        document.getElementById('login-totp').focus();
-        return;
-      }
-
-      if (!data.user) throw new Error('Login failed');
-
-      const role = data.user.role;
-      if (role !== 'admin' && role !== 'hr') throw new Error('Access denied — admin or HR role required');
-
-      currentUser = data.user;
-      showDashboard();
-    }
+    currentUser = data.user;
+    showDashboard();
   } catch (err) {
     errEl.textContent = err.message;
     errEl.classList.add('show');
   } finally {
     btn.disabled = false;
-    if (!pending2FAUserId) btn.textContent = 'Sign In';
+    btn.textContent = 'Sign In';
   }
 });
 
@@ -662,6 +628,13 @@ function formatConsentStatus(value, at) {
   return 'Accepted (' + dt.toLocaleString('en-CA') + ')';
 }
 
+function formatBirthdate(value) {
+  if (!value) return '—';
+  const dt = new Date(`${value}T00:00:00`);
+  if (isNaN(dt.getTime())) return String(value);
+  return dt.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 // Detail panel
 async function openDetail(id) {
   const overlay = document.getElementById('detail-overlay');
@@ -698,6 +671,7 @@ function renderDetail(a) {
   document.getElementById('detail-body').innerHTML = `
     <div class="detail-section">
       <div class="detail-section-title">Personal Information</div>
+      <div class="detail-row"><div class="detail-label">Birthdate</div><div class="detail-value">${esc(formatBirthdate(a.birthdate))}</div></div>
       <div class="detail-row"><div class="detail-label">Address</div><div class="detail-value">${esc(a.addressFull || '—')}</div></div>
       <div class="detail-row"><div class="detail-label">City</div><div class="detail-value">${esc(displayLocation(a))}</div></div>
       <div class="detail-row"><div class="detail-label">Postal Code</div><div class="detail-value">${esc(a.addressPostalCode || '—')}</div></div>

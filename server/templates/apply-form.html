@@ -233,6 +233,12 @@
       </div>
 
       <div class="field">
+        <label>Birthdate <span class="req">*</span></label>
+        <input type="date" id="birthdate" name="birthdate" autocomplete="bday" required />
+        <div class="field-error" id="err-birthdate">Please enter a valid birthdate</div>
+      </div>
+
+      <div class="field">
         <label>Home Address (Canada only) <span class="req">*</span></label>
         <input type="text" id="address_full" name="address_full" placeholder="123 Main St, Toronto, ON" autocomplete="street-address" />
         <div class="field-hint" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Enter your full address including city and province</div>
@@ -409,6 +415,10 @@ let photoData = null, resumeData = null;
 })();
 let submitPending = false;
 const addressInput = document.getElementById('address_full');
+const birthdateInput = document.getElementById('birthdate');
+if (birthdateInput) {
+  birthdateInput.max = new Date().toISOString().split('T')[0];
+}
 
 function parseCoordinate(id) {
   const val = document.getElementById(id).value.trim();
@@ -530,6 +540,15 @@ function validatePhone(val) {
   return digits.length >= 10 && digits.length <= 11;
 }
 
+function isValidBirthdate(value) {
+  if (!value) return false;
+  const parsed = new Date(`${value}T00:00:00`);
+  if (isNaN(parsed.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return parsed.getTime() <= today.getTime();
+}
+
 // --- FORM SUBMIT ---
 document.getElementById('apply-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -542,6 +561,9 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
 
   const phone = document.getElementById('phone').value.trim();
   if (!validatePhone(phone)) { showError('phone', 'Please enter a valid Canadian phone number'); valid = false; } else clearError('phone');
+
+  const birthdate = document.getElementById('birthdate').value;
+  if (!isValidBirthdate(birthdate)) { showError('birthdate', 'Please enter a valid birthdate'); valid = false; } else clearError('birthdate');
 
   const address = document.getElementById('address_full').value.trim();
   if (!address) { 
@@ -592,6 +614,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
     const payload = {
       fullName: fullName.trim(),
       phone: phone.trim(),
+      birthdate,
       addressFull: address.trim(),
       addressStreet: address.trim(),
       addressCity: document.getElementById('address_city').value.trim(),

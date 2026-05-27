@@ -2436,6 +2436,7 @@
         html += '<div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">' + escapeHtml(app.full_name || app.fullName || 'Not provided') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">' + escapeHtml(app.email || 'Not provided') + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">' + escapeHtml(app.phone || 'Not provided') + '</div></div>';
+        html += '<div class="detail-item"><div class="detail-label">Birthdate</div><div class="detail-value">' + escapeHtml(formatDateValue(getAppValue(app, 'birthdate', 'birthdate') || getAppValue(app, 'dateOfBirth', 'date_of_birth'))) + '</div></div>';
         html += '<div class="detail-item"><div class="detail-label">Location</div><div class="detail-value">' + escapeHtml(getLocationDetailLabel(app)) + '</div></div>';
         html += '<div class="detail-item full"><div class="detail-label">Preferred Roles</div><div class="detail-value">' + escapeHtml(roles.join(', ') || 'Not provided') + '</div></div>';
         html += '</div></div>';

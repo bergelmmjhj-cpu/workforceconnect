@@ -62,7 +62,7 @@ type UserRole = "admin" | "hr" | "client" | "worker";
 
 type AdminPortalAuthResult = {
   ok: boolean;
-  mode: "missing" | "invalid" | "legacy-basic" | "db-basic";
+  mode: "missing" | "invalid" | "env-basic";
   normalizedUsername: string | null;
   userFound: boolean;
   passwordMatched: boolean;
@@ -1380,6 +1380,19 @@ const optionalTrimmedStringSchema = z.preprocess((value) => {
   return value;
 }, z.string().optional());
 
+const applicantBirthdateSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string") return value.trim();
+  return value;
+}, z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Birthdate must be in YYYY-MM-DD format")
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) return false;
+    const today = new Date();
+    const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    return parsed.getTime() <= todayUtc;
+  }, "Birthdate cannot be in the future"));
+
 const requiredTrimmedStringSchema = z.preprocess((value) => {
   if (typeof value === "string") return normalizeWhitespace(value);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -1405,6 +1418,7 @@ const publicApplicantSubmissionSchema = z.object({
   first_name: optionalTrimmedStringSchema,
   lastName: optionalTrimmedStringSchema,
   last_name: optionalTrimmedStringSchema,
+  birthdate: applicantBirthdateSchema,
   email: z.preprocess((value) => {
     if (value === null || value === undefined || value === "") return undefined;
     if (typeof value !== "string") return value;
@@ -1471,6 +1485,7 @@ function normalizePublicApplicantSubmissionPayload(input: unknown): Record<strin
     first_name: pickFirstPresent(source, ["first_name"]),
     lastName: pickFirstPresent(source, ["lastName", "last_name"]),
     last_name: pickFirstPresent(source, ["last_name"]),
+    birthdate: pickFirstPresent(source, ["birthdate", "birth_date", "dateOfBirth", "date_of_birth"]),
     email: pickFirstPresent(source, ["email", "emailAddress", "email_address"]),
     phone: pickFirstPresent(source, ["phone", "phoneNumber", "phone_number", "mobile", "contactNumber"]),
     phoneNumber: pickFirstPresent(source, ["phoneNumber"]),
@@ -1634,6 +1649,10 @@ const APPLICANT_OPTIONAL_ADDRESS_COLUMNS = {
   addressLongitude: "address_longitude",
 } as const;
 
+const APPLICANT_OPTIONAL_PROFILE_COLUMNS = {
+  birthdate: "birthdate",
+} as const;
+
 let applicantsColumnSetPromise: Promise<Set<string>> | null = null;
 
 async function getApplicantsColumnSet(): Promise<Set<string>> {
@@ -1660,6 +1679,7 @@ async function getApplicantsColumnSet(): Promise<Set<string>> {
         const missingColumns = [
           ...Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS),
           ...Object.values(APPLICANT_OPTIONAL_ADDRESS_COLUMNS),
+          ...Object.values(APPLICANT_OPTIONAL_PROFILE_COLUMNS),
         ]
           .filter((columnName) => !columnSet.has(columnName));
 
@@ -1710,6 +1730,16 @@ async function getApplicantOptionalAddressSelect() {
     addressLongitude: columnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude)
       ? applicants.addressLongitude
       : sql<number | null>`NULL`,
+  };
+}
+
+async function getApplicantOptionalProfileSelect() {
+  const columnSet = await getApplicantsColumnSet();
+
+  return {
+    birthdate: columnSet.has(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate)
+      ? applicants.birthdate
+      : sql<string | null>`NULL`,
   };
 }
 
@@ -2965,27 +2995,6 @@ function parseBasicAuthCredentials(authHeader: string | undefined): { username: 
   };
 }
 
-function getAdminPortalCandidateEmails(username: string): string[] {
-  const normalizedUsername = username.trim().toLowerCase();
-  const candidates = new Set<string>();
-
-  if (normalizedUsername.includes("@")) {
-    candidates.add(normalizedUsername);
-  }
-
-  // Preserve the long-standing portal username while allowing it to resolve
-  // to the seeded admin account stored in the users table.
-  if (normalizedUsername === "wfconnect") {
-    candidates.add("admin@wfconnect.org");
-  }
-
-  if (normalizedUsername === "admin" || normalizedUsername === "admin@wfconnecr.org") {
-    candidates.add("admin@wfconnect.org");
-  }
-
-  return Array.from(candidates);
-}
-
 async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAuthResult> {
   const credentials = parseBasicAuthCredentials(req.headers.authorization);
   if (!credentials) {
@@ -3006,79 +3015,19 @@ async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAu
   if (normalizedUsername === envAdminUsername && credentials.password === envAdminPassword) {
     return {
       ok: true,
-      mode: "legacy-basic",
+      mode: "env-basic",
       normalizedUsername,
       userFound: false,
       passwordMatched: true,
     };
   }
 
-  const candidateEmails = getAdminPortalCandidateEmails(credentials.username);
-  if (candidateEmails.length === 0) {
-    return {
-      ok: false,
-      mode: "invalid",
-      normalizedUsername,
-      userFound: false,
-      passwordMatched: false,
-    };
-  }
-
-  const candidateUsers = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      role: users.role,
-      password: users.password,
-      isActive: users.isActive,
-    })
-    .from(users)
-    .where(
-      and(
-        inArray(users.email, candidateEmails),
-        inArray(users.role, ["admin", "hr"]),
-        eq(users.isActive, true),
-      ),
-    );
-
-  const user = candidateUsers[0];
-  if (!user || !user.password) {
-    return {
-      ok: false,
-      mode: "invalid",
-      normalizedUsername,
-      userFound: false,
-      passwordMatched: false,
-    };
-  }
-
-  const passwordMatched = await bcrypt.compare(credentials.password, user.password);
-  if (!passwordMatched) {
-    return {
-      ok: false,
-      mode: "invalid",
-      normalizedUsername,
-      userFound: true,
-      passwordMatched: false,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-    };
-  }
-
   return {
-    ok: true,
-    mode: "db-basic",
+    ok: false,
+    mode: "invalid",
     normalizedUsername,
-    userFound: true,
-    passwordMatched: true,
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    },
+    userFound: false,
+    passwordMatched: false,
   };
 }
 
@@ -3704,31 +3653,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
-      // Check env-var admin credentials before schema validation (allows non-email username)
-      const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").toLowerCase();
-      const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
-      const submittedIdentifier = typeof req.body?.email === "string" ? req.body.email.trim() : "";
-      const submittedPassword = typeof req.body?.password === "string" ? req.body.password : "";
-
-      if (
-        submittedIdentifier.toLowerCase() === envAdminUsername &&
-        submittedPassword === envAdminPassword
-      ) {
-        const [adminUser] = await db
-          .select()
-          .from(users)
-          .where(and(eq(users.role, "admin"), eq(users.isActive, true)))
-          .limit(1);
-
-        if (adminUser) {
-          const { password: _p, totpSecret: _t, recoveryCodes: _r, ...userWithoutSensitive } = adminUser;
-          setSessionCookie(res, adminUser.id, adminUser.role);
-          console.info(`[AUTH_LOGIN] envAdminLogin=true userId=${adminUser.id}`);
-          res.json({ user: { ...userWithoutSensitive, mustChangePassword: false } });
-          return;
-        }
-      }
-
       const result = loginUserSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({ error: result.error.errors[0].message });
@@ -3772,6 +3696,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error logging in:", error);
       res.status(500).json({ error: "Failed to login" });
+    }
+  });
+
+  app.post("/api/applicants/admin-login", async (req: Request, res: Response) => {
+    try {
+      const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").trim().toLowerCase();
+      const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
+
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+
+      if (username !== envAdminUsername || password !== envAdminPassword) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      const [adminUser] = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.role, "admin"), eq(users.isActive, true)))
+        .limit(1);
+
+      if (!adminUser) {
+        return res.status(503).json({ error: "Admin account is unavailable" });
+      }
+
+      const { password: _p, totpSecret: _t, recoveryCodes: _r, ...userWithoutSensitive } = adminUser;
+      setSessionCookie(res, adminUser.id, adminUser.role);
+      return res.json({ user: { ...userWithoutSensitive, mustChangePassword: false } });
+    } catch (error) {
+      console.error("[APPLICANTS_ADMIN_LOGIN] Error:", error);
+      return res.status(500).json({ error: "Failed to login" });
     }
   });
 
@@ -6552,6 +6510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
+        birthdate: payload.birthdate,
         smsConsent: smsConsentGranted,
         smsConsentAt: smsConsentGranted ? now : null,
         marketingConsent: marketingConsentGranted,
@@ -6564,6 +6523,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (shouldPersistApplicantAddressCoordinates) {
         insertValues.addressLatitude = hasGeocodedCoordinates ? normalizedAddressLatitude : null;
         insertValues.addressLongitude = hasGeocodedCoordinates ? normalizedAddressLongitude : null;
+      }
+
+      if (!applicantsColumnSet.has(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate)) {
+        delete insertValues.birthdate;
       }
 
       const [applicant] = await db.insert(applicants).values(insertValues as any).returning({ id: applicants.id });
@@ -6623,6 +6586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resumeFilename: applicants.resumeFilename,
         resumeMimeType: applicants.resumeMimeType,
         ...(await getApplicantOptionalAddressSelect()),
+        ...(await getApplicantOptionalProfileSelect()),
         ...(await getApplicantOptionalConsentSelect()),
         status: applicants.status,
         submittedAt: applicants.submittedAt,
@@ -6757,6 +6721,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adminNotes: applicants.adminNotes,
         submittedAt: applicants.submittedAt,
         ...(await getApplicantOptionalAddressSelect()),
+        ...(await getApplicantOptionalProfileSelect()),
         ...(await getApplicantOptionalConsentSelect()),
       }).from(applicants).where(eq(applicants.id, applicantId));
       if (!row) return res.status(404).json({ error: "Applicant not found" });

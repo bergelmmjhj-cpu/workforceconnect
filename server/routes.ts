@@ -3000,23 +3000,10 @@ async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAu
 
   const normalizedUsername = credentials.username.trim().toLowerCase();
 
-  if (
-    normalizedUsername === "wfconnect" &&
-    (credentials.password === "@2255Dundaswest" || credentials.password === "@2255DundasWest")
-  ) {
-    return {
-      ok: true,
-      mode: "legacy-basic",
-      normalizedUsername,
-      userFound: false,
-      passwordMatched: true,
-    };
-  }
+  const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").toLowerCase();
+  const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
 
-  if (
-    (normalizedUsername === "admin" || normalizedUsername === "admin@wfconnect.org" || normalizedUsername === "admin@wfconnecr.org") &&
-    credentials.password === "@1900Dundas"
-  ) {
+  if (normalizedUsername === envAdminUsername && credentials.password === envAdminPassword) {
     return {
       ok: true,
       mode: "legacy-basic",
@@ -3717,6 +3704,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
+      // Check env-var admin credentials before schema validation (allows non-email username)
+      const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").toLowerCase();
+      const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
+      const submittedIdentifier = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+      const submittedPassword = typeof req.body?.password === "string" ? req.body.password : "";
+
+      if (
+        submittedIdentifier.toLowerCase() === envAdminUsername &&
+        submittedPassword === envAdminPassword
+      ) {
+        const [adminUser] = await db
+          .select()
+          .from(users)
+          .where(and(eq(users.role, "admin"), eq(users.isActive, true)))
+          .limit(1);
+
+        if (adminUser) {
+          const { password: _p, totpSecret: _t, recoveryCodes: _r, ...userWithoutSensitive } = adminUser;
+          setSessionCookie(res, adminUser.id, adminUser.role);
+          console.info(`[AUTH_LOGIN] envAdminLogin=true userId=${adminUser.id}`);
+          res.json({ user: { ...userWithoutSensitive, mustChangePassword: false } });
+          return;
+        }
+      }
+
       const result = loginUserSchema.safeParse(req.body);
       if (!result.success) {
         res.status(400).json({ error: result.error.errors[0].message });

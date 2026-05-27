@@ -6,8 +6,8 @@
 set -e
 
 API_BASE="${API_BASE:-https://guide.wfconnect.org}"
-ADMIN_USER="${ADMIN_USER:-wfconnect}"
-ADMIN_PASS="${ADMIN_PASS:-@2255Dundaswest}"
+ADMIN_USER="${ADMIN_USER:-${ADMIN_USERNAME:-WFC}}"
+ADMIN_PASS="${ADMIN_PASS:-${ADMIN_PASSWORD:-1900dundas}}"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -28,8 +28,8 @@ Commands:
 
 Environment Variables:
   API_BASE                          Base URL (default: https://guide.wfconnect.org)
-  ADMIN_USER                        Admin username (default: wfconnect)
-  ADMIN_PASS                        Admin password (default: @2255Dundaswest)
+  ADMIN_USER                        Admin username (default: WFC; overrides ADMIN_USERNAME env)
+  ADMIN_PASS                        Admin password (default: uses ADMIN_PASSWORD env)
 
 Examples:
   bash scripts/manage-api-keys.sh list

@@ -1799,6 +1799,14 @@ const WORKER_APPLICATION_OPTIONAL_METADATA_COLUMNS = {
   bankInfo: "bank_info",
 } as const;
 
+const WORKER_APPLICATION_OPTIONAL_SUBMISSION_COLUMNS = {
+  dateOfBirth: "date_of_birth",
+  smsConsent: "sms_consent",
+  smsConsentAt: "sms_consent_at",
+  promotionalConsent: "promotional_consent",
+  marketingConsent: "marketing_consent",
+} as const;
+
 let workerApplicationColumnSetPromise: Promise<Set<string>> | null = null;
 
 async function getWorkerApplicationColumnSet(): Promise<Set<string>> {
@@ -4611,7 +4619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const applicationData = {
+      const applicationData: Record<string, unknown> = {
         fullName: resolvedIdentity.fullName,
         dateOfBirth: normalizeOptionalText(payload.dateOfBirth),
         phone: normalizeWhitespace(payload.phone),
@@ -4662,7 +4670,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent,
       };
 
-      const [newApplication] = await db.insert(workerApplications).values(applicationData).returning();
+      const workerApplicationColumnSet = await getWorkerApplicationColumnSet();
+      for (const [field, columnName] of Object.entries(WORKER_APPLICATION_OPTIONAL_SUBMISSION_COLUMNS)) {
+        if (!workerApplicationColumnSet.has(columnName)) {
+          delete applicationData[field];
+        }
+      }
+
+      const [newApplication] = await db.insert(workerApplications).values(applicationData as any).returning();
 
       registerSubmissionFingerprint(recentApplyFingerprint);
       console.log(`Worker application submitted from: ${payload.email}`);

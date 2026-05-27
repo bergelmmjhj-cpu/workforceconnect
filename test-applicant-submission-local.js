@@ -134,6 +134,16 @@ test('Guide onboarding form leaves SMS consent unchecked and optional', () => {
   assert(formContent.includes('Consent to receive SMS messages is not a condition of employment, application approval, or service.'), 'Guide form consent wording not updated');
 });
 
+// Test 14: Public apply submission is resilient to missing optional DB columns
+test('Public apply route drops optional consent/DOB fields when DB columns are absent', () => {
+  const routesContent = fs.readFileSync('server/routes.ts', 'utf8');
+  assert(routesContent.includes('WORKER_APPLICATION_OPTIONAL_SUBMISSION_COLUMNS'), 'Optional submission column map missing');
+  assert(routesContent.includes('date_of_birth'), 'date_of_birth compatibility guard missing');
+  assert(routesContent.includes('sms_consent'), 'sms_consent compatibility guard missing');
+  assert(routesContent.includes('promotional_consent'), 'promotional_consent compatibility guard missing');
+  assert(routesContent.includes('delete applicationData[field]'), 'Optional field drop logic missing');
+});
+
 console.log('\n' + '='.repeat(70));
 console.log(`RESULTS: ${tests_passed} passed, ${tests_failed} failed`);
 console.log('='.repeat(70) + '\n');

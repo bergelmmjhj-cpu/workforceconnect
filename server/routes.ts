@@ -1269,7 +1269,6 @@ const REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
   "workerAgreementConsent",
   "privacyConsent",
   "paymentTermsAcknowledged",
-  "smsConsent",
 ] as const;
 
 const consentLikeSchema = z.union([z.boolean(), z.string(), z.number()]);
@@ -1542,7 +1541,6 @@ function getMissingRequiredConsents(payload: Record<string, unknown> | undefined
     workerAgreementConsent: resolved.workerAgreementConsent,
     privacyConsent: resolved.privacyConsent,
     paymentTermsAcknowledged: resolved.paymentTermsAcknowledged,
-    smsConsent: resolved.smsConsent,
   };
 
   return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);
@@ -6352,11 +6350,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!resumeDataIn) return res.status(400).json({ error: "Resume required" });
 
       const smsConsentGranted = isConsentGranted(smsConsent);
-      if (!smsConsentGranted) {
-        return res.status(400).json({
-          error: "SMS text/call consent is required to submit this application",
-        });
-      }
       const marketingConsentGranted = isConsentGranted(marketingConsent) || isConsentGranted(promotionalConsent);
 
       const PHOTO_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];

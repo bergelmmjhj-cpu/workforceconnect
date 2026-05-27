@@ -1109,10 +1109,9 @@
             </label>
             <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">I consent to the collection, use, and protection of my personal data as outlined in the <a href="https://wfconnect.org/privacy" style="color: var(--primary);">Privacy Policy</a>, in compliance with GDPR and PIPEDA regulations.</p>
 
-            <p style="margin-left: 32px; font-size: 14px; color: var(--text-secondary);">By providing your phone number and submitting this form, you consent to receive SMS text messages from Workforce Connect regarding job opportunities, scheduling, onboarding, and work-related updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for assistance.</p>
             <label class="checkbox-item" style="margin-top: 16px;">
-              <input type="checkbox" name="smsConsent" required>
-              <span class="checkbox-label bold">I agree to receive SMS communications from 1001328662 Ontario Inc. regarding staffing updates, scheduling, onboarding, and operational notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for assistance. <span style="color: var(--error);">*</span></span>
+              <input type="checkbox" name="smsConsent">
+              <span class="checkbox-label bold">I agree to receive SMS messages from 1001328662 Ontario Inc. regarding applications, interviews, onboarding, scheduling, staffing updates, and operational notifications. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe or HELP for assistance.<br><br>Consent to receive SMS messages is not a condition of employment, application approval, or service.</span>
             </label>
 
             <label class="checkbox-item" style="margin-top: 16px;">
@@ -1166,7 +1165,6 @@
           </section>
 
           <div class="submit-section">
-            <p class="submit-note" style="margin-bottom: 12px;">By providing your phone number and submitting this form, you consent to receive SMS text messages from Workforce Connect regarding job opportunities, scheduling, onboarding, and work-related updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for assistance.</p>
             <div class="page-actions">
               <button type="button" class="secondary-btn" id="prevPageBtn">Back to Form</button>
               <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
@@ -1244,7 +1242,7 @@
                 isValid = false;
               }
 
-              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'independentContractorStatusAcknowledged', 'privacyConsent', 'smsConsent', 'paymentTermsAcknowledged'].forEach(function(name) {
+              ['backgroundCheckConsent', 'titoAcknowledgment', 'siteRulesAcknowledgment', 'workerAgreementConsent', 'independentContractorStatusAcknowledged', 'privacyConsent', 'paymentTermsAcknowledged'].forEach(function(name) {
                 var checkbox = form.querySelector('input[name="' + name + '"]');
                 if (checkbox && !checkbox.checked) {
                   isValid = false;

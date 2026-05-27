@@ -318,13 +318,9 @@
     </div>
 
     <div class="consent-block">
-      <p class="consent-disclosure">
-        By providing your phone number and submitting this form, you consent to receive SMS text messages from Workforce Connect regarding job opportunities, scheduling, onboarding, and work-related updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for assistance.
-      </p>
-
       <label class="consent-row">
-        <input type="checkbox" id="sms_consent" name="sms_consent" required />
-        <span>I agree to receive SMS communications from 1001328662 Ontario Inc. regarding staffing updates, scheduling, onboarding, and operational notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for assistance. <span class="req">*</span></span>
+        <input type="checkbox" id="sms_consent" name="sms_consent" />
+        <span>I agree to receive SMS messages from 1001328662 Ontario Inc. regarding applications, interviews, onboarding, scheduling, staffing updates, and operational notifications. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe or HELP for assistance.<br /><br />Consent to receive SMS messages is not a condition of employment, application approval, or service.</span>
       </label>
 
       <label class="consent-row consent-optional">
@@ -332,7 +328,6 @@
         <span>I agree to receive promotional communications and updates (optional)</span>
       </label>
 
-      <div class="consent-error" id="err-sms-consent">Please agree to receive SMS messages from Workforce Connect to submit your application.</div>
     </div>
 
     <!-- Submit -->
@@ -592,13 +587,6 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
     clearError('resume');
   }
   const smsConsentChecked = document.getElementById('sms_consent').checked;
-  const smsConsentError = document.getElementById('err-sms-consent');
-  if (!smsConsentChecked) {
-    smsConsentError.classList.add('show');
-    valid = false;
-  } else {
-    smsConsentError.classList.remove('show');
-  }
 
   if (!valid) {
     document.querySelector('.field-error.show, .consent-error.show')?.scrollIntoView({ behavior: 'smooth', block: 'center' });

@@ -108,6 +108,32 @@ test('Required field validation enforced', () => {
   assert(allPresent, 'Required field validation not found');
 });
 
+// Test 11: SMS consent is optional in backend applicant flows
+test('Backend no longer requires SMS consent for apply submissions', () => {
+  const routesContent = fs.readFileSync('server/routes.ts', 'utf8');
+  const requiredConsentsMatch = routesContent.match(/const REQUIRED_PUBLIC_APPLICATION_CONSENTS = \[([\s\S]*?)\] as const;/);
+  assert(requiredConsentsMatch, 'Required consents list not found');
+  assert(!requiredConsentsMatch[1].includes('"smsConsent"'), 'smsConsent should not be in the required public consents list');
+  assert(!routesContent.includes('SMS text/call consent is required to submit this application'), 'Applicant route should not hard-require SMS consent');
+});
+
+// Test 12: SMS checkbox is optional in standalone apply form
+test('Standalone apply form leaves SMS consent unchecked and optional', () => {
+  const formContent = fs.readFileSync('server/templates/apply-form.html', 'utf8');
+  assert(formContent.includes('id="sms_consent" name="sms_consent"'), 'Standalone SMS checkbox not found');
+  assert(!formContent.includes('id="sms_consent" name="sms_consent" required'), 'Standalone SMS checkbox should not be required');
+  assert(formContent.includes('Consent to receive SMS messages is not a condition of employment, application approval, or service.'), 'Standalone form consent wording not updated');
+});
+
+// Test 13: Guide onboarding form leaves SMS consent unchecked and optional
+test('Guide onboarding form leaves SMS consent unchecked and optional', () => {
+  const formContent = fs.readFileSync('server/templates/apply.html', 'utf8');
+  assert(formContent.includes('name="smsConsent"'), 'Guide SMS checkbox not found');
+  assert(!formContent.includes('name="smsConsent" required'), 'Guide SMS checkbox should not be required');
+  assert(!formContent.includes("'privacyConsent', 'smsConsent', 'paymentTermsAcknowledged'"), 'Guide validation should not require smsConsent');
+  assert(formContent.includes('Consent to receive SMS messages is not a condition of employment, application approval, or service.'), 'Guide form consent wording not updated');
+});
+
 console.log('\n' + '='.repeat(70));
 console.log(`RESULTS: ${tests_passed} passed, ${tests_failed} failed`);
 console.log('='.repeat(70) + '\n');

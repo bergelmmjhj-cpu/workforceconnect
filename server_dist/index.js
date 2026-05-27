@@ -920,6 +920,7 @@ var init_schema = __esm({
       addressCountry: text("address_country").default("Canada"),
       addressLatitude: doublePrecision("address_latitude"),
       addressLongitude: doublePrecision("address_longitude"),
+      birthdate: date("birthdate"),
       applyingFor: text("applying_for").notNull(),
       jobPostingSource: text("job_posting_source").notNull(),
       photoData: text("photo_data"),
@@ -3846,8 +3847,7 @@ var REQUIRED_PUBLIC_APPLICATION_CONSENTS = [
   "siteRulesAcknowledgment",
   "workerAgreementConsent",
   "privacyConsent",
-  "paymentTermsAcknowledged",
-  "smsConsent"
+  "paymentTermsAcknowledged"
 ];
 var consentLikeSchema = z2.union([z2.boolean(), z2.string(), z2.number()]);
 var listLikeSchema = z2.union([z2.string(), z2.array(z2.string())]);
@@ -3956,6 +3956,17 @@ var optionalTrimmedStringSchema = z2.preprocess((value) => {
   }
   return value;
 }, z2.string().optional());
+var applicantBirthdateSchema = z2.preprocess((value) => {
+  if (value === null || value === void 0) return void 0;
+  if (typeof value === "string") return value.trim();
+  return value;
+}, z2.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Birthdate must be in YYYY-MM-DD format").refine((value) => {
+  const parsed = /* @__PURE__ */ new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const today = /* @__PURE__ */ new Date();
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return parsed.getTime() <= todayUtc;
+}, "Birthdate cannot be in the future"));
 var requiredTrimmedStringSchema = z2.preprocess((value) => {
   if (typeof value === "string") return normalizeWhitespace(value);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -3979,6 +3990,7 @@ var publicApplicantSubmissionSchema = z2.object({
   first_name: optionalTrimmedStringSchema,
   lastName: optionalTrimmedStringSchema,
   last_name: optionalTrimmedStringSchema,
+  birthdate: applicantBirthdateSchema,
   email: z2.preprocess((value) => {
     if (value === null || value === void 0 || value === "") return void 0;
     if (typeof value !== "string") return value;
@@ -4038,6 +4050,7 @@ function normalizePublicApplicantSubmissionPayload(input) {
     first_name: pickFirstPresent(source, ["first_name"]),
     lastName: pickFirstPresent(source, ["lastName", "last_name"]),
     last_name: pickFirstPresent(source, ["last_name"]),
+    birthdate: pickFirstPresent(source, ["birthdate", "birth_date", "dateOfBirth", "date_of_birth"]),
     email: pickFirstPresent(source, ["email", "emailAddress", "email_address"]),
     phone: pickFirstPresent(source, ["phone", "phoneNumber", "phone_number", "mobile", "contactNumber"]),
     phoneNumber: pickFirstPresent(source, ["phoneNumber"]),
@@ -4090,8 +4103,7 @@ function getMissingRequiredConsents(payload) {
     siteRulesAcknowledgment: resolved.siteRulesAcknowledgment,
     workerAgreementConsent: resolved.workerAgreementConsent,
     privacyConsent: resolved.privacyConsent,
-    paymentTermsAcknowledged: resolved.paymentTermsAcknowledged,
-    smsConsent: resolved.smsConsent
+    paymentTermsAcknowledged: resolved.paymentTermsAcknowledged
   };
   return REQUIRED_PUBLIC_APPLICATION_CONSENTS.filter((field) => !consentValues[field]);
 }
@@ -4176,6 +4188,9 @@ var APPLICANT_OPTIONAL_ADDRESS_COLUMNS = {
   addressLatitude: "address_latitude",
   addressLongitude: "address_longitude"
 };
+var APPLICANT_OPTIONAL_PROFILE_COLUMNS = {
+  birthdate: "birthdate"
+};
 var applicantsColumnSetPromise = null;
 async function getApplicantsColumnSet() {
   if (!applicantsColumnSetPromise) {
@@ -4191,7 +4206,8 @@ async function getApplicantsColumnSet() {
       );
       const missingColumns = [
         ...Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS),
-        ...Object.values(APPLICANT_OPTIONAL_ADDRESS_COLUMNS)
+        ...Object.values(APPLICANT_OPTIONAL_ADDRESS_COLUMNS),
+        ...Object.values(APPLICANT_OPTIONAL_PROFILE_COLUMNS)
       ].filter((columnName) => !columnSet.has(columnName));
       if (missingColumns.length > 0) {
         console.warn(`[APPLICANTS] Optional applicant columns unavailable: ${missingColumns.join(", ")}`);
@@ -4219,6 +4235,12 @@ async function getApplicantOptionalAddressSelect() {
   return {
     addressLatitude: columnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLatitude) ? applicants.addressLatitude : sql3`NULL`,
     addressLongitude: columnSet.has(APPLICANT_OPTIONAL_ADDRESS_COLUMNS.addressLongitude) ? applicants.addressLongitude : sql3`NULL`
+  };
+}
+async function getApplicantOptionalProfileSelect() {
+  const columnSet = await getApplicantsColumnSet();
+  return {
+    birthdate: columnSet.has(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate) ? applicants.birthdate : sql3`NULL`
   };
 }
 var REQUIRED_APPROVAL_ACK_FIELDS = [
@@ -5141,20 +5163,6 @@ function parseBasicAuthCredentials(authHeader) {
     password: credentials.slice(separatorIndex + 1)
   };
 }
-function getAdminPortalCandidateEmails(username) {
-  const normalizedUsername = username.trim().toLowerCase();
-  const candidates = /* @__PURE__ */ new Set();
-  if (normalizedUsername.includes("@")) {
-    candidates.add(normalizedUsername);
-  }
-  if (normalizedUsername === "wfconnect") {
-    candidates.add("admin@wfconnect.org");
-  }
-  if (normalizedUsername === "admin" || normalizedUsername === "admin@wfconnecr.org") {
-    candidates.add("admin@wfconnect.org");
-  }
-  return Array.from(candidates);
-}
 async function validateAdminPortalBasicAuth(req) {
   const credentials = parseBasicAuthCredentials(req.headers.authorization);
   if (!credentials) {
@@ -5167,83 +5175,23 @@ async function validateAdminPortalBasicAuth(req) {
     };
   }
   const normalizedUsername = credentials.username.trim().toLowerCase();
-  if (normalizedUsername === "wfconnect" && (credentials.password === "@2255Dundaswest" || credentials.password === "@2255DundasWest")) {
+  const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").toLowerCase();
+  const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
+  if (normalizedUsername === envAdminUsername && credentials.password === envAdminPassword) {
     return {
       ok: true,
-      mode: "legacy-basic",
+      mode: "env-basic",
       normalizedUsername,
       userFound: false,
       passwordMatched: true
-    };
-  }
-  if ((normalizedUsername === "admin" || normalizedUsername === "admin@wfconnect.org" || normalizedUsername === "admin@wfconnecr.org") && credentials.password === "@1900Dundas") {
-    return {
-      ok: true,
-      mode: "legacy-basic",
-      normalizedUsername,
-      userFound: false,
-      passwordMatched: true
-    };
-  }
-  const candidateEmails = getAdminPortalCandidateEmails(credentials.username);
-  if (candidateEmails.length === 0) {
-    return {
-      ok: false,
-      mode: "invalid",
-      normalizedUsername,
-      userFound: false,
-      passwordMatched: false
-    };
-  }
-  const candidateUsers = await db.select({
-    id: users.id,
-    email: users.email,
-    role: users.role,
-    password: users.password,
-    isActive: users.isActive
-  }).from(users).where(
-    and3(
-      inArray(users.email, candidateEmails),
-      inArray(users.role, ["admin", "hr"]),
-      eq4(users.isActive, true)
-    )
-  );
-  const user = candidateUsers[0];
-  if (!user || !user.password) {
-    return {
-      ok: false,
-      mode: "invalid",
-      normalizedUsername,
-      userFound: false,
-      passwordMatched: false
-    };
-  }
-  const passwordMatched = await bcrypt.compare(credentials.password, user.password);
-  if (!passwordMatched) {
-    return {
-      ok: false,
-      mode: "invalid",
-      normalizedUsername,
-      userFound: true,
-      passwordMatched: false,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role
-      }
     };
   }
   return {
-    ok: true,
-    mode: "db-basic",
+    ok: false,
+    mode: "invalid",
     normalizedUsername,
-    userFound: true,
-    passwordMatched: true,
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role
-    }
+    userFound: false,
+    passwordMatched: false
   };
 }
 async function checkBasicAuthAdmin(req, res) {
@@ -5745,6 +5693,30 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error logging in:", error);
       res.status(500).json({ error: "Failed to login" });
+    }
+  });
+  app2.post("/api/applicants/admin-login", async (req, res) => {
+    try {
+      const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").trim().toLowerCase();
+      const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+      if (username !== envAdminUsername || password !== envAdminPassword) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      const [adminUser] = await db.select().from(users).where(and3(eq4(users.role, "admin"), eq4(users.isActive, true))).limit(1);
+      if (!adminUser) {
+        return res.status(503).json({ error: "Admin account is unavailable" });
+      }
+      const { password: _p, totpSecret: _t, recoveryCodes: _r, ...userWithoutSensitive } = adminUser;
+      setSessionCookie(res, adminUser.id, adminUser.role);
+      return res.json({ user: { ...userWithoutSensitive, mustChangePassword: false } });
+    } catch (error) {
+      console.error("[APPLICANTS_ADMIN_LOGIN] Error:", error);
+      return res.status(500).json({ error: "Failed to login" });
     }
   });
   app2.get("/api/auth/me", async (req, res) => {
@@ -7885,11 +7857,6 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       if (!photoDataIn) return res.status(400).json({ error: "Photo required" });
       if (!resumeDataIn) return res.status(400).json({ error: "Resume required" });
       const smsConsentGranted = isConsentGranted(smsConsent);
-      if (!smsConsentGranted) {
-        return res.status(400).json({
-          error: "SMS text/call consent is required to submit this application"
-        });
-      }
       const marketingConsentGranted = isConsentGranted(marketingConsent) || isConsentGranted(promotionalConsent);
       const PHOTO_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
       const RESUME_TYPES = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
@@ -8020,6 +7987,7 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeFilename: resumeFilename || null,
         resumeMimeType: resumeMimeType || null,
         resumeFileSize: resumeFileSize || null,
+        birthdate: payload.birthdate,
         smsConsent: smsConsentGranted,
         smsConsentAt: smsConsentGranted ? now : null,
         marketingConsent: marketingConsentGranted,
@@ -8031,6 +7999,9 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
       if (shouldPersistApplicantAddressCoordinates) {
         insertValues.addressLatitude = hasGeocodedCoordinates ? normalizedAddressLatitude : null;
         insertValues.addressLongitude = hasGeocodedCoordinates ? normalizedAddressLongitude : null;
+      }
+      if (!applicantsColumnSet.has(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate)) {
+        delete insertValues.birthdate;
       }
       const [applicant] = await db.insert(applicants).values(insertValues).returning({ id: applicants.id });
       registerSubmissionFingerprint(recentApplicantFingerprint);
@@ -8082,6 +8053,7 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         resumeFilename: applicants.resumeFilename,
         resumeMimeType: applicants.resumeMimeType,
         ...await getApplicantOptionalAddressSelect(),
+        ...await getApplicantOptionalProfileSelect(),
         ...await getApplicantOptionalConsentSelect(),
         status: applicants.status,
         submittedAt: applicants.submittedAt
@@ -8189,6 +8161,7 @@ Shift: ${data.shiftStartAt || "TBD"} - ${data.shiftEndAt || "TBD"}`,
         adminNotes: applicants.adminNotes,
         submittedAt: applicants.submittedAt,
         ...await getApplicantOptionalAddressSelect(),
+        ...await getApplicantOptionalProfileSelect(),
         ...await getApplicantOptionalConsentSelect()
       }).from(applicants).where(eq4(applicants.id, applicantId));
       if (!row) return res.status(404).json({ error: "Applicant not found" });

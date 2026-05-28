@@ -6499,57 +6499,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
         addressMetadataNotes.push(`Place types: ${normalizedPlaceTypes}`);
       }
 
-      const insertValues: Record<string, unknown> = {
-        fullName: normalizeWhitespace(fullName),
+      const missingOptionalConsentColumns = Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS)
+        .filter((columnName) => !applicantsColumnSet.has(columnName));
+      if (missingOptionalConsentColumns.length > 0) {
+        addressMetadataNotes.push(`Consent columns unavailable: ${missingOptionalConsentColumns.join(", ")}`);
+      }
+
+      const insertValuesByColumn: Record<string, unknown> = {
+        full_name: normalizeWhitespace(fullName),
         phone: normalizeWhitespace(canonicalPhone),
-        addressFull: normalizeAddressText(addressFull),
-        addressStreet: persistedAddressStreet,
-        addressCity: persistedAddressCity || null,
-        addressProvince: persistedAddressProvince || null,
-        addressPostalCode: persistedAddressPostalCode || null,
-        addressCountry: "Canada",
-        applyingFor: normalizeWhitespace(applyingFor),
-        jobPostingSource: normalizeWhitespace(jobPostingSource),
-        photoData: photoDataIn,
-        photoFilename: photoFilename || null,
-        photoMimeType: photoMimeType || null,
-        photoFileSize: photoFileSize || null,
-        resumeData: resumeDataIn,
-        resumeFilename: resumeFilename || null,
-        resumeMimeType: resumeMimeType || null,
-        resumeFileSize: resumeFileSize || null,
-        birthdate: payload.birthdate,
-        smsConsent: smsConsentGranted,
-        smsConsentAt: smsConsentGranted ? now : null,
-        marketingConsent: marketingConsentGranted,
-        marketingConsentAt: marketingConsentGranted ? now : null,
-        adminNotes: addressMetadataNotes.length > 0 ? addressMetadataNotes.join(" | ") : null,
+        address_full: normalizeAddressText(addressFull),
+        address_street: persistedAddressStreet,
+        address_city: persistedAddressCity || null,
+        address_province: persistedAddressProvince || null,
+        address_postal_code: persistedAddressPostalCode || null,
+        address_country: "Canada",
+        applying_for: normalizeWhitespace(applyingFor),
+        job_posting_source: normalizeWhitespace(jobPostingSource),
+        photo_data: photoDataIn,
+        photo_filename: photoFilename || null,
+        photo_mime_type: photoMimeType || null,
+        photo_file_size: photoFileSize || null,
+        resume_data: resumeDataIn,
+        resume_filename: resumeFilename || null,
+        resume_mime_type: resumeMimeType || null,
+        resume_file_size: resumeFileSize || null,
+        birthdate: payload.birthdate || null,
+        admin_notes: addressMetadataNotes.length > 0 ? addressMetadataNotes.join(" | ") : null,
         status: "new",
-        submittedAt: now,
+        submitted_at: now.toISOString(),
       };
 
-      if (shouldPersistApplicantAddressCoordinates) {
-        insertValues.addressLatitude = hasGeocodedCoordinates ? normalizedAddressLatitude : null;
-        insertValues.addressLongitude = hasGeocodedCoordinates ? normalizedAddressLongitude : null;
-      }
-
       if (!applicantsColumnSet.has(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate)) {
-        delete insertValues.birthdate;
+        delete insertValuesByColumn.birthdate;
       }
 
-      const [applicant] = await db.insert(applicants).values(insertValues as any).returning({ id: applicants.id });
+      if (applicantsColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsent)) {
+        insertValuesByColumn.sms_consent = smsConsentGranted;
+      }
+      if (applicantsColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.smsConsentAt)) {
+        insertValuesByColumn.sms_consent_at = smsConsentGranted ? now.toISOString() : null;
+      }
+      if (applicantsColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsent)) {
+        insertValuesByColumn.marketing_consent = marketingConsentGranted;
+      }
+      if (applicantsColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.marketingConsentAt)) {
+        insertValuesByColumn.marketing_consent_at = marketingConsentGranted ? now.toISOString() : null;
+      }
+      if (applicantsColumnSet.has(APPLICANT_OPTIONAL_CONSENT_COLUMNS.promotionalConsent)) {
+        insertValuesByColumn.promotional_consent = marketingConsentGranted;
+      }
+
+      if (shouldPersistApplicantAddressCoordinates) {
+        insertValuesByColumn.address_latitude = hasGeocodedCoordinates ? normalizedAddressLatitude : null;
+        insertValuesByColumn.address_longitude = hasGeocodedCoordinates ? normalizedAddressLongitude : null;
+      }
+
+      const insertColumnNames = Object.keys(insertValuesByColumn);
+      const insertApplicantsQuery = sql`
+        INSERT INTO ${sql.identifier("applicants")} (
+          ${sql.join(insertColumnNames.map((columnName) => sql.identifier(columnName)), sql`, `)}
+        ) VALUES (
+          ${sql.join(insertColumnNames.map((columnName) => sql`${insertValuesByColumn[columnName]}`), sql`, `)}
+        )
+        RETURNING ${sql.identifier("id")}
+      `;
+      const insertResult = await db.execute<{ id: string }>(insertApplicantsQuery);
+      const insertedRows = Array.isArray(insertResult)
+        ? insertResult
+        : insertResult && typeof insertResult === "object" && "rows" in insertResult && Array.isArray((insertResult as { rows?: unknown[] }).rows)
+          ? (insertResult as { rows: Array<{ id?: string }> }).rows
+          : [];
+      const applicantId = insertedRows[0]?.id;
+      if (!applicantId) {
+        throw new Error("Applicant insert did not return an id");
+      }
 
       registerSubmissionFingerprint(recentApplicantFingerprint);
       console.log(`[APPLICANTS] ✅ New submission: ${fullName} (${canonicalPhone}) for ${applyingFor}`);
-      res.json({ success: true, applicantId: applicant.id });
+      res.json({ success: true, applicantId });
     } catch (error: any) {
       const detail = error instanceof Error ? error.message : "Unknown error";
-      const errorStack = error instanceof Error ? error.stack : "";
-      console.error("[APPLICANTS] ❌ Submission error:", { 
-        detail, 
-        stack: errorStack,
-        type: error.constructor.name,
-        requestBody: JSON.stringify(req.body).substring(0, 500)
+      const requestBody = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? req.body as Record<string, unknown>
+        : {};
+      const parseApproxSize = (value: unknown): number | null => {
+        if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+        if (typeof value === "string") {
+          const parsed = Number.parseInt(value, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      };
+
+      console.error("[APPLICANTS] ❌ Submission error:", {
+        type: error?.constructor?.name || typeof error,
+        messageSummary: detail,
+        dbCode: typeof error?.code === "string" ? error.code : undefined,
+        dbColumn: typeof error?.column === "string" ? error.column : undefined,
+        dbConstraint: typeof error?.constraint === "string" ? error.constraint : undefined,
+        requestKeys: Object.keys(requestBody).filter((key) => key !== "photoData" && key !== "resumeData"),
+        fileMetadata: {
+          hasPhotoData: Boolean(requestBody.photoData),
+          hasResumeData: Boolean(requestBody.resumeData),
+          photoMimeType: typeof requestBody.photoMimeType === "string" ? requestBody.photoMimeType : undefined,
+          resumeMimeType: typeof requestBody.resumeMimeType === "string" ? requestBody.resumeMimeType : undefined,
+          photoFileSizeApprox: parseApproxSize(requestBody.photoFileSize),
+          resumeFileSizeApprox: parseApproxSize(requestBody.resumeFileSize),
+        },
+        consentFlags: {
+          smsConsent: isConsentGranted(requestBody.smsConsent),
+          marketingConsent: isConsentGranted(requestBody.marketingConsent),
+          promotionalConsent: isConsentGranted(requestBody.promotionalConsent),
+        },
       });
       
       // Provide more specific error messages

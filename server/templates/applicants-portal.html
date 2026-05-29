@@ -91,9 +91,10 @@
     tbody tr:last-child td { border-bottom: none; }
     .applicant-name { font-weight: 600; }
     .applicant-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-    .phone-copy-btn { display: inline-flex; align-items: center; min-height: 24px; margin-top: 2px; padding: 0; border: none; background: transparent; color: #64748b; font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
-    .phone-copy-btn:hover { color: var(--primary); text-decoration: underline; }
+    .phone-copy-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; margin-top: 2px; padding: 0; border: none; background: transparent; color: #2563eb; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; }
+    .phone-copy-btn:hover { color: #1d4ed8; text-decoration: underline; }
     .phone-copy-btn:focus { outline: 2px solid var(--primary-light); outline-offset: 2px; border-radius: 4px; }
+    .phone-copy-icon { width: 13px; height: 13px; stroke: currentColor; stroke-width: 2; fill: none; flex-shrink: 0; }
 
     /* Status Badge */
     .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
@@ -642,7 +643,7 @@ function renderTable() {
     const phone = displayPhone(a);
     const phoneMarkup = phone === '—'
       ? `<div class="applicant-meta">—</div>`
-      : `<button class="phone-copy-btn" type="button" title="Copy phone number" onclick="copyApplicantPhone(event, '${escAttr(phone)}')">${esc(phone)}</button>`;
+      : `<button class="phone-copy-btn" type="button" title="Copy phone number" onclick="copyApplicantPhone(event, '${escAttr(phone)}')">${esc(phone)}<svg class="phone-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>`;
     return `<tr onclick="openDetail('${escAttr(a.id)}')">
       <td><div class="applicant-name">${esc(a.fullName)}</div>${phoneMarkup}</td>
       <td>${esc(a.applyingFor)}</td>

@@ -1661,7 +1661,7 @@ async function getApplicantsColumnSet(): Promise<Set<string>> {
       WHERE table_schema = current_schema()
         AND table_name = 'applicants'
     `)
-      .then((result: unknown) => {
+      .then(async (result: unknown) => {
         const rows = Array.isArray(result)
           ? result
           : result && typeof result === "object" && "rows" in result && Array.isArray((result as { rows?: unknown[] }).rows)

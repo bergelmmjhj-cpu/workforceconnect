@@ -1674,6 +1674,19 @@ async function getApplicantsColumnSet(): Promise<Set<string>> {
             .filter((columnName): columnName is string => typeof columnName === "string" && columnName.length > 0),
         );
 
+        if (!columnSet.has(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate)) {
+          try {
+            await db.execute(sql`
+              ALTER TABLE ${sql.identifier("applicants")}
+              ADD COLUMN IF NOT EXISTS ${sql.identifier(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate)} date
+            `);
+            columnSet.add(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate);
+            console.log("[APPLICANTS] Added missing applicants.birthdate column");
+          } catch (error) {
+            console.warn("[APPLICANTS] Failed to add missing applicants.birthdate column", error);
+          }
+        }
+
         const missingColumns = [
           ...Object.values(APPLICANT_OPTIONAL_CONSENT_COLUMNS),
           ...Object.values(APPLICANT_OPTIONAL_ADDRESS_COLUMNS),

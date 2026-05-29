@@ -121,6 +121,11 @@
     .detail-row { display: flex; gap: 8px; margin-bottom: 10px; }
     .detail-label { font-size: 13px; color: var(--text-muted); min-width: 100px; flex-shrink: 0; }
     .detail-value { font-size: 14px; font-weight: 500; }
+    .birthdate-edit { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .birthdate-input { height: 34px; padding: 0 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; }
+    .birthdate-input:focus { outline: none; border-color: var(--primary); }
+    .birthdate-save { height: 34px; padding: 0 12px; border: none; border-radius: 8px; background: var(--primary); color: white; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .birthdate-save:disabled { opacity: .6; cursor: not-allowed; }
 
     .doc-btns { display: flex; gap: 12px; flex-wrap: wrap; }
     .doc-btn { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 10px; background: white; cursor: pointer; transition: all .15s; font-size: 13px; font-weight: 600; flex: 1; min-width: 180px; }
@@ -667,6 +672,23 @@ function formatBirthdate(value) {
   return dt.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function formatBirthdateInput(value) {
+  const dt = parseBirthdate(value);
+  if (!dt) return '';
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function todayDateInputValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function formatEstimatedAge(value) {
   const birthdate = parseBirthdate(value);
   if (!birthdate) return '—';
@@ -719,8 +741,8 @@ function renderDetail(a) {
     <div class="detail-section">
       <div class="detail-section-title">Personal Information</div>
       <div class="detail-row"><div class="detail-label">Contact number</div><div class="detail-value">${esc(phone)}</div></div>
-      <div class="detail-row"><div class="detail-label">Birthdate</div><div class="detail-value">${esc(formatBirthdate(birthdate))}</div></div>
-      <div class="detail-row"><div class="detail-label">Estimated age</div><div class="detail-value">${esc(formatEstimatedAge(birthdate))}</div></div>
+      <div class="detail-row"><div class="detail-label">Birthdate</div><div class="detail-value birthdate-edit"><input class="birthdate-input" id="birthdate-input" type="date" value="${escAttr(formatBirthdateInput(birthdate))}" max="${todayDateInputValue()}" /><button class="birthdate-save" id="birthdate-save" type="button" onclick="updateBirthdate('${escAttr(a.id)}')">Save</button></div></div>
+      <div class="detail-row"><div class="detail-label">Estimated age</div><div class="detail-value" id="estimated-age-value">${esc(formatEstimatedAge(birthdate))}</div></div>
       <div class="detail-row"><div class="detail-label">Address</div><div class="detail-value">${esc(a.addressFull || '—')}</div></div>
       <div class="detail-row"><div class="detail-label">City</div><div class="detail-value">${esc(displayLocation(a))}</div></div>
       <div class="detail-row"><div class="detail-label">Postal Code</div><div class="detail-value">${esc(a.addressPostalCode || '—')}</div></div>
@@ -770,6 +792,14 @@ function renderDetail(a) {
       </div>
     </div>
   `;
+
+  const birthdateInput = document.getElementById('birthdate-input');
+  if (birthdateInput) {
+    birthdateInput.addEventListener('input', () => {
+      const ageEl = document.getElementById('estimated-age-value');
+      if (ageEl) ageEl.textContent = formatEstimatedAge(birthdateInput.value);
+    });
+  }
 }
 
 function closeDetail(event) {
@@ -811,6 +841,35 @@ async function updateStatus(id, newStatus) {
     loadApplicants();
   } catch {
     showToast('Failed to update status', 'error');
+  }
+}
+
+async function updateBirthdate(id) {
+  const input = document.getElementById('birthdate-input');
+  const btn = document.getElementById('birthdate-save');
+  const birthdate = input ? input.value : '';
+  if (!birthdate) {
+    showToast('Please enter a birthdate', 'error');
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await apiFetch('/api/applicants/' + id + '/birthdate', {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ birthdate }),
+    });
+    if (!resp.ok) {
+      const msg = await parseApiErrorMessage(resp, 'Failed to update birthdate');
+      throw new Error(msg);
+    }
+    showToast('Birthdate updated', 'success');
+    openDetail(id);
+  } catch (err) {
+    showToast((err && err.message) ? err.message : 'Failed to update birthdate', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 

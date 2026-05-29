@@ -6868,6 +6868,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/applicants/:id/birthdate", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
+    try {
+      const applicantId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const birthdateInput = typeof req.body?.birthdate === "string" ? req.body.birthdate.trim() : "";
+      if (!applicantId) return res.status(400).json({ error: "Invalid applicant id" });
+      if (!birthdateInput) return res.status(400).json({ error: "Birthdate is required" });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthdateInput)) {
+        return res.status(400).json({ error: "Birthdate must use YYYY-MM-DD format" });
+      }
+
+      const parsedBirthdate = new Date(`${birthdateInput}T00:00:00Z`);
+      if (isNaN(parsedBirthdate.getTime()) || parsedBirthdate.toISOString().slice(0, 10) !== birthdateInput) {
+        return res.status(400).json({ error: "Birthdate is invalid" });
+      }
+      if (parsedBirthdate > new Date()) {
+        return res.status(400).json({ error: "Birthdate cannot be in the future" });
+      }
+
+      const columnSet = await getApplicantsColumnSet();
+      if (!columnSet.has(APPLICANT_OPTIONAL_PROFILE_COLUMNS.birthdate)) {
+        return res.status(500).json({ error: "Birthdate storage is not available yet" });
+      }
+
+      const [updated] = await db.update(applicants)
+        .set({ birthdate: birthdateInput, updatedAt: new Date() })
+        .where(eq(applicants.id, applicantId))
+        .returning({ id: applicants.id, birthdate: applicants.birthdate });
+
+      if (!updated) return res.status(404).json({ error: "Applicant not found" });
+      res.json(updated);
+    } catch (error: any) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      console.error("[APPLICANTS] Birthdate update error:", { applicantId: req.params.id, detail, error });
+      res.status(500).json({ error: "Failed to update birthdate", detail });
+    }
+  });
+
   app.get("/api/applicants/:id/download/photo", checkRoles("admin", "hr"), async (req: Request, res: Response) => {
     try {
       const [row] = await db.select({ photoData: applicants.photoData, photoFilename: applicants.photoFilename, photoMimeType: applicants.photoMimeType })

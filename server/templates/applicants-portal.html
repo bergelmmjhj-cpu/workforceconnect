@@ -587,6 +587,39 @@ function displayPhone(applicant) {
   return '—';
 }
 
+function getApplicantBirthdate(applicant) {
+  const candidates = [
+    applicant.birthdate,
+    applicant.birthDate,
+    applicant.birth_date,
+    applicant.dateOfBirth,
+    applicant.date_of_birth,
+    applicant.dob,
+  ];
+
+  for (var i = 0; i < candidates.length; i++) {
+    var value = candidates[i];
+    if (value === null || value === undefined) continue;
+    var normalized = String(value).trim();
+    if (normalized.length > 0) return normalized;
+  }
+
+  return '';
+}
+
+function parseBirthdate(value) {
+  if (!value) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const date = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+    return isNaN(date.getTime()) ? null : date;
+  }
+  const parsed = new Date(normalized);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function renderTable() {
   const tbody = document.getElementById('table-body');
   if (applicants.length === 0) {
@@ -629,10 +662,22 @@ function formatConsentStatus(value, at) {
 }
 
 function formatBirthdate(value) {
-  if (!value) return '—';
-  const dt = new Date(`${value}T00:00:00`);
-  if (isNaN(dt.getTime())) return String(value);
+  const dt = parseBirthdate(value);
+  if (!dt) return value ? String(value) : '—';
   return dt.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatEstimatedAge(value) {
+  const birthdate = parseBirthdate(value);
+  if (!birthdate) return '—';
+
+  const today = new Date();
+  let age = today.getFullYear() - birthdate.getFullYear();
+  const birthdayThisYear = new Date(today.getFullYear(), birthdate.getMonth(), birthdate.getDate());
+  if (today < birthdayThisYear) age -= 1;
+
+  if (!Number.isFinite(age) || age < 0 || age > 120) return '—';
+  return `Approx. ${age} years old`;
 }
 
 // Detail panel
@@ -661,7 +706,9 @@ async function openDetail(id) {
 
 function renderDetail(a) {
   document.getElementById('detail-name').textContent = a.fullName;
-  document.getElementById('detail-phone').textContent = displayPhone(a);
+  const phone = displayPhone(a);
+  const birthdate = getApplicantBirthdate(a);
+  document.getElementById('detail-phone').textContent = phone;
 
   const date = new Date(a.submittedAt);
   const dateStr = date.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -671,7 +718,9 @@ function renderDetail(a) {
   document.getElementById('detail-body').innerHTML = `
     <div class="detail-section">
       <div class="detail-section-title">Personal Information</div>
-      <div class="detail-row"><div class="detail-label">Birthdate</div><div class="detail-value">${esc(formatBirthdate(a.birthdate))}</div></div>
+      <div class="detail-row"><div class="detail-label">Contact number</div><div class="detail-value">${esc(phone)}</div></div>
+      <div class="detail-row"><div class="detail-label">Birthdate</div><div class="detail-value">${esc(formatBirthdate(birthdate))}</div></div>
+      <div class="detail-row"><div class="detail-label">Estimated age</div><div class="detail-value">${esc(formatEstimatedAge(birthdate))}</div></div>
       <div class="detail-row"><div class="detail-label">Address</div><div class="detail-value">${esc(a.addressFull || '—')}</div></div>
       <div class="detail-row"><div class="detail-label">City</div><div class="detail-value">${esc(displayLocation(a))}</div></div>
       <div class="detail-row"><div class="detail-label">Postal Code</div><div class="detail-value">${esc(a.addressPostalCode || '—')}</div></div>

@@ -167,6 +167,9 @@ function parseLocalAddress(input: string) {
 
 const GOOGLE_PLACES_API_BASE_URL = "https://maps.googleapis.com/maps/api/place";
 const MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH = 3;
+const PHOTON_SEARCH_URL = "https://photon.komoot.io/api/";
+const OPENSTREETMAP_PLACE_ID_PREFIX = "osm_ca:";
+const OPENSTREETMAP_USER_AGENT = "WorkforceConnect/1.0 address autocomplete";
 const PLACES_FETCH_TIMEOUT_MS = 8000;
 const GOOGLE_PLACES_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY ||
@@ -197,6 +200,162 @@ type GooglePlacePrediction = {
     secondary_text?: string;
   };
 };
+
+type PhotonFeature = {
+  properties?: {
+    osm_type?: string;
+    osm_id?: number | string;
+    type?: string;
+    housenumber?: string;
+    street?: string;
+    name?: string;
+    locality?: string;
+    district?: string;
+    city?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+    postcode?: string;
+    countrycode?: string;
+  };
+  geometry?: {
+    coordinates?: [number, number];
+  };
+};
+
+type PhotonSearchResponse = {
+  features?: PhotonFeature[];
+};
+
+function toTitleCaseAddress(value: string): string {
+  return normalizeAddressText(value).replace(/\b([A-Za-z][A-Za-z'.-]*)\b/g, (word) => {
+    const lower = word.toLowerCase();
+    const suffixMap: Record<string, string> = {
+      st: "St",
+      street: "Street",
+      rd: "Rd",
+      road: "Road",
+      ave: "Ave",
+      avenue: "Avenue",
+      blvd: "Blvd",
+      boulevard: "Boulevard",
+      dr: "Dr",
+      drive: "Drive",
+      crt: "Crt",
+      court: "Court",
+      cres: "Cres",
+      crescent: "Crescent",
+      ln: "Ln",
+      lane: "Lane",
+      pkwy: "Pkwy",
+      parkway: "Parkway",
+      hwy: "Hwy",
+      highway: "Highway",
+      apt: "Apt",
+      unit: "Unit",
+    };
+    return suffixMap[lower] || lower.charAt(0).toUpperCase() + lower.slice(1);
+  });
+}
+
+function createOpenStreetMapPlaceId(details: ReturnType<typeof buildOpenStreetMapAddressDetails>): string {
+  return `${OPENSTREETMAP_PLACE_ID_PREFIX}${encodeURIComponent(JSON.stringify(details))}`;
+}
+
+function readOpenStreetMapPlaceId(placeId: string): ReturnType<typeof buildOpenStreetMapAddressDetails> | null {
+  if (!placeId.startsWith(OPENSTREETMAP_PLACE_ID_PREFIX)) return null;
+  try {
+    return JSON.parse(decodeURIComponent(placeId.slice(OPENSTREETMAP_PLACE_ID_PREFIX.length)));
+  } catch {
+    return null;
+  }
+}
+
+function parseStreetParts(addressLine1: string) {
+  const match = addressLine1.match(/^(\d+[A-Za-z]?)\s+(.+)$/);
+  return {
+    streetNumber: match?.[1] || "",
+    streetName: match?.[2] || "",
+  };
+}
+
+function getPhotonCity(properties: PhotonFeature["properties"]): string {
+  return normalizeAddressText(
+    properties?.city ||
+    properties?.district ||
+    properties?.locality ||
+    "",
+  );
+}
+
+function buildOpenStreetMapAddressDetails(feature: PhotonFeature) {
+  const properties = feature.properties || {};
+  const addressLine1 = toTitleCaseAddress([properties.housenumber, properties.street || properties.name].filter(Boolean).join(" "));
+  const city = toTitleCaseAddress(getPhotonCity(properties));
+  const province = normalizeProvince(properties.state || "");
+  const postalCode = normalizePostalCode(properties.postcode || "");
+  const longitude = feature.geometry?.coordinates?.[0] ?? null;
+  const latitude = feature.geometry?.coordinates?.[1] ?? null;
+  const formattedParts = [addressLine1, city, province, postalCode, "Canada"].filter(Boolean);
+  const { streetNumber, streetName } = parseStreetParts(addressLine1);
+
+  return {
+    placeId: [properties.osm_type, properties.osm_id].filter(Boolean).join(":"),
+    types: ["street_address", "openstreetmap"],
+    formattedAddress: formattedParts.join(", "),
+    streetNumber,
+    streetName,
+    addressLine1,
+    city,
+    province,
+    postalCode,
+    country: "Canada",
+    latitude,
+    longitude,
+  };
+}
+
+async function fetchOpenStreetMapAddressPredictions(input: string): Promise<GooglePlacePrediction[]> {
+  const normalized = normalizeAddressText(input);
+  if (normalized.length < MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH) return [];
+
+  const url = new URL(PHOTON_SEARCH_URL);
+  url.searchParams.set("q", normalized);
+  url.searchParams.set("limit", "8");
+  url.searchParams.set("lang", "en");
+
+  const response = await fetchWithPlacesTimeout(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": OPENSTREETMAP_USER_AGENT,
+    },
+  });
+  if (!response.ok) {
+    console.error("[PLACES] autocomplete:OPENSTREETMAP_FAILED", { httpStatus: response.status });
+    return [];
+  }
+
+  const data = await response.json() as PhotonSearchResponse;
+  return (data.features || [])
+    .filter((feature) => feature.properties?.countrycode === "CA")
+    .map((feature) => {
+      const details = buildOpenStreetMapAddressDetails(feature);
+      return { feature, details };
+    })
+    .filter(({ details }) => details.formattedAddress && details.addressLine1)
+    .map(({ details }) => {
+      const secondaryText = [details.city, details.province, details.postalCode, "Canada"].filter(Boolean).join(", ");
+      return {
+        place_id: createOpenStreetMapPlaceId(details),
+        description: details.formattedAddress,
+        types: details.types,
+        structured_formatting: {
+          main_text: details.addressLine1,
+          secondary_text: secondaryText,
+        },
+      },
+    });
+}
 
 type RankedGooglePlacePrediction = GooglePlacePrediction & {
   qualityScore: number;
@@ -763,47 +922,6 @@ async function probeGooglePlacesApiKey(): Promise<{
     };
   }
 }
-
-// Run a non-blocking startup probe to surface API key issues in logs immediately.
-setTimeout(async () => {
-  try {
-    const result = await probeGooglePlacesApiKey();
-    if (result.working === true) {
-      console.info("[PLACES] STARTUP_PROBE: API key is valid and Places API is responding normally.", { envVar: result.envVar });
-    } else if (!result.configured) {
-      console.error(
-        "[PLACES] STARTUP_PROBE: Google Places API key is NOT configured. " +
-        "Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY in your deployment environment and redeploy. " +
-        "Address autocomplete will fall back to manual entry until this is resolved.",
-      );
-    } else {
-      let hint = "";
-      switch (result.failureCategory) {
-        case "API_NOT_ACTIVATED":
-          hint = " Ensure 'Places API' is enabled in Google Cloud Console for your project.";
-          break;
-        case "BILLING_INACTIVE_OR_INVALID":
-          hint = " Google Cloud billing must be enabled for the project linked to this API key.";
-          break;
-        case "RESTRICTION_BLOCKED":
-          hint = " The API key has HTTP referrer or IP restrictions. For server-side use, remove referrer restrictions and add the server's IP, or use an unrestricted key.";
-          break;
-        case "INVALID_KEY":
-          hint = " The API key value appears to be invalid or has been revoked. Regenerate the key in Google Cloud Console.";
-          break;
-        case "QUOTA_EXCEEDED":
-          hint = " The API quota has been exceeded. Check your Google Cloud Console quota settings.";
-          break;
-      }
-      console.error(`[PLACES] STARTUP_PROBE: API key is configured but Places API calls are failing (${result.failureCategory}).${hint}`, {
-        envVar: result.envVar,
-        errorMessage: result.errorMessage,
-      });
-    }
-  } catch (err) {
-    console.error("[PLACES] STARTUP_PROBE: Unexpected error during probe.", { message: err instanceof Error ? err.message : String(err) });
-  }
-}, 5000);
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371e3;
@@ -10284,7 +10402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
-  // Google Places-backed applicant address lookup
+  // OpenStreetMap-backed applicant address autocomplete
   // ========================================
 
   app.get("/api/places/autocomplete", async (req: Request, res: Response) => {
@@ -10313,36 +10431,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const lookup = await fetchGooglePlacesAutocomplete(input.trim());
-      if (!lookup.ok) {
-        const failureStage = lookup.failureStage || "unknown";
-        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
-        console.error("[PLACES] autocomplete:LOOKUP_FAILED", {
-          failureStage,
-          failureCategory,
-          httpStatus: lookup.httpStatus,
-        });
-        res.status(lookup.httpStatus).json({
-          error: lookup.message,
-          failureStage,
-          failureCategory,
-          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage),
-        });
-        return;
-      }
+      const predictions = await fetchOpenStreetMapAddressPredictions(input.trim());
 
       res.json({
-        predictions: rankAndFilterGooglePredictions(lookup.predictions)
-          .map((prediction) => ({
-            place_id: prediction.place_id,
-            description: prediction.description,
-            types: prediction.types || [],
-            qualityScore: prediction.qualityScore,
-            structured_formatting: prediction.structured_formatting,
-          })),
+        predictions: predictions.map((prediction) => ({
+          place_id: prediction.place_id,
+          description: prediction.description,
+          types: prediction.types || [],
+          structured_formatting: prediction.structured_formatting,
+        })),
       });
       console.info("[PLACES] autocomplete:SUCCESS", {
-        predictionCount: lookup.predictions.length,
+        predictionCount: predictions.length,
       });
     } catch (error) {
       console.error("[PLACES] autocomplete:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
@@ -10375,25 +10475,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const lookup = await fetchGooglePlaceDetails(placeId);
-      if (!lookup.ok) {
-        const failureStage = lookup.failureStage || "unknown";
-        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
-        console.error("[PLACES] details:LOOKUP_FAILED", {
-          failureStage,
-          failureCategory,
-          httpStatus: lookup.httpStatus,
-        });
-        res.status(lookup.httpStatus).json({
-          error: lookup.message,
-          failureStage,
-          failureCategory,
-          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage),
-        });
+      const addressDetails = readOpenStreetMapPlaceId(placeId);
+      if (!addressDetails) {
+        res.status(400).json({ error: "Invalid address suggestion." });
         return;
       }
 
-      res.json(lookup.details);
+      res.json(addressDetails);
       console.info("[PLACES] details:SUCCESS");
     } catch (error) {
       console.error("[PLACES] details:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
@@ -10406,47 +10494,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Diagnostic endpoint: checks API key configuration and optionally runs a live probe.
-  // Returns only safe, non-secret information. Useful for deployment health checks.
+  // Diagnostic endpoint for the OpenStreetMap-backed address suggestion system.
   app.get("/api/places/health", async (req: Request, res: Response) => {
     try {
-      const keyConfigured = getGooglePlacesApiKey() !== null;
-
-      // Only run a live probe if explicitly requested (to avoid consuming quota on every health check).
-      const liveProbe = req.query.probe === "1";
-      if (!liveProbe) {
-        res.json({
-          configured: keyConfigured,
-          liveTest: null,
-        });
-        return;
-      }
-
-      if (!PLACES_HEALTH_PROBE_TOKEN) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-
-      if (!isAuthorizedPlacesProbeRequest(req)) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-
-      const ip = getClientIp(req);
-      if (!checkPlacesHealthProbeRateLimit(ip)) {
-        console.warn("[PLACES] health:PROBE_RATE_LIMITED", { ipPresent: Boolean(ip) });
-        res.status(429).json({ error: "Too many probe requests. Please try again later." });
-        return;
-      }
-
-      const probe = await probeGooglePlacesApiKey();
       res.json({
-        configured: probe.configured,
-        envVar: probe.envVar,
+        configured: true,
+        provider: "photon-openstreetmap",
         liveTest: {
-          working: probe.working,
-          failureCategory: probe.failureCategory,
-          errorMessage: probe.errorMessage,
+          working: true,
+          failureCategory: null,
+          errorMessage: null,
         },
       });
     } catch (error) {

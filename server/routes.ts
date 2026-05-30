@@ -167,6 +167,35 @@ function parseLocalAddress(input: string) {
 
 const GOOGLE_PLACES_API_BASE_URL = "https://maps.googleapis.com/maps/api/place";
 const MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH = 3;
+const GENERIC_CANADIAN_PLACE_ID_PREFIX = "generic_ca:";
+const GENERIC_CANADIAN_ADDRESS_LOCATIONS = [
+  { city: "Toronto", province: "ON" },
+  { city: "Mississauga", province: "ON" },
+  { city: "Brampton", province: "ON" },
+  { city: "Scarborough", province: "ON" },
+  { city: "North York", province: "ON" },
+  { city: "Etobicoke", province: "ON" },
+  { city: "Ottawa", province: "ON" },
+  { city: "Hamilton", province: "ON" },
+  { city: "London", province: "ON" },
+  { city: "Windsor", province: "ON" },
+  { city: "Kitchener", province: "ON" },
+  { city: "Waterloo", province: "ON" },
+  { city: "Markham", province: "ON" },
+  { city: "Vaughan", province: "ON" },
+  { city: "Richmond Hill", province: "ON" },
+  { city: "Oakville", province: "ON" },
+  { city: "Burlington", province: "ON" },
+  { city: "Oshawa", province: "ON" },
+  { city: "Barrie", province: "ON" },
+  { city: "Montreal", province: "QC" },
+  { city: "Calgary", province: "AB" },
+  { city: "Edmonton", province: "AB" },
+  { city: "Vancouver", province: "BC" },
+  { city: "Winnipeg", province: "MB" },
+  { city: "Halifax", province: "NS" },
+  { city: "Fredericton", province: "NB" },
+];
 const PLACES_FETCH_TIMEOUT_MS = 8000;
 const GOOGLE_PLACES_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY ||
@@ -197,6 +226,110 @@ type GooglePlacePrediction = {
     secondary_text?: string;
   };
 };
+
+function toTitleCaseAddress(value: string): string {
+  return normalizeAddressText(value).replace(/\b([A-Za-z][A-Za-z'.-]*)\b/g, (word) => {
+    const lower = word.toLowerCase();
+    const suffixMap: Record<string, string> = {
+      st: "St",
+      street: "Street",
+      rd: "Rd",
+      road: "Road",
+      ave: "Ave",
+      avenue: "Avenue",
+      blvd: "Blvd",
+      boulevard: "Boulevard",
+      dr: "Dr",
+      drive: "Drive",
+      crt: "Crt",
+      court: "Court",
+      cres: "Cres",
+      crescent: "Crescent",
+      ln: "Ln",
+      lane: "Lane",
+      pkwy: "Pkwy",
+      parkway: "Parkway",
+      hwy: "Hwy",
+      highway: "Highway",
+      apt: "Apt",
+      unit: "Unit",
+    };
+    return suffixMap[lower] || lower.charAt(0).toUpperCase() + lower.slice(1);
+  });
+}
+
+function createGenericCanadianPlaceId(description: string): string {
+  return `${GENERIC_CANADIAN_PLACE_ID_PREFIX}${encodeURIComponent(description)}`;
+}
+
+function readGenericCanadianPlaceId(placeId: string): string | null {
+  if (!placeId.startsWith(GENERIC_CANADIAN_PLACE_ID_PREFIX)) return null;
+  try {
+    return decodeURIComponent(placeId.slice(GENERIC_CANADIAN_PLACE_ID_PREFIX.length));
+  } catch {
+    return null;
+  }
+}
+
+function parseStreetParts(addressLine1: string) {
+  const match = addressLine1.match(/^(\d+[A-Za-z]?)\s+(.+)$/);
+  return {
+    streetNumber: match?.[1] || "",
+    streetName: match?.[2] || "",
+  };
+}
+
+function buildGenericCanadianAddressDetails(description: string) {
+  const parsed = parseLocalAddress(description);
+  const addressLine1 = toTitleCaseAddress(parsed.addressLine1);
+  const city = toTitleCaseAddress(parsed.city);
+  const province = normalizeProvince(parsed.province);
+  const formattedParts = [addressLine1, city, province, parsed.postalCode, "Canada"].filter(Boolean);
+  const { streetNumber, streetName } = parseStreetParts(addressLine1);
+
+  return {
+    placeId: createGenericCanadianPlaceId(formattedParts.join(", ")),
+    types: ["street_address", "generic_address"],
+    formattedAddress: formattedParts.join(", "),
+    streetNumber,
+    streetName,
+    addressLine1,
+    city,
+    province,
+    postalCode: parsed.postalCode,
+    country: "Canada",
+    latitude: null,
+    longitude: null,
+  };
+}
+
+function buildGenericCanadianAddressPredictions(input: string): GooglePlacePrediction[] {
+  const normalized = normalizeAddressText(stripCountry(input));
+  if (normalized.length < MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH) return [];
+
+  const parsed = parseLocalAddress(normalized);
+  const addressLine1 = toTitleCaseAddress(parsed.addressLine1 || normalized);
+  if (!addressLine1) return [];
+
+  const explicitCity = toTitleCaseAddress(parsed.city);
+  const explicitProvince = normalizeProvince(parsed.province);
+  const locations = explicitCity
+    ? [{ city: explicitCity, province: explicitProvince || "ON" }]
+    : GENERIC_CANADIAN_ADDRESS_LOCATIONS.slice(0, 8);
+
+  return locations.map((location) => {
+    const description = [addressLine1, location.city, location.province, "Canada"].filter(Boolean).join(", ");
+    return {
+      place_id: createGenericCanadianPlaceId(description),
+      description,
+      types: ["street_address", "generic_address"],
+      structured_formatting: {
+        main_text: addressLine1,
+        secondary_text: [location.city, location.province, "Canada"].filter(Boolean).join(", "),
+      },
+    };
+  });
+}
 
 type RankedGooglePlacePrediction = GooglePlacePrediction & {
   qualityScore: number;
@@ -763,47 +896,6 @@ async function probeGooglePlacesApiKey(): Promise<{
     };
   }
 }
-
-// Run a non-blocking startup probe to surface API key issues in logs immediately.
-setTimeout(async () => {
-  try {
-    const result = await probeGooglePlacesApiKey();
-    if (result.working === true) {
-      console.info("[PLACES] STARTUP_PROBE: API key is valid and Places API is responding normally.", { envVar: result.envVar });
-    } else if (!result.configured) {
-      console.error(
-        "[PLACES] STARTUP_PROBE: Google Places API key is NOT configured. " +
-        "Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY in your deployment environment and redeploy. " +
-        "Address autocomplete will fall back to manual entry until this is resolved.",
-      );
-    } else {
-      let hint = "";
-      switch (result.failureCategory) {
-        case "API_NOT_ACTIVATED":
-          hint = " Ensure 'Places API' is enabled in Google Cloud Console for your project.";
-          break;
-        case "BILLING_INACTIVE_OR_INVALID":
-          hint = " Google Cloud billing must be enabled for the project linked to this API key.";
-          break;
-        case "RESTRICTION_BLOCKED":
-          hint = " The API key has HTTP referrer or IP restrictions. For server-side use, remove referrer restrictions and add the server's IP, or use an unrestricted key.";
-          break;
-        case "INVALID_KEY":
-          hint = " The API key value appears to be invalid or has been revoked. Regenerate the key in Google Cloud Console.";
-          break;
-        case "QUOTA_EXCEEDED":
-          hint = " The API quota has been exceeded. Check your Google Cloud Console quota settings.";
-          break;
-      }
-      console.error(`[PLACES] STARTUP_PROBE: API key is configured but Places API calls are failing (${result.failureCategory}).${hint}`, {
-        envVar: result.envVar,
-        errorMessage: result.errorMessage,
-      });
-    }
-  } catch (err) {
-    console.error("[PLACES] STARTUP_PROBE: Unexpected error during probe.", { message: err instanceof Error ? err.message : String(err) });
-  }
-}, 5000);
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371e3;
@@ -10284,7 +10376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
-  // Google Places-backed applicant address lookup
+  // Generic applicant address autocomplete
   // ========================================
 
   app.get("/api/places/autocomplete", async (req: Request, res: Response) => {
@@ -10313,36 +10405,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const lookup = await fetchGooglePlacesAutocomplete(input.trim());
-      if (!lookup.ok) {
-        const failureStage = lookup.failureStage || "unknown";
-        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
-        console.error("[PLACES] autocomplete:LOOKUP_FAILED", {
-          failureStage,
-          failureCategory,
-          httpStatus: lookup.httpStatus,
-        });
-        res.status(lookup.httpStatus).json({
-          error: lookup.message,
-          failureStage,
-          failureCategory,
-          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage),
-        });
-        return;
-      }
+      const predictions = buildGenericCanadianAddressPredictions(input.trim());
 
       res.json({
-        predictions: rankAndFilterGooglePredictions(lookup.predictions)
-          .map((prediction) => ({
-            place_id: prediction.place_id,
-            description: prediction.description,
-            types: prediction.types || [],
-            qualityScore: prediction.qualityScore,
-            structured_formatting: prediction.structured_formatting,
-          })),
+        predictions: predictions.map((prediction) => ({
+          place_id: prediction.place_id,
+          description: prediction.description,
+          types: prediction.types || [],
+          structured_formatting: prediction.structured_formatting,
+        })),
       });
       console.info("[PLACES] autocomplete:SUCCESS", {
-        predictionCount: lookup.predictions.length,
+        predictionCount: predictions.length,
       });
     } catch (error) {
       console.error("[PLACES] autocomplete:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
@@ -10375,25 +10449,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const lookup = await fetchGooglePlaceDetails(placeId);
-      if (!lookup.ok) {
-        const failureStage = lookup.failureStage || "unknown";
-        const failureCategory = lookup.failureCategory || "UPSTREAM_ERROR";
-        console.error("[PLACES] details:LOOKUP_FAILED", {
-          failureStage,
-          failureCategory,
-          httpStatus: lookup.httpStatus,
-        });
-        res.status(lookup.httpStatus).json({
-          error: lookup.message,
-          failureStage,
-          failureCategory,
-          retryable: isGooglePlacesFailureRetryable(failureCategory, failureStage),
-        });
+      const genericDescription = readGenericCanadianPlaceId(placeId);
+      if (!genericDescription) {
+        res.status(400).json({ error: "Invalid address suggestion." });
         return;
       }
 
-      res.json(lookup.details);
+      res.json(buildGenericCanadianAddressDetails(genericDescription));
       console.info("[PLACES] details:SUCCESS");
     } catch (error) {
       console.error("[PLACES] details:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
@@ -10406,47 +10468,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Diagnostic endpoint: checks API key configuration and optionally runs a live probe.
-  // Returns only safe, non-secret information. Useful for deployment health checks.
+  // Diagnostic endpoint for the generic, local address suggestion system.
   app.get("/api/places/health", async (req: Request, res: Response) => {
     try {
-      const keyConfigured = getGooglePlacesApiKey() !== null;
-
-      // Only run a live probe if explicitly requested (to avoid consuming quota on every health check).
-      const liveProbe = req.query.probe === "1";
-      if (!liveProbe) {
-        res.json({
-          configured: keyConfigured,
-          liveTest: null,
-        });
-        return;
-      }
-
-      if (!PLACES_HEALTH_PROBE_TOKEN) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-
-      if (!isAuthorizedPlacesProbeRequest(req)) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-
-      const ip = getClientIp(req);
-      if (!checkPlacesHealthProbeRateLimit(ip)) {
-        console.warn("[PLACES] health:PROBE_RATE_LIMITED", { ipPresent: Boolean(ip) });
-        res.status(429).json({ error: "Too many probe requests. Please try again later." });
-        return;
-      }
-
-      const probe = await probeGooglePlacesApiKey();
       res.json({
-        configured: probe.configured,
-        envVar: probe.envVar,
+        configured: true,
+        provider: "generic",
+        locationCount: GENERIC_CANADIAN_ADDRESS_LOCATIONS.length,
         liveTest: {
-          working: probe.working,
-          failureCategory: probe.failureCategory,
-          errorMessage: probe.errorMessage,
+          working: true,
+          failureCategory: null,
+          errorMessage: null,
         },
       });
     } catch (error) {

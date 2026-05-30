@@ -167,35 +167,9 @@ function parseLocalAddress(input: string) {
 
 const GOOGLE_PLACES_API_BASE_URL = "https://maps.googleapis.com/maps/api/place";
 const MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH = 3;
-const GENERIC_CANADIAN_PLACE_ID_PREFIX = "generic_ca:";
-const GENERIC_CANADIAN_ADDRESS_LOCATIONS = [
-  { city: "Toronto", province: "ON" },
-  { city: "Mississauga", province: "ON" },
-  { city: "Brampton", province: "ON" },
-  { city: "Scarborough", province: "ON" },
-  { city: "North York", province: "ON" },
-  { city: "Etobicoke", province: "ON" },
-  { city: "Ottawa", province: "ON" },
-  { city: "Hamilton", province: "ON" },
-  { city: "London", province: "ON" },
-  { city: "Windsor", province: "ON" },
-  { city: "Kitchener", province: "ON" },
-  { city: "Waterloo", province: "ON" },
-  { city: "Markham", province: "ON" },
-  { city: "Vaughan", province: "ON" },
-  { city: "Richmond Hill", province: "ON" },
-  { city: "Oakville", province: "ON" },
-  { city: "Burlington", province: "ON" },
-  { city: "Oshawa", province: "ON" },
-  { city: "Barrie", province: "ON" },
-  { city: "Montreal", province: "QC" },
-  { city: "Calgary", province: "AB" },
-  { city: "Edmonton", province: "AB" },
-  { city: "Vancouver", province: "BC" },
-  { city: "Winnipeg", province: "MB" },
-  { city: "Halifax", province: "NS" },
-  { city: "Fredericton", province: "NB" },
-];
+const PHOTON_SEARCH_URL = "https://photon.komoot.io/api/";
+const OPENSTREETMAP_PLACE_ID_PREFIX = "osm_ca:";
+const OPENSTREETMAP_USER_AGENT = "WorkforceConnect/1.0 address autocomplete";
 const PLACES_FETCH_TIMEOUT_MS = 8000;
 const GOOGLE_PLACES_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY ||
@@ -225,6 +199,32 @@ type GooglePlacePrediction = {
     main_text?: string;
     secondary_text?: string;
   };
+};
+
+type PhotonFeature = {
+  properties?: {
+    osm_type?: string;
+    osm_id?: number | string;
+    type?: string;
+    housenumber?: string;
+    street?: string;
+    name?: string;
+    locality?: string;
+    district?: string;
+    city?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+    postcode?: string;
+    countrycode?: string;
+  };
+  geometry?: {
+    coordinates?: [number, number];
+  };
+};
+
+type PhotonSearchResponse = {
+  features?: PhotonFeature[];
 };
 
 function toTitleCaseAddress(value: string): string {
@@ -258,14 +258,14 @@ function toTitleCaseAddress(value: string): string {
   });
 }
 
-function createGenericCanadianPlaceId(description: string): string {
-  return `${GENERIC_CANADIAN_PLACE_ID_PREFIX}${encodeURIComponent(description)}`;
+function createOpenStreetMapPlaceId(details: ReturnType<typeof buildOpenStreetMapAddressDetails>): string {
+  return `${OPENSTREETMAP_PLACE_ID_PREFIX}${encodeURIComponent(JSON.stringify(details))}`;
 }
 
-function readGenericCanadianPlaceId(placeId: string): string | null {
-  if (!placeId.startsWith(GENERIC_CANADIAN_PLACE_ID_PREFIX)) return null;
+function readOpenStreetMapPlaceId(placeId: string): ReturnType<typeof buildOpenStreetMapAddressDetails> | null {
+  if (!placeId.startsWith(OPENSTREETMAP_PLACE_ID_PREFIX)) return null;
   try {
-    return decodeURIComponent(placeId.slice(GENERIC_CANADIAN_PLACE_ID_PREFIX.length));
+    return JSON.parse(decodeURIComponent(placeId.slice(OPENSTREETMAP_PLACE_ID_PREFIX.length)));
   } catch {
     return null;
   }
@@ -279,56 +279,82 @@ function parseStreetParts(addressLine1: string) {
   };
 }
 
-function buildGenericCanadianAddressDetails(description: string) {
-  const parsed = parseLocalAddress(description);
-  const addressLine1 = toTitleCaseAddress(parsed.addressLine1);
-  const city = toTitleCaseAddress(parsed.city);
-  const province = normalizeProvince(parsed.province);
-  const formattedParts = [addressLine1, city, province, parsed.postalCode, "Canada"].filter(Boolean);
+function getPhotonCity(properties: PhotonFeature["properties"]): string {
+  return normalizeAddressText(
+    properties?.city ||
+    properties?.district ||
+    properties?.locality ||
+    "",
+  );
+}
+
+function buildOpenStreetMapAddressDetails(feature: PhotonFeature) {
+  const properties = feature.properties || {};
+  const addressLine1 = toTitleCaseAddress([properties.housenumber, properties.street || properties.name].filter(Boolean).join(" "));
+  const city = toTitleCaseAddress(getPhotonCity(properties));
+  const province = normalizeProvince(properties.state || "");
+  const postalCode = normalizePostalCode(properties.postcode || "");
+  const longitude = feature.geometry?.coordinates?.[0] ?? null;
+  const latitude = feature.geometry?.coordinates?.[1] ?? null;
+  const formattedParts = [addressLine1, city, province, postalCode, "Canada"].filter(Boolean);
   const { streetNumber, streetName } = parseStreetParts(addressLine1);
 
   return {
-    placeId: createGenericCanadianPlaceId(formattedParts.join(", ")),
-    types: ["street_address", "generic_address"],
+    placeId: [properties.osm_type, properties.osm_id].filter(Boolean).join(":"),
+    types: ["street_address", "openstreetmap"],
     formattedAddress: formattedParts.join(", "),
     streetNumber,
     streetName,
     addressLine1,
     city,
     province,
-    postalCode: parsed.postalCode,
+    postalCode,
     country: "Canada",
-    latitude: null,
-    longitude: null,
+    latitude,
+    longitude,
   };
 }
 
-function buildGenericCanadianAddressPredictions(input: string): GooglePlacePrediction[] {
-  const normalized = normalizeAddressText(stripCountry(input));
+async function fetchOpenStreetMapAddressPredictions(input: string): Promise<GooglePlacePrediction[]> {
+  const normalized = normalizeAddressText(input);
   if (normalized.length < MIN_ADDRESS_AUTOCOMPLETE_INPUT_LENGTH) return [];
 
-  const parsed = parseLocalAddress(normalized);
-  const addressLine1 = toTitleCaseAddress(parsed.addressLine1 || normalized);
-  if (!addressLine1) return [];
+  const url = new URL(PHOTON_SEARCH_URL);
+  url.searchParams.set("q", normalized);
+  url.searchParams.set("limit", "8");
+  url.searchParams.set("lang", "en");
 
-  const explicitCity = toTitleCaseAddress(parsed.city);
-  const explicitProvince = normalizeProvince(parsed.province);
-  const locations = explicitCity
-    ? [{ city: explicitCity, province: explicitProvince || "ON" }]
-    : GENERIC_CANADIAN_ADDRESS_LOCATIONS.slice(0, 8);
-
-  return locations.map((location) => {
-    const description = [addressLine1, location.city, location.province, "Canada"].filter(Boolean).join(", ");
-    return {
-      place_id: createGenericCanadianPlaceId(description),
-      description,
-      types: ["street_address", "generic_address"],
-      structured_formatting: {
-        main_text: addressLine1,
-        secondary_text: [location.city, location.province, "Canada"].filter(Boolean).join(", "),
-      },
-    };
+  const response = await fetchWithPlacesTimeout(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": OPENSTREETMAP_USER_AGENT,
+    },
   });
+  if (!response.ok) {
+    console.error("[PLACES] autocomplete:OPENSTREETMAP_FAILED", { httpStatus: response.status });
+    return [];
+  }
+
+  const data = await response.json() as PhotonSearchResponse;
+  return (data.features || [])
+    .filter((feature) => feature.properties?.countrycode === "CA")
+    .map((feature) => {
+      const details = buildOpenStreetMapAddressDetails(feature);
+      return { feature, details };
+    })
+    .filter(({ details }) => details.formattedAddress && details.addressLine1)
+    .map(({ details }) => {
+      const secondaryText = [details.city, details.province, details.postalCode, "Canada"].filter(Boolean).join(", ");
+      return {
+        place_id: createOpenStreetMapPlaceId(details),
+        description: details.formattedAddress,
+        types: details.types,
+        structured_formatting: {
+          main_text: details.addressLine1,
+          secondary_text: secondaryText,
+        },
+      },
+    });
 }
 
 type RankedGooglePlacePrediction = GooglePlacePrediction & {
@@ -10376,7 +10402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
-  // Generic applicant address autocomplete
+  // OpenStreetMap-backed applicant address autocomplete
   // ========================================
 
   app.get("/api/places/autocomplete", async (req: Request, res: Response) => {
@@ -10405,7 +10431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const predictions = buildGenericCanadianAddressPredictions(input.trim());
+      const predictions = await fetchOpenStreetMapAddressPredictions(input.trim());
 
       res.json({
         predictions: predictions.map((prediction) => ({
@@ -10449,13 +10475,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      const genericDescription = readGenericCanadianPlaceId(placeId);
-      if (!genericDescription) {
+      const addressDetails = readOpenStreetMapPlaceId(placeId);
+      if (!addressDetails) {
         res.status(400).json({ error: "Invalid address suggestion." });
         return;
       }
 
-      res.json(buildGenericCanadianAddressDetails(genericDescription));
+      res.json(addressDetails);
       console.info("[PLACES] details:SUCCESS");
     } catch (error) {
       console.error("[PLACES] details:INTERNAL_ERROR", { message: (error instanceof Error ? error.message : String(error)) });
@@ -10468,13 +10494,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Diagnostic endpoint for the generic, local address suggestion system.
+  // Diagnostic endpoint for the OpenStreetMap-backed address suggestion system.
   app.get("/api/places/health", async (req: Request, res: Response) => {
     try {
       res.json({
         configured: true,
-        provider: "generic",
-        locationCount: GENERIC_CANADIAN_ADDRESS_LOCATIONS.length,
+        provider: "photon-openstreetmap",
         liveTest: {
           working: true,
           failureCategory: null,

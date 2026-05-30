@@ -604,7 +604,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       phone: phone.trim(),
       birthdate,
       addressFull: address.trim(),
-      addressStreet: address.trim(),
+      addressStreet: document.getElementById('address_street').value.trim() || address.trim(),
       addressCity: document.getElementById('address_city').value.trim(),
       addressProvince: document.getElementById('address_province').value.trim(),
       addressPostalCode: document.getElementById('address_postal_code').value.trim(),
@@ -615,7 +615,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
       addressPlaceTypes: document.getElementById('address_place_types').value.trim(),
       addressLatitude: parseCoordinate('address_latitude'),
       addressLongitude: parseCoordinate('address_longitude'),
-      addressManualEntry: true,
+      addressManualEntry: !document.getElementById('address_place_id').value.trim(),
       applyingFor: applyingFor.trim(),
       jobPostingSource: source.trim(),
       photoData: String(photoData.data).trim(),
@@ -747,6 +747,7 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
   var debounceTimer = null;
   var activeIndex = -1;
   var currentPredictions = [];
+  var lastQuery = '';
 
   function setVal(id, val) {
     var el = document.getElementById(id);
@@ -771,6 +772,24 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
     currentPredictions = [];
   }
 
+  function showDropdownMessage(message, retryable) {
+    currentPredictions = [];
+    activeIndex = -1;
+    dropdown.innerHTML =
+      '<div class="suggestion-message">' + escapeHtml(message) +
+      (retryable ? ' <button type="button" class="retry-autocomplete">Try again</button>' : '') +
+      '</div>';
+    dropdown.style.display = 'block';
+    var retryButton = dropdown.querySelector('.retry-autocomplete');
+    if (retryButton) {
+      retryButton.classList.add('show');
+      retryButton.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        fetchSuggestions(lastQuery || addressInput.value);
+      });
+    }
+  }
+
   function escapeHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -779,7 +798,10 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
 
   function renderPredictions(predictions) {
     dropdown.innerHTML = '';
-    if (!predictions || predictions.length === 0) { hideDropdown(); return; }
+    if (!predictions || predictions.length === 0) {
+      showDropdownMessage('No matching Canadian addresses found. Keep typing your full address if you do not see it.', false);
+      return;
+    }
     currentPredictions = predictions;
     predictions.forEach(function (pred, i) {
       var item = document.createElement('div');
@@ -816,6 +838,8 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
           setVal('address_postal_code', d.postalCode || '');
           setVal('address_street_number', d.streetNumber || '');
           setVal('address_street_name', d.streetName || '');
+          setVal('address_latitude', d.latitude === null || d.latitude === undefined ? '' : String(d.latitude));
+          setVal('address_longitude', d.longitude === null || d.longitude === undefined ? '' : String(d.longitude));
           if (d.formattedAddress) {
             window._addressAutofilling = true;
             addressInput.value = d.formattedAddress;
@@ -828,16 +852,29 @@ document.getElementById('apply-form').addEventListener('submit', async (e) => {
 
   function fetchSuggestions(val) {
     if (!val || val.trim().length < 3) { hideDropdown(); return; }
+    lastQuery = val.trim();
+    showDropdownMessage('Looking up addresses...', false);
     fetch('/api/places/autocomplete?input=' + encodeURIComponent(val.trim()))
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) {
+            var err = new Error(data.error || 'Address suggestions are unavailable. You can still type the full address.');
+            err.retryable = data.retryable !== false;
+            throw err;
+          }
+          return data;
+        });
+      })
       .then(function (data) {
         if (data && Array.isArray(data.predictions)) {
           renderPredictions(data.predictions);
         } else {
-          hideDropdown();
+          showDropdownMessage('Address suggestions are unavailable. You can still type the full address.', true);
         }
       })
-      .catch(function () { hideDropdown(); });
+      .catch(function (error) {
+        showDropdownMessage(error && error.message ? error.message : 'Address suggestions are unavailable. You can still type the full address.', !error || error.retryable !== false);
+      });
   }
 
   addressInput.addEventListener('input', function () {

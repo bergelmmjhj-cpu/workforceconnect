@@ -458,11 +458,14 @@ function isGooglePlacesFailureRetryable(
   return !NON_RETRYABLE_GOOGLE_PLACES_FAILURE_CATEGORIES.has(failureCategory);
 }
 
-async function fetchWithPlacesTimeout(url: URL): Promise<Response> {
+async function fetchWithPlacesTimeout(
+  input: URL | string,
+  init?: RequestInit,
+): Promise<Response> {
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), PLACES_FETCH_TIMEOUT_MS);
   try {
-    return await fetch(url, { signal: abortController.signal });
+    return await fetch(input, { ...init, signal: abortController.signal });
   } finally {
     clearTimeout(timeout);
   }

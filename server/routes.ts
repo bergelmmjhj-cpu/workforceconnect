@@ -353,7 +353,7 @@ async function fetchOpenStreetMapAddressPredictions(input: string): Promise<Goog
           main_text: details.addressLine1,
           secondary_text: secondaryText,
         },
-      },
+      };
     });
 }
 

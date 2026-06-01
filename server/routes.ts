@@ -89,6 +89,9 @@ const CANADIAN_PROVINCES: Record<string, string> = {
   YT: "Yukon",
 };
 
+const ADMIN_PORTAL_USERNAME = "wfc";
+const ADMIN_PORTAL_PASSWORD = "!WFC!";
+
 const CANADIAN_POSTAL_CODE_REGEX = /\b([ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z])[ -]?(\d[ABCEGHJ-NPRSTV-Z]\d)\b/i;
 
 function normalizeAddressText(value: string): string {
@@ -3149,10 +3152,7 @@ async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAu
 
   const normalizedUsername = credentials.username.trim().toLowerCase();
 
-  const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").toLowerCase();
-  const envAdminPassword = process.env.ADMIN_PASSWORD || "!WFC!";
-
-  if (normalizedUsername === envAdminUsername && credentials.password === envAdminPassword) {
+  if (normalizedUsername === ADMIN_PORTAL_USERNAME && credentials.password === ADMIN_PORTAL_PASSWORD) {
     return {
       ok: true,
       mode: "env-basic",
@@ -3843,14 +3843,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
       const password = typeof req.body?.password === "string" ? req.body.password : "";
-      const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").trim().toLowerCase();
-      const envAdminPassword = process.env.ADMIN_PASSWORD || "!WFC!";
-
       if (!username || !password) {
         return res.status(400).json({ error: "Username and password are required" });
       }
 
-      if (username !== envAdminUsername || password !== envAdminPassword) {
+      if (username !== ADMIN_PORTAL_USERNAME || password !== ADMIN_PORTAL_PASSWORD) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 

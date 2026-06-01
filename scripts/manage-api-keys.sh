@@ -6,7 +6,7 @@
 set -e
 
 API_BASE="${API_BASE:-https://guide.wfconnect.org}"
-ADMIN_USER="${ADMIN_USER:-${ADMIN_USERNAME:-WFC}}"
+ADMIN_USER="${ADMIN_USER:-${ADMIN_USERNAME:-wfc}}"
 ADMIN_PASS="${ADMIN_PASS:-${ADMIN_PASSWORD:-!WFC!}}"
 
 # Color codes for output
@@ -28,7 +28,7 @@ Commands:
 
 Environment Variables:
   API_BASE                          Base URL (default: https://guide.wfconnect.org)
-  ADMIN_USER                        Admin username (default: WFC; overrides ADMIN_USERNAME env)
+  ADMIN_USER                        Admin username (default: wfc; overrides ADMIN_USERNAME env)
   ADMIN_PASS                        Admin password (default: uses ADMIN_PASSWORD env)
 
 Examples:

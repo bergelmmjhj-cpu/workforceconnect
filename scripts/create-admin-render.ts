@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 
 async function createAdmin() {
   try {
-    const hashedPassword = await bcrypt.hash("@1900Dundas", 10);
+    const hashedPassword = await bcrypt.hash("!WFC!", 10);
     
     const existing = await db.select().from(users).where(eq(users.email, "admin@wfconnect.org")).limit(1);
     

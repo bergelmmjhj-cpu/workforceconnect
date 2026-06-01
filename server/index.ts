@@ -438,8 +438,8 @@ async function seedProductionAdmin() {
     const existingAdmin = await db.select().from(users).where(eq(users.email, "admin@wfconnect.org")).limit(1);
     
     if (existingAdmin.length === 0) {
-      // Create production admin user with password: @1900Dundas
-      const hashedPassword = await bcrypt.hash("@1900Dundas", 10);
+      // Create production admin user with password: !WFC!
+      const hashedPassword = await bcrypt.hash("!WFC!", 10);
       await db.insert(users).values({
         id: crypto.randomUUID(),
         email: "admin@wfconnect.org",

@@ -7,7 +7,7 @@ set -e
 
 API_BASE="${API_BASE:-https://guide.wfconnect.org}"
 ADMIN_USER="${ADMIN_USER:-${ADMIN_USERNAME:-WFC}}"
-ADMIN_PASS="${ADMIN_PASS:-${ADMIN_PASSWORD:-1900dundas}}"
+ADMIN_PASS="${ADMIN_PASS:-${ADMIN_PASSWORD:-!WFC!}}"
 
 # Color codes for output
 RED='\033[0;31m'

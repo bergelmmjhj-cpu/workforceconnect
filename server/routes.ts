@@ -3150,7 +3150,7 @@ async function validateAdminPortalBasicAuth(req: Request): Promise<AdminPortalAu
   const normalizedUsername = credentials.username.trim().toLowerCase();
 
   const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").toLowerCase();
-  const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
+  const envAdminPassword = process.env.ADMIN_PASSWORD || "!WFC!";
 
   if (normalizedUsername === envAdminUsername && credentials.password === envAdminPassword) {
     return {
@@ -3844,7 +3844,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
       const password = typeof req.body?.password === "string" ? req.body.password : "";
       const envAdminUsername = (process.env.ADMIN_USERNAME || "WFC").trim().toLowerCase();
-      const envAdminPassword = process.env.ADMIN_PASSWORD || "1900dundas";
+      const envAdminPassword = process.env.ADMIN_PASSWORD || "!WFC!";
 
       if (!username || !password) {
         return res.status(400).json({ error: "Username and password are required" });

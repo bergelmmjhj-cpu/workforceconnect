@@ -4586,13 +4586,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      if (!isConsentGranted(smsConsent)) {
-        res.status(400).json({ ok: false, error: "SMS consent is required to submit this form" });
-        return;
-      }
-
       const userAgent = req.headers["user-agent"] || null;
       const submittedAt = new Date();
+      const smsConsentGranted = isConsentGranted(smsConsent);
 
       await db.insert(contactLeads).values({
         name: name.trim(),
@@ -4602,8 +4598,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cityProvince: cityProvince?.trim() || null,
         serviceNeeded: serviceNeeded?.trim() || null,
         message: message.trim(),
-        smsConsent: true,
-        smsConsentAt: submittedAt,
+        smsConsent: smsConsentGranted,
+        smsConsentAt: smsConsentGranted ? submittedAt : null,
         ip,
         userAgent,
       });

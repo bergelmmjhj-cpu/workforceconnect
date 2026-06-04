@@ -2050,11 +2050,11 @@
                 <textarea id="message" name="message" required placeholder="Describe your property, the roles or cleaning service you need, approximate frequency or shift dates, and any other details that help us respond accurately."></textarea>
               </div>
               <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-left:4px solid #16a34a;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#166534;line-height:1.55;">
-                By providing your phone number and submitting this form, you consent to receive SMS text messages from Workforce Connect regarding job opportunities, scheduling, onboarding, and work-related updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for assistance. View our <a href="/privacy" style="color:#15803d;">Privacy Policy</a> and <a href="/terms" style="color:#15803d;">Terms &amp; Conditions</a>.
+                SMS consent is optional. If you choose to opt in, Workforce Connect may send SMS text messages from 1001328662 Ontario Inc. regarding staffing updates, scheduling, onboarding, and operational notifications. Message frequency varies. Message and data rates may apply. Reply STOP or CANCEL to opt out, or HELP for assistance. View our <a href="/privacy" style="color:#15803d;">Privacy Policy</a> and <a href="/terms" style="color:#15803d;">Terms &amp; Conditions</a>.
               </div>
               <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;font-size:13px;color:#374151;cursor:pointer;">
-                <input type="checkbox" id="sms_consent" name="sms_consent" required style="margin-top:2px;flex-shrink:0;" />
-                <span>I agree to receive SMS communications from 1001328662 Ontario Inc. regarding staffing updates, scheduling, onboarding, and operational notifications. Message frequency varies. Message and data rates may apply. Reply STOP to opt out and HELP for assistance. <span style="color:#dc2626;">*</span></span>
+                <input type="checkbox" id="sms_consent" name="sms_consent" style="margin-top:2px;flex-shrink:0;" />
+                <span>I agree to receive SMS communications from 1001328662 Ontario Inc. regarding staffing updates, scheduling, onboarding, and operational notifications. Reply STOP or CANCEL to opt out, or HELP for assistance. Consent is not a condition of employment, application approval, or service. (optional)</span>
               </label>
               <button type="submit" class="form-submit" id="submitBtn">Send Request</button>
               <div class="form-message" id="formMessage"></div>
@@ -2202,12 +2202,6 @@
 
         if (formData.message.length < 10) {
           formMessage.textContent = 'Please describe your needs in a bit more detail (at least 10 characters).';
-          formMessage.className = 'form-message error';
-          return;
-        }
-
-        if (!formData.smsConsent) {
-          formMessage.textContent = 'Please agree to receive SMS communications before submitting.';
           formMessage.className = 'form-message error';
           return;
         }

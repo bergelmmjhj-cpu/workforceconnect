@@ -50,6 +50,7 @@ interface EmailAttachment {
 
 interface SendEmailOptions {
   to: string;
+  fromName?: string;
   subject: string;
   text: string;
   html?: string;
@@ -62,7 +63,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<{ success: b
 
     const msg: any = {
       to: options.to,
-      from: fromEmail,
+      from: options.fromName ? { email: fromEmail, name: options.fromName } : fromEmail,
       subject: options.subject,
       text: options.text,
     };

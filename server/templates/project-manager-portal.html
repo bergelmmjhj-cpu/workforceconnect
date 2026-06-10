@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Project Manager Portal | 1001328662 Ontario Inc.</title><meta name="robots" content="noindex,nofollow,noarchive">
+  <style>
+    :root{--ink:#172033;--muted:#606979;--line:#d7dbe2;--bg:#f4f5f7;--panel:#fff;--action:#25354d}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Arial,sans-serif}header,main,footer{width:min(1080px,calc(100% - 28px));margin:auto}
+    header{padding:26px 0 18px;border-bottom:1px solid var(--line)}.company{font-size:18px;font-weight:700}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:18px;overflow:auto}.wide{grid-column:1/-1}h1,h2{margin-top:0}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line);vertical-align:top}.badge{display:inline-block;padding:3px 8px;border:1px solid var(--line);border-radius:99px}
+    a{color:#183f71}.muted{color:var(--muted)}input,select,button{padding:9px;border:1px solid #b7bec8;border-radius:4px;font:inherit}button{background:var(--action);color:#fff;font-weight:700;cursor:pointer}
+    footer{text-align:center;color:var(--muted);padding:28px 0}@media(max-width:760px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+  </style>
+</head>
+<body>
+<header><div class="company">1001328662 Ontario Inc.</div><div class="muted">Secure Project Manager portal</div></header>
+<main>
+  <section id="loading" class="card" style="margin-top:20px">Loading secure portal...</section>
+  <div id="portal" hidden>
+    <div class="grid">
+      <section class="card"><h1>Project Manager</h1><div id="application"></div></section>
+      <section class="card"><h2>Compliance upload</h2><p>Upload insurance, licensing, registration, clearance, or training documents.</p><select id="category"><option>INSURANCE</option><option>LICENCE</option><option>REGISTRATION</option><option>CLEARANCE</option><option>TRAINING</option><option>OTHER</option></select><input id="file" type="file"><button id="upload">Upload</button><p id="uploadMessage"></p></section>
+      <section class="card wide"><h2>Agreements and PDFs</h2><div id="agreements"></div></section>
+      <section class="card wide"><h2>Assignment Confirmations</h2><div id="assignments"></div></section>
+      <section class="card wide"><h2>Approved workers</h2><div id="workers"></div></section>
+      <section class="card"><h2>Compliance documents</h2><div id="documents"></div></section>
+      <section class="card"><h2>Notices and amendments</h2><div id="notices"></div></section>
+    </div>
+  </div>
+</main>
+<footer>&copy; 1001328662 Ontario Inc. All rights reserved.</footer>
+<script>
+  const token=new URLSearchParams(location.search).get("token");let portalData;
+  const esc=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+  const table=(rows,columns)=>rows.length?'<table><thead><tr>'+columns.map(c=>'<th>'+esc(c[0])+'</th>').join("")+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+columns.map(c=>'<td>'+c[1](row)+'</td>').join("")+'</tr>').join("")+'</tbody></table>':'<p class="muted">No records.</p>';
+  async function load(){
+    if(!token){document.getElementById("loading").textContent="A secure portal token is required.";return}
+    const response=await fetch("/api/project-manager/portal/"+encodeURIComponent(token),{cache:"no-store"});const data=await response.json();
+    if(!response.ok){document.getElementById("loading").textContent=data.error||"Portal unavailable.";return}portalData=data;
+    document.getElementById("loading").hidden=true;document.getElementById("portal").hidden=false;
+    document.getElementById("application").innerHTML='<p><strong>'+esc(data.application.legalBusinessName)+'</strong></p><p>Application '+esc(data.application.applicationNumber)+'</p><p><span class="badge">'+esc(data.application.status==="APPROVED_AGREEMENT_EXECUTED"?"Approved \u2014 Agreement Executed":data.application.status)+'</span></p>';
+    document.getElementById("agreements").innerHTML=table(data.agreements,[["Number",r=>esc(r.agreementNumber)],["Status",r=>'<span class="badge">'+esc(r.status)+'</span>'],["Versions",r=>esc(data.agreementVersions.filter(v=>v.agreementId===r.id).map(v=>"v"+v.versionNumber+(v.isExecuted?" executed":"")).join(", "))],["PDF",r=>r.executedVersionId?'<a href="/api/project-manager/portal/'+encodeURIComponent(token)+'/agreements/'+encodeURIComponent(r.id)+'/download">Download executed PDF</a>':'Not yet executed']]);
+    document.getElementById("assignments").innerHTML=table(data.assignments,[["Number",r=>esc(r.assignmentNumber)],["Project",r=>esc(r.projectName)],["Status",r=>esc(r.status)],["Rates",r=>'<pre>'+esc(r.ratesSnapshot)+'</pre>'],["Actions",r=>'<a href="/api/project-manager/portal/'+encodeURIComponent(token)+'/assignments/'+encodeURIComponent(r.id)+'/download">PDF</a>'+(r.status==="ISSUED"?' <button onclick="acceptAssignment(\''+r.id+'\')">Accept</button>':'')]]);
+    document.getElementById("workers").innerHTML=table(data.workers,[["Legal name",r=>esc(r.legalName)],["Actual relationship",r=>esc(r.relationshipType)],["Role",r=>esc(r.role)],["Status",r=>esc(r.status)]]);
+    document.getElementById("documents").innerHTML=table(data.documents,[["File",r=>'<a href="/api/project-manager/portal/'+encodeURIComponent(token)+'/documents/'+encodeURIComponent(r.id)+'/download">'+esc(r.originalFileName)+'</a>'],["Category",r=>esc(r.category)],["Status",r=>esc(r.status)],["Expiry",r=>esc(r.expiresAt||"Not specified")]]);
+    document.getElementById("notices").innerHTML=data.notices.length?data.notices.map(n=>'<article><strong>'+esc(n.subject)+'</strong><p>'+esc(n.body)+'</p></article>').join(""):'<p class="muted">No notices.</p>';
+  }
+  async function acceptAssignment(id){const response=await fetch("/api/project-manager/portal/"+encodeURIComponent(token)+"/assignments/"+encodeURIComponent(id)+"/accept",{method:"POST"});const data=await response.json();if(!response.ok)alert(data.error);else load()}
+  document.getElementById("upload").onclick=async()=>{
+    const file=document.getElementById("file").files[0],message=document.getElementById("uploadMessage");if(!file){message.textContent="Choose a file.";return}
+    const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(",")[1]);reader.onerror=reject;reader.readAsDataURL(file)});
+    const response=await fetch("/api/project-manager/portal/"+encodeURIComponent(token)+"/documents",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({category:document.getElementById("category").value,fileName:file.name,mimeType:file.type||"application/octet-stream",base64})});
+    const data=await response.json();message.textContent=response.ok?"Document registered securely.":data.error;if(response.ok)load();
+  };load();
+</script>
+</body>
+</html>

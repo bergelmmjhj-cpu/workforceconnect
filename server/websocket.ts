@@ -1,11 +1,21 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "node:http";
+import type { Express } from "express";
+import { registerProjectManagerWorkflow } from "./project-manager-bootstrap";
 
 const clients = new Set<WebSocket>();
 
 let wss: WebSocketServer;
 
 export function setupWebSocket(server: Server) {
+  const app = server.listeners("request").find(
+    (listener) => typeof (listener as Express).get === "function",
+  ) as Express | undefined;
+  if (!app) {
+    throw new Error("Express request handler unavailable for Project Manager workflow registration");
+  }
+  registerProjectManagerWorkflow(app);
+
   wss = new WebSocketServer({ server, path: "/ws" });
   
   wss.on("connection", (ws) => {

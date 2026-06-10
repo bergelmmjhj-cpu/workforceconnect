@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Become a Project Manager | 1001328662 Ontario Inc.</title>
+  <meta name="description" content="Apply to provide independent Project Manager services to 1001328662 Ontario Inc.">
+  <style>
+    :root{color-scheme:light;--ink:#172033;--muted:#5f6878;--line:#d9dde5;--bg:#f4f5f7;--panel:#fff;--action:#25354d;--danger:#9f2525}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Arial,sans-serif}
+    header,main,footer{width:min(980px,calc(100% - 32px));margin:auto}header{padding:34px 0 22px;border-bottom:1px solid var(--line)}
+    .company{font-weight:700;letter-spacing:.02em}.eyebrow{color:var(--muted);text-transform:uppercase;font-size:12px;letter-spacing:.1em;margin-top:26px}
+    h1{font-size:clamp(30px,6vw,52px);line-height:1.08;margin:8px 0 12px}h2{font-size:22px;margin:0 0 18px}.lead{font-size:18px;max-width:760px;color:var(--muted)}
+    main{padding:28px 0 54px}.notice,.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px;margin-bottom:18px}
+    .notice{border-left:4px solid var(--action)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    label{display:block;font-weight:700;font-size:13px}input,select,textarea{width:100%;margin-top:6px;padding:11px 12px;border:1px solid #b9c0cc;border-radius:5px;background:#fff;color:var(--ink);font:inherit}
+    textarea{min-height:100px;resize:vertical}.wide{grid-column:1/-1}.workers{display:grid;gap:12px}.worker{border:1px solid var(--line);border-radius:6px;padding:14px}
+    .worker-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}button{border:0;border-radius:5px;padding:11px 16px;font-weight:700;cursor:pointer}
+    .primary{background:var(--action);color:#fff}.secondary{background:#e8ebef;color:var(--ink)}.remove{background:#fff0f0;color:var(--danger)}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.error{color:var(--danger);font-weight:700}.success{border-left:4px solid #227445}
+    footer{padding:24px 0 40px;color:var(--muted);border-top:1px solid var(--line);text-align:center}
+    @media(max-width:680px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.card,.notice{padding:17px}header{padding-top:24px}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="company">1001328662 Ontario Inc.</div>
+  <div class="eyebrow">Become a Project Manager</div>
+  <h1>Manage Workers and Coordinate Projects</h1>
+  <p class="lead">1001328662 Ontario Inc. works with independent Project Managers who provide, organize, and oversee qualified workers for approved client assignments.</p>
+</header>
+<main>
+  <section class="notice">
+    <strong>Important status notice</strong>
+    <p>&ldquo;Project Manager&rdquo; is an operational title. Legal status depends on the actual working relationship and applicable law. Applying does not guarantee approval, projects, hours, revenue, rates, payment timing, or worker acceptance.</p>
+  </section>
+  <form id="applicationForm">
+    <section class="card">
+      <h2>Business and legal information</h2>
+      <div class="grid">
+        <label>Entity type<select name="entityType" required><option value="">Select</option><option value="CORPORATION">Corporation</option><option value="SOLE_PROPRIETOR">Sole proprietor</option><option value="PARTNERSHIP">Partnership</option><option value="OTHER">Other</option></select></label>
+        <label>Legal business name<input name="legalBusinessName" required></label>
+        <label>Operating name, if any<input name="operatingName"></label>
+        <label>Corporation or registration number<input name="corporationNumber"></label>
+        <label>Tax number, if applicable<input name="taxNumber"></label>
+        <label>Authorized contact legal name<input name="contactLegalName" required></label>
+        <label>Contact title<input name="contactTitle"></label>
+        <label>Email<input name="email" type="email" required></label>
+        <label>Phone<input name="phone" type="tel" required></label>
+        <label class="wide">Street address<input name="address" required></label>
+        <label>City<input name="city" required></label>
+        <label>Province<input name="province" required></label>
+        <label>Postal code<input name="postalCode" required></label>
+        <label class="wide">Business description<textarea name="businessDescription"></textarea></label>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Worker roster</h2>
+      <p>List each proposed worker and the worker's actual legal relationship. The roster may also be completed or updated during review.</p>
+      <div id="workers" class="workers"></div>
+      <div class="actions"><button type="button" class="secondary" id="addWorker">Add worker</button></div>
+    </section>
+    <section class="card">
+      <h2>Submission</h2>
+      <p>Submitted information must be complete and accurate. Approval and agreement execution are required before Project Requests may be issued.</p>
+      <label><input type="checkbox" id="accuracy" style="width:auto;margin-right:8px" required>I confirm that the information supplied is accurate and that worker relationships are described truthfully.</label>
+      <div class="actions"><button class="primary" type="submit">Submit application</button></div>
+      <p id="message" role="status"></p>
+    </section>
+  </form>
+  <section id="confirmation" class="card success" hidden>
+    <h2>Application submitted</h2>
+    <p>Your Project Manager application number is <strong id="applicationNumber"></strong>.</p>
+    <p>Use the secure portal link below to view status, agreements, approved workers, compliance documents, notices, and amendments.</p>
+    <p><a id="portalLink">Open secure Project Manager portal</a></p>
+  </section>
+</main>
+<footer>&copy; 1001328662 Ontario Inc. All rights reserved.</footer>
+<script>
+  const workers = document.getElementById("workers");
+  function addWorker(){
+    const row=document.createElement("div");row.className="worker";
+    row.innerHTML='<div class="worker-head"><strong>Proposed worker</strong><button type="button" class="remove">Remove</button></div><div class="grid"><label>Legal name<input data-field="legalName" required></label><label>Actual legal relationship<select data-field="relationshipType" required><option value="">Select</option><option value="EMPLOYEE">Employee</option><option value="INDEPENDENT_CONTRACTOR">Independent contractor</option><option value="SUBCONTRACTOR_OF_OTHER_ENTITY">Subcontractor of another entity</option><option value="OWNER">Owner</option><option value="OTHER">Other</option></select></label><label>Role<input data-field="role"></label><label>Email<input data-field="email" type="email"></label><label>Phone<input data-field="phone"></label><label><input data-field="workEligibilityConfirmed" type="checkbox" style="width:auto;margin-right:8px">Work eligibility confirmed</label></div>';
+    row.querySelector(".remove").onclick=()=>row.remove();workers.appendChild(row);
+  }
+  document.getElementById("addWorker").onclick=addWorker;
+  document.getElementById("applicationForm").onsubmit=async(event)=>{
+    event.preventDefault();const form=new FormData(event.currentTarget);const message=document.getElementById("message");message.textContent="Submitting...";
+    const payload=Object.fromEntries(form.entries());
+    payload.workers=[...document.querySelectorAll(".worker")].map(row=>Object.fromEntries([...row.querySelectorAll("[data-field]")].map(input=>[input.dataset.field,input.type==="checkbox"?input.checked:(input.value||null)])));
+    try{
+      const response=await fetch("/api/project-manager/applications",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||"Submission failed");
+      event.currentTarget.hidden=true;document.getElementById("applicationNumber").textContent=data.applicationNumber;
+      const link=document.getElementById("portalLink");link.href=data.portalUrl;document.getElementById("confirmation").hidden=false;
+    }catch(error){message.className="error";message.textContent=error.message}
+  };
+</script>
+</body>
+</html>

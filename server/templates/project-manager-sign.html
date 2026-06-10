@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Project Manager Agreement | 1001328662 Ontario Inc.</title>
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <style>
+    :root{--ink:#172033;--muted:#606979;--line:#d7dbe2;--bg:#f4f5f7;--panel:#fff;--action:#25354d;--warn:#6d4d00}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 Arial,sans-serif}
+    header,main,footer{width:min(900px,calc(100% - 28px));margin:auto}header{padding:26px 0 18px;border-bottom:1px solid var(--line)}
+    .company{font-weight:700}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px;margin:18px 0}
+    .notice{border-left:4px solid #9a7412;background:#fffaf0}.agreement{white-space:pre-wrap;font-family:Georgia,serif;max-height:55vh;overflow:auto}
+    label{display:block;margin:12px 0;font-weight:700}input{width:100%;padding:11px;border:1px solid #b6bdc8;border-radius:5px;font:inherit}
+    .ack{display:flex;gap:10px;align-items:flex-start;font-weight:400}.ack input{width:auto;margin-top:6px}button{background:var(--action);color:#fff;border:0;border-radius:5px;padding:12px 17px;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.5}.muted{color:var(--muted)}.error{color:#9f2525;font-weight:700}footer{text-align:center;color:var(--muted);padding:28px 0}
+  </style>
+</head>
+<body>
+<header><div class="company">1001328662 Ontario Inc.</div><div class="muted">Secure agreement review and e-signing</div></header>
+<main>
+  <section id="loading" class="card">Loading secure agreement...</section>
+  <div id="content" hidden>
+    <section class="card notice"><strong>Draft for Legal Review</strong><p id="notice"></p></section>
+    <section class="card"><h1 id="title"></h1><p id="meta" class="muted"></p><div id="agreement" class="agreement"></div></section>
+    <section class="card"><h2>Required acknowledgments</h2><p>Each acknowledgment must be accepted separately and is stored as its own audit record.</p><div id="acks"></div><button id="accept">Accept acknowledgments</button><p id="ackMessage" role="status"></p></section>
+    <section class="card"><h2>Project Manager signature</h2><label>Signer legal name<input id="signerName"></label><label>Title<input id="signerTitle"></label><label>Type your full legal name as your electronic signature<input id="signature"></label><button id="sign" disabled>Sign agreement</button> <button id="decline" style="background:#7f1d1d">Decline</button><p id="signMessage" role="status"></p></section>
+  </div>
+</main>
+<footer>&copy; 1001328662 Ontario Inc. All rights reserved.</footer>
+<script>
+  const token=new URLSearchParams(location.search).get("token");let agreementData;
+  async function load(){
+    if(!token){document.getElementById("loading").textContent="A secure signing token is required.";return}
+    const response=await fetch("/api/project-manager/signing/"+encodeURIComponent(token),{cache:"no-store"});const data=await response.json();
+    if(!response.ok){document.getElementById("loading").textContent=data.error||"This link is unavailable.";return}
+    agreementData=data;document.getElementById("loading").hidden=true;document.getElementById("content").hidden=false;
+    document.getElementById("notice").textContent=data.legalReviewNotice+" \u201cProject Manager\u201d is an operational title and legal status depends on the actual working relationship and applicable law.";
+    document.getElementById("title").textContent=data.title;document.getElementById("meta").textContent="Agreement "+data.agreementNumber+" | Version "+data.versionNumber;
+    document.getElementById("agreement").textContent=data.body;
+    document.getElementById("acks").innerHTML=data.requiredAcknowledgments.map((ack,index)=>'<label class="ack"><input type="checkbox" data-key="'+ack.key+'"><span>'+ack.text+'</span></label>').join("");
+  }
+  document.getElementById("accept").onclick=async()=>{
+    const boxes=[...document.querySelectorAll("#acks input")];const message=document.getElementById("ackMessage");
+    if(boxes.some(box=>!box.checked)){message.className="error";message.textContent="Accept each required acknowledgment separately.";return}
+    const response=await fetch("/api/project-manager/signing/"+encodeURIComponent(token)+"/acknowledgments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({acknowledgments:boxes.map(box=>({key:box.dataset.key,accepted:true}))})});
+    const data=await response.json();if(!response.ok){message.className="error";message.textContent=data.error;return}
+    boxes.forEach(box=>box.disabled=true);document.getElementById("accept").disabled=true;document.getElementById("sign").disabled=false;message.textContent="Acknowledgments recorded.";
+  };
+  document.getElementById("sign").onclick=async()=>{
+    const message=document.getElementById("signMessage");const payload={signerLegalName:document.getElementById("signerName").value,signerTitle:document.getElementById("signerTitle").value||null,signatureText:document.getElementById("signature").value};
+    const response=await fetch("/api/project-manager/signing/"+encodeURIComponent(token)+"/sign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const data=await response.json();
+    if(!response.ok){message.className="error";message.textContent=data.error;return}
+    document.getElementById("sign").disabled=true;message.textContent="Signed. The agreement is pending 1001328662 Ontario Inc. countersignature.";
+  };
+  document.getElementById("decline").onclick=async()=>{if(!confirm("Decline this agreement?"))return;const reason=prompt("Optional reason");const response=await fetch("/api/project-manager/signing/"+encodeURIComponent(token)+"/decline",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})});const data=await response.json();document.getElementById("signMessage").textContent=response.ok?"Agreement declined.":data.error};
+  load();
+</script>
+</body>
+</html>

@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Cutoff &amp; Payment Schedule 2026 — Workforce Connect</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="View the 2026 bi-weekly payroll cutoff, scrutiny, and payment release schedule for Workforce Connect Management staff." />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#1E40AF" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <style>
+      *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --primary: #1E3A8A;
+        --primary-mid: #1E40AF;
+        --primary-light: #3B82F6;
+        --primary-subtle: rgba(30, 64, 175, 0.08);
+        --accent: #F59E0B;
+        --success: #10B981;
+        --warning: #F59E0B;
+        --bg: #F8FAFC;
+        --surface: #FFFFFF;
+        --border: #E2E8F0;
+        --text: #0F172A;
+        --text-secondary: #475569;
+        --text-muted: #94A3B8;
+        --radius: 10px;
+        --radius-lg: 16px;
+      }
+
+      html { scroll-behavior: smooth; }
+
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a { color: inherit; text-decoration: none; }
+      img { display: block; max-width: 100%; }
+
+      /* ── NAV ─────────────────────────────────────── */
+      .nav {
+        position: sticky;
+        top: 0;
+        background: rgba(255,255,255,0.97);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+        z-index: 100;
+        padding: 0 24px;
+      }
+
+      .nav-inner {
+        max-width: 1000px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 60px;
+      }
+
+      .nav-logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 15px;
+        color: var(--primary);
+        text-decoration: none;
+      }
+
+      .nav-logo img {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        object-fit: contain;
+      }
+
+      .nav-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        text-decoration: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        transition: background 0.15s, color 0.15s;
+      }
+
+      .nav-back:hover {
+        background: var(--primary-subtle);
+        color: var(--primary-mid);
+      }
+
+      /* ── HERO ────────────────────────────────────── */
+      .hero {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-mid) 60%, #2563EB 100%);
+        padding: 56px 24px 48px;
+        text-align: center;
+      }
+
+      .hero-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+      }
+
+      .hero-icon svg {
+        width: 32px;
+        height: 32px;
+        color: #fff;
+        stroke: #fff;
+      }
+
+      .hero h1 {
+        font-size: clamp(22px, 4vw, 32px);
+        font-weight: 800;
+        color: #fff;
+        letter-spacing: -0.02em;
+        margin-bottom: 12px;
+      }
+
+      .hero p {
+        font-size: 16px;
+        color: rgba(255,255,255,0.82);
+        max-width: 520px;
+        margin: 0 auto;
+        line-height: 1.7;
+      }
+
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255,255,255,0.15);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 12px;
+        border-radius: 999px;
+        margin-bottom: 20px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      /* ── LEGEND ──────────────────────────────────── */
+      .legend-row {
+        max-width: 1000px;
+        margin: 32px auto 0;
+        padding: 0 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+      }
+
+      .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        flex-shrink: 0;
+      }
+
+      /* ── CURRENT PERIOD BANNER ───────────────────── */
+      .current-banner {
+        max-width: 1000px;
+        margin: 24px auto 0;
+        padding: 0 24px;
+      }
+
+      .current-banner-inner {
+        background: var(--primary-subtle);
+        border: 1px solid rgba(30, 64, 175, 0.2);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--primary-mid);
+        font-weight: 500;
+      }
+
+      .current-banner-inner svg {
+        width: 18px;
+        height: 18px;
+        stroke: var(--primary-mid);
+        flex-shrink: 0;
+      }
+
+      /* ── INFO CARDS ──────────────────────────────── */
+      .info-section {
+        max-width: 1000px;
+        margin: 32px auto 0;
+        padding: 0 24px;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      @media (min-width: 600px) {
+        .info-section { grid-template-columns: repeat(3, 1fr); }
+      }
+
+      .info-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 18px 20px;
+        border-left: 4px solid transparent;
+      }
+
+      .info-card-title {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 6px;
+      }
+
+      .info-card-body {
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+      }
+
+      /* ── TABLE ───────────────────────────────────── */
+      .table-section {
+        max-width: 1000px;
+        margin: 32px auto 48px;
+        padding: 0 24px;
+      }
+
+      .table-section h2 {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 16px;
+      }
+
+      .table-wrap {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        min-width: 580px;
+      }
+
+      thead tr {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      thead th {
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+      }
+
+      tbody tr {
+        border-bottom: 1px solid var(--border);
+        transition: background 0.1s;
+      }
+
+      tbody tr:last-child { border-bottom: none; }
+      tbody tr:hover { background: #F8FAFC; }
+      tbody tr.current-row { background: rgba(30, 64, 175, 0.05); }
+      tbody tr.current-row:hover { background: rgba(30, 64, 175, 0.08); }
+
+      td {
+        padding: 12px 16px;
+        color: var(--text-secondary);
+        vertical-align: middle;
+      }
+
+      td.period-num {
+        font-weight: 700;
+        color: var(--text);
+        white-space: nowrap;
+      }
+
+      td.period-label {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      .date-range {
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+
+      .badge-current {
+        background: rgba(30, 64, 175, 0.1);
+        color: var(--primary-mid);
+      }
+
+      /* ── FOOTER ──────────────────────────────────── */
+      .page-footer {
+        background: #0F172A;
+        padding: 32px 24px;
+        text-align: center;
+      }
+
+      .page-footer a {
+        color: rgba(255,255,255,0.6);
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+
+      .page-footer a:hover { color: #fff; }
+
+      .page-footer p {
+        font-size: 12px;
+        color: rgba(255,255,255,0.3);
+        margin-top: 8px;
+      }
+
+      /* ── NOTICE ──────────────────────────────────── */
+      .notice {
+        max-width: 1000px;
+        margin: 0 auto 32px;
+        padding: 0 24px;
+      }
+
+      .notice-inner {
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+      }
+
+      .notice-inner svg {
+        width: 18px;
+        height: 18px;
+        stroke: var(--warning);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- ── NAV ──────────────────────────────────────────── -->
+    <nav class="nav">
+      <div class="nav-inner">
+        <a href="/" class="nav-logo">
+          <img src="/logo.png" alt="Workforce Connect Logo" />
+          <span>Workforce Connect</span>
+        </a>
+        <a href="/" class="nav-back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Back to home
+        </a>
+      </div>
+    </nav>
+
+    <!-- ── HERO ─────────────────────────────────────────── -->
+    <div class="hero">
+      <div class="hero-badge">2026 Period Guide</div>
+      <div class="hero-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      </div>
+      <h1>Cutoff &amp; Payment Schedule</h1>
+      <p>Understand when your work is counted and when your payment may be released. All 26 bi-weekly payroll periods for 2026.</p>
+    </div>
+
+    <!-- ── LEGEND ────────────────────────────────────────── -->
+    <div class="legend-row">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#3B82F6;"></div>
+        Cutoff period — work counted
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#F59E0B;"></div>
+        Scrutiny — timesheets reviewed
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#10B981;"></div>
+        Release week — payment issued
+      </div>
+    </div>
+
+    <!-- ── CURRENT PERIOD BANNER ─────────────────────────── -->
+    <div class="current-banner" id="currentBanner" style="display:none;">
+      <div class="current-banner-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span id="currentBannerText"></span>
+      </div>
+    </div>
+
+    <!-- ── INFO CARDS ────────────────────────────────────── -->
+    <div class="info-section">
+      <div class="info-card" style="border-left-color:#3B82F6;">
+        <div class="info-card-title" style="color:#3B82F6;">Cutoff Period</div>
+        <div class="info-card-body">The two-week window during which your hours must be submitted. Work completed in this period is counted toward the associated pay period.</div>
+      </div>
+      <div class="info-card" style="border-left-color:#F59E0B;">
+        <div class="info-card-title" style="color:#D97706;">Scrutiny Period</div>
+        <div class="info-card-body">The week immediately after the cutoff ends. Timesheets are reviewed and verified by the accounting team during this period.</div>
+      </div>
+      <div class="info-card" style="border-left-color:#10B981;">
+        <div class="info-card-title" style="color:#059669;">Release Week</div>
+        <div class="info-card-body">Payment may be issued during this week, subject to client remittance, banking timelines, and operational processing.</div>
+      </div>
+    </div>
+
+    <!-- ── SCHEDULE TABLE ────────────────────────────────── -->
+    <div class="table-section">
+      <h2>All 26 Pay Periods — 2026</h2>
+      <div class="table-wrap">
+        <table id="scheduleTable">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Label</th>
+              <th style="color:#93C5FD;">Cutoff (Work Period)</th>
+              <th style="color:#FDE68A;">Scrutiny</th>
+              <th style="color:#6EE7B7;">Release Week</th>
+            </tr>
+          </thead>
+          <tbody id="scheduleBody">
+            <!-- Populated by JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── LEGAL NOTICE ──────────────────────────────────── -->
+    <div class="notice">
+      <div class="notice-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>
+          Payment release dates are estimates only and subject to client remittance, banking processing times, and operational factors beyond our control.
+          Actual deposit timing may vary. Contact <a href="mailto:info@wfconnect.org" style="color:var(--primary-mid);font-weight:600;">info@wfconnect.org</a> with any questions.
+        </span>
+      </div>
+    </div>
+
+    <!-- ── FOOTER ────────────────────────────────────────── -->
+    <footer class="page-footer">
+      <a href="/">← Back to Workforce Connect</a>
+      <p>&copy; 2026 Workforce Connect Management. All rights reserved.</p>
+    </footer>
+
+    <script>
+      // ── Data ──────────────────────────────────────────────────────────────────
+      // NOTE: These 26 periods are for the 2026 fiscal year.
+      // Update this file annually when a new year's schedule is published.
+      const PERIODS = [
+        { period: 1,  label: "Dec – Jan",   cutoffStart: "2025-12-27", cutoffEnd: "2026-01-09" },
+        { period: 2,  label: "January",     cutoffStart: "2026-01-10", cutoffEnd: "2026-01-23" },
+        { period: 3,  label: "Jan – Feb",   cutoffStart: "2026-01-24", cutoffEnd: "2026-02-06" },
+        { period: 4,  label: "February",    cutoffStart: "2026-02-07", cutoffEnd: "2026-02-20" },
+        { period: 5,  label: "Feb – Mar",   cutoffStart: "2026-02-21", cutoffEnd: "2026-03-06" },
+        { period: 6,  label: "March",       cutoffStart: "2026-03-07", cutoffEnd: "2026-03-20" },
+        { period: 7,  label: "Mar – Apr",   cutoffStart: "2026-03-21", cutoffEnd: "2026-04-03" },
+        { period: 8,  label: "April",       cutoffStart: "2026-04-04", cutoffEnd: "2026-04-17" },
+        { period: 9,  label: "Apr – May",   cutoffStart: "2026-04-18", cutoffEnd: "2026-05-01" },
+        { period: 10, label: "May",         cutoffStart: "2026-05-02", cutoffEnd: "2026-05-15" },
+        { period: 11, label: "May",         cutoffStart: "2026-05-16", cutoffEnd: "2026-05-29" },
+        { period: 12, label: "May – Jun",   cutoffStart: "2026-05-30", cutoffEnd: "2026-06-12" },
+        { period: 13, label: "June",        cutoffStart: "2026-06-13", cutoffEnd: "2026-06-26" },
+        { period: 14, label: "Jun – Jul",   cutoffStart: "2026-06-27", cutoffEnd: "2026-07-10" },
+        { period: 15, label: "July",        cutoffStart: "2026-07-11", cutoffEnd: "2026-07-24" },
+        { period: 16, label: "Jul – Aug",   cutoffStart: "2026-07-25", cutoffEnd: "2026-08-07" },
+        { period: 17, label: "August",      cutoffStart: "2026-08-08", cutoffEnd: "2026-08-21" },
+        { period: 18, label: "Aug – Sep",   cutoffStart: "2026-08-22", cutoffEnd: "2026-09-04" },
+        { period: 19, label: "September",   cutoffStart: "2026-09-05", cutoffEnd: "2026-09-18" },
+        { period: 20, label: "Sep – Oct",   cutoffStart: "2026-09-19", cutoffEnd: "2026-10-02" },
+        { period: 21, label: "October",     cutoffStart: "2026-10-03", cutoffEnd: "2026-10-16" },
+        { period: 22, label: "October",     cutoffStart: "2026-10-17", cutoffEnd: "2026-10-30" },
+        { period: 23, label: "Oct – Nov",   cutoffStart: "2026-10-31", cutoffEnd: "2026-11-13" },
+        { period: 24, label: "November",    cutoffStart: "2026-11-14", cutoffEnd: "2026-11-27" },
+        { period: 25, label: "Nov – Dec",   cutoffStart: "2026-11-28", cutoffEnd: "2026-12-11" },
+        { period: 26, label: "December",    cutoffStart: "2026-12-12", cutoffEnd: "2026-12-25" },
+      ];
+
+      // ── Helpers ───────────────────────────────────────────────────────────────
+      function parseDate(iso) {
+        const [y, m, d] = iso.split("-").map(Number);
+        return new Date(y, m - 1, d);
+      }
+
+      function addDays(d, n) {
+        const r = new Date(d);
+        r.setDate(r.getDate() + n);
+        return r;
+      }
+
+      function nextMondayAfter(d) {
+        const day = d.getDay();
+        const diff = day === 0 ? 1 : 8 - day;
+        return addDays(d, diff);
+      }
+
+      function fmtShort(d) {
+        return d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+      }
+
+      function fmtRange(start, end) {
+        return fmtShort(start) + " – " + fmtShort(end);
+      }
+
+      function computeSchedule(p) {
+        const cutoffStart  = parseDate(p.cutoffStart);
+        const cutoffEnd    = parseDate(p.cutoffEnd);
+        const scrutinyStart = nextMondayAfter(cutoffEnd);
+        const scrutinyEnd   = addDays(scrutinyStart, 6);
+        const releaseStart  = nextMondayAfter(scrutinyEnd);
+        const releaseEnd    = addDays(releaseStart, 6);
+        return { cutoffStart, cutoffEnd, scrutinyStart, scrutinyEnd, releaseStart, releaseEnd };
+      }
+
+      // ── Render ────────────────────────────────────────────────────────────────
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const tbody = document.getElementById("scheduleBody");
+
+      let currentPeriod = null;
+
+      PERIODS.forEach((p) => {
+        const s = computeSchedule(p);
+        const isCurrent = todayStr >= p.cutoffStart && todayStr <= p.cutoffEnd;
+        if (isCurrent) currentPeriod = p;
+
+        const tr = document.createElement("tr");
+        if (isCurrent) tr.className = "current-row";
+
+        tr.innerHTML =
+          '<td class="period-num">Period ' + p.period + (isCurrent ? '&nbsp;<span class="badge badge-current">Current</span>' : "") + "</td>" +
+          '<td class="period-label">' + p.label + "</td>" +
+          '<td class="date-range" style="color:#1D4ED8;">' + fmtRange(s.cutoffStart, s.cutoffEnd) + "</td>" +
+          '<td class="date-range" style="color:#D97706;">' + fmtRange(s.scrutinyStart, s.scrutinyEnd) + "</td>" +
+          '<td class="date-range" style="color:#059669;">' + fmtRange(s.releaseStart, s.releaseEnd) + "</td>";
+
+        tbody.appendChild(tr);
+      });
+
+      // ── Current period banner ─────────────────────────────────────────────────
+      if (currentPeriod) {
+        const s = computeSchedule(currentPeriod);
+        const banner = document.getElementById("currentBanner");
+        const bannerText = document.getElementById("currentBannerText");
+        bannerText.textContent =
+          "You are currently in Period " + currentPeriod.period +
+          " (" + currentPeriod.label + "). " +
+          "Cutoff ends " + fmtShort(s.cutoffEnd) + ". " +
+          "Payment release estimated " + fmtRange(s.releaseStart, s.releaseEnd) + ".";
+        banner.style.display = "block";
+      }
+    </script>
+  </body>
+</html>

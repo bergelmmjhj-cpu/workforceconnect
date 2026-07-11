@@ -952,6 +952,16 @@ function configureExpoAndLanding(app: express.Application) {
     res.status(200).send(paymentInfoTemplate);
   });
 
+  // Serve Cutoff & Payment Schedule Page
+  const cutoffSchedulePath = path.resolve(process.cwd(), "server", "templates", "cutoff-payment-schedule.html");
+  const cutoffScheduleTemplate = fs.readFileSync(cutoffSchedulePath, "utf-8");
+
+  app.get("/cutoff-payment-schedule", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.status(200).send(cutoffScheduleTemplate);
+  });
+
   // Serve Admin Applications Dashboard
   const adminAppsPath = path.resolve(process.cwd(), "server", "templates", "admin-applications.html");
   const adminAppsTemplate = fs.readFileSync(adminAppsPath, "utf-8");
